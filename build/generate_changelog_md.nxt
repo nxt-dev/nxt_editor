@@ -1,0 +1,431 @@
+{
+    "version": "1.15", 
+    "alias": "generate_change_log", 
+    "color": "#ffaaff", 
+    "mute": false, 
+    "solo": false, 
+    "meta_data": {
+        "positions": {
+            "/": [
+                0.0, 
+                0.0, 
+                0.0
+            ], 
+            "/BeginPR": [
+                1200.0, 
+                0.0
+            ], 
+            "/BeginRelease": [
+                0, 
+                0
+            ], 
+            "/BeginRelease/GitCurBranch/CurBranch/ParseGitReturn": [
+                0.0, 
+                0.0, 
+                0.0
+            ], 
+            "/CheckCommits": [
+                300.0, 
+                0.0
+            ], 
+            "/CreateRelease": [
+                2743.3073550205086, 
+                -1.0996848810221387
+            ], 
+            "/DoIt": [
+                -1640.0, 
+                900.0
+            ], 
+            "/GenerateChangelog": [
+                0.0, 
+                -20.0
+            ], 
+            "/GenerateHotkeysMD": [
+                1800.0, 
+                0.0
+            ], 
+            "/GitCmd": [
+                -800.0, 
+                760.0
+            ], 
+            "/GitCmd2": [
+                618.6319850156622, 
+                104.42705080595923
+            ], 
+            "/GitCurBranch": [
+                -800.0, 
+                520.0
+            ], 
+            "/GitCurBranch2": [
+                -160.0, 
+                420.0
+            ], 
+            "/GitPR": [
+                -1200.0, 
+                680.0
+            ], 
+            "/GitRelease": [
+                -800.0, 
+                600.0
+            ], 
+            "/GitRelease2": [
+                219.4455692046359, 
+                -150.45574389461672
+            ], 
+            "/GitStatus": [
+                -1200.0, 
+                520.0
+            ], 
+            "/GitUpload": [
+                -1200.0, 
+                760.0
+            ], 
+            "/JsonLoad": [
+                -1200.0, 
+                200.0
+            ], 
+            "/JsonLoad2": [
+                -720.0, 
+                420.0
+            ], 
+            "/ParseGitReturn": [
+                -400.00000000000006, 
+                218.85416666666669
+            ], 
+            "/ParseGitReturn2": [
+                139.97772221620224, 
+                201.2760907674117
+            ], 
+            "/STAGE": [
+                -1123.7400818788076, 
+                -75.57563472014294
+            ], 
+            "/UpdateHotkeys": [
+                1811.2303797361437, 
+                -305.46632882310877
+            ], 
+            "/UploadHotkeys2": [
+                -1640.0, 
+                900.0
+            ], 
+            "/ValidatePushed": [
+                900.0, 
+                0.0
+            ], 
+            "/VersionCheck": [
+                600.0, 
+                0.0
+            ], 
+            "/make_module_folder": [
+                2421.8606515416, 
+                -0.12985212006404367
+            ], 
+            "/make_package": [
+                2100.0, 
+                0.0
+            ], 
+            "/node": [
+                1528.7310849793016, 
+                173.60697703569716
+            ], 
+            "/populate": [
+                -800.0, 
+                680.0
+            ], 
+            "/ship": [
+                -1200.0, 
+                600.0
+            ], 
+            "/unzip_env": [
+                -1200.0, 
+                1000.0
+            ], 
+            "name": [
+                0.0, 
+                0.0, 
+                0.0
+            ]
+        }, 
+        "collapse": {
+            "/BeginPR": false, 
+            "/BeginPR/PR_Dev": false, 
+            "/BeginPR/PR_Dev/GetPR_URL": false, 
+            "/BeginPR/PR_Master": false, 
+            "/BeginPR/PR_Master/GetPR_URL": false, 
+            "/BeginPush/Push/ParseGitReturn": false, 
+            "/BeginRelease/GitCurBranch/CurBranch": true, 
+            "/CheckCommits": false, 
+            "/CheckCommits/Status": true, 
+            "/CheckCommits/Status/ParseGitReturn": true, 
+            "/CheckCommits/ValidateStatus": true, 
+            "/CreateRelease/UploadChangelog": false, 
+            "/CreateRelease/UploadHotkeys": false, 
+            "/GitCmd": true, 
+            "/GitCurBranch": true, 
+            "/GitCurBranch/CurBranch": false, 
+            "/GitCurBranch/CurBranch/ParseGitReturn": false, 
+            "/GitCurBranch/CurBranch/UpdateWorkingBranch": false, 
+            "/GitCurBranch/ValidateExactBranch": false, 
+            "/GitCurBranch/ValidateLegalBranch": false, 
+            "/GitPR": false, 
+            "/GitStatus": true, 
+            "/GitUpload": true, 
+            "/GitUpload/DoIt": false, 
+            "/JsonLoad": false, 
+            "/ValidatePushed": false, 
+            "/ValidatePushed/Push": true, 
+            "/ValidatePushed/ValidatePush": false, 
+            "/VersionCheck": false, 
+            "/VersionCheck/CheckoutMaster": true, 
+            "/VersionCheck/CheckoutMaster/ParseGitReturn": true, 
+            "/VersionCheck/CheckoutWorking": true, 
+            "/VersionCheck/CheckoutWorking/ParseGitReturn": true, 
+            "/VersionCheck/GitPull": true, 
+            "/VersionCheck/GitPull/ParseGitReturn": true, 
+            "/VersionCheck/LoadMasterVersion": true, 
+            "/VersionCheck/LoadMasterVersion/ReadMasterVersion": true, 
+            "/VersionCheck/ValidateMaster": true, 
+            "/VersionCheck/ValidateMaster/CurBranch": true, 
+            "/VersionCheck/ValidateMaster/CurBranch/ParseGitReturn": true, 
+            "/VersionCheck/ValidateMaster/CurBranch/UpdateWorkingBranch": true, 
+            "/VersionCheck/ValidateMaster/ValidateExactBranch": true, 
+            "/VersionCheck/ValidateMaster/ValidateLegalBranch": true, 
+            "/VersionCheck/ValidateVersion": false, 
+            "/VersionCheck/ValidateWorking": true, 
+            "/VersionCheck/ValidateWorking/CurBranch": true, 
+            "/VersionCheck/ValidateWorking/CurBranch/ParseGitReturn": true, 
+            "/VersionCheck/ValidateWorking/CurBranch/UpdateWorkingBranch": true, 
+            "/VersionCheck/ValidateWorking/ValidateExactBranch": true, 
+            "/VersionCheck/ValidateWorking/ValidateLegalBranch": true, 
+            "/make_package": false, 
+            "/populate": true, 
+            "/populate/docs": false, 
+            "/populate/launch": false, 
+            "/populate/src": false, 
+            "/populate/src/remove_extras": false, 
+            "/ship": true, 
+            "/ship/get_release": false, 
+            "/ship/upload": false, 
+            "/ship/zip": false, 
+            "/ship/zip/remove_ship_dir": false, 
+            "/unzip_env": true, 
+            "/unzip_env/remove_zipped": true
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "attrs": {
+                "branch": {
+                    "type": "raw", 
+                    "value": "dev", 
+                    "comment": "Name of the head branch"
+                }, 
+                "changelog_md": {
+                    "type": "raw", 
+                    "value": "${release_dir}/changelog.md", 
+                    "comment": "File path to changelog.md"
+                }, 
+                "executable": {
+                    "type": "raw", 
+                    "value": "python.exe", 
+                    "comment": "Path the current python executable"
+                }, 
+                "hotfix_version": {
+                    "type": "int", 
+                    "value": "0", 
+                    "comment": "Hotfix number updating to"
+                }, 
+                "hotkeys_md": {
+                    "type": "raw", 
+                    "value": "${release_dir}/hotkeys.md", 
+                    "comment": "File path to hotkeys.md"
+                }, 
+                "ignore_uncommited_changes": {
+                    "type": "bool", 
+                    "value": "False", 
+                    "comment": "Force the graph to ignore uncommited changes on disc"
+                }, 
+                "master_pr_url": {
+                    "type": "raw", 
+                    "value": "https://api.github.com/repos/SunriseProductions/nxt/pulls/123", 
+                    "comment": "The api url to the pr who's base is master"
+                }, 
+                "release_body": {
+                    "type": "raw", 
+                    "value": "Auto generated release", 
+                    "comment": "Markdown or plain text used for the release body as well as the master PR"
+                }, 
+                "release_dict": {
+                    "type": "dict", 
+                    "value": "{}", 
+                    "comment": "Data returned from REST request"
+                }, 
+                "release_dir": {
+                    "type": "raw", 
+                    "value": "${path::}", 
+                    "comment": "File path to the temp dir were the release files get dumped"
+                }, 
+                "release_title": {
+                    "type": "raw", 
+                    "value": "Release v${version}", 
+                    "comment": "Release title"
+                }, 
+                "release_type": {
+                    "type": "NoneType", 
+                    "comment": "minor or hotfix"
+                }, 
+                "secret": {
+                    "type": "tuple", 
+                    "value": "()", 
+                    "comment": "tuple of (github_username, auth_token). DO NOT enter those details here! Please create a file with them and let the layer node load them for you."
+                }, 
+                "secret_path": {
+                    "type": "raw", 
+                    "value": "${file::secrets}"
+                }
+            }, 
+            "child_order": [
+                "ParseGitReturn", 
+                "ParseGitReturn2", 
+                "GitCmd", 
+                "GitCmd2", 
+                "JsonLoad2", 
+                "GitCurBranch2", 
+                "GenerateChangelog", 
+                "node"
+            ], 
+            "comment": "This graph is meant to be referenced into another graph to run, only edit if you are sure you know what you're doing.\nAttrs will auto populate with the correct data as the graph runs. The only thing you need to setup is the 'release_type'.\nExpects you to have a 'secrets' file in the same dir as this graph. See the attr comment on 'secrets'.", 
+            "code": [
+                "# Builtin", 
+                "import sys", 
+                "import os", 
+                "import subprocess", 
+                "import json", 
+                "import requests", 
+                "import pickle", 
+                "import webbrowser", 
+                "import shutil", 
+                "# Internal", 
+                "import nxt", 
+                "", 
+                "# Load git auth token", 
+                "with open('${secret_path}', 'rb') as fp:", 
+                "    self.secret = pickle.load(fp)", 
+                "", 
+                "self.executable = sys.executable.replace(os.path.sep, '/')"
+            ]
+        }, 
+        "/GenerateChangelog/ParseCommits": {
+            "attrs": {
+                "graph_version": {
+                    "value": "unknown"
+                }
+            }, 
+            "child_order": [
+                "WriteChangelog"
+            ], 
+            "code": [
+                "commits = []", 
+                "next_pg = {'url': '${master_pr_url}/commits'}", 
+                "self.lists = {}", 
+                "for name in self.order:", 
+                "    self.lists[name] = []", 
+                "", 
+                "while next_pg:", 
+                "    response = requests.get(next_pg['url'], auth=self.secret, timeout=30)", 
+                "    commits += json.loads(response.content)", 
+                "    next_pg = response.links.get('next')", 
+                "for commit in commits:", 
+                "    message = commit['commit']['message']", 
+                "    for line in message.split('\\n'):", 
+                "        for name in self.order:", 
+                "            token = self.tokens[name]", 
+                "            if line.startswith(token):", 
+                "                self.lists[name].append(line.split(token)[-1])", 
+                "", 
+                "# This attribute needed for token subbing in child", 
+                "from nxt.constants import GRAPH_VERSION", 
+                "self.graph_version = GRAPH_VERSION.VERSION_STR"
+            ]
+        }, 
+        "/GenerateChangelog/ParseCommits/WriteChangelog": {
+            "code": [
+                "STAGE.changelog_md = os.path.join('${release_dir}', 'changelog.md')", 
+                "with open(STAGE.changelog_md, 'w+') as changelog:", 
+                "    changelog.write('')", 
+                "    for name in self.order:", 
+                "        lines = self.lists[name]", 
+                "        if not lines:", 
+                "            continue", 
+                "        changelog.write(self.headers[name])", 
+                "        for line in lines:", 
+                "            token = self.tokens[name].rstrip()", 
+                "            changelog.write('`{}` {}\\n'.format(token, line))", 
+                "    changelog.write(${footer})", 
+                "with open('${changelog_md}') as f:", 
+                "    STAGE.changelog_text = f.read()"
+            ]
+        }, 
+        "/GenerateChangelog": {
+            "attrs": {
+                "footer": {
+                    "type": "str", 
+                    "value": "\"\"\"${contents::${file::release_footer.md}}\"\"\""
+                }, 
+                "headers": {
+                    "type": "dict", 
+                    "value": "{}"
+                }, 
+                "lists": {
+                    "type": "dict", 
+                    "value": "{}"
+                }, 
+                "order": {
+                    "type": "list", 
+                    "value": "[]"
+                }, 
+                "tokens": {
+                    "type": "dict", 
+                    "value": "{}"
+                }
+            }, 
+            "child_order": [
+                "ParseCommits"
+            ], 
+            "comment": "Generate a changelog from the commits on the master PR", 
+            "enabled": true, 
+            "code": [
+                "print('Generating changelog...')", 
+                "", 
+                "CRITICAL = 'critical'", 
+                "ADD = 'add'", 
+                "CHANGE = 'change'", 
+                "REMOVE = 'remove'", 
+                "NOTE = 'note'", 
+                "", 
+                "self.tokens = {", 
+                "    CRITICAL: '! ',", 
+                "    ADD: '+ ',", 
+                "    CHANGE: '* ',", 
+                "    REMOVE: '- ',", 
+                "    NOTE: '... '", 
+                "}", 
+                "self.lists = {", 
+                "    CRITICAL: [],", 
+                "    ADD: [],", 
+                "    CHANGE: [],", 
+                "    REMOVE: [],", 
+                "    NOTE: []", 
+                "}", 
+                "self.headers = {", 
+                "    CRITICAL: '## Critical changes:\\n',", 
+                "    ADD: '## Additions:\\n',", 
+                "    CHANGE: '## Changes:\\n',", 
+                "    REMOVE: '## Removals:\\n',", 
+                "    NOTE: '## Notes:\\n'", 
+                "}", 
+                "self.order = [CRITICAL, ADD, CHANGE, REMOVE, NOTE]"
+            ]
+        }
+    }
+}

@@ -1,0 +1,722 @@
+{
+    "version": "1.15", 
+    "alias": "ReleaseBot", 
+    "color": "#b33b5b", 
+    "mute": false, 
+    "solo": false, 
+    "references": [
+        "generate_changelog_md.nxt", 
+        "make_maya_plugin.nxt", 
+        "generate_hotkeys_md.nxt", 
+        "make_package.nxt", 
+        "GitUtils.nxt", 
+        "$NXT_BUILTINS/sub_graphs.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "/": [
+                0.0, 
+                0.0, 
+                0.0
+            ], 
+            "/BeginPR": [
+                1200.0, 
+                0.0
+            ], 
+            "/BeginRelease": [
+                -260.0, 
+                0.0
+            ], 
+            "/BeginRelease/GitCurBranch/CurBranch/ParseGitReturn": [
+                0.0, 
+                0.0, 
+                0.0
+            ], 
+            "/CheckCommits": [
+                80.0, 
+                100.0
+            ], 
+            "/CreateRelease": [
+                2760.0, 
+                60.0
+            ], 
+            "/DoIt": [
+                -1640.0, 
+                900.0
+            ], 
+            "/GenerateChangelog": [
+                1500.0, 
+                0.0
+            ], 
+            "/GenerateHotkeysMD": [
+                1800.0, 
+                0.0
+            ], 
+            "/GitCmd": [
+                -800.0, 
+                760.0
+            ], 
+            "/GitCmd2": [
+                618.6319850156622, 
+                104.42705080595923
+            ], 
+            "/GitCurBranch": [
+                -800.0, 
+                520.0
+            ], 
+            "/GitCurBranch2": [
+                -160.0, 
+                420.0
+            ], 
+            "/GitPR": [
+                -1200.0, 
+                680.0
+            ], 
+            "/GitRelease": [
+                -800.0, 
+                600.0
+            ], 
+            "/GitRelease2": [
+                219.4455692046359, 
+                -150.45574389461672
+            ], 
+            "/GitStatus": [
+                -1200.0, 
+                520.0
+            ], 
+            "/GitUpload": [
+                -1200.0, 
+                760.0
+            ], 
+            "/JsonLoad": [
+                -1200.0, 
+                200.0
+            ], 
+            "/JsonLoad2": [
+                -720.0, 
+                420.0
+            ], 
+            "/MakeReleaseDir": [
+                540.0, 
+                0.0
+            ], 
+            "/OldVersionCheck": [
+                280.0, 
+                380.0
+            ], 
+            "/PR_Dev": [
+                1240.0, 
+                180.0
+            ], 
+            "/ParseGitReturn": [
+                -400.00000000000006, 
+                218.85416666666669
+            ], 
+            "/ParseGitReturn2": [
+                139.97772221620224, 
+                201.2760907674117
+            ], 
+            "/ReleaseLoop": [
+                2740.0, 
+                0.0
+            ], 
+            "/STAGE": [
+                -1123.7400818788076, 
+                -75.57563472014294
+            ], 
+            "/UpdateHotkeys": [
+                1811.2303797361437, 
+                -305.46632882310877
+            ], 
+            "/UpdateMasterPR": [
+                1520.0, 
+                -120.0
+            ], 
+            "/UploadHotkeys2": [
+                -1640.0, 
+                900.0
+            ], 
+            "/ValidatePushed": [
+                900.0, 
+                0.0
+            ], 
+            "/_sub_graph": [
+                -1200.0, 
+                0.0
+            ], 
+            "/make_module_folder": [
+                2420.0, 
+                0.0
+            ], 
+            "/make_package": [
+                2100.0, 
+                0.0
+            ], 
+            "/populate": [
+                -800.0, 
+                680.0
+            ], 
+            "/ship": [
+                -1200.0, 
+                600.0
+            ], 
+            "/unzip_env": [
+                -1200.0, 
+                1000.0
+            ], 
+            "/versions": [
+                140.0, 
+                0.0
+            ], 
+            "name": [
+                0.0, 
+                0.0, 
+                0.0
+            ]
+        }, 
+        "collapse": {
+            "/BeginPR": false, 
+            "/BeginPR/PR_Dev/GetPR_URL": false, 
+            "/BeginPR/PR_Master": false, 
+            "/BeginPR/PR_Master/GetPR_URL": false, 
+            "/BeginPush/Push/ParseGitReturn": false, 
+            "/BeginRelease/CheckCommits": true, 
+            "/BeginRelease/CheckCommits/Status": true, 
+            "/BeginRelease/GitCurBranch/CurBranch": true, 
+            "/CheckCommits/Status": true, 
+            "/CheckCommits/Status/ParseGitReturn": true, 
+            "/CheckCommits/ValidateStatus": false, 
+            "/CreateRelease/UploadChangelog": false, 
+            "/CreateRelease/UploadHotkeys": false, 
+            "/GitCmd": true, 
+            "/GitCurBranch": true, 
+            "/GitCurBranch/CurBranch": false, 
+            "/GitCurBranch/CurBranch/ParseGitReturn": false, 
+            "/GitCurBranch/CurBranch/UpdateWorkingBranch": false, 
+            "/GitCurBranch/ValidateExactBranch": false, 
+            "/GitCurBranch/ValidateLegalBranch": false, 
+            "/GitPR": false, 
+            "/GitStatus": true, 
+            "/GitUpload": true, 
+            "/GitUpload/DoIt": false, 
+            "/JsonLoad": false, 
+            "/PR_Dev": false, 
+            "/ValidatePushed": false, 
+            "/ValidatePushed/Push": true, 
+            "/ValidatePushed/ValidatePush": false, 
+            "/VersionCheck/CheckoutMaster/ParseGitReturn": true, 
+            "/VersionCheck/CheckoutWorking/ParseGitReturn": true, 
+            "/VersionCheck/GitPull/ParseGitReturn": true, 
+            "/VersionCheck/LoadMasterVersion/ReadMasterVersion": true, 
+            "/VersionCheck/ValidateMaster/CurBranch": true, 
+            "/VersionCheck/ValidateMaster/CurBranch/ParseGitReturn": true, 
+            "/VersionCheck/ValidateMaster/CurBranch/UpdateWorkingBranch": true, 
+            "/VersionCheck/ValidateMaster/ValidateExactBranch": true, 
+            "/VersionCheck/ValidateMaster/ValidateLegalBranch": true, 
+            "/VersionCheck/ValidateWorking/CurBranch": true, 
+            "/VersionCheck/ValidateWorking/CurBranch/ParseGitReturn": true, 
+            "/VersionCheck/ValidateWorking/CurBranch/UpdateWorkingBranch": true, 
+            "/VersionCheck/ValidateWorking/ValidateExactBranch": true, 
+            "/VersionCheck/ValidateWorking/ValidateLegalBranch": true, 
+            "/make_package": false, 
+            "/populate": true, 
+            "/populate/docs": false, 
+            "/populate/launch": false, 
+            "/populate/src": false, 
+            "/populate/src/remove_extras": false, 
+            "/ship": true, 
+            "/ship/get_release": false, 
+            "/ship/upload": false, 
+            "/ship/zip": false, 
+            "/ship/zip/remove_ship_dir": false, 
+            "/unzip_env": true, 
+            "/unzip_env/remove_zipped": true, 
+            "/versions": false
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "attrs": {
+                "branch": {
+                    "type": "raw", 
+                    "value": "dev", 
+                    "comment": "Name of the head branch"
+                }, 
+                "changelog_md": {
+                    "type": "raw", 
+                    "value": "${release_dir}/changelog.md", 
+                    "comment": "File path to changelog.md"
+                }, 
+                "executable": {
+                    "type": "raw", 
+                    "value": "python.exe", 
+                    "comment": "Path the current python executable"
+                }, 
+                "hotfix_version": {
+                    "type": "int", 
+                    "value": "0", 
+                    "comment": "Hotfix number updating to"
+                }, 
+                "hotkeys_md": {
+                    "type": "raw", 
+                    "value": "${release_dir}/hotkeys.md", 
+                    "comment": "File path to hotkeys.md"
+                }, 
+                "ignore_uncommited_changes": {
+                    "type": "bool", 
+                    "value": "False", 
+                    "comment": "Force the graph to ignore uncommited changes on disc"
+                }, 
+                "master_pr_url": {
+                    "type": "raw", 
+                    "value": "https://api.github.com/repos/SunriseProductions/nxt/pulls/123", 
+                    "comment": "The api url to the pr who's base is master"
+                }, 
+                "release_body": {
+                    "type": "raw", 
+                    "value": "Auto generated release", 
+                    "comment": "Markdown or plain text used for the release body as well as the master PR"
+                }, 
+                "release_dict": {
+                    "type": "dict", 
+                    "value": "{}", 
+                    "comment": "Data returned from REST request"
+                }, 
+                "release_dir": {
+                    "type": "raw", 
+                    "value": "${path::TEMP}", 
+                    "comment": "File path to the temp dir were the release files get dumped"
+                }, 
+                "release_title": {
+                    "type": "raw", 
+                    "value": "Release v${version}", 
+                    "comment": "Release title"
+                }, 
+                "release_type": {
+                    "type": "NoneType", 
+                    "comment": "minor or hotfix"
+                }, 
+                "secret": {
+                    "type": "tuple", 
+                    "value": "()", 
+                    "comment": "tuple of (github_username, auth_token). DO NOT enter those details here! Please create a file with them and let the layer node load them for you."
+                }, 
+                "secret_path": {
+                    "type": "raw", 
+                    "value": "${file::secrets}"
+                }, 
+                "version": {
+                    "type": "raw", 
+                    "value": "editor_v1.2.3-api_v4.5.6"
+                }
+            }, 
+            "child_order": [
+                "CheckCommits", 
+                "ValidatePushed", 
+                "CreateRelease", 
+                "BeginPR", 
+                "ParseGitReturn", 
+                "ParseGitReturn2", 
+                "GitCmd", 
+                "GitCmd2", 
+                "JsonLoad2", 
+                "BeginRelease", 
+                "GitCurBranch2", 
+                "make_package", 
+                "GenerateHotkeysMD", 
+                "make_module_folder", 
+                "UpdateMasterPR", 
+                "GenerateChangelog", 
+                "versions", 
+                "ReleaseLoop", 
+                "PR_Dev", 
+                "MakeReleaseDir"
+            ], 
+            "comment": "This graph is meant to be referenced into another graph to run, only edit if you are sure you know what you're doing.\nAttrs will auto populate with the correct data as the graph runs. The only thing you need to setup is the 'release_type'.\nExpects you to have a 'secrets' file in the same dir as this graph. See the attr comment on 'secrets'.", 
+            "code": [
+                "# Builtin", 
+                "import sys", 
+                "import os", 
+                "import subprocess", 
+                "import json", 
+                "import requests", 
+                "import pickle", 
+                "import webbrowser", 
+                "import shutil", 
+                "# Internal", 
+                "import nxt", 
+                "from nxt.constants import API_VERSION", 
+                "from nxt.ui.constants import EDITOR_VERSION", 
+                "", 
+                "# Load git auth token", 
+                "with open('${secret_path}', 'rb') as fp:", 
+                "    self.secret = pickle.load(fp)", 
+                "", 
+                "", 
+                "editor_version = 'editor-v' + EDITOR_VERSION.VERSION_STR", 
+                "api_version = 'api-v' + API_VERSION.VERSION_STR", 
+                "", 
+                "self.version = editor_version + '-' + api_version", 
+                ""
+            ]
+        }, 
+        "/BeginPR/DoDev": {
+            "code": [
+                "if ${/versions.hotfix}:", 
+                "    execute(start='/PR_Dev')"
+            ]
+        }, 
+        "/BeginPR/PR_Master": {
+            "attrs": {
+                "body": {
+                    "type": "raw", 
+                    "value": "Auto generated PR > ${target}"
+                }, 
+                "target": {
+                    "type": "raw", 
+                    "value": "master"
+                }, 
+                "title": {
+                    "value": "Release ${version}"
+                }
+            }, 
+            "child_order": [
+                "GetPR_URL"
+            ], 
+            "instance": "/GitPR", 
+            "enabled": true
+        }, 
+        "/BeginPR/PR_Master/GetPR_URL": {
+            "enabled": true, 
+            "code": [
+                "STAGE.master_pr_url = self.pr_data['url']"
+            ]
+        }, 
+        "/BeginRelease/CheckCommits": {
+            "comment": "Check that there are no un-commited changes on the branch.", 
+            "instance": "/GitStatus", 
+            "code": [
+                "print('Validating commits...')"
+            ]
+        }, 
+        "/BeginRelease/GitCurBranch": {
+            "child_order": [
+                "CurBranch", 
+                "ValidateLegalBranch"
+            ], 
+            "instance": "/GitCurBranch"
+        }, 
+        "/BeginRelease/GitCurBranch/CurBranch": {
+            "child_order": [
+                "ParseGitReturn", 
+                "UpdateWorkingBranch"
+            ]
+        }, 
+        "/BeginRelease/GitCurBranch/CurBranch/ParseGitReturn": {
+            "attrs": {
+                "key": {
+                    "value": "\"*\""
+                }
+            }, 
+            "instance": "/GitCurBranch/CurBranch/ParseGitReturn", 
+            "code": [
+                "self.lines = [l for l in self.input.split(\"\\n\") if l.startswith(${key})]", 
+                "if ${allow_multi_line}:", 
+                "    self.result = [l.strip(${key}).strip() for l in self.lines]", 
+                "else:", 
+                "    if self.lines:", 
+                "        self.result = w(self.lines[0].strip(${key}).strip())", 
+                "# print(self.input.split(\"\\n\"))"
+            ]
+        }, 
+        "/BeginRelease/GitCurBranch/CurBranch/UpdateWorkingBranch": {
+            "enabled": true
+        }, 
+        "/BeginRelease/GitCurBranch/ValidateLegalBranch": {
+            "enabled": true
+        }, 
+        "/CreateRelease/DraftRelease": {
+            "instance": "/GitRelease"
+        }, 
+        "/CreateRelease/OpenReleaseURL": {
+            "code": [
+                "webbrowser.open(STAGE.release_dict[\"html_url\"], new=2)"
+            ]
+        }, 
+        "/CreateRelease/UploadChangelog": {
+            "attrs": {
+                "asset_path": {
+                    "value": "${changelog_md}"
+                }
+            }, 
+            "instance": "/CreateRelease/UploadHotkeys"
+        }, 
+        "/CreateRelease/UploadHotkeys": {
+            "attrs": {
+                "asset_path": {
+                    "type": "raw", 
+                    "value": "${/GenerateHotkeysMD/Setup.output_file}"
+                }, 
+                "content_type": {
+                    "type": "raw", 
+                    "value": "text/markdown"
+                }
+            }, 
+            "instance": "/GitUpload"
+        }, 
+        "/CreateRelease/UploadMayaMod": {
+            "attrs": {
+                "asset_path": {
+                    "type": "raw", 
+                    "value": "${/make_module_folder/zip_mod.zip_path}"
+                }
+            }, 
+            "instance": "/CreateRelease/UploadHotkeys", 
+            "code": [
+                "print('Starting nxt_maya upload...')"
+            ]
+        }, 
+        "/CreateRelease/UploadPackage": {
+            "attrs": {
+                "asset_path": {
+                    "type": "raw", 
+                    "value": "${/make_package.result_path}"
+                }
+            }, 
+            "instance": "/CreateRelease/UploadHotkeys", 
+            "code": [
+                "print('Starting package upload...')"
+            ]
+        }, 
+        "/GenerateChangelog/UpdateMasterPR": {
+            "code": [
+                "data = {\"body\": STAGE.changelog_text}", 
+                "new_rel_resp = requests.post(STAGE.master_pr_url, auth=self.secret, data=json.dumps(data))", 
+                "if new_rel_resp.status_code != 200:", 
+                "    raise Exception('Unsuccessfully updated PR ({})'.format(new_rel_resp.text))", 
+                "print('Updated master PR')"
+            ]
+        }, 
+        "/GenerateHotkeysMD/Setup": {}, 
+        "/PR_Dev/GetPR_URL": {
+            "enabled": false
+        }, 
+        "/ValidatePushed/GetRemoteHEAD": {
+            "attrs": {
+                "remote_sha": {}
+            }, 
+            "code": [
+                "response = requests.get('https://api.github.com/repos/SunriseProductions/nxt/branches/${branch}', auth=self.secret, timeout=30)", 
+                "remote_branch = json.loads(response.content)", 
+                "self.remote_sha = remote_branch['commit']['sha']"
+            ]
+        }, 
+        "/ValidatePushed/Push": {
+            "attrs": {
+                "cmd_args": {
+                    "type": "str", 
+                    "value": "\"rev-parse\", \"HEAD\""
+                }
+            }, 
+            "instance": "/GitCmd"
+        }, 
+        "/ValidatePushed/ValidatePush": {
+            "code": [
+                "if ${../Push/ParseGitReturn.result} != '${../GetRemoteHEAD.remote_sha}':", 
+                "    raise Exception('Your local HEAD does not match the remote HEAD, please push you commits!')", 
+                "print(\"Remote and local in sync!\")"
+            ]
+        }, 
+        "/make_module_folder/zip_mod": {
+            "attrs": {
+                "zip_name": {
+                    "type": "raw", 
+                    "value": "${release_dir}/nxt_maya"
+                }, 
+                "zip_path": {
+                    "type": "raw", 
+                    "value": "${zip_name}.zip"
+                }
+            }, 
+            "code": [
+                "", 
+                "self.zip_path = shutil.make_archive('${zip_name}', 'zip', '${mod_folder}')", 
+                "shutil.rmtree('${mod_folder}')"
+            ]
+        }, 
+        "/BeginPR": {
+            "child_order": [
+                "PR_Master", 
+                "DoDev"
+            ], 
+            "comment": "Open a PR to master and dev, then open them in your browser.", 
+            "execute_in": "/ValidatePushed", 
+            "code": [
+                "print(\"Beginning pull request...\")"
+            ]
+        }, 
+        "/BeginRelease": {
+            "start_point": true, 
+            "child_order": [
+                "GitCurBranch", 
+                "CheckCommits"
+            ], 
+            "comment": "Begin a release", 
+            "code": [
+                "print('Beginning Release!')"
+            ]
+        }, 
+        "/CreateRelease": {
+            "child_order": [
+                "DraftRelease", 
+                "UploadHotkeys", 
+                "UploadChangelog", 
+                "UploadPackage", 
+                "UploadMayaMod", 
+                "OpenReleaseURL"
+            ], 
+            "comment": "Create the draft release and open it in your browser.", 
+            "code": [
+                "print(\"Beginning release...\")"
+            ]
+        }, 
+        "/GenerateChangelog": {
+            "child_order": [
+                "ParseCommits", 
+                "UpdateMasterPR"
+            ], 
+            "execute_in": "/BeginPR"
+        }, 
+        "/GenerateHotkeysMD": {
+            "start_point": false, 
+            "child_order": [
+                "Setup"
+            ], 
+            "execute_in": "/GenerateChangelog", 
+            "code": [
+                "print(\"Generating hotkeys.md...\")"
+            ]
+        }, 
+        "/MakeReleaseDir": {
+            "execute_in": "/versions", 
+            "code": [
+                "dir_name = 'nxt_${version}'.replace('.', '-')", 
+                "dir_path = os.path.join('${path::}', dir_name)", 
+                "if os.path.isdir(dir_path):", 
+                "    print('Release dir already exsists, removing it...')", 
+                "    shutil.rmtree(dir_path)", 
+                "", 
+                "os.mkdir(dir_path)", 
+                "STAGE.release_dir = dir_path.replace(os.sep, '/')"
+            ]
+        }, 
+        "/PR_Dev": {
+            "attrs": {
+                "target": {
+                    "value": "dev"
+                }, 
+                "title": {
+                    "type": "raw", 
+                    "value": "Release v${version} (${target})"
+                }
+            }, 
+            "child_order": [
+                "GetPR_URL"
+            ], 
+            "instance": "/BeginPR/PR_Master", 
+            "enabled": true
+        }, 
+        "/ReleaseLoop": {
+            "comment": "Calls /CreateRelease", 
+            "execute_in": "/make_module_folder", 
+            "code": [
+                "# Parse return from versions sub-graph", 
+                "for version_info in (${/versions.API}, ${/versions.EDITOR}, ${/versions.GRAPH}):", 
+                "    if not version_info:", 
+                "        continue", 
+                "    version_cat, version_str = version_info", 
+                "    version_tag = version_cat.lower() + '_v' + version_str", 
+                "    version_name = version_cat.capitalize()", 
+                "    parameters = {'/CreateRelease.version_tag': version_tag,", 
+                "                  '/CreateRelease.version_name': version_name,", 
+                "                  '/CreateRelease.version_str': version_str}", 
+                "    execute(start='/CreateRelease', parameters=parameters)"
+            ]
+        }, 
+        "/ValidatePushed": {
+            "child_order": [
+                "Push", 
+                "GetRemoteHEAD", 
+                "ValidatePush"
+            ], 
+            "comment": "Push your changes to remote.", 
+            "execute_in": "/MakeReleaseDir", 
+            "code": [
+                "print('Pushing...')"
+            ]
+        }, 
+        "/make_module_folder": {
+            "attrs": {
+                "output_dir": {
+                    "value": "${release_dir}"
+                }
+            }, 
+            "start_point": false, 
+            "child_order": [
+                "copy_source", 
+                "qt_py", 
+                "make_resources", 
+                "populate_mod_template", 
+                "zip_mod"
+            ], 
+            "execute_in": "/make_package"
+        }, 
+        "/make_package": {
+            "attrs": {
+                "dest_dir": {
+                    "type": "raw", 
+                    "value": "${release_dir}"
+                }, 
+                "expected_result": {
+                    "type": "raw", 
+                    "value": "nxt-${version}.tar.gz", 
+                    "comment": "Assumes naming based on patterns in setuptools. Setuptools does not appear to allow forcing this name."
+                }, 
+                "result_path": {
+                    "comment": "Resulting path, computed in code block to use platform correct sperators."
+                }
+            }, 
+            "start_point": false, 
+            "execute_in": "/GenerateHotkeysMD", 
+            "code": [
+                "self.result_path = os.path.join('${dest_dir}', '${expected_result}').replace(os.sep, '/')"
+            ]
+        }, 
+        "/versions": {
+            "attrs": {
+                "API": {
+                    "type": "NoneType", 
+                    "value": "None"
+                }, 
+                "EDITOR": {
+                    "type": "NoneType", 
+                    "value": "None"
+                }, 
+                "GRAPH": {
+                    "type": "NoneType", 
+                    "value": "None"
+                }, 
+                "_graph_path": {
+                    "value": "${file::validate_version_numbers.nxt}"
+                }, 
+                "hotfix": {
+                    "type": "bool", 
+                    "value": "False"
+                }
+            }, 
+            "comment": "Runs version validation sub-graph", 
+            "instance": "/_sub_graph", 
+            "execute_in": "/BeginRelease"
+        }
+    }
+}

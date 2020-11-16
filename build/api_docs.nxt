@@ -1,0 +1,130 @@
+{
+    "version": "1.16", 
+    "alias": "api_docs", 
+    "color": null, 
+    "mute": false, 
+    "solo": false, 
+    "meta_data": {
+        "positions": {
+            "/build": [
+                -320.0, 
+                360.0
+            ], 
+            "/build_to_user_docs": [
+                20.0, 
+                280.0
+            ], 
+            "/deploy": [
+                -320.0, 
+                280.0
+            ], 
+            "/node": [
+                -180.0, 
+                -60.0
+            ]
+        }, 
+        "collapse": {
+            "/build/cleanup_stubs": false
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "build", 
+                "deploy", 
+                "build_to_user_docs"
+            ], 
+            "attrs": {
+                "build_folder": {
+                    "type": "raw", 
+                    "value": "${file::../docs/api_docs/build}"
+                }, 
+                "module_folder": {
+                    "type": "raw", 
+                    "value": "${file::../nxt}"
+                }, 
+                "stubs_folder": {
+                    "type": "raw", 
+                    "value": "${file::../docs/api_docs/source}"
+                }
+            }, 
+            "code": [
+                "import subprocess", 
+                "import os", 
+                "import shutil"
+            ]
+        }, 
+        "/build": {
+            "start_point": true, 
+            "child_order": [
+                "generate_stubs", 
+                "generate_html", 
+                "cleanup_stubs"
+            ]
+        }, 
+        "/build/cleanup_stubs": {
+            "attrs": {
+                "stub_keep_files": {
+                    "type": "list", 
+                    "value": "['conf.py', 'index.rst']"
+                }
+            }, 
+            "code": [
+                "import tempfile", 
+                "", 
+                "relocated_files = []", 
+                "keep_dir = tempfile.gettempdir()", 
+                "for keep_filename in self.stub_keep_files:", 
+                "    full_keep_path = os.path.join(self.stubs_folder, keep_filename)", 
+                "    temp_path = os.path.join(keep_dir, keep_filename)", 
+                "    shutil.move(full_keep_path, keep_dir)", 
+                "    relocated_files += [temp_path]", 
+                "", 
+                "shutil.rmtree('${stubs_folder}')", 
+                "os.makedirs('${stubs_folder}')", 
+                "for temp_path in relocated_files:", 
+                "    shutil.move(temp_path, '${stubs_folder}')"
+            ]
+        }, 
+        "/build/generate_html": {
+            "code": [
+                "subprocess.call(['sphinx-build', '-b', 'html', '${stubs_folder}', '${build_folder}'])"
+            ]
+        }, 
+        "/build/generate_stubs": {
+            "code": [
+                "subprocess.call(['sphinx-apidoc', '-e', '-o', '${stubs_folder}', '${module_folder}'])"
+            ]
+        }, 
+        "/build_to_user_docs": {
+            "instance": "/build", 
+            "execute_in": "/deploy", 
+            "child_order": [
+                "remove_previous_build", 
+                "generate_stubs", 
+                "generate_html", 
+                "cleanup_stubs"
+            ], 
+            "attrs": {
+                "build_folder": {
+                    "value": "${file::../docs/user_docs/docs/api}"
+                }
+            }
+        }, 
+        "/build_to_user_docs/remove_previous_build": {
+            "attrs": {
+                "build_folder": {
+                    "value": "${path::../docs/user_docs/docs/api}"
+                }
+            }, 
+            "code": [
+                "if os.path.exists('${build_folder}'):", 
+                "    shutil.rmtree('${build_folder}')", 
+                "os.makedirs('${build_folder}')"
+            ]
+        }, 
+        "/deploy": {
+            "start_point": true
+        }
+    }
+}
