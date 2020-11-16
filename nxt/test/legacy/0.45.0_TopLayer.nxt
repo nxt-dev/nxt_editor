@@ -1,0 +1,66 @@
+{
+    "version": "0.45.6",
+    "alias": "0.45.0_TopLayer",
+    "color": "#4c959a",
+    "references": [
+        {
+            "path": "0.45.0_BottomLayer.nxt"
+        }
+    ],
+    "solo": false,
+    "mute": false,
+    "data": {
+        "position_data": {
+            "/node1": [
+                390.5380816066577,
+                4.990901944633734
+            ],
+            "/ExecEnd": [
+                360.0,
+                -220.0
+            ],
+            "/ExecStart": [
+                20.0,
+                -220.0
+            ],
+            "/MatchingName": [
+                20.0,
+                -79.02066642040462
+            ]
+        },
+        "collapse_data": {
+            "/node1/InstTarget1": true,
+            "/ExtToken_InstTarget_Parent/InstTarget1": true
+        }
+    },
+    "children": [
+        {
+            "name": "MatchingName",
+            "data": {
+                "enabled": true,
+                "attributes": {
+                    "TokenSource": {
+                        "type": "int",
+                        "value": "123"
+                    },
+                    "TokenTarget": {
+                        "type": "raw",
+                        "value": "${TokenSource}"
+                    }
+                }
+            },
+            "execute_order": []
+        },
+        {
+            "name": "ExecStart",
+            "data": {},
+            "execute_order": []
+        },
+        {
+            "name": "ExecEnd",
+            "data": {},
+            "execute_in": "/ExecStart",
+            "execute_order": []
+        }
+    ]
+}

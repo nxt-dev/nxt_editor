@@ -1,0 +1,47 @@
+{
+    "version": "1.15", 
+    "alias": "StageChildOrderTest", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "LowerParent": [
+                -400.0, 
+                0.0
+            ], 
+            "ParentNode": [
+                0.0, 
+                0.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/LowerParent": {
+            "child_order": [
+                "Child0", 
+                "Child1"
+            ], 
+            "enabled": true
+        }, 
+        "/LowerParent/Child0": {
+            "enabled": true
+        }, 
+        "/LowerParent/Child1": {
+            "enabled": true
+        }, 
+        "/ParentNode": {
+            "child_order": [
+                "node0", 
+                "node1", 
+                "node2"
+            ], 
+            "enabled": true
+        }, 
+        "/ParentNode/node0": {
+            "enabled": true
+        }, 
+        "/ParentNode/node1": {
+            "enabled": true
+        }
+    }
+}

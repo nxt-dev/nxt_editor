@@ -1,0 +1,48 @@
+{
+    "version": "1.15", 
+    "alias": "Instance2", 
+    "color": "#732670", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "node": [
+                320.0, 
+                -120.0
+            ], 
+            "Layer2.node": [
+                0.0, 
+                0.0
+            ], 
+            "Layer2": [
+                21.781473994576288, 
+                -41.78147399457629
+            ], 
+            "node.node": [
+                0.0, 
+                0.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/control": {
+            "attrs": {
+                "attr2": {
+                    "type": "NoneType"
+                }, 
+                "attr3": {
+                    "type": "NoneType"
+                }, 
+                "attr1": {
+                    "type": "NoneType"
+                }
+            }, 
+            "child_order": [
+                "create"
+            ], 
+            "enabled": true
+        }, 
+        "/control/create": {
+            "enabled": true
+        }
+    }
+}

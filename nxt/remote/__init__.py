@@ -1,0 +1,3 @@
+# TODO: Should this be a config? Bet it should...
+RPC_HOST = 'localhost'
+RPC_PORT = 8001

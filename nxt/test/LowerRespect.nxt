@@ -1,0 +1,17 @@
+{
+    "version": "1.15", 
+    "alias": "untitled", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/node": [
+                -57.0, 
+                -10.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/lower": {}
+    }
+}

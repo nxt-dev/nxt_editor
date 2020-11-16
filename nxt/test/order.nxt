@@ -1,0 +1,130 @@
+{
+    "version": "1.15", 
+    "alias": "order", 
+    "color": "#119B77", 
+    "meta_data": {
+        "positions": {
+            "/twelve": [
+                240.0, 
+                -142.0
+            ], 
+            "/seven": [
+                -80.0, 
+                -143.0
+            ], 
+            "/c": [
+                354.4840520806282, 
+                226.86979333160207
+            ], 
+            "/b": [
+                -288.8325373987304, 
+                299.96330876532915
+            ], 
+            "/a": [
+                -323.98481091906103, 
+                228.92339933203115
+            ], 
+            "/one": [
+                -406.0, 
+                -142.0
+            ], 
+            "/SKIP": [
+                12.761425874902628, 
+                226.8697933316021
+            ]
+        }
+    }, 
+    "nodes": {
+        "/SKIP": {
+            "child_order": [
+                "THATS", 
+                "NO", 
+                "MOON"
+            ], 
+            "enabled": false, 
+            "execute_in": "/a"
+        }, 
+        "/SKIP/MOON": {}, 
+        "/SKIP/NO": {}, 
+        "/SKIP/THATS": {}, 
+        "/a": {
+            "child_order": [
+                "b", 
+                "BAD"
+            ]
+        }, 
+        "/a/BAD": {
+            "child_order": [
+                "WORSE"
+            ], 
+            "enabled": false
+        }, 
+        "/a/BAD/WORSE": {
+            "child_order": [
+                "WORST"
+            ]
+        }, 
+        "/a/BAD/WORSE/WORST": {}, 
+        "/a/b": {}, 
+        "/c": {
+            "execute_in": "/SKIP"
+        }, 
+        "/one": {
+            "child_order": [
+                "two", 
+                "three", 
+                "six"
+            ], 
+            "enabled": true
+        }, 
+        "/one/six": {
+            "enabled": true
+        }, 
+        "/one/three": {
+            "child_order": [
+                "four", 
+                "five"
+            ], 
+            "enabled": true
+        }, 
+        "/one/three/five": {
+            "enabled": true
+        }, 
+        "/one/three/four": {
+            "enabled": true
+        }, 
+        "/one/two": {
+            "enabled": true
+        }, 
+        "/seven": {
+            "child_order": [
+                "eight"
+            ], 
+            "enabled": true, 
+            "execute_in": "/one"
+        }, 
+        "/seven/eight": {
+            "child_order": [
+                "nine", 
+                "eleven"
+            ], 
+            "enabled": true
+        }, 
+        "/seven/eight/eleven": {
+            "enabled": true
+        }, 
+        "/seven/eight/nine": {
+            "child_order": [
+                "ten"
+            ], 
+            "enabled": true
+        }, 
+        "/seven/eight/nine/ten": {
+            "enabled": true
+        }, 
+        "/twelve": {
+            "enabled": true, 
+            "execute_in": "/seven"
+        }
+    }
+}

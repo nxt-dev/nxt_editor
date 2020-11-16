@@ -1,0 +1,246 @@
+{
+    "solo": false, 
+    "mute": false, 
+    "color": "#119B77", 
+    "meta_data": {
+        "positions": {
+            "/dropDownMenu": [
+                0.0, 
+                360.0
+            ], 
+            "/window": [
+                0.0, 
+                0.0
+            ], 
+            "/button": [
+                0.0, 
+                240.0
+            ], 
+            "/panel": [
+                0.0, 
+                120.0
+            ], 
+            "/menuItem": [
+                0.0, 
+                420.0
+            ], 
+            "/panel/layout": [
+                0.0, 
+                0.0, 
+                0.0
+            ], 
+            "/tab": [
+                0.0, 
+                60.0
+            ], 
+            "/checkbox": [
+                0.0, 
+                300.0
+            ], 
+            "/gridLayout": [
+                0.0, 
+                180.0
+            ], 
+            "/layout": [
+                -289.0, 
+                -7.0
+            ], 
+            "/itemSelector": [
+                0.0, 
+                480.0
+            ]
+        }
+    }, 
+    "alias": "WidgetNodes", 
+    "version": "1.16", 
+    "nodes": {
+        "/dropDownMenu": {
+            "enabled": true, 
+            "attrs": {
+                "menu_background_color": {}, 
+                "text": {
+                    "comment": "menu label", 
+                    "type": "raw", 
+                    "value": "${_name}"
+                }, 
+                "text_color": {
+                    "type": "NoneType"
+                }, 
+                "menu_index": {}, 
+                "menu_value": {}, 
+                "menu_exec_path": {
+                    "comment": "node path to execute when menu changes", 
+                    "type": "raw", 
+                    "value": "${_nxtpath}"
+                }, 
+                "menu_items": {
+                    "comment": "list of space-separated words"
+                }, 
+                "menu_border_color": {
+                    "type": "raw", 
+                    "value": "${_nxtcolor}"
+                }
+            }
+        }, 
+        "/window": {
+            "enabled": true, 
+            "attrs": {
+                "_widget_window": {
+                    "comment": "QWidget", 
+                    "type": "NoneType"
+                }, 
+                "window_title": {
+                    "type": "raw", 
+                    "value": "Workflow Tools"
+                }, 
+                "background_color": {
+                    "type": "NoneType"
+                }
+            }
+        }, 
+        "/button": {
+            "enabled": true, 
+            "attrs": {
+                "button_color": {
+                    "comment": "button color (styleSheet property \"background-color\")", 
+                    "type": "NoneType"
+                }, 
+                "text": {
+                    "comment": "button text", 
+                    "type": "raw", 
+                    "value": "${_name}"
+                }, 
+                "button_border_color": {
+                    "type": "raw", 
+                    "value": "${_nxtcolor}"
+                }, 
+                "button_exec_path": {
+                    "type": "raw", 
+                    "value": "${_nxtpath}"
+                }, 
+                "text_color": {
+                    "comment": "button text color (styleSheet property - \"color\")", 
+                    "type": "NoneType"
+                }
+            }
+        }, 
+        "/panel": {
+            "enabled": true, 
+            "attrs": {
+                "panel_border_color": {
+                    "type": "raw", 
+                    "value": "${_nxtcolor}"
+                }, 
+                "text": {
+                    "type": "raw", 
+                    "value": "${_name}"
+                }, 
+                "panel_color": {
+                    "type": "NoneType"
+                }, 
+                "text_color": {
+                    "type": "NoneType"
+                }
+            }
+        }, 
+        "/menuItem": {
+            "enabled": true, 
+            "attrs": {
+                "text": {
+                    "type": "raw", 
+                    "value": "${_name}"
+                }, 
+                "item_exec_path": {
+                    "type": "raw", 
+                    "value": "${_nxtpath}"
+                }, 
+                "item_is_separator": {
+                    "type": "bool", 
+                    "value": "False"
+                }
+            }
+        }, 
+        "/tab": {
+            "enabled": true, 
+            "attrs": {
+                "color": {
+                    "type": "raw", 
+                    "value": "${_nxtcolor}"
+                }, 
+                "text": {
+                    "comment": "menu label", 
+                    "type": "raw", 
+                    "value": "${_name}"
+                }, 
+                "tab_color": {}, 
+                "tab_border_color": {}, 
+                "text_color": {
+                    "type": "NoneType"
+                }
+            }
+        }, 
+        "/checkbox": {
+            "enabled": true, 
+            "attrs": {
+                "checkbox_alignment": {
+                    "comment": "valid options are: left, right, center", 
+                    "type": "raw", 
+                    "value": "center"
+                }, 
+                "text": {
+                    "comment": "checkbox text", 
+                    "type": "raw", 
+                    "value": "${_name}"
+                }, 
+                "checkbox_exec_path": {
+                    "comment": "node path to execute when checkbox is checked", 
+                    "type": "raw", 
+                    "value": "${_nxtpath}"
+                }, 
+                "text_align": {
+                    "comment": "valid options are: left, right", 
+                    "type": "raw", 
+                    "value": "right"
+                }, 
+                "text_color": {
+                    "type": "NoneType"
+                }, 
+                "is_checked": {
+                    "comment": "whether the checkbox is checked by default", 
+                    "type": "bool", 
+                    "value": "False"
+                }
+            }
+        }, 
+        "/gridLayout": {
+            "enabled": true, 
+            "attrs": {
+                "max_columns": {
+                    "type": "int", 
+                    "value": "2"
+                }, 
+                "grid_color": {}
+            }
+        }, 
+        "/itemSelector": {
+            "instance": "/menuItem", 
+            "attrs": {
+                "item_input_list": {
+                    "comment": "Items in this list will populate the item selector dialog"
+                }, 
+                "item_selector_title": {
+                    "comment": "The title of the dialog", 
+                    "type": "raw", 
+                    "value": "Select Items"
+                }, 
+                "item_list_attr_path": {
+                    "comment": "The list of items selected in the dialog will be written to this attribute"
+                }, 
+                "is_item_selector": {
+                    "type": "bool", 
+                    "value": "True"
+                }
+            }
+        }
+    }
+}

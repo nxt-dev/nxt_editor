@@ -1,0 +1,92 @@
+{
+    "version": "1.15", 
+    "alias": "initial_spec", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/node": [
+                29.051948051948045, 
+                -239.51298701298703
+            ], 
+            "/test_a_cached": [
+                523.2685950413223, 
+                -1.75873403456049
+            ], 
+            "/test_result": [
+                300.0, 
+                1.0
+            ], 
+            "/test_a_resolved": [
+                230.26859504132233, 
+                2.305932703659977
+            ], 
+            "/test_a_input": [
+                -83.0, 
+                -1.0
+            ], 
+            "/test_a_resolved1": [
+                597.7603305785124, 
+                13.557998819362453
+            ], 
+            "/test_resolved": [
+                303.0, 
+                0.0
+            ], 
+            "/test_a_expected": [
+                263.0, 
+                2.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/node": {
+            "attrs": {
+                "boo": {
+                    "type": "str", 
+                    "value": "'ya'"
+                }
+            }, 
+            "enabled": true
+        }, 
+        "/test_a_cached": {
+            "attrs": {
+                "attr": {
+                    "type": "str", 
+                    "value": "'goo'"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                "print('ya')", 
+                "self.attr = \"\\'goo\\'\""
+            ]
+        }, 
+        "/test_a_input": {
+            "attrs": {
+                "attr": {
+                    "type": "raw", 
+                    "value": "${/node.boo}"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                "print(${attr})", 
+                "self.attr = \"\\'goo\\'\""
+            ]
+        }, 
+        "/test_a_resolved": {
+            "attrs": {
+                "attr": {
+                    "type": "str", 
+                    "value": "'ya'"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                "print('ya')", 
+                "self.attr = \"\\'goo\\'\""
+            ]
+        }
+    }
+}

@@ -1,0 +1,11 @@
+*.DS_STORE
+*.pyc
+*.iml
+*.name
+*.xml
+.vscode/
+.idea
+docs/build/
+build/
+site/
+nxt/ui/resources.py

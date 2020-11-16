@@ -1,0 +1,93 @@
+{
+    "version": "1.16", 
+    "alias": "fallbacks2", 
+    "color": null, 
+    "mute": false, 
+    "solo": false, 
+    "meta_data": {
+        "positions": {
+            "/another": [
+                -650.0192214967838, 
+                -33.90122923906129
+            ], 
+            "/init2": [
+                320, 
+                0
+            ], 
+            "/test_mute": [
+                -631.4324190147721, 
+                -314.5293064641252
+            ]
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "init", 
+                "init2", 
+                "another", 
+                "test_mute", 
+                "does_not_work"
+            ], 
+            "attrs": {
+                "element": {
+                    "type": "raw", 
+                    "value": "biped"
+                }
+            }
+        }, 
+        "/another": {
+            "child_order": [
+                "node"
+            ], 
+            "comment": "This node tree is here if we ever support divergent instances during fallbacks"
+        }, 
+        "/another/node": {
+            "attrs": {
+                "filepath": {
+                    "type": "raw", 
+                    "value": "${variant}.txt"
+                }
+            }
+        }, 
+        "/does_not_work": {
+            "instance": "/another"
+        }, 
+        "/init": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/init/node": {
+            "attrs": {
+                "element2": {
+                    "value": "biped"
+                }
+            }
+        }, 
+        "/init2": {
+            "instance": "/init"
+        }, 
+        "/node/node/node/node/node/node/node": {
+            "attrs": {
+                "attr": {}
+            }
+        }, 
+        "/test_mute": {
+            "attrs": {
+                "filepath": {
+                    "type": "raw", 
+                    "value": "${file::${mute_attr}.txt}"
+                }, 
+                "mute_attr": {
+                    "type": "raw", 
+                    "value": "biped_base"
+                }, 
+                "path": {
+                    "type": "raw", 
+                    "value": "${path::${mute_attr}.txt}"
+                }
+            }
+        }
+    }
+}

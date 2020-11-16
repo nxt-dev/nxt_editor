@@ -1,0 +1,65 @@
+{
+    "version": "1.15", 
+    "alias": "untitled", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/node/node1": [
+                0.0, 
+                0.0
+            ], 
+            "/node/chidl1": [
+                0.0, 
+                0.0
+            ], 
+            "/parent/child2/grandchild2": [
+                0.0, 
+                0.0
+            ], 
+            "/parent": [
+                292.0, 
+                -62.0
+            ], 
+            "/parent/child1/grandchild1": [
+                0.0, 
+                0.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/parent": {
+            "child_order": [
+                "child1", 
+                "child2", 
+                "inst_target"
+            ], 
+            "enabled": true
+        }, 
+        "/parent/child1": {
+            "child_order": [
+                "grandchild1"
+            ], 
+            "enabled": true
+        }, 
+        "/parent/child1/grandchild1": {
+            "enabled": true
+        }, 
+        "/parent/child2": {
+            "child_order": [
+                "grandchild2"
+            ], 
+            "enabled": true
+        }, 
+        "/parent/child2/grandchild2": {
+            "enabled": true
+        }, 
+        "/parent/inst_target": {
+            "child_order": [
+                "grandchild1"
+            ], 
+            "instance": "../child1", 
+            "enabled": true
+        }
+    }
+}

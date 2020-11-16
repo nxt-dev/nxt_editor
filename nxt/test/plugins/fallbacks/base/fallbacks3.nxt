@@ -1,0 +1,70 @@
+{
+    "version": "1.16", 
+    "alias": "fallbacks3", 
+    "color": null, 
+    "mute": false, 
+    "solo": false, 
+    "meta_data": {
+        "positions": {
+            "/init": [
+                -420.0, 
+                80.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "init"
+            ], 
+            "attrs": {
+                "element": {
+                    "type": "raw", 
+                    "value": "quad"
+                }, 
+                "variant": {
+                    "value": "base"
+                }
+            }
+        }, 
+        "/init": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/init/node": {
+            "attrs": {
+                "element": {
+                    "value": "${/node/node/node/node/node/node/node/node/node.another}"
+                }, 
+                "element2": {
+                    "type": "raw", 
+                    "value": "quad"
+                }, 
+                "file_list": {
+                    "type": "raw", 
+                    "value": "${filelist::${element2}_${variant}.txt}"
+                }, 
+                "filepath": {
+                    "type": "raw", 
+                    "value": "${file::${element}_${variant}.txt}"
+                }, 
+                "path": {
+                    "type": "raw", 
+                    "value": "${path::${element}_${variant}.txt}"
+                }
+            }, 
+            "code": [
+                "${file_list}"
+            ]
+        }, 
+        "/node/node/node/node/node/node/node/node/node": {
+            "attrs": {
+                "another": {
+                    "type": "raw", 
+                    "value": "biped"
+                }
+            }
+        }
+    }
+}

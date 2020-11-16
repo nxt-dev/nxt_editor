@@ -1,0 +1,59 @@
+{
+    "version": "1.15", 
+    "alias": "StageRuntimeTest", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/NodeB": [
+                300.0, 
+                0.0
+            ], 
+            "/NodeA": [
+                0, 
+                0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/NodeA": {
+            "attrs": {
+                "attr0": {
+                    "type": "raw", 
+                    "value": "side"
+                }, 
+                "attr1": {
+                    "type": "int", 
+                    "value": "5"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                "# just printing values for now", 
+                "print(\"${attr0}\")", 
+                "print(${attr1})", 
+                "print(self.attr0)", 
+                "print(self.attr1)"
+            ]
+        }, 
+        "/NodeB": {
+            "attrs": {
+                "attr2": {
+                    "type": "int", 
+                    "value": "${/NodeA.attr1}"
+                }
+            }, 
+            "enabled": true, 
+            "execute_in": "/NodeA", 
+            "code": [
+                "# just printing values for now", 
+                "print(${attr2})", 
+                "print(self.attr2)", 
+                "", 
+                "# also printing remote attrs for fun!", 
+                "print(\"${/NodeA.attr0}\")", 
+                "print(\"${/NodeA.attr1}\")"
+            ]
+        }
+    }
+}

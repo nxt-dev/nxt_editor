@@ -1,0 +1,76 @@
+{
+    "version": "1.16", 
+    "alias": "fallbacks4", 
+    "color": null, 
+    "mute": false, 
+    "solo": false, 
+    "meta_data": {
+        "positions": {
+            "/node": [
+                418.21679298572667, 
+                5.677151036005339
+            ]
+        }
+    }, 
+    "nodes": {
+        "/init": {
+            "attrs": {
+                "path": {
+                    "type": "raw", 
+                    "value": "CHAR_BASE"
+                }
+            }
+        }, 
+        "/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node/node/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node/node/node/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node/node/node/node/node/node/node": {
+            "child_order": [
+                "node"
+            ]
+        }, 
+        "/node/node/node/node/node/node/node/node/node/node/node": {}
+    }
+}

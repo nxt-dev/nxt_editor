@@ -1,0 +1,154 @@
+{
+    "version": "1.16", 
+    "alias": "_context", 
+    "color": "#00557f", 
+    "mute": false, 
+    "solo": false, 
+    "references": [
+        "$NXT_BUILTINS/sub_graphs.nxt"
+    ], 
+    "comp_overrides": {
+        "$NXT_BUILTINS/sub_graphs.nxt": {
+            "mute": false
+        }
+    }, 
+    "meta_data": {
+        "aliases": {
+            "$NXT_BUILTINS/sub_graphs.nxt": "_sub_graphs"
+        }, 
+        "positions": {
+            "/_MAYA_sub_graph": [
+                -400.0, 
+                -200.0
+            ], 
+            "/_NUKE_sub_graph": [
+                -400.0, 
+                -260.0
+            ], 
+            "/_PYTHON_sub_graph": [
+                -400.0, 
+                -320.0
+            ], 
+            "/_sub_graph": [
+                -400.0, 
+                -400.0
+            ], 
+            "/enter": [
+                0.0, 
+                0.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "enter"
+            ], 
+            "attrs": {
+                "cache_file": {
+                    "type": "NoneType"
+                }, 
+                "graph_file": {
+                    "type": "NoneType"
+                }, 
+                "parameters_file": {
+                    "type": "NoneType"
+                }, 
+                "start_node": {
+                    "type": "NoneType", 
+                    "value": "None"
+                }
+            }, 
+            "code": [
+                ""
+            ]
+        }, 
+        "/enter": {
+            "start_point": true, 
+            "child_order": [
+                "init", 
+                "call_graph", 
+                "teardown"
+            ], 
+            "comment": "Parse for parameters and start node", 
+            "attrs": {
+                "_parameters": {
+                    "type": "dict", 
+                    "value": "{}"
+                }
+            }, 
+            "code": [
+                "# Builtin", 
+                "import os", 
+                "import sys", 
+                "import json", 
+                "import logging", 
+                "logger = logging.getLogger('nxt')", 
+                "", 
+                "parameters = {}", 
+                "if os.path.isfile('${parameters_file}'):", 
+                "    with open('${parameters_file}', 'r') as fp:", 
+                "        parameters = json.load(fp)", 
+                "        logger.info('Loaded parameters: {}'.format(parameters))", 
+                "", 
+                "self._parameters = parameters", 
+                "self._start = None", 
+                "if self.start_node:", 
+                "    self._start = '${start}'", 
+                ""
+            ]
+        }, 
+        "/enter/call_graph": {
+            "instance": "/_sub_graph", 
+            "comment": "Call the sub graph", 
+            "attrs": {
+                "_cache_file": {
+                    "value": "${cache_file}"
+                }, 
+                "_graph_path": {
+                    "value": "${graph_file}"
+                }
+            }, 
+            "code": [
+                "import os", 
+                "import sys", 
+                "from nxt import nxt_node, nxt_path", 
+                "from nxt.stage import Stage", 
+                "", 
+                "if self._graph_path and os.path.isfile(self._graph_path):", 
+                "    sub_stage = Stage.load_from_filepath(self._graph_path)", 
+                "    ", 
+                "    # Assemble parameters dictionary", 
+                "    for attr_name, attr_val in vars(self).items():", 
+                "        if attr_name in nxt_node.INTERNAL_ATTRS.PROTECTED:", 
+                "            continue", 
+                "        if attr_name in ('_graph_path', '_start', '_parameters'):", 
+                "            continue", 
+                "        attr_path = nxt_path.make_attr_path(nxt_path.WORLD, attr_name)", 
+                "        self._parameters[attr_path] = attr_val", 
+                "    result_rt_layer = sub_stage.execute(parameters=self._parameters, start=self._start)", 
+                "    if self._cache_file:", 
+                "        result_rt_layer.cache_layer.save('${_cache_file}')", 
+                "    # Bring attributes back from world node onto this node", 
+                "    world_frame_node = result_rt_layer.cache_layer.lookup(nxt_path.WORLD)", 
+                "    for attr_name, attr_val in vars(world_frame_node).items():", 
+                "        if attr_name in nxt_node.INTERNAL_ATTRS.PROTECTED:", 
+                "            continue", 
+                "        setattr(self, attr_name, attr_val)"
+            ]
+        }, 
+        "/enter/init": {
+            "comment": "Initalize DCC", 
+            "code": [
+                "# Start up your dcc now", 
+                ""
+            ]
+        }, 
+        "/enter/teardown": {
+            "comment": "Any clean up that needs to happen after the graph runs", 
+            "code": [
+                "# Tear down your dcc if needed"
+            ]
+        }
+    }
+}

@@ -1,0 +1,79 @@
+{
+    "version": "1.16", 
+    "alias": "remote_contexts", 
+    "color": "#b49411", 
+    "mute": false, 
+    "solo": false, 
+    "references": [
+        "$NXT_BUILTINS/sub_graphs.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "/_remote_sub_graph": [
+                0.0, 
+                0.0
+            ], 
+            "/_sub_graph": [
+                -360.0, 
+                0.0
+            ]
+        }, 
+        "collapse": {
+            "/_NUKE_sub_graph": false
+        }
+    }, 
+    "nodes": {
+        "/_remote_sub_graph": {
+            "instance": "/_sub_graph", 
+            "attrs": {
+                "_context": {
+                    "type": "raw", 
+                    "value": "python"
+                }
+            }, 
+            "code": [
+                "from nxt import nxt_path, nxt_io", 
+                "from nxt.remote.client import NxtClient", 
+                "from nxt.remote.server import NxtServerException", 
+                "from nxt.nxt_node import META_ATTRS, get_node_as_dict", 
+                "", 
+                "proxy = NxtClient()", 
+                "parameters = {}", 
+                "node_dict = get_node_as_dict(self)", 
+                "node_attrs = node_dict.get(nxt_io.SAVE_KEY.ATTRS, {})", 
+                "for attr_name, attr_dict in node_attrs.items():", 
+                "    attr_path = nxt_path.make_attr_path(nxt_path.WORLD, attr_name)", 
+                "    try:", 
+                "        val = attr_dict[META_ATTRS.VALUE]", 
+                "        parameters[attr_path] = val", 
+                "    except KeyError:", 
+                "        continue", 
+                "context = self._context", 
+                "start = self._start", 
+                "cache_path = None", 
+                "cache_file = None", 
+                "try:", 
+                "    cache_file = proxy.exec_in_headless(self._graph_path, start, cache_path, ", 
+                "                                        parameters, context)", 
+                "except NxtServerException:", 
+                "    print('Remote exec failed!')", 
+                "    raise", 
+                "if not cache_file:", 
+                "    raise IOError('nxt proxy failed to return cache!')", 
+                "try:", 
+                "    file_data = nxt_io.load_file_data(cache_file)", 
+                "except ValueError:", 
+                "    raise IOError('Failed to open cache provided by nxt proxy!')", 
+                "nodes = file_data.get(nxt_io.SAVE_KEY.NODES, {})", 
+                "world_node = nodes.get(nxt_path.WORLD, {})", 
+                "world_node_attrs = world_node.get(nxt_io.SAVE_KEY.ATTRS, {})", 
+                "for attr, a_dat in world_node_attrs.items():", 
+                "    try:", 
+                "        val = a_dat[META_ATTRS.VALUE]", 
+                "        setattr(self, attr, val)", 
+                "    except KeyError:", 
+                "        continue"
+            ]
+        }
+    }
+}

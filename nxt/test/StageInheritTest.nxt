@@ -1,0 +1,101 @@
+{
+    "version": "1.15", 
+    "alias": "StageInheritTest", 
+    "color": "#119B77", 
+    "references": [
+        "./StageInheritTest_LowerLayer.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "node": [
+                0, 
+                0
+            ], 
+            "/node2": [
+                240.0, 
+                -120.0
+            ], 
+            "/parent_node": [
+                -400.0, 
+                -120.0
+            ], 
+            "/node1": [
+                -80.0, 
+                -120.0
+            ], 
+            "/node3/child": [
+                0.0, 
+                0.0
+            ], 
+            "node1": [
+                0.0, 
+                -200.0
+            ], 
+            "node2": [
+                0.0, 
+                -120.0
+            ], 
+            "/inst_tgt_parent": [
+                -40.0, 
+                20.0
+            ], 
+            "/node3": [
+                -400.0, 
+                20.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/inst_tgt_parent": {
+            "instance": "/node3"
+        }, 
+        "/node1": {
+            "enabled": true
+        }, 
+        "/node2": {
+            "attrs": {
+                "attr": {
+                    "type": "raw", 
+                    "value": "top"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                ""
+            ]
+        }, 
+        "/node3": {
+            "child_order": [
+                "child"
+            ], 
+            "enabled": false, 
+            "code": [
+                "# Parent code"
+            ]
+        }, 
+        "/node3/child": {
+            "code": [
+                "# Child code"
+            ]
+        }, 
+        "/parent_node": {
+            "attrs": {
+                "parent": {
+                    "type": "NoneType", 
+                    "value": "None"
+                }
+            }, 
+            "child_order": [
+                "child_node"
+            ], 
+            "comment": "Node - layer 1", 
+            "enabled": false, 
+            "code": [
+                "# Code"
+            ]
+        }, 
+        "/parent_node/child_node": {
+            "enabled": true
+        }
+    }
+}

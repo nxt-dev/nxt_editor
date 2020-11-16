@@ -1,0 +1,46 @@
+{
+    "version": "1.15", 
+    "alias": "StageInheritTest_LowerLayer", 
+    "color": "#343d77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/node2": [
+                0.0, 
+                -80.0
+            ], 
+            "/node": [
+                0.0, 
+                -80.0
+            ]
+        }, 
+        "start_nodes": [
+            "/node1"
+        ]
+    }, 
+    "nodes": {
+        "/node1": {
+            "start_point": true, 
+            "comment": "Node1 - layer 0", 
+            "enabled": false, 
+            "code": [
+                "# BOTTOM"
+            ]
+        }, 
+        "/node2": {
+            "attrs": {
+                "attr": {
+                    "type": "raw", 
+                    "value": "bottom"
+                }
+            }, 
+            "comment": "Node2 - layer 0", 
+            "instance": "/Instance/Path", 
+            "enabled": true, 
+            "execute_in": "/node1", 
+            "code": [
+                "# BOTTOM 2"
+            ]
+        }
+    }
+}

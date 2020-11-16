@@ -1,0 +1,73 @@
+{
+    "version": "1.15", 
+    "alias": "future_tokens", 
+    "color": null, 
+    "meta_data": {
+        "positions": {
+            "/node3": [
+                380.00000000000006, 
+                -1.654761904761905
+            ], 
+            "/node2": [
+                80.0, 
+                0.0
+            ], 
+            "/node": [
+                -218.87755102040816, 
+                1.3130538810017143
+            ]
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "node", 
+                "node2", 
+                "node3"
+            ], 
+            "attrs": {
+                "num": {
+                    "type": "int", 
+                    "value": "0"
+                }
+            }
+        }, 
+        "/node": {
+            "code": [
+                "STAGE.num = 5", 
+                "assert ${A} == 5"
+            ], 
+            "start_point": true, 
+            "attrs": {
+                "A": {
+                    "type": "raw", 
+                    "value": "${/node2.B} + 5"
+                }
+            }
+        }, 
+        "/node2": {
+            "code": [
+                "self.B = 10"
+            ], 
+            "attrs": {
+                "B": {
+                    "type": "int", 
+                    "value": "0"
+                }
+            }, 
+            "execute_in": "/node"
+        }, 
+        "/node3": {
+            "code": [
+                "assert ${/node.A} == 15"
+            ], 
+            "attrs": {
+                "C": {
+                    "type": "raw", 
+                    "value": "${/node2.B}"
+                }
+            }, 
+            "execute_in": "/node2"
+        }
+    }
+}

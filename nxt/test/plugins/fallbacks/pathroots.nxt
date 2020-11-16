@@ -1,0 +1,7 @@
+{
+    "version": "1.16", 
+    "alias": "pathroots", 
+    "nodes": {
+        "/test_node": {}
+    }
+}

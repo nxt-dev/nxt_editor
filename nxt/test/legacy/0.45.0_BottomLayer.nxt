@@ -1,0 +1,107 @@
+{
+    "version": "0.45.6",
+    "alias": "0.45.0_BottomLayer",
+    "color": "#c2998d",
+    "references": [],
+    "solo": false,
+    "mute": false,
+    "data": {
+        "position_data": {
+            "/AttrTokenSource1": [
+                42,
+                100
+            ],
+            "/MatchingName": [
+                220.0,
+                -100.0
+            ],
+            "/ExtToken_InstTarget_Parent": [
+                400,
+                40
+            ]
+        },
+        "collapse_data": {
+            "/ExtToken_InstTarget_Parent/InstTarget1": true
+        }
+    },
+    "children": [
+        {
+            "name": "AttrTokenSource1",
+            "data": {
+                "enabled": true,
+                "attributes": {
+                    "foo1": {
+                        "type": "int",
+                        "value": "123"
+                    }
+                }
+            },
+            "execute_order": [
+                "AttrTokenSource2"
+            ],
+            "children": [
+                {
+                    "name": "AttrTokenSource2",
+                    "data": {
+                        "enabled": true,
+                        "attributes": {
+                            "foo2": {
+                                "type": "str",
+                                "value": "'abc'"
+                            }
+                        }
+                    },
+                    "execute_order": []
+                }
+            ]
+        },
+        {
+            "name": "ExtToken_InstTarget_Parent",
+            "data": {
+                "enabled": true,
+                "attributes": {
+                    "bar1": {
+                        "type": "raw",
+                        "value": "${/AttrTokenSource1.foo1}"
+                    },
+                    "bar2": {
+                        "type": "raw",
+                        "value": "${/AttrTokenSource1/AttrTokenSource2.foo2}"
+                    }
+                }
+            },
+            "execute_order": [
+                "InstTarget1",
+                "InstTarget11"
+            ],
+            "children": [
+                {
+                    "name": "InstTarget1",
+                    "data": {
+                        "instance": "/AttrTokenSource1",
+                        "enabled": true
+                    },
+                    "execute_order": [
+                        "node",
+                        "child",
+                        "source2",
+                        "AttrTokenSource2"
+                    ]
+                },
+                {
+                    "name": "InstTarget11",
+                    "data": {
+                        "instance": "/AttrTokenSource1/AttrTokenSource2",
+                        "enabled": true
+                    },
+                    "execute_order": []
+                }
+            ]
+        },
+        {
+            "name": "MatchingName",
+            "data": {},
+            "execute_order": []
+        }
+    ]
+}

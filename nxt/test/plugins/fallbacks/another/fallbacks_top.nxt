@@ -1,0 +1,146 @@
+{
+    "version": "1.16", 
+    "alias": "fallbacks0", 
+    "color": "#a67a53", 
+    "mute": false, 
+    "solo": false, 
+    "references": [
+        "../base/fallbacks2.nxt", 
+        "../base/fallbacks3.nxt", 
+        "../fallbacks4.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "/": [
+                0.0, 
+                0.0, 
+                0.0
+            ], 
+            "/another": [
+                -600.0, 
+                0.0
+            ], 
+            "/does_not_work": [
+                -280.0, 
+                0.0
+            ], 
+            "/init": [
+                -820.0, 
+                -260.0
+            ], 
+            "/init2": [
+                -500.0, 
+                -260.0
+            ], 
+            "/node": [
+                0.0, 
+                0.0
+            ], 
+            "/test_mute": [
+                -600.0, 
+                -400.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "does_not_work", 
+                "init", 
+                "init2", 
+                "test_mute"
+            ], 
+            "attrs": {
+                "variant": {
+                    "type": "raw", 
+                    "value": "dummy"
+                }
+            }
+        }, 
+        "/does_not_work": {
+            "instance": "/init", 
+            "comment": "This node tree is here if we ever support divergent instances during fallbacks"
+        }, 
+        "/init": {
+            "child_order": [
+                "node", 
+                "node2", 
+                "node3", 
+                "node4"
+            ], 
+            "code": [
+                "${file::dummy.txt}"
+            ]
+        }, 
+        "/init/node": {
+            "attrs": {
+                "dir": {
+                    "type": "raw", 
+                    "value": "${file::}"
+                }, 
+                "nested": {
+                    "type": "raw", 
+                    "value": "${file::${dir}/${variant}.txt}"
+                }
+            }, 
+            "code": [
+                "${file_list}"
+            ]
+        }, 
+        "/init/node2": {
+            "attrs": {
+                "limitation": {
+                    "type": "list", 
+                    "value": "['${file::}', '${file::${element}_${variant}_test.txt}', '${file::${/init/node.element}_${/init/node.variant}.txt}']"
+                }, 
+                "test": {
+                    "type": "raw", 
+                    "value": "${file::${/init/node.element}_${/init/node.variant}.txt}"
+                }
+            }
+        }, 
+        "/init/node3": {
+            "attrs": {
+                "env": {
+                    "type": "raw", 
+                    "value": "${file::biped_base.txt}"
+                }, 
+                "test": {
+                    "type": "dict", 
+                    "value": "{} ${element}"
+                }
+            }, 
+            "code": [
+                ""
+            ]
+        }, 
+        "/init/node4": {
+            "attrs": {
+                "nothing": {
+                    "type": "raw", 
+                    "value": "${file::${variant}}"
+                }
+            }
+        }, 
+        "/init2": {
+            "instance": "/init"
+        }, 
+        "/node/node/node": {
+            "attrs": {
+                "attr": {}
+            }
+        }, 
+        "/test_mute": {
+            "attrs": {
+                "mute_attr": {
+                    "type": "raw", 
+                    "value": "dummy"
+                }, 
+                "path": {
+                    "type": "raw", 
+                    "value": "${path::${mute_attr}.txt}"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,71 @@
+{
+    "version": "1.15", 
+    "alias": "StageChildOrderTest_TopLayer", 
+    "color": "#af6569", 
+    "references": [
+        "./StageChildOrderTest.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "/tgt": [
+                200.0, 
+                -200.0
+            ], 
+            "/LowerParent": [
+                200.0, 
+                0.0
+            ], 
+            "/ParentNode": [
+                -200.0, 
+                0.0
+            ], 
+            "/InstanceTarget": [
+                600.0, 
+                0.0
+            ], 
+            "/src": [
+                -200.0, 
+                -200.0
+            ]
+        }, 
+        "collapse": {
+            "/src/Child1": false
+        }
+    }, 
+    "nodes": {
+        "/InstanceTarget": {
+            "instance": "/LowerParent", 
+            "child_order": [
+                "Child2"
+            ], 
+            "enabled": true
+        }, 
+        "/InstanceTarget/Child2": {
+            "enabled": true
+        }, 
+        "/ParentNode": {
+            "child_order": [
+                "node0", 
+                "node1", 
+                "node2"
+            ], 
+            "enabled": true
+        }, 
+        "/ParentNode/node2": {
+            "enabled": true
+        }, 
+        "/src": {
+            "child_order": [
+                "Child1", 
+                "Child2", 
+                "Child3"
+            ]
+        }, 
+        "/src/Child1": {}, 
+        "/src/Child2": {}, 
+        "/src/Child3": {}, 
+        "/tgt": {
+            "instance": "/src"
+        }
+    }
+}

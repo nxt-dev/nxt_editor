@@ -1,0 +1,109 @@
+{
+    "version": "1.15", 
+    "alias": "runtime_changes", 
+    "color": "#00ffff", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/node21": [
+                630.5261081893309, 
+                1.895567242674673
+            ], 
+            "/test_inst_tgt_resolved": [
+                619.9445093384667, 
+                -0.4899887673035721
+            ], 
+            "/test_inst_tgt_input": [
+                0.0, 
+                0.0, 
+                0.0
+            ], 
+            "/a": [
+                611.2796507172422, 
+                -13.290195341848246
+            ], 
+            "/inst_src": [
+                -135.57711817587662, 
+                -280.73901202103684
+            ], 
+            "/center": [
+                271.24746431254687, 
+                -253.89831697622097
+            ], 
+            "/test_center_resolved": [
+                254.56217129977477, 
+                46.51540195341849
+            ], 
+            "/inst_tgt": [
+                617.8631667918854, 
+                -279.30371900826447
+            ], 
+            "/test_inst_src_cached": [
+                -121.82241657783428, 
+                249.42431602170092
+            ], 
+            "/test_inst_src_resolved": [
+                -123.21177685950417, 
+                -1.879349048973495
+            ]
+        }
+    }, 
+    "nodes": {
+        "/center": {
+            "attrs": {
+                "other": {
+                    "type": "str", 
+                    "value": "'old'"
+                }
+            }, 
+            "child_order": [
+                "node"
+            ], 
+            "enabled": true, 
+            "execute_in": "/inst_src", 
+            "code": [
+                "self.other = w('new')"
+            ]
+        }, 
+        "/inst_src": {
+            "attrs": {
+                "changed": {
+                    "type": "raw", 
+                    "value": "first"
+                }, 
+                "list": {
+                    "type": "list", 
+                    "value": "[${refer}, '${changer}']"
+                }, 
+                "changer": {
+                    "type": "raw", 
+                    "value": "me_${changed}"
+                }, 
+                "deep": {
+                    "type": "list", 
+                    "value": "[[2,1],[${/center.other}]]"
+                }, 
+                "refer": {
+                    "type": "raw", 
+                    "value": "${/center.other}"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                "print(self.refer)", 
+                "self.changed = 'second'", 
+                "print(self.changer)", 
+                "self.list.append('again')", 
+                "print(self.list)", 
+                "print(self.deep)", 
+                "goo = self.deep[0]", 
+                "goo.sort()"
+            ]
+        }, 
+        "/inst_tgt": {
+            "instance": "/inst_src", 
+            "enabled": true, 
+            "execute_in": "/center"
+        }
+    }
+}

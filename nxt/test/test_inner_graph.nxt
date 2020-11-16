@@ -1,0 +1,28 @@
+{
+    "version": "1.15", 
+    "alias": "test_inner_graph", 
+    "color": "#0d765a", 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "make_a_file"
+            ], 
+            "attrs": {
+                "location": {
+                    "type": "raw", 
+                    "value": "${path::}/sub_graph_file.txt"
+                }
+            }
+        }, 
+        "/make_a_file": {
+            "code": [
+                "print(self.location)", 
+                "print(STAGE.location)", 
+                "with open('${location}', 'w+') as fp:", 
+                "    pass", 
+                "STAGE.made_a_file = True"
+            ], 
+            "start_point": true
+        }
+    }
+}

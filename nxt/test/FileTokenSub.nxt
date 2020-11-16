@@ -1,0 +1,55 @@
+{
+    "version": "1.15", 
+    "alias": "FileTokenSub", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/paths": [
+                230.33499532466845, 
+                -181.5710371861406
+            ], 
+            "/tokens": [
+                301.31138056096984, 
+                -79.5326821452061
+            ]
+        }
+    }, 
+    "nodes": {
+        "/paths": {
+            "attrs": {
+                "real": {
+                    "type": "raw", 
+                    "value": "real_file.txt"
+                }, 
+                "fake": {
+                    "type": "raw", 
+                    "value": "notafile.txt"
+                }
+            }
+        }, 
+        "/tokens": {
+            "attrs": {
+                "path_fake": {
+                    "type": "raw", 
+                    "value": "${path::${/paths.fake}}"
+                }, 
+                "file_real": {
+                    "type": "raw", 
+                    "value": "${file::${/paths.real}}"
+                }, 
+                "path_real": {
+                    "type": "raw", 
+                    "value": "${path::${/paths.real}}"
+                }, 
+                "file_fake": {
+                    "type": "raw", 
+                    "value": "${file::${/paths.fake}}"
+                }
+            }, 
+            "code": [
+                "${contents::${path_real}}"
+            ]
+        }
+    }
+}

@@ -1,0 +1,117 @@
+{
+    "version": "1.15", 
+    "alias": "local_attr_sub", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/node": [
+                -68.0, 
+                -147.0
+            ], 
+            "/other": [
+                -115.34823441021788, 
+                -192.27188204357626
+            ], 
+            "/top_input1": [
+                611.8305785123966, 
+                -295.6136363636364
+            ], 
+            "/top_resolved1": [
+                880.0206611570248, 
+                -300.2479338842976
+            ], 
+            "/top_resolved": [
+                557.8512396694214, 
+                -306.0433884297521
+            ], 
+            "/top_input": [
+                247.04752066115697, 
+                -306.5743801652892
+            ], 
+            "/node1": [
+                268.0, 
+                -176.0
+            ], 
+            "/top_cached": [
+                880.6818181818182, 
+                -303.46074380165294
+            ]
+        }
+    }, 
+    "nodes": {
+        "/other": {
+            "attrs": {
+                "attr": {
+                    "type": "raw", 
+                    "value": "foo${side}"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                "print(self.attr)"
+            ]
+        }, 
+        "/top_cached": {
+            "attrs": {
+                "side": {
+                    "type": "raw", 
+                    "value": "l"
+                }
+            }, 
+            "child_order": [
+                "test_node_cached"
+            ], 
+            "enabled": true
+        }, 
+        "/top_cached/test_node_cached": {
+            "attrs": {
+                "attr": {
+                    "type": "raw", 
+                    "value": "fool"
+                }
+            }, 
+            "enabled": true
+        }, 
+        "/top_input": {
+            "attrs": {
+                "side": {
+                    "type": "raw", 
+                    "value": "l"
+                }
+            }, 
+            "child_order": [
+                "test_node_input"
+            ], 
+            "enabled": true
+        }, 
+        "/top_input/test_node_input": {
+            "instance": "/other", 
+            "enabled": true, 
+            "code": [
+                ""
+            ]
+        }, 
+        "/top_resolved": {
+            "attrs": {
+                "side": {
+                    "type": "raw", 
+                    "value": "l"
+                }
+            }, 
+            "child_order": [
+                "test_node_resolved"
+            ], 
+            "enabled": true
+        }, 
+        "/top_resolved/test_node_resolved": {
+            "attrs": {
+                "attr": {
+                    "type": "raw", 
+                    "value": "fool"
+                }
+            }, 
+            "enabled": true
+        }
+    }
+}

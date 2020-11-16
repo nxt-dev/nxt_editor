@@ -1,0 +1,69 @@
+{
+    "version": "1.15", 
+    "alias": "StageRuntimeTest2", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/NodeB": [
+                301.0294342427053, 
+                1.0
+            ], 
+            "/NodeA": [
+                0, 
+                0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/NodeA": {
+            "attrs": {
+                "attr0": {
+                    "type": "raw", 
+                    "value": "side"
+                }, 
+                "attr1": {
+                    "type": "int", 
+                    "value": "5"
+                }
+            }, 
+            "enabled": true, 
+            "code": [
+                "# printing values before they are changed", 
+                "print(\"${attr0}\")", 
+                "print(${attr1})", 
+                "print(self.attr0)", 
+                "print(self.attr1)  # notice this value is the input value!", 
+                "", 
+                "# changing value from 5 to 10", 
+                "self.attr1 = 10", 
+                "", 
+                "# printing after value change", 
+                "print(self.attr1)  # notice this value change is a result of runtime", 
+                "", 
+                "# caveat!  This is expected behavior - DO NOT modify at runtime!", 
+                "print(${attr1})", 
+                ""
+            ]
+        }, 
+        "/NodeB": {
+            "attrs": {
+                "attr2": {
+                    "type": "raw", 
+                    "value": "${/NodeA.attr1}"
+                }
+            }, 
+            "enabled": true, 
+            "execute_in": "/NodeA", 
+            "code": [
+                "# just printing values for now", 
+                "print(${attr2})  # this is the correct answer currently! NodeA hasn't run yet!", 
+                "print(self.attr2)", 
+                "", 
+                "# also printing remote attrs for fun!", 
+                "print(\"${/NodeA.attr0}\")", 
+                "print(${/NodeA.attr1})  # this is the correct answer too!"
+            ]
+        }
+    }
+}

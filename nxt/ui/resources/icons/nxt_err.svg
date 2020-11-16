@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" x="0px" y="0px">
+	<defs>
+		<image width="256" height="256" id="img1" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiI+Cgk8c3R5bGU+CgkJdHNwYW4geyB3aGl0ZS1zcGFjZTpwcmUgfQoJCS5zaHAwIHsgZmlsbDogIzQ3OWZkOCB9IAoJPC9zdHlsZT4KCTxwYXRoIGlkPSJMYXllciIgY2xhc3M9InNocDAiIGQ9Ik0yMDAuMSAyMDIuM0wxNTEuNSAyMDIuM0wxMTUuNCAxNTYuN0wxMTUuNCAyMDEuMkw1Ni4zIDIwMS4yTDU2LjMgNTYuNEwxMDIuMSA1Ni40TDE0MC45IDEwNS40TDE0MC45IDU2LjRMMjAwLjEgNTYuNEwyMDAuMSAyMDIuM0wyMDAuMSAyMDIuM1oiIC8+Cjwvc3ZnPg=="/>
+	</defs>
+	<style>
+		tspan { white-space:pre }
+		.shp0 { fill: #000000 }
+		.shp1 { fill: #429fd8;stroke: #429fd8;stroke-linecap:round;stroke-linejoin:round;stroke-width: 5 }
+		.shp2 { fill: none;stroke: #429fd8;stroke-linecap:round;stroke-linejoin:round;stroke-width: 20 }
+	</style>
+	<path id="bg" class="shp0" d="M136.11 27.42L231.2 220.94C235.41 229.5 232.01 236.42 223.6 236.42L33.41 236.42C25 236.42 21.6 229.5 25.8 220.94L120.9 27.42C125.1 18.86 131.9 18.86 136.11 27.42Z" />
+	<path id="exclamation dot" class="shp1" d="M122.65 128.33L134.35 128.33L134.35 140.02L122.65 140.02L122.65 128.33Z" />
+	<path id="exclamation top" class="shp1" d="M122.65 68.58L134.35 68.58L134.35 120.83L122.65 120.83L122.65 68.58Z" />
+	<use id="nxt-n" href="#img1" transform="matrix(0.469,0,0,0.469,69,126)"/>
+	<path id="Triangle" class="shp2" d="M136.11 27.42L231.2 220.94C235.41 229.5 232.01 236.42 223.6 236.42L33.41 236.42C25 236.42 21.6 229.5 25.8 220.94L120.9 27.42C125.1 18.86 131.9 18.86 136.11 27.42Z" />
+</svg>

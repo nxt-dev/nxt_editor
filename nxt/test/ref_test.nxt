@@ -1,0 +1,18 @@
+{
+    "version": "1.16", 
+    "alias": "ref_test", 
+    "color": null, 
+    "mute": false, 
+    "solo": false, 
+    "meta_data": {
+        "positions": {
+            "/i_am_here": [
+                -43.0, 
+                -75.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/i_am_here": {}
+    }
+}

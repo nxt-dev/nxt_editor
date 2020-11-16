@@ -1,0 +1,34 @@
+{
+    "version": "1.15", 
+    "alias": "StageInstanceAcrossLayersTest", 
+    "color": "#966877", 
+    "references": [
+        "./StageInstanceTest.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "/inst_source3": [
+                700.0, 
+                180.0
+            ], 
+            "/node": [
+                1080.6597543213106, 
+                161.15101599528316
+            ], 
+            "/inst_target3": [
+                1040.0, 
+                180.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/inst_source3": {
+            "instance": "/inst_target1", 
+            "enabled": true
+        }, 
+        "/inst_target3": {
+            "instance": "/inst_source3", 
+            "enabled": true
+        }
+    }
+}

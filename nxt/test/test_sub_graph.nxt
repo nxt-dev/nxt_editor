@@ -1,0 +1,58 @@
+{
+    "version": "1.15", 
+    "alias": "test_sub_graph", 
+    "color": "#119b77", 
+    "references": [
+        "../builtin/sub_graphs.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "/specific_file": [
+                400, 
+                0
+            ], 
+            "/basic_file": [
+                400, 
+                -200
+            ], 
+            "/inside_the_sub_graph": [
+                -117.0, 
+                -55.0
+            ], 
+            "/run_sub_graph": [
+                0, 
+                -60
+            ]
+        }
+    }, 
+    "nodes": {
+        "/": {
+            "child_order": [
+                "run_sub_graph", 
+                "basic_file", 
+                "specific_file"
+            ]
+        }, 
+        "/basic_file": {
+            "instance": "/run_sub_graph"
+        }, 
+        "/run_sub_graph": {
+            "instance": "/_sub_graph", 
+            "attrs": {
+                "_graph_path": {
+                    "type": "raw", 
+                    "value": "${file::test_inner_graph.nxt}"
+                }
+            }
+        }, 
+        "/specific_file": {
+            "instance": "/run_sub_graph", 
+            "attrs": {
+                "location": {
+                    "type": "raw", 
+                    "value": "${path::specific_file.txt}"
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "version": "1.15", 
+    "alias": "TokenSiblingTest", 
+    "color": "#119B77", 
+    "references": [], 
+    "meta_data": {
+        "positions": {
+            "/my": [
+                -45.0, 
+                -55.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/tester": {
+            "enabled": true, 
+            "code": [
+                "\"\"\"NOTE: this graph depends on the test folder structure.", 
+                "it is used in the test file `test_tokens.py` that must be", 
+                "a direct sibling to this file. If you find one of these files", 
+                "without the other, something is wrong.", 
+                "\"\"\""
+            ]
+        }
+    }
+}

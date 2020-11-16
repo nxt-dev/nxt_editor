@@ -1,0 +1,171 @@
+{
+    "version": "1.15", 
+    "alias": "StageInstanceTest_Layer0", 
+    "color": "#8a3600", 
+    "references": [
+        "./StageInstanceTest_Layer1.nxt", 
+        "./StageInstanceTest_Layer2.nxt"
+    ], 
+    "meta_data": {
+        "positions": {
+            "/Parent": [
+                380.0, 
+                -80.0
+            ], 
+            "/Character/build/legs/node": [
+                0.0, 
+                0.0
+            ], 
+            "/spine": [
+                480.0, 
+                -300.0
+            ], 
+            "/OneLayerSource1": [
+                340.0, 
+                0.0
+            ], 
+            "/another": [
+                120.0, 
+                -160.0
+            ], 
+            "/node": [
+                -520.0, 
+                -480.0
+            ], 
+            "/Character": [
+                -400.0, 
+                -200.0
+            ], 
+            "/leg": [
+                -800.0, 
+                -120.0
+            ], 
+            "/OneLayerSource/node": [
+                0.0, 
+                0.0
+            ], 
+            "/Character/build/node": [
+                0.0, 
+                0.0
+            ], 
+            "/OneLayerSource/node1": [
+                0.0, 
+                0.0
+            ], 
+            "/dummy": [
+                500.0, 
+                -320.0
+            ], 
+            "/control": [
+                -1200.0, 
+                0.0
+            ], 
+            "/node1": [
+                -100.0, 
+                -480.0
+            ]
+        }
+    }, 
+    "nodes": {
+        "/Character": {
+            "child_order": [
+                "build"
+            ], 
+            "enabled": true
+        }, 
+        "/Character/build": {
+            "attrs": {
+                "NAME": {
+                    "type": "raw", 
+                    "value": "David"
+                }
+            }, 
+            "child_order": [
+                "legs"
+            ], 
+            "enabled": true
+        }, 
+        "/Character/build/legs": {
+            "child_order": [
+                "left", 
+                "right"
+            ], 
+            "enabled": true
+        }, 
+        "/Character/build/legs/left": {
+            "attrs": {
+                "LOCAL": {}, 
+                "SIDE": {
+                    "type": "raw", 
+                    "value": "L"
+                }
+            }, 
+            "child_order": [
+                "create"
+            ], 
+            "instance": "/leg", 
+            "enabled": true
+        }, 
+        "/Character/build/legs/right": {
+            "attrs": {
+                "SIDE": {
+                    "type": "raw", 
+                    "value": "R"
+                }
+            }, 
+            "child_order": [
+                "create"
+            ], 
+            "instance": "/Character/build/legs/left", 
+            "enabled": true
+        }, 
+        "/another": {
+            "child_order": [
+                "build"
+            ], 
+            "instance": "/Character", 
+            "enabled": true
+        }, 
+        "/another/build": {
+            "child_order": [
+                "legs"
+            ], 
+            "enabled": true
+        }, 
+        "/another/build/legs": {
+            "child_order": [
+                "left", 
+                "right"
+            ], 
+            "enabled": true
+        }, 
+        "/another/build/legs/right": {
+            "child_order": [
+                "create"
+            ], 
+            "instance": "/Character/build/legs/right", 
+            "enabled": true
+        }, 
+        "/node": {
+            "child_order": [
+                "node", 
+                "node1"
+            ], 
+            "enabled": true
+        }, 
+        "/node/node": {
+            "enabled": true
+        }, 
+        "/node/node1": {
+            "enabled": true
+        }, 
+        "/node1": {
+            "child_order": [
+                "node1", 
+                "node"
+            ], 
+            "instance": "/node", 
+            "enabled": true
+        }
+    }
+}
