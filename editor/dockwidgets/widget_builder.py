@@ -13,9 +13,9 @@ except AttributeError:
     from PySide2 import QtCore
 
 # Internal
+from nxt_editor import user_dir
 from dock_widget_base import DockWidgetBase
 from nxt import DATA_STATE, nxt_path
-from nxt import user_dir
 
 logger = logging.getLogger(__name__)
 

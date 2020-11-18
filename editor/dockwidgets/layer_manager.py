@@ -7,8 +7,9 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
+from nxt_editor import user_dir
 from dock_widget_base import DockWidgetBase
-from nxt import nxt_path, user_dir
+from nxt import nxt_path
 
 logger = logging.getLogger(__name__)
 

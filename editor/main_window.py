@@ -15,20 +15,21 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
+from nxt_editor import user_dir
 from nxt.session import Session
-from nxt.ui.constants import EDITOR_VERSION
-from nxt.ui.stage_view import StageView
-from nxt.ui.stage_model import StageModel
-from nxt.ui.dockwidgets import (DockWidgetBase, CodeEditor, PropertyEditor,
-                                HotkeyEditor, LayerManager, OutputLog,
-                                HistoryView, WidgetBuilder, BuildView)
-from nxt.ui.dockwidgets.output_log import (FileTailingThread,
-                                           QtLogStreamHandler)
-from nxt.ui.dockwidgets.code_editor import NxtCodeEditor
-from nxt import user_dir, nxt_log, nxt_io, nxt_layer
+from nxt_editor.constants import EDITOR_VERSION
+from nxt_editor.stage_view import StageView
+from nxt_editor.stage_model import StageModel
+from nxt_editor.dockwidgets import (DockWidgetBase, CodeEditor, PropertyEditor,
+                                    HotkeyEditor, LayerManager, OutputLog,
+                                    HistoryView, WidgetBuilder, BuildView)
+from nxt_editor.dockwidgets.output_log import (FileTailingThread,
+                                               QtLogStreamHandler)
+from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
+from nxt import nxt_log, nxt_io, nxt_layer
 from dialogs import (NxtFileDialog, NxtWarningDialog, UnsavedLayersDialogue,
                      UnsavedChangesMessage)
-from nxt.ui import actions, LoggingSignaler
+from nxt_editor import actions, LoggingSignaler
 from nxt.constants import API_VERSION, GRAPH_VERSION
 from nxt.remote.client import NxtClient
 import resources

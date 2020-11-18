@@ -6,7 +6,7 @@ from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
 from dock_widget_base import DockWidgetBase
-from nxt.ui import colors, dialogs
+from nxt_editor import colors, dialogs
 
 logger = logging.getLogger(__name__)
 TOOLTIP_INFO = ('<p style="font-size:12px;color:white;">'

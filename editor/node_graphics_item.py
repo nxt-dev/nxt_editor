@@ -12,9 +12,9 @@ from Qt import QtCore
 # Nxt imports
 from nxt import nxt_path, nxt_node
 from nxt.nxt_layer import LAYERS
-from nxt.ui import colors
+from . import colors
 from nxt.stage import INTERNAL_ATTRS
-from nxt.ui.label_edit import NameEditDialog
+from .label_edit import NameEditDialog
 
 
 logger = logging.getLogger(__name__)

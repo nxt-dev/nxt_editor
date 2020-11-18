@@ -12,20 +12,21 @@ from Qt import QtWidgets
 from Qt import QtCore
 
 # Internal
+from nxt_editor import user_dir
 from nxt import clean_json
-from nxt.ui.commands import *
-from nxt.ui.dialogs import NxtFileDialog
+from nxt_editor.commands import *
+from nxt_editor.dialogs import NxtFileDialog
 from nxt.constants import API_VERSION
-from nxt import (nxt_path, user_dir, nxt_layer, tokens, DATA_STATE,
+from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
-from . import DIRECTIONS, StringSignaler
+from nxt_editor import DIRECTIONS, StringSignaler
 from nxt.nxt_layer import LAYERS, CompLayer
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
 from nxt.stage import (determine_nxt_type, INTERNAL_ATTRS,
                        get_historical_opinions)
 from nxt.runtime import GraphError
-from nxt.ui.dialogs import NxtConfirmDialog
+from nxt_editor.dialogs import NxtConfirmDialog
 from nxt.remote import nxt_socket
 
 logger = logging.getLogger(__name__)

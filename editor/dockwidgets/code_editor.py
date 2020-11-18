@@ -9,10 +9,10 @@ from Qt import QtCore
 
 # Internal
 from dock_widget_base import DockWidgetBase
-from nxt.ui.pixmap_button import PixmapButton
-from nxt.ui.label_edit import LabelEdit
-from nxt.ui import colors
-from nxt.ui.decorator_widgets import OpinionDots
+from nxt_editor.pixmap_button import PixmapButton
+from nxt_editor.label_edit import LabelEdit
+from nxt_editor import colors
+from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS
 import syntax

@@ -7,7 +7,7 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
-from nxt.ui import colors
+from . import colors
 from nxt import nxt_path, nxt_node
 
 

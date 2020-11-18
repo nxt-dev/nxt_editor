@@ -9,8 +9,9 @@ from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from . import DIRECTIONS
-from nxt import nxt_layer, user_dir, DATA_STATE, nxt_path
-from nxt.ui import colors, finder, file_search
+from nxt_editor import user_dir
+from nxt import nxt_layer, DATA_STATE, nxt_path
+from nxt_editor import colors, finder, file_search
 
 logger = logging.getLogger('nxt')
 

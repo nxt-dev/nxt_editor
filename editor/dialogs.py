@@ -8,7 +8,7 @@ import os
 from Qt import QtCore, QtWidgets, QtGui
 
 # Internal
-from nxt import user_dir
+from nxt_editor import user_dir
 
 logger = logging.getLogger(__name__)
 
