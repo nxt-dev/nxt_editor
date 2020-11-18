@@ -42,62 +42,62 @@ The following example is for Maya 2020 running on Windows.
 
 The two imports from nxt that you'll need are the `RemoteContext` class and `register_context` function. The first arg in `RemoteContexts` is the **context name**, this will be used by users to call your context. Next we have the context executable, this must be a python (currently only `Python 2.7`) executable. And finally the path to your context graph.
 
-```python
-# Builtin
-import os
-# External
-from nxt.remote.contexts import RemoteContext, register_context
-# Maya 2020
-maya2020_name = 'maya2020'
-maya2020_exe = 'C:/Program Files/Autodesk/Maya2020/bin/mayapy.exe'
-maya2020_graph = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                              'maya_2020_context.nxt'))
-maya_2020_context = RemoteContext(maya2020_name, maya2020_exe, maya2020_graph)
-register_context(maya_2020_context)
-```
+
+    # Builtin
+    import os
+    # External
+    from nxt.remote.contexts import RemoteContext, register_context
+    # Maya 2020
+    maya2020_name = 'maya2020'
+    maya2020_exe = 'C:/Program Files/Autodesk/Maya2020/bin/mayapy.exe'
+    maya2020_graph = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                                  'maya_2020_context.nxt'))
+    maya_2020_context = RemoteContext(maya2020_name, maya2020_exe, maya2020_graph)
+    register_context(maya_2020_context)
+
 
 #### maya_2020_context.nxt
 
 Now to write your context graph.
 
-1. Create an nxt graph and make sure to add the following reference layer:
+- Create an nxt graph and make sure to add the following reference layer:
 
-```json
-"references": [
-    "$NXT_BUILTINS/_context.nxt"
-]
-```
+        "references": [
+            "$NXT_BUILTINS/_context.nxt"
+        ]
 
-Note: Currently the only way to add a layer like this (using the env var) is to open the graph in a text editor.
 
-2. On the `/` node add an attr called `maya_inst_name` and set its value to `nxt`
+!!! Note
+    Currently the _only_ way to add a layer like this (using the env var) is to
+     open the graph in a text editor.
 
-3. Also on the `/` node we're going to want to write some custom code in. Add the following to the code block.
+
+- On the `/` node add an attr called `maya_inst_name` and set its value to `nxt`
+
+- Also on the `/` node we're going to want to write some custom code in. Add
+ the following to the code block.
+           
+        cwd = os.path.dirname(sys.executable)
+        python_home = os.path.abspath(os.path.join(cwd, '..', 'Python/Lib/site-packages'))
+        sys.path.insert(0, python_home)
+        from maya import standalone
    
-   ```python
-   cwd = os.path.dirname(sys.executable)
-   python_home = os.path.abspath(os.path.join(cwd, '..', 'Python/Lib/site-packages'))
-   sys.path.insert(0, python_home)
-   from maya import standalone
-   ```
-   
-    This will add the Maya site-packages to your environment and import `maya.standalone`.
+    _This will add the Maya site-packages to your environment and import
+     `maya.standalone`._
 
-4. In the `/enter/init` node you'll want to add your own custom code, something like this:
-   
-   ```python
-   STAGE.old_cwd = os.getcwd()
-   maya_cwd = os.path.dirname(sys.executable) 
-   os.chdir(maya_cwd) 
-   standalone.initialize(name='${maya_inst_name}')
-   ```
+- In the `/enter/init` node you'll want to add your own custom code, something like this:
+ 
+           STAGE.old_cwd = os.getcwd()
+           maya_cwd = os.path.dirname(sys.executable) 
+           os.chdir(maya_cwd) 
+           standalone.initialize(name='${maya_inst_name}')
+
 
 5. In the `/enter/teardown` node you want to uninitialize Maya, add the following code:
-   
-   ```python
-   standalone.uninitialize(name='${maya_inst_name}')
-   os.chdir(STAGE.old_cwd)
-   ```
+
+           standalone.uninitialize(name='${maya_inst_name}')
+           os.chdir(STAGE.old_cwd)
+
 
 ### Using Custom Contexts
 

@@ -16,7 +16,7 @@ Build View
 
 History View
 
-Hotkey Editor
+[Hotkey Editor](hotkeys.md)
 
 # Terms and Definitions
 
@@ -40,7 +40,7 @@ At editor time (before the graph has begun [executing](#executionorder)) attribu
 A node’s local attributes can be resolved by name alone via `${attrname}`
 
 !!! note "Hotkeys"
-    The raw/composited state can be visualized by toggling [editor resolution](#rawresolvedcached) on and off using `QWE`.
+    The raw/composited state can be visualized by toggling editor resolution on and off using `Q`, `W`, `E`.
     NXT includes a full hot key editor. (Window > [Hotkey ](hotkeys.md)Editor)
 
 !!! example
@@ -123,7 +123,7 @@ The compute block/code block  is standard python code, with the exception that i
 ![code_editor.PNG](../images/code_editor.PNG)
 
 !!! note "Hotkeys"
-    The raw/composited state can be visualized by toggling [editor resolution](#rawresolvedcached) on and off using `QWE`.
+    The raw/composited state can be visualized by toggling editor resolution on and off using `Q`, `W`, `E`.
 
     `numreturn` or `ctrl+enter` or clicking off the code will accept your edit
     
@@ -164,7 +164,7 @@ To begin execution from a given node, the first node is run, followed by a depth
 ### Layers
 
 [Stages ](#stage)are designed to be combined together to create a hierarchy of instructions that can be reused and repurposed by several NXT users for use on several assets or workflows. When a stage is referenced into another stage, it is a “layer” within that stage.
-
+![nxt_layers](images/layers_concept.png)
 ![layers.PNG](../images/layers.PNG)
 
 All of the layers in your file are composited together to produce final code to execute. Each layer has the power to change as much or as little as is needed to customize the composited node’s attributes and code block. These changes are stored in the file they are made on, keeping referenced files safe to use for many purposes.
@@ -175,7 +175,7 @@ Layer color propagates into nodes an also attributes.
 
 ### Composition Inside Node Hierarchies
 
-When a [node ](#node)is a child of another node, it [inherits ](index.md#Inheritance)its [attributes ](#attributes)from that node which can be overwritten locally on the node.
+When a [node ](#node)is a child of another node, it [inherits ](concepts.md#Inheritance)its [attributes ](#attributes)from that node which can be overwritten locally on the node.
 
 ## Instancing
 
@@ -185,14 +185,14 @@ Instances in NXT can be simple and powerful. But they can also be extremely comp
 
 !!! example
 
-    -  If you create a node, don't add any attributes or code, it will just look like a clone of the instance source.
+    - If you create a node, don't add any attributes or code, it will just look like a clone of the instance source.
     
     ![simple](../images/instance_simple.PNG)
     
     - If you create a node with unique attributes it will look like the instance source is another parent. All the attributes will composite from the instance source, and the local attributes will be visible as well.
     
     ![local](../images/instance_local.PNG)
-    - If you create a node with attributes named the same as the instance source, the local attributes will have a stronger opinion and overwrite the instance values. In this case, `cat` exists on `custom_node` so it's value wins.
+    - If you create a node with attributes named the same as the instance source, the local attributes will have a stronger opinion and overwrite the instance values. In this case, `cat` exists on `custom_node` so it's value wins.
     ![overwrite](../images/instance_overwrite.PNG)
 
 The children of the instance node get inserted into the hierarchy as proxy children. This data exists only as a result of the composite. The are not local saved data. Proxy children are drawn in a hashed style to make it clear you haven't touched the data.
@@ -251,7 +251,7 @@ Nxt follows a functional model. It eschews object oriented inheritance with a la
 
 ##### Why not visual programming?
 
-Nxt differs from a visual programming environment where every function (math, concatenation, data, flow control)  is wrapped up in a node. Fully visual programming environments result in sprawling graphs. While the functions are readable, they are not dense. Nxt displays code standard text notation but creates a visualization for the data.
+Nxt differs from a visual programming environment where every function (math, concatenation, data, flow control) is wrapped up in a node. Fully visual programming environments result in sprawling graphs. While the functions are readable, they are not dense. Nxt displays code standard text notation but creates a visualization for the data.
 
 - VP graphs can be tedious to construct. A simple operation can often require a dozen nodes but could be represented in 3 lines of code.
 
@@ -271,12 +271,12 @@ Houdini is a tool for building tools. It’s a visual processing engine. Can’t
 
 - Artists have decades of experience in other tools
 
-- Large segments of production already built around need to be built around  Maya, Nuke, Unreal
+- Large segments of production already built around need to be built around Maya, Nuke, Unreal
 
 - HDA’s are black boxes and can be slow in host applications
 
 - PDG is great, and expensive.
   
-  ```
-  
-  ```
+# Application structure
+
+![nxt_structure](images/nxt_structure.png)

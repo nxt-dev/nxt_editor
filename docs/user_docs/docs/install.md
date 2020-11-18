@@ -1,103 +1,101 @@
-# Release Installation
+# Standalone Installation
 
-##### Maya plugin install
+### Linux/OSX
 
-This is a maya module folder for nxt.
+To install the latest release directly from [PyPi](https://pypi.org/project/nxt-editor/) follow the following steps.
 
-###### Manual
+- First time install
+    - `pip install nxt-core`
+    - `pip install nxt-editor`
+- Update
+    - `pip install -U nxt-core`
+    - `pip install -U nxt-editor`
 
-- Edit with your paths and place the module definition (.mod) file into a directory of the MAYA_MODULE_PATH.
+If you would like to install a previous release download the `.tar.gz` from 
+our [releases page](https://github.com/SunriseProductions/nxt/releases).
+To install use the following commands. 
 
-- By default, the possible locations are:
-  
-    - Windows: `C:\Users\<username>\Documents\maya\modules`
-    - Linux:   `~/maya/modules`
-    - Mac:     `~/Library/Preferences/Autodesk/maya/modules`
+- First time install
+    - `pip install path/to/release.tar.gz`
+- Update
+    - `pip install -U path/to/release.tar.gz`
 
-- You can edit your maya.env file to point to any module location. `MAYA_MODULE_PATH=<path to module file>`
+### Windows
 
-###### Automated
+Due to the limited availability of PySide2 on Windows for Python 2.7 the steps to install on Windows are slightly more involved.
+The following steps are a simplified version of those found in our
+ [contributing documentation](https://github.com/SunriseProductions/nxt/blob/master/CONTRIBUTING.md).
+If you're comfortable working in and IDE and using git we suggest you follow 
+the contributing documentation.
 
-1. Place this nxt module folder somewhere you'd like to keep it, and will be easy to find when you're ready to install a newer version.
-2. When your folder is in place, drag the file `drag_into_maya.py` into maya.
-   * A file browser will appear. Please select the folder you'd like the nxt module file to go in. Ensure the location you choose is in your maya modules path. This will replace any existing nxt.mod in that directory. If you are unsure where your modules folder is, the default/suggested location should work.
-3. Restart maya
-4. Now `nxt_maya.py` should be available for you to activate in the plugin browser.
+!!! Note
+    These steps are only necessary if you want to use the nxt **editor** outside
+     of Maya. The core will pip install on Windows without issue.
 
-!!! warning
-    Remember not to delete this folder after installing in maya. This is where maya loads nxt from. When there is an update to nxt, you can replace this folder, and your nxt plugin will continue to work with the updated code.
+#### Python Environment (Miniconda)
+To get the correct Python environment setup on your Windows machine you will 
+need to follow these steps. 
+The nxt environment is specified in our `nxt_env.yml`.
+ 
+- Conda is best installed via [miniconda](https://docs.conda.io/en/latest/miniconda.html). 
+We recommend **not** adding conda python to your system path and **not** making it your system python.
+- You can either clone the nxt source from [our repo](https://github.com/SunriseProductions/nxt) or download the desired
+ [release](https://github.com/SunriseProductions/nxt/releases) source code zip and extract it.
+- Lets assume you place the source code at `C:/Projects/nxt`
+- Launch the **Anaconda Prompt** and install dependencies:
+    `conda env create -f C:/Projects/nxt/nxt_env.yml`
+#### Launching the nxt editor
+- From Anaconda Prompt
+    - `conda activate nxt`
+    - `cd C:/Projects/nxt`
+    - `python -m nxt.cli ui`
 
-###### Usage
+---
+
+# Maya Plugin
+
+Install the editor and core for Maya.
+
+### Automated
+
+- Place this nxt module folder somewhere you'd like to keep it, and will be
+ easy to find when you're ready to install a newer version.
+- When your folder is in place, drag the file `drag_into_maya.py` into maya.
+    - A file browser will appear. Please select the folder you'd like the nxt
+     module file to go in. Ensure the location you choose is in your maya modules path. This will replace any existing nxt.mod in that directory. If you're confused, the default should work."
+- Restart maya
+- Now `nxt_maya.py` should be available for you to activate in the plugin
+ browser.
+
+**Remember** not to delete this folder after installing in maya. This is where maya loads nxt from. When there is an update to nxt, you can replace this folder, and your nxt plugin will continue to work with the updated code.
+
+### By hand (if you're familiar with Maya modules)
+We provide an example `nxt.mod` file with the `nxt_maya` plugin. Simply
+populate the mod path with the path to your extracted `nxt_maya.zip` and
+ place the `nxt.mod` where Maya can find it.
+
+### Maya plugin usage
 
 * When the nxt plugin is loaded, there is an "nxt" menu at the top of maya where you can select "Open Editor" and get started.
+* 
 
-##### Houdini plugin install
-
-##### Nuke plugin install
-
-##### UE4 plugin install
+#### Planned plugins:
+- Houdini 
+- Nuke
 
 ---
 
 # Developer Installation
+See our [contributing documentation](https://github.com/SunriseProductions/nxt/blob/master/CONTRIBUTING.md)
 
-1. Install git. ([https://git-scm.com/downloads](https://git-scm.com/downloads))
-
-2. Install an IDE 
-   
-   - [Pycharm community](https://www.jetbrains.com/pycharm/download/)
-   - [VS Code](https://www.jetbrains.com/pycharm/download/)
-   - GITGUI
-
-3. Install [miniconda](https://docs.conda.io/en/latest/miniconda.html) standard install no env, no system python.
-
-4. Download the repository:   
-   
-       - Clone in your IDE, docs below for [Pycharm ](#pycharm)and [VScode](#vscode)
-       - `https://github.com/SunriseProductions/nxt.git`
-
-5. Launch **Anaconda Prompt** powershell folder and install dependencies by pointing conda to the conda manifest in the repo `nxt.yml`. `conda env create -f PATH_TO_NXT_CLONE/nxt/nxt_env.yml`
-
-6. Launch    
-   
-   - `app.py` in your IDE   
-   - Maya/Nuke/Houdini via [Bootstrap](#bootstrap)
-
-##### CLI integration
-
-- **On Mac/Linux**, update the paths and add the following line to your `.bashrc` or `.zshrc` if you're using zshell.
-
-- `alias nxt='PATH_TO_CONDA/envs/nxt/bin/python2 PATH_TO_NXT_CLONE/cli.py'`
-
-- **On Windows**
-  
-  - Create `%USERPROFILE%/alias.bat` and add the following line to it
-
-- `DOSKEY nxt=C:\Users\USER_NAME\Miniconda2\envs\nxt\python.exe PATH_TO_NXT_CLONE\nxt\cli.py $*`
-  
-  - Add the follow key and string value to `Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Command Processo` in the registery editor.
-
-- `AutoRun`
-
-- `%USERPROFILE%/alias.bat`
-
-## Dependencies
-
-- Python 2.7
-- [Qt.py](https://github.com/mottosso/Qt.py)
-- PySide2 5.6
-- pyyaml 
-
-## Usage
-
-App's entry point is **app.py**. 
-
-## Bootstrap
+#### Bootstrapping nxt
 
 Tested with Maya2018/19/20, Houdini18, Nuke11,12
 
 !!! warning
-    This setup is temporary, and will eventually be replaced with RPC/command port connections with host plugins.  There is also lack of support in apps like photoshop, ue(qt library issues)
+    This setup is temporary, and will eventually be replaced with a command
+     port connections with host plugins. There is also lack of support in
+      apps like photoshop, UE4 (qt library issues).
 
 Find your conda env with this command in the Anaconda Prompt: `conda info --envs` 
 Copy the following code into Maya and edit  `NXT_PATH` and `ENV_PATH` to reflect your environment. You can then drag it to your shelf or save it to a file, up to you.
@@ -115,9 +113,8 @@ Copy the following code into Maya and edit  `NXT_PATH` and `ENV_PATH` to reflect
     if NXT_PATH not in sys.path:
         sys.path.append(os.path.expanduser(NXT_PATH))
     from Qt import QtCore
-    import nxt.ui.main_window
-    reload(nxt.ui.main_window)
-    instance = nxt.ui.main_window.MainWindow(filepath=LAUNCH_FILE)
+    import nxt_editor.main_window
+    instance = nxt_editor.main_window.main_window.MainWindow(filepath=LAUNCH_FILE)
     if sys.platform == 'win32':
         instance.setWindowFlags(QtCore.Qt.Window)
     instance.show()
@@ -136,16 +133,13 @@ To attach to the main window in Nuke
                 return obj
         else:
             raise RuntimeError('Could not find DockMainWindow instance')
-    parent = _nuke_main_window()
-    instance = nxt.ui.main_window.MainWindow(parent = parent, filepath=LAUNCH_FILE)
+    nuke_window = _nuke_main_window()
+    instance = nxt_editor.main_window.MainWindow(parent=nuke_window, filepath=LAUNCH_FILE)
 
 To Attach to the main window in Houdini
 
     from hutil.Qt import QtCore
-    #print QtWidgets.QApplication.instance()
-    instance = nxt.ui.main_window.MainWindow()
-    # parent = hou.qt.mainWindow()
-    # instance = nxt.ui.main_window.MainWindow(parent = parent)
+    instance = nxt_editor.main_window.MainWindow()
     instance.setParent(hou.qt.mainWindow(), QtCore.Qt.Window)
 
 To Attach to the main window in Maya
@@ -153,82 +147,4 @@ To Attach to the main window in Maya
     import maya.OpenMayaUI as mui
     pointer = mui.MQtUtil.mainWindow()
     maya_window = QtCompat.wrapInstance(long(pointer), QtWidgets.QWidget)
-
-## Pycharm
-
-Launch via pycharm configuration
-
-- Star the `master` branch under VCS>Git>Branches
-- Set your interpreter File>Settings>Project:nxt>+Interpreter>Conda Environment>Existing environment
-- Python version 2.7
-- Find the path using `conda info --envs`
-- point to python.exe in the conda env
-- confirm by looking at Project>nxt>External Libraries
-- Add a new configuration Run > Edit Configurations
-- Set the script path to: `PATH_TO_NXT_CLONE/nxt/app.py`
-- Set the environment to point to the conda env rather than the basic pycharm venv
-
-## VScode
-
-- Ctrl+shift+p to open the command palette
-- type 'install', select install extension, select python
-
-##### Remote debug
-
-Under the Debug icon and then > menu, select 'Add configuration' or Debug>open configurations. Paste this in or add the keys, confirm your port matches the maya session. https://code.visualstudio.com/docs/python/debugging
-
-    {
-        // comment
-        "version": "0.2.0",
-        "configurations": [
-            {
-                "name": "Python: Current File",
-                "type": "python",
-                "request": "launch",
-                "program": "${file}",
-                "console": "integratedTerminal",
-                "pathMappings": [
-                    {
-                        "localRoot": "${workspaceFolder}",
-                        "remoteRoot": "."
-                    }
-                ]
-            },
-            {
-                "name": "Python: Remote Attach Maya",
-                "type": "python",
-                "request": "attach",
-                "port": 3000,
-                "host": "localhost",
-    
-                "pathMappings": [
-                    {
-                        "localRoot": "Z:/vscode/nxt",
-                        "remoteRoot": "Z:/vscode/nxt"
-                    }
-                ]
-            }
-    
-        ]
-    
-    }
-
-##### Maya Remote Setup
-
-Ptvsd should be installed by miniconda. If you need to add it, do so with pip. Run the following lines in Maya. It should already be added to your conda env and the  system path should already be updated via the bootstrap
-
-    import ptvsd
-    ptvsd.enable_attach(address=('0.0.0.0', 3000), redirect_output=True)
-
-The port used here can be changed, but the VScode launch configuration needs to have a matching port. 
-Multiple debug sessions can be available at once on separate ports. These sessions can be changed between by changing your existing launch configuration or via creating addtional launch configurations.
-
-##### Notes
-
-You don't need to hook to Maya to enable breakpoints. The `current file` config will work directly inside VScode.
-
-Once you establish a breakpoint, you can debug using `Python: Remote Attach Maya`
-
-You can then step through into the code execution using the play controls at the top of the screen.
-
-You can also use the debug console to interact directly with the code. For example, you can type `self` to see what the current context is. Code completion should work if you got your `path mappings` key correct in your `launch.json`
+    instance = nxt_editor.main_window.MainWindow(parent=maya_window)

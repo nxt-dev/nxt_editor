@@ -1,61 +1,60 @@
 # NXT - Node eXecution Tree
 
-...or NXT, or Nxt, or ‘next’, depends on the day.
+nxt (/ɛn·ɛks·ti/) is a general purpose code compositor designed for rigging, 
+scene assembly, and automation.
 
 *It’s code with layers with a nice way to see and change data.*
 
 ## Introduction
 
-Nxt is a  script composition tool designed for rigging, scene assembly, and automation.
+The primary function of nxt is to visualize and automate programming tasks 
+related to computer graphics and linear processing. The intent is to bridge 
+the gap between one-off scripting and general purpose tools through the use of 
+inheritance, layering, and string tokens.
+## Why use nxt?
+The core functionality of nxt was built with insights from industry veterans 
+of various technical and artistic backgrounds. We set out to bring to the
+ table a simple set of principles:
 
-The primary function of nxt is to visualize and automate programming tasks related to computer graphics and linear processing. Nxt bridges the gap between one-off scripting and general purpose tools through the use of inheritance, layering, and string tokens.
+- Visualize a map of what a complex script is actually doing. 
+[Nodes](reference.md#node), [inheritance](concepts.md#inheritance), and
+connection lines are easy to understand. However, we've gone a step further 
+and added string [tokens](reference.md#tokens). An instant visualization 
+of what an attribute value _actually_ is. Our tokens can be used _almost_
+anywhere inside nxt and are dynamically "resolved" during execution. Allowing the
+user to see exactly what data is flowing around without the use of an
+external debugger.
+- Encourage collaboration though [layering](reference.md#layers) and multi context graphs. 
+With our layering system it is easy for departments to share base workflows and
+utility nodes. Since layering is non-destructive graphs can referenced built on 
+without worrying about breaking someone else's graph. With [multi context](extensions.md#creating-custom-contexts) 
+graphs a Maya user, for example, can directly call a Houdini graph from inside Maya. 
+Alternatively, graphs can call other graphs in the same context, allowing 
+interdependent graphs to be developed simultaneously.
+- Make code accessible to everyone. Artists can modify attributes like their
+used to and learn to make simple code changes that normally would require a 
+TD to intervene. We're not visual programming, but rather a friendly visual
+portal into code.
 
-See the [tutorials](tutorials.md) for a step by step walkthroughs
+## What does nxt do?
+In the simplest of terms nxt combines multiple layers of nodes into a single 
+composite layer that is then executable. Something like Photoshop layers for
+your code, you're able to mute, solo, override, and extend layers of code. 
+The resulting composite of the code clearly visualizes where attributes and
+their values came from. Colors, node paths, and conveniently placed buttons/links 
+allow users to quickly jump to and correct erroneous values.
 
----
+*Example character rig with a general to specific layer structure*
+![layers](images/nxt_layers01.gif)
 
-# Concept quick start
+## Limitations
+- We currently do not support asynchronous execution in a single graph. Our 
+current focus is on lineal scripts.
+- We are [not visual programming](reference.md#design-philosophy), no for loop nodes sorry.
+- We currently do not support Python 3, however it is on the top of our
+priority list.
 
-See the [reference](reference.md) section for more detailed explanations
-
-## Nodes
-
-Graphs are made of node hierarchies. Node hierarchies can be collapsed by double clicking. During execution, a root node is executed, then it's descendants are executed depth first, then the next root node is begun. Execution sequencing between nodes is done via a special attribute: "Exec Input" where a node specifies the root node that is _before_ it in execution.
-
-![hierarchy.PNG](images\hierarchy.PNG)
-
-In the above example, the execution order would be: `/parent`, `/parent/child1`, `/parent/child1/child2`, `/parent/sibling`, `/parent/sibling2`, `/node`, `/node/node`
-
-## Attributes
-
-Rather than building a custom UI to interact with code, you edit attributes on [nodes ](reference.md#node)in a familiar property editor. Nxt [substitutes ](reference.md#stagecomposition) [attributes ](reference.md#attributes)into the body of the  [code ](reference.md#compute)on the fly and generates linearly executed bespoke programs. It lets you interact via properties without writing, managing, and extracting data from a UI. 
-
-| All of this to print a value   | Less                               |
-| ------------------------------ | ---------------------------------- |
-| ![](images/overhead_intro.PNG) | ![](images/nxt_overhead_intro.PNG) |
-
-![token_intro.gif](images\token_intro.gif)
-
-Attributes can refer to other attributes and are [composited ](reference.md#stagecomposition)on the fly, or attributes can be used directly in code. These are called [tokens](reference.md#tokens).
-
-![token2_intro.gif](images\token2_intro.gif)
-
-## Inheritance
-
-Each tree [inherits ](reference.md#stagecomposition)all the attributes of their parent nodes. (All of this can be easily hidden via `1,2,3` hotkeys) Those attributes are available to child nodes. Each child node can overwrite the value, or use the inherited value.
-
-![token_intro.gif](images\tree_intro.gif)
-
-## Layers
-
-Nxt also incorporates a [layering ](reference.md#layers)model where attributes and code can be overridden by nodes on higher layers and leave the underlying structure intact.
-
-![layer_intro.gif](images\layer_intro.gif)
-
-## Instances
-
-Finally, any node can be instanced and overridden by layers or nodes.
-
-[Instancing ](reference.md#instancing)allows you to reuse node trees from other parts of the graph with specific overrides.
-
-![instance_intro.gif](images\instance_intro.gif)
+|  |  |
+| :---: | :---: |
+| Concepts | Tutorials |
+| See [concepts](concepts.md) for a quick overview of nxt's core concepts. | See the [tutorials](tutorials.md) for a step by step walkthroughs |
