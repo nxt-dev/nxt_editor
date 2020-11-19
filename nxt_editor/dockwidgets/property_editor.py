@@ -14,7 +14,7 @@ except AttributeError:
 
 # Internal
 from nxt_editor import user_dir
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors

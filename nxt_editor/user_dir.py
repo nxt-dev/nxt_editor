@@ -7,13 +7,19 @@ will be made that the user directory is a directory.
 """
 # Built-in
 import os
-import pickle
+
 import json
 import logging
+import sys
+
+if sys.version_info[0] == 2:
+    import cPickle as pickle
+else:
+    import pickle
 
 # Internal
 from nxt.constants import USER_DIR
-from constants import PREF_DIR
+from nxt_editor.constants import PREF_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -161,13 +167,21 @@ class PicklePref(PrefFile):
     def write(self):
         out = {}
         out.update(self)
-        with open(self.path, 'w+') as fp:
-            pickle.dump(out, fp)
+        with open(self.path, 'wb+') as fp:
+            pickle.dump(out, fp, protocol=2)
 
     def read(self):
         contents = {}
-        with open(self.path, 'r+') as fp:
-            contents = pickle.load(fp)
+        try:
+            with open(self.path, 'rb+') as fp:
+                if sys.version_info[0] == 2:
+                    contents = pickle.load(fp)
+                else:
+                    contents = pickle.load(fp, encoding='bytes')
+        except pickle.UnpicklingError:
+            logger.error('Failed to load pickle pref "{}", probably changed '
+                         'interpreter versions.'
+                         ''.format(os.path.basename(self.path)))
         self.clear()
         self.update(contents)
 
@@ -258,7 +272,7 @@ class MultiFilePref(object):
         out_keys = set()
         for pref_file in self.pref_files:
             pref_file.read()
-            out_keys.union(pref_file.keys())
+            out_keys.union(list(pref_file.keys()))
         return out_keys
 
 

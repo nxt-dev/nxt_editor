@@ -8,14 +8,14 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS
-import syntax
+from nxt_editor.dockwidgets import syntax
 
 logger = logging.getLogger(__name__)
 
@@ -671,7 +671,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
     def get_lines(self):
         doc = self.document()
-        return [str(doc.findBlockByLineNumber(i).text().encode("utf8")) for i in range(doc.lineCount())]
+        return [str(doc.findBlockByLineNumber(i).text()) for i in range(doc.lineCount())]
 
     def resizeEvent(self, *e):
         """overload resizeEvent handler"""
