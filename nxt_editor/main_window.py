@@ -27,12 +27,12 @@ from nxt_editor.dockwidgets.output_log import (FileTailingThread,
                                                QtLogStreamHandler)
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
 from nxt import nxt_log, nxt_io, nxt_layer
-from dialogs import (NxtFileDialog, NxtWarningDialog, UnsavedLayersDialogue,
-                     UnsavedChangesMessage)
+from nxt_editor.dialogs import (NxtFileDialog, NxtWarningDialog,
+                                UnsavedLayersDialogue, UnsavedChangesMessage)
 from nxt_editor import actions, LoggingSignaler
 from nxt.constants import API_VERSION, GRAPH_VERSION
 from nxt.remote.client import NxtClient
-import resources
+import nxt_editor.resources
 
 
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
@@ -87,11 +87,12 @@ class MainWindow(QtWidgets.QMainWindow):
             dcc = 'maya'
         self.host_app = dcc
         self.setWindowTitle("nxt {} - Editor v{} | Graph v{} | API v{} "
-                            "{}".format(self.host_app,
-                                        EDITOR_VERSION.VERSION_STR,
-                                        GRAPH_VERSION.VERSION_STR,
-                                        API_VERSION.VERSION_STR,
-                                        current_branch))
+                            "(Python {}) {}".format(self.host_app,
+                                                    EDITOR_VERSION.VERSION_STR,
+                                                    GRAPH_VERSION.VERSION_STR,
+                                                    API_VERSION.VERSION_STR,
+                                                    sys.version_info[0],
+                                                    current_branch))
         self.setObjectName('Main Window')
         self._closing = False
         self.last_focused_start = 0  # Start point focus tracker
@@ -737,8 +738,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Window state
         state_key = user_dir.EDITOR_CACHE.WINODW_STATE
         geo_key = user_dir.EDITOR_CACHE.MAIN_WIN_GEO
-        user_dir.editor_cache[state_key] = str(self.saveState())
-        user_dir.editor_cache[geo_key] = str(self.saveGeometry())
+        user_dir.editor_cache[state_key] = self.saveState()
+        user_dir.editor_cache[geo_key] = self.saveGeometry()
         state_key = user_dir.EDITOR_CACHE.NODE_PROPERTY_STATE
         property_state = self.property_editor.model.state
         if property_state:
@@ -1212,7 +1213,7 @@ class MenuBar(QtWidgets.QMenuBar):
 
     def __force_uncaught_exception(self):
         sys.excepthook = nxt_execpthook
-        print foo
+        print(foo)
         sys.excepthook = og_excepthook
 
     def __compile_node_code(self):

@@ -622,7 +622,7 @@ class StageView(QtWidgets.QGraphicsView):
                                layer=self.model.target_layer)
 
     def select_all(self):
-        node_paths = self._node_graphics.keys()
+        node_paths = list(self._node_graphics.keys())
         self.model.set_selection(paths=node_paths)
 
     def keyPressEvent(self, event):
@@ -1223,7 +1223,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene().removeItem(graphic)
         # because node graphics are parented to one another, removing parent
         # implicitly removes descendants.
-        for key in self._node_graphics.keys()[:]:
+        for key in list(self._node_graphics.keys()):
             if nxt_path.is_ancestor(key, node_path):
                 self._node_graphics.pop(key)
                 self.remove_node_connection_graphics(key)

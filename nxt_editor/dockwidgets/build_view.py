@@ -6,9 +6,9 @@ import time
 from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
-from layer_manager import LetterCheckboxDelegeate
+from nxt_editor.dockwidgets.layer_manager import LetterCheckboxDelegeate
 
 logger = logging.getLogger(__name__)
 

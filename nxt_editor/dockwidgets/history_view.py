@@ -5,7 +5,7 @@ import logging
 from Qt import QtWidgets
 
 # Internal
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 
 logger = logging.getLogger(__name__)
 
