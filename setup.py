@@ -1,56 +1,44 @@
 import setuptools
 import json
+import os
 
-with open("README.md", "r") as fh:
-    long_description = fh.read()
+this_dir = os.path.dirname(os.path.realpath(__file__))
+module_dir = os.path.join(this_dir, 'nxt_editor')
+
+with open(os.path.join(this_dir, "README.md"), "r") as fp:
+    long_description = fp.read()
 
 desc = ("A general purpose code compositor designed for rigging, "
         "scene assembly, and automation. (node execution tree)")
 
-with open("nxt/version.json", 'r') as fh:
-    version_data = json.load(fh)
-api_v_data = version_data['API']
-api_major = api_v_data['MAJOR']
-api_minor = api_v_data['MINOR']
-api_patch = api_v_data['PATCH']
-api_version = 'api_v{}.{}.{}'.format(api_major, api_minor, api_patch)
-
-with open("nxt/ui/version.json", 'r') as fh:
-    ed_version_data = json.load(fh)
+with open(os.path.join(module_dir, "version.json"), 'r') as fp:
+    ed_version_data = json.load(fp)
 ed_v_data = ed_version_data['EDITOR']
 ed_major = ed_v_data['MAJOR']
 ed_minor = ed_v_data['MINOR']
 ed_patch = ed_v_data['PATCH']
-editor_version = 'editor_v{}.{}.{}'.format(ed_major, ed_minor, ed_patch)
+editor_version = '{}.{}.{}'.format(ed_major, ed_minor, ed_patch)
 
-version = editor_version + '-' + api_version
 setuptools.setup(
-    name="nxt",
-    version=version,
+    name="nxt_editor",
+    version=editor_version,
     author="the nxt contributors",
-    author_email="what@is.email",
+    author_email="dev@opennxt.dev",
     description=desc,
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/SunriseProductions/nxt",
+    url="https://github.com/nxt-dev/nxt_editor",
     packages=setuptools.find_packages(),
     python_requires='>=2.7, <3',
-    install_requires=['qt.py', 'pyside2'],
-    entry_points={
-        'console_scripts': [
-            'nxt=nxt.cli:main',
-        ],
-    },
+    install_requires=['nxt_core', 'qt.py', 'pyside2'],
     package_data={
         # covers text nxt files
         "": ["*.nxt"],
         # Covers builtin, and full depth of resources
-        "nxt": ["version.json",
-                "ui/version.json",
-                "builtin/*.nxt",
-                "ui/resources/*",
-                "ui/resources/*/*",
-                "ui/resources/*/*/*",
-                "ui/resources/*/*/*/*"],
+        "nxt_editor": ["version.json",
+                       "resources/*",
+                       "resources/*/*",
+                       "resources/*/*/*",
+                       "resources/*/*/*/*"],
     }
 )
