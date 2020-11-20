@@ -85,10 +85,15 @@ Conda is best installed via [miniconda](https://docs.conda.io/en/latest/minicond
       ```
 
 ## Dependencies
-
 - Python 2.7
-- [Qt.py](https://github.com/mottosso/Qt.py)
-- PySide2 5.6
+    - [Qt.py](https://github.com/mottosso/Qt.py)
+    - [PySide2](https://wiki.qt.io/Qt_for_Python) 5.6 (Python 2)
+    - `pip install -e <path to nxt core clone>`
+
+- Python 3.7
+    - [Qt.py](https://github.com/mottosso/Qt.py)
+    - [PySide2](https://wiki.qt.io/Qt_for_Python) 5.11.1 (Python 3)
+    - `pip install -e <path to nxt core clone>`
 
 ## Changelog syntax
 We follow a special syntax in our commits in order to indicate messages that should be included in our automatically generated changelog(see `/GenerateChangelog` in `build/ReleaseBot.nxt`). We have 5 different levels of messages indicated by starting a line with an indicator string, followed by a space, and then your message. The 5 indicator strings are:
