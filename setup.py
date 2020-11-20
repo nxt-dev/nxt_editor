@@ -20,17 +20,21 @@ ed_patch = ed_v_data['PATCH']
 editor_version = '{}.{}.{}'.format(ed_major, ed_minor, ed_patch)
 
 setuptools.setup(
-    name="nxt_editor",
+    name="nxt-editor",
     version=editor_version,
-    author="the nxt contributors",
+    author="The nxt contributors",
     author_email="dev@opennxt.dev",
     description=desc,
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/nxt-dev/nxt_editor",
     packages=setuptools.find_packages(),
-    python_requires='>=2.7, <3',
-    install_requires=['nxt_core', 'qt.py', 'pyside2'],
+    python_requires='>=2.7, <3.8',
+    install_requires=['nxt-core',
+                      'qt.py==1.1',
+                      'pyside2==5.6; python_version<"3"',
+                      'pyside2==5.11.1; python_version>="3"',
+                      ],
     package_data={
         # covers text nxt files
         "": ["*.nxt"],

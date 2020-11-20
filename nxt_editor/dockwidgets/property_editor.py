@@ -1258,8 +1258,8 @@ class PropertyModel(QtCore.QAbstractTableModel):
         self.state = self.horizontal_header.saveState()
         col = self.horizontal_header.sortIndicatorSection()
         order = self.horizontal_header.sortIndicatorOrder().name
-        state = {'column': col,
-                 'order':  order}
+        state = {'column': int(col),
+                 'order':  str(order)}
         if state == self.parent.user_sort_pref:
             return
         user_dir.user_prefs[self.parent.PREF_KEY] = state

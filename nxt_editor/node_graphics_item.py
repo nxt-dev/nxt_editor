@@ -2,6 +2,7 @@
 import math
 import logging
 import textwrap
+import sys
 from collections import OrderedDict
 
 # UI imports
@@ -920,7 +921,11 @@ class CollapseArrow(QtWidgets.QGraphicsItem):
         self.width = 16
         self.filled = filled
         self.color = color or QtCore.Qt.white
-        if isinstance(self.color, basestring):
+        if sys.version_info[0] == 2:
+            is_str = isinstance(self.color, basestring)
+        else:
+            is_str = isinstance(self.color, str)
+        if is_str:
             self.color = QtGui.QColor(self.color)
 
     def boundingRect(self):
@@ -935,7 +940,8 @@ class CollapseArrow(QtWidgets.QGraphicsItem):
                                QtGui.QPainter.TextAntialiasing |
                                QtGui.QPainter.SmoothPixmapTransform)
         if self.filled:
-            painter.setBrush(self.color)
+            brush = QtGui.QBrush(self.color)
+            painter.setBrush(brush)
             painter.setPen(QtCore.Qt.NoPen)
         else:
             painter.setBrush(QtCore.Qt.NoBrush)

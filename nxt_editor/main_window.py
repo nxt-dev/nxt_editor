@@ -32,7 +32,7 @@ from nxt_editor.dialogs import (NxtFileDialog, NxtWarningDialog,
 from nxt_editor import actions, LoggingSignaler
 from nxt.constants import API_VERSION, GRAPH_VERSION
 from nxt.remote.client import NxtClient
-import nxt_editor.resources
+from nxt_editor import resources
 
 
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
@@ -91,7 +91,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                                     EDITOR_VERSION.VERSION_STR,
                                                     GRAPH_VERSION.VERSION_STR,
                                                     API_VERSION.VERSION_STR,
-                                                    sys.version_info[0],
+                                                    '.'.join([str(n) for n in sys.version_info[:3]]),
                                                     current_branch))
         self.setObjectName('Main Window')
         self._closing = False

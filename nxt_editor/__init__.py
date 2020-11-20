@@ -36,7 +36,7 @@ def make_resources(qrc_path, result_path):
 
 
 try:
-    from . import resources
+    from nxt_editor import resources
 except ImportError:
     this_dir = os.path.dirname(os.path.realpath(__file__))
     qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
@@ -59,6 +59,10 @@ def launch_editor(paths=None):
         paths = []
     app = QtWidgets.QApplication(sys.argv)
     app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
+    style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
+    style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
+    stream = QtCore.QTextStream(style_file)
+    app.setStyleSheet(stream.readAll())
     instance = MainWindow(filepath=path)
     for other_path in paths:
         instance.load_file(other_path)
@@ -67,4 +71,3 @@ def launch_editor(paths=None):
     app.setActiveWindow(instance)
     instance.show()
     return app.exec_()
-    sys.exit()

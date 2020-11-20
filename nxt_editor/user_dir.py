@@ -157,8 +157,14 @@ class JsonPref(PrefFile):
 
     def read(self):
         contents = {}
-        with open(self.path, 'r+') as fp:
-            contents = json.load(fp)
+        if not os.path.isfile(self.path):
+            return
+        try:
+            with open(self.path, 'r') as fp:
+                contents = json.load(fp)
+        except json.decoder.JSONDecodeError:
+            logger.error('Invalid json file "{}", please fix by hand or delete '
+                         'it.'.format(self.path))
         self.clear()
         self.update(contents)
 
@@ -172,8 +178,10 @@ class PicklePref(PrefFile):
 
     def read(self):
         contents = {}
+        if not os.path.isfile(self.path):
+            return
         try:
-            with open(self.path, 'rb+') as fp:
+            with open(self.path, 'r+b') as fp:
                 if sys.version_info[0] == 2:
                     contents = pickle.load(fp)
                 else:
@@ -278,7 +286,7 @@ class MultiFilePref(object):
 
 user_prefs = JsonPref(USER_PREFS_PATH)
 hotkeys = JsonPref(HOTKEYS_PREF)
-breakpoints = PicklePref(BREAKPOINT_FILE)
+breakpoints = JsonPref(BREAKPOINT_FILE)
 editor_cache = PicklePref(EDITOR_CACHE_PATH)
 editor_cache.set_handler(USER_PREF.LAST_OPEN, LastOpenedHandler)
 # TODO as a session starts(or ends?), let's create a symlink to
