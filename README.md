@@ -2,6 +2,10 @@
 
 **nxt** (**/ɛn·ɛks·ti/**) is a general purpose code compositor designed for rigging, scene assembly, and automation. (node execution tree)
 
+| Release | Dev |
+| :---: | :---: |
+| ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=dev) | ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=release) |
+
 # Links
 
 - [Installation](#installation)
