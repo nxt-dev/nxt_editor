@@ -20,8 +20,9 @@ else:
 # Internal
 from nxt.constants import USER_DIR
 from nxt_editor.constants import PREF_DIR
+import nxt_editor
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 # Constants
 USER_PREFS_PATH = os.path.join(PREF_DIR, 'prefs.json')

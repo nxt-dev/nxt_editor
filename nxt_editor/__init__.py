@@ -6,7 +6,12 @@ import logging
 # External
 from Qt import QtCore, QtWidgets, QtGui
 
-logger = logging.getLogger('nxt.editor')
+# Internal
+import nxt
+
+logger = logging.getLogger('nxt.nxt_editor')
+
+LOGGER_NAME = logger.name
 
 
 class DIRECTIONS:

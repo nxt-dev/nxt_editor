@@ -5,10 +5,11 @@ import logging
 from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
+import nxt_editor
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor import colors, dialogs
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 TOOLTIP_INFO = ('<p style="font-size:12px;color:white;">'
                 '<h3>How to:</h3>'
                 '<ul>'

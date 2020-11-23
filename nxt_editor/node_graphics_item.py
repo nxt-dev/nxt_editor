@@ -5,12 +5,13 @@ import textwrap
 import sys
 from collections import OrderedDict
 
-# UI imports
+# External
 from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
 
-# Nxt imports
+# Internal
+import nxt_editor
 from nxt import nxt_path, nxt_node
 from nxt.nxt_layer import LAYERS
 from . import colors
@@ -18,7 +19,7 @@ from nxt.stage import INTERNAL_ATTRS
 from .label_edit import NameEditDialog
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class NodeGraphicsItem(QtWidgets.QGraphicsItem):

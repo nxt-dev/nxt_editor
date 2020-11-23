@@ -7,11 +7,12 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
+import nxt_editor
 from nxt_editor import user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class LayerManager(DockWidgetBase):

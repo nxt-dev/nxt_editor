@@ -15,6 +15,7 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
+import nxt_editor
 from nxt_editor import user_dir
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION
@@ -36,7 +37,7 @@ from nxt_editor import resources
 
 
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
 
 

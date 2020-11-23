@@ -16,8 +16,9 @@ from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
+import nxt_editor
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class CodeEditor(DockWidgetBase):

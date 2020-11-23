@@ -18,6 +18,7 @@ from nxt_editor.dialogs import NxtFileDialog
 from nxt.constants import API_VERSION
 from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
+import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler
 from nxt.nxt_layer import LAYERS, CompLayer
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
@@ -28,7 +29,7 @@ from nxt.runtime import GraphError
 from nxt_editor.dialogs import NxtConfirmDialog
 from nxt.remote import nxt_socket
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 LAYER_DATA_KEYS = ['position_data', 'enabled_data', 'execute_data' 'break_data']
 
 

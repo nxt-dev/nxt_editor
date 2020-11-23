@@ -10,14 +10,14 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Interal
-from nxt_editor import user_dir
-from nxt import GRID_SIZE, nxt_path, nxt_node, tokens
+import nxt_editor
+from nxt import nxt_node, tokens
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.commands import *
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class CONNECTION_SIDES:

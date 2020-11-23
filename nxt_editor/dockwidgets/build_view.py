@@ -9,8 +9,9 @@ from Qt import QtWidgets, QtGui, QtCore
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
 from nxt_editor.dockwidgets.layer_manager import LetterCheckboxDelegeate
+import nxt_editor
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class STARTS(object):

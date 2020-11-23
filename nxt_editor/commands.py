@@ -15,8 +15,9 @@ from nxt.nxt_node import (INTERNAL_ATTRS, META_ATTRS, get_node_as_dict,
                           list_merger)
 from nxt import nxt_io
 from nxt import GRID_SIZE
+import nxt_editor
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 def processing(func):
