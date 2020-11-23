@@ -5,8 +5,19 @@ branches:
   - dev
 python:
   - "3.7"
+
+addons:
+    apt:
+        packages:
+            - libxkbcommon-x11-0
+            - libgl1-mesa-dev
+
+services:
+    - xvfb
+
 env:
-  - DISPLAY=:0.0
+    - QT_CI_PACKAGES=qt.qt5.5132.gcc_64,qt.qt5.5132.qtwebengine PATH="$TRAVIS_BUILD_DIR/Qt/5.13.2/gcc_64/bin:${PATH}"
+
 install:
   - cd ..
   - git clone git+ssh://git@github.com/nxt-dev/nxt.git
