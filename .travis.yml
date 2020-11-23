@@ -4,7 +4,7 @@ branches:
   - release
   - dev
 python:
-  - "2.7"
+  - "3.7"
 install:
   - cd ..
   - pip install git+ssh://git@github.com/nxt-dev/nxt.git
