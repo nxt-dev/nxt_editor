@@ -5,13 +5,13 @@ branches:
   - dev
 python:
   - "3.7"
-env:
-  - DISPLAY=:0.0
+
 install:
   - cd ..
   - git clone git+ssh://git@github.com/nxt-dev/nxt.git
   - pip install ./nxt
   - pip install ./nxt_editor
+  - export DISPLAY=:0.0
 
 script:
   - python nxt/ci.py
