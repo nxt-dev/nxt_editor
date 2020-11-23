@@ -6,12 +6,6 @@ branches:
 python:
   - "3.7"
 
-addons:
-    apt:
-        packages:
-            - libxkbcommon-x11-0
-            - libgl1-mesa-dev
-
 services:
     - xvfb
 
@@ -19,23 +13,27 @@ env:
     - QT_CI_PACKAGES=qt.qt5.5132.gcc_64,qt.qt5.5132.qtwebengine PATH="$TRAVIS_BUILD_DIR/Qt/5.13.2/gcc_64/bin:${PATH}"
 
 before_install:
-  - if $TRAVIS_BRANCH = dev AND $TRAVIS_EVENT_TYPE = push
-    then
-      echo "Push to dev, not running tests until PR"
-      exit
+  - if [ "$TRAVIS_BRANCH" = "dev" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
+        echo "Push to dev, not running tests until PR"
+  else
+    echo "Doing the build"
+  fi
 
 install:
   - cd ..
   - git clone git+ssh://git@github.com/nxt-dev/nxt.git
   - pip install ./nxt
   - pip install ./nxt_editor
+  - sudo apt-get install -y libxkbcommon-x11-0
+  - sudo apt-get install -y libgl1-mesa-dev
 
 script:
-  - if $TRAVIS_BRANCH = release AND $TRAVIS_EVENT_TYPE = pull_request
-      then
-      python -m nxt.cli test
-      exit 0
-  - if $TRAVIS_BRANCH = release AND $TRAVIS_EVENT_TYPE = push
-    then
-      python -m nxt.cli exec nxt/build/packaging.nxt -s /make_and_test_upload
-      exit 0
+  - if [ "$TRAVIS_BRANCH" = "release" ] && [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
+          python -m nxt.cli test
+          exit 0
+    fi
+
+  - if [ "$TRAVIS_BRANCH" = "release" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
+          python -m nxt.cli exec nxt/build/packaging.nxt -s /make_and_test_upload
+          exit 0
+    fi
