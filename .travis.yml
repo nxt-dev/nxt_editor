@@ -8,6 +8,7 @@ python:
 install:
   - cd ..
   - git clone --depth=50 --branch=release https://github.com/nxt-dev/nxt.git nxt-dev/nxt
+  - cd ..
   - pip install ./nxt
   - pip install ./nxt_editor
 
