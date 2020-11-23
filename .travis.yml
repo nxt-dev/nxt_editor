@@ -16,6 +16,7 @@ before_install:
   - |
     if [ "$TRAVIS_BRANCH" = "dev" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
         echo "Push to dev, not running tests until PR"
+        exit 0
     else
       echo "Doing the build"
     fi
