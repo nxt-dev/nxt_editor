@@ -7,8 +7,7 @@ python:
   - "2.7"
 install:
   - cd ..
-  - git clone -branch=release https://github.com/nxt-dev/nxt.git
-  - pip install ./nxt
+  - pip install git+https://github.com/nxt-dev/nxt.git
   - pip install ./nxt_editor
 
 script:
