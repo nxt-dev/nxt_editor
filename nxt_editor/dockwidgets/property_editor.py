@@ -1,5 +1,6 @@
 # Built-in
 import textwrap
+import sys
 from functools import partial
 
 # External
@@ -1243,6 +1244,8 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
             # column widths
             if self.state:
+                if sys.version_info[0] > 2 and isinstance(self.state, str):
+                    self.state = bytes(self.state, 'utf-8')
                 self.horizontal_header.restoreState(self.state)
             self.view.resizeColumnToContents(COLUMNS.nxt_type)
 

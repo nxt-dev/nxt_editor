@@ -10,12 +10,11 @@ from Qt.QtWidgets import QUndoCommand
 from nxt_editor import colors
 from nxt_editor import user_dir
 from nxt import nxt_path
-from nxt import nxt_path
 from nxt.nxt_layer import LAYERS, SAVE_KEY
 from nxt.nxt_node import (INTERNAL_ATTRS, META_ATTRS, get_node_as_dict,
                           list_merger)
 from nxt import nxt_io
-from nxt import DATA_STATE, GRID_SIZE
+from nxt import GRID_SIZE
 
 logger = logging.getLogger(__name__)
 

@@ -30,6 +30,8 @@ BREAKPOINT_FILE = os.path.join(PREF_DIR, 'breakpoints')
 HOTKEYS_PREF = os.path.join(PREF_DIR, 'hotkeys.json')
 MAX_RECENT_FILES = 10
 
+broken_files = {}
+
 
 # Make sure the user dir is setup
 def ensure_pref_dir_exists():
@@ -148,6 +150,11 @@ class PrefFile(dict):
 
 
 class JsonPref(PrefFile):
+    if sys.version_info[0] == 2:
+        json_decode_err = Exception
+    else:
+        json_decode_err = json.decoder.JSONDecodeError
+
     def write(self):
         out = {}
         out.update(self)
@@ -162,9 +169,17 @@ class JsonPref(PrefFile):
         try:
             with open(self.path, 'r') as fp:
                 contents = json.load(fp)
-        except json.decoder.JSONDecodeError:
-            logger.error('Invalid json file "{}", please fix by hand or delete '
-                         'it.'.format(self.path))
+        except self.json_decode_err:
+            broken_files.setdefault(self.path, 0)
+            times_hit = broken_files[self.path]
+            if times_hit < 3:
+                warning = ''
+                if times_hit == 2:
+                    warning = "(I'll stop nagging now)"
+                logger.error('Invalid json file "{}", please fix by hand or '
+                             'delete it. {}'.format(self.path, warning))
+            times_hit += 1
+            broken_files[self.path] = times_hit
         self.clear()
         self.update(contents)
 
@@ -187,9 +202,17 @@ class PicklePref(PrefFile):
                 else:
                     contents = pickle.load(fp, encoding='bytes')
         except pickle.UnpicklingError:
-            logger.error('Failed to load pickle pref "{}", probably changed '
-                         'interpreter versions.'
-                         ''.format(os.path.basename(self.path)))
+            broken_files.setdefault(self.path, 0)
+            times_hit = broken_files[self.path]
+            if times_hit < 3:
+                warning = ''
+                if times_hit == 2:
+                    warning = "(I'll stop nagging now)"
+                logger.error('Failed to load pickle pref "{}", probably '
+                             'changed interpreter versions. {}'
+                             ''.format(os.path.basename(self.path), warning))
+            times_hit += 1
+            broken_files[self.path] = times_hit
         self.clear()
         self.update(contents)
 

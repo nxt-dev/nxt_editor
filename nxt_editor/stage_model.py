@@ -12,7 +12,6 @@ from Qt import QtWidgets
 from Qt import QtCore
 
 # Internal
-from nxt_editor import user_dir
 from nxt import clean_json
 from nxt_editor.commands import *
 from nxt_editor.dialogs import NxtFileDialog
