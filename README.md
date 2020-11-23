@@ -4,7 +4,7 @@
 
 | Release | Dev |
 | :---: | :---: |
-| ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=dev) | ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=release) |
+| ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=release) | ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=dev) |
 
 # Links
 
