@@ -1,0 +1,15 @@
+language: python
+branches:
+  only:
+  - release
+  - dev
+python:
+  - "2.7"
+install:
+  - cd ..
+  - git clone git@github.com:nxt-dev/nxt.git
+  - pip install ./nxt
+  - pip install ./nxt_editor
+
+script:
+  - python nxt/ci.py
