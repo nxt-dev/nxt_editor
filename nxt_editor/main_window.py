@@ -7,7 +7,7 @@ import traceback
 from collections import OrderedDict
 import webbrowser
 from functools import partial
-import threading
+import time
 
 # External
 from Qt import QtWidgets
@@ -245,7 +245,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.in_startup = False
         app = QtWidgets.QApplication.instance()
         app.aboutToQuit.connect(self.shutdown_rpc_server)
-        self.close_signal.connect(self.shutdown_rpc_server)
 
     # RPC
     def startup_rpc_server(self, join=True):
@@ -282,6 +281,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.nxt.shutdown_rpc_server()
         if self.model:
             self.model.processing.emit(False)
+        if not self.rpc_log_tail:
+            return
+        wait_started = time.time()
+        while not self.rpc_log_tail.isFinished():
+            QtWidgets.QApplication.processEvents()
+            if time.time() - wait_started > 5:
+                logger.error('Failed to stop rpc log tail!')
+                return
         self.rpc_log_tail = None
 
     def safe_stop_rpc_tailing(self):
@@ -736,6 +743,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 event.ignore()
                 return
         event.accept()
+        self.shutdown_rpc_server()
         # Window state
         state_key = user_dir.EDITOR_CACHE.WINODW_STATE
         geo_key = user_dir.EDITOR_CACHE.MAIN_WIN_GEO
@@ -1405,6 +1413,8 @@ class StartRPCThread(QtCore.QThread):
         except OSError:
             logger.warning('Failed to start/connect to rpc server. Please try '
                            'starting the rpc server via the UI')
+            if self.main_window.model:
+                self.main_window.model.processing.emit(False)
             return
         remote_rpc_log_file_path = None
         if not self.main_window.nxt.rpc_server:
