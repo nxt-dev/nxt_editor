@@ -31,7 +31,7 @@ from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (NxtFileDialog, NxtWarningDialog,
                                 UnsavedLayersDialogue, UnsavedChangesMessage)
 from nxt_editor import actions, LoggingSignaler
-from nxt.constants import API_VERSION, GRAPH_VERSION
+from nxt.constants import API_VERSION, GRAPH_VERSION, USER_PLUGIN_DIR
 from nxt.remote.client import NxtClient
 from nxt_editor import resources
 
@@ -1026,6 +1026,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.help_menu.setTearOffEnabled(True)
         prefs_dir_action = self.help_menu.addAction('Open Prefs Dir')
         prefs_dir_action.triggered.connect(self.open_prefs_dir)
+        config_dir_action = self.help_menu.addAction('Open Plugins Dir')
+        config_dir_action.triggered.connect(self.open_plugins_dir)
         self.help_menu.addSeparator()
         self.help_menu.addAction(self.main_window.app_actions.docs_action)
         github_action = self.help_menu.addAction('GitHub')
@@ -1117,6 +1119,19 @@ class MenuBar(QtWidgets.QMenuBar):
                 os.system('xdg-open {}'.format(d))
             except:
                 logger.exception('Failed to open user dir')
+
+    @staticmethod
+    def open_plugins_dir():
+        d = USER_PLUGIN_DIR
+        if 'darwin' in sys.platform:
+            os.system('open {}'.format(d))
+        elif 'win' in sys.platform:
+            os.startfile(d)
+        else:
+            try:
+                os.system('xdg-open {}'.format(d))
+            except:
+                logger.exception('Failed to open user config dir')
 
     def about_message(self):
         text = ('nxt {} \n'

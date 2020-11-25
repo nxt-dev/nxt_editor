@@ -1,0 +1,69 @@
+{
+    "version": "1.17",
+    "alias": "layering",
+    "color": "#df9d02",
+    "mute": false,
+    "solo": false,
+    "references": [
+        "the_basics.nxt"
+    ],
+    "meta_data": {
+        "positions": {
+            "/instance2": [
+                380.0,
+                260.0
+            ]
+        }
+    },
+    "nodes": {
+        "/": {
+            "child_order": [
+                "counting",
+                "instance2",
+                "README"
+            ],
+            "attrs": {
+                "another_num": {
+                    "type": "int",
+                    "value": "8"
+                },
+                "example_attr": {
+                    "comment": "Right click my source to see my historical value",
+                    "value": "I've been overloaded"
+                }
+            }
+        },
+        "/README": {
+            "comment": "I've replaced the comment here, notice the 2 colored dots indicating there is an opinion about this node's coment on 2 layers.",
+            "code": [
+                "\"\"\"",
+                "This graph covers how layers work. Notice this node exesits on 2 layers.",
+                "Layering is one of the most powerful tools nxt has to offer. With layers we can non-distructivly change and extend graphs.",
+                "",
+                "You'll notice the different layer colors are displayed almost everywhere to give you a quick viusal hint as to where data is coming from.",
+                "However if an internal attribute (any attr not in the user attr table) has been overloaded you'll see colored dots next to it.",
+                "",
+                "At the bottom right of the code editor there are 2 colored dots inidcating that both layers have an opinion about the code on this node.",
+                "",
+                "Attributes also have what's called `Historical Values`, try right clicking on the source cell of the `.example_attr`.",
+                "\"\"\""
+            ]
+        },
+        "/counting": {
+            "attrs": {
+                "count": {
+                    "value": "${another_num}"
+                }
+            }
+        },
+        "/instance2": {
+            "instance": "/instance",
+            "comment": "You can of course instance from other layers both above and below you.",
+            "attrs": {
+                "thing_i_like": {
+                    "value": "Grapes"
+                }
+            }
+        }
+    }
+}
