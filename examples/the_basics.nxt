@@ -1,0 +1,298 @@
+{
+    "version": "1.17",
+    "alias": "the_basics",
+    "color": "#00a9cb",
+    "mute": false,
+    "solo": false,
+    "meta_data": {
+        "positions": {
+            "/README": [
+                -200.0,
+                -340.0
+            ],
+            "/counting": [
+                140.0,
+                -120.0
+            ],
+            "/hello_user": [
+                -580.0,
+                -60.0
+            ],
+            "/hello_world": [
+                -580.0,
+                -120.0
+            ],
+            "/instance": [
+                60.0,
+                260.0
+            ],
+            "/instance_src": [
+                -300.0,
+                260.0
+            ],
+            "/live_tokens": [
+                -300.0,
+                140.0
+            ],
+            "/results": [
+                60.0,
+                140.0
+            ],
+            "/tokens": [
+                -300.0,
+                20.0
+            ]
+        }
+    },
+    "nodes": {
+        "/": {
+            "child_order": [
+                "hello_world",
+                "counting",
+                "tokens",
+                "hello_user",
+                "live_tokens",
+                "results",
+                "README",
+                "instance_src",
+                "instance"
+            ],
+            "comment": "If you haven't already, navigate to the `Window` menu and open the `Output Log`.\nFor simplicity lets just look at the `Raw Ouput` tab. Our examples will be printing a lot.",
+            "attrs": {
+                "example_attr": {
+                    "comment": "Just an attr",
+                    "type": "raw",
+                    "value": "This is just an example"
+                },
+                "my_num": {
+                    "comment": "We'll use this int in the /counting node",
+                    "type": "int",
+                    "value": "0"
+                }
+            },
+            "code": [
+                "\"\"\"",
+                "This is what we call the `World` or `Layer` node.",
+                "Its path is `/` and what makes it sepcial is its where you can import external modules and define globals.",
+                "Every node in the graph inherits from this node. Notice the attribute called `my_num` in the Property Editor.",
+                "(If you don't see the `Property Editor` navigate to `Window` > `Property Editor`)",
+                "Click around to different nodes and you'll see they all have access to that attirbute.",
+                "\"\"\"",
+                "import getpass  # This import is avaible to every node in the graph.",
+                "",
+                "my_global = 'A global string!' # This variable name is avaible everywhere in this graph without the use of the global keyword.",
+                ""
+            ]
+        },
+        "/README": {
+            "comment": "This is a comment, you'll see them used on other nodes.",
+            "code": [
+                "\"\"\"",
+                "This graph covers some of the basics of nxt.",
+                "Each node has a little comment explaining what it does and how to use it.",
+                "One node you won't see on the `Stage View` is the `World` node. You can access it by double clicking the layer name in the `Layer Manager`.",
+                "If you don't see a widget called `Layer Manager` you can open it by navigating to `Window` > `Layer Manager`.",
+                "\"\"\""
+            ]
+        },
+        "/counting": {
+            "child_order": [
+                "child"
+            ],
+            "comment": "Execute this hierarcy to see how attributes are inherited by children nodes.",
+            "attrs": {
+                "count": {
+                    "comment": "Number to count to",
+                    "type": "int",
+                    "value": "5"
+                }
+            },
+            "code": [
+                "\"\"\"",
+                "${/._comment}",
+                "",
+                "",
+                "${_comment}",
+                "",
+                "Right click this node in the `Stage View` and select `Execute Hierarchy` ",
+                "\"\"\"",
+                "",
+                "print('-'*79)",
+                "print('Hi I\\'m ${_name} and my child will inherit whatever number I count to.')",
+                "for _ in range(${count}):",
+                "    self.my_num += 1",
+                ""
+            ]
+        },
+        "/counting/child": {
+            "code": [
+                "print('My parent counted to ${my_num}')",
+                "print('-'*79)"
+            ]
+        },
+        "/hello_user": {
+            "comment": "Here is a a slighly more complex example showing how code can be set and used in an attr value.\nTokens directly string sub. Since we want Python to evaluate the value of `.noun` we use format.",
+            "attrs": {
+                "noun": {
+                    "value": "getpass.getuser()"
+                }
+            },
+            "code": [
+                "\"\"\"",
+                "${/._comment}",
+                "",
+                "${_comment}",
+                "",
+                "",
+                "To execute just this node, right click this node in the `Stage View` and select `Execute ${_nxtpath}` ",
+                "\"\"\"",
+                "print('Hello {}'.format(${noun}))"
+            ]
+        },
+        "/hello_world": {
+            "comment": "Execute this node to print \"Hello World\" except using a token for the noun.\nTry changing the value of the attr `noun` and see what happens.",
+            "attrs": {
+                "noun": {
+                    "type": "raw",
+                    "value": "World"
+                }
+            },
+            "code": [
+                "\"\"\"",
+                "${/._comment}",
+                "",
+                "",
+                "${_comment}",
+                "",
+                "To execute just this node, right click this node in the `Stage View` and select `Execute ${_nxtpath}` ",
+                "\"\"\"",
+                "print('Hello ${noun}')"
+            ]
+        },
+        "/instance": {
+            "instance": "/instance_src",
+            "attrs": {
+                "thing_i_like": {
+                    "value": "Toast"
+                }
+            }
+        },
+        "/instance_src": {
+            "comment": "Any node in the graph can be instanced. Instancing is basically creating a linked copy of a node. The code and attributes are not duplicated.\n- You can instance as many times as you want.\n- Each instance can overload any attibute of its instance source node.\n- Instances inheirt from their parent and their instance.\n\nTake careful note of this node and its instance, see how attrs are overloaded and inherited.",
+            "attrs": {
+                "inst_attr": {
+                    "type": "list",
+                    "value": "[1, 2, 3]"
+                },
+                "thing_i_like": {
+                    "type": "raw",
+                    "value": "Cereal"
+                }
+            },
+            "code": [
+                "\"\"\"",
+                "${_comment}",
+                "\"\"\"",
+                "# My node path is ${_nxtpath}",
+                "# I like ${thing_i_like}"
+            ]
+        },
+        "/live_tokens": {
+            "comment": "This little execution chain will demonstrait how tokens remain live during execution.",
+            "attrs": {
+                "live": {
+                    "type": "raw",
+                    "value": "Hello World."
+                }
+            },
+            "code": [
+                "\"\"\"",
+                "${/._comment}",
+                "",
+                "${_comment}",
+                "",
+                "Right click this node in the `Stage View` and select `Execute From Selected` ",
+                "\"\"\"",
+                "print('-'*79)",
+                "print('${_name} says: ')",
+                "print('${live}')",
+                "# Now we're going to set a new value",
+                "self.live = 'Hey there!'",
+                ""
+            ]
+        },
+        "/results": {
+            "execute_in": "/live_tokens",
+            "comment": "Notice how this node prints the token with the value that was set during execution.",
+            "code": [
+                "\"\"\"",
+                "${_comment}",
+                "\"\"\"",
+                "print('${_name} got the new token value:')",
+                "# Note that the value shown in the ediotr is the pre-exec value.",
+                "# To see how execution changed things navigate to `View` > `Cached View` after executing from /live_tokens.",
+                "print('${/live_tokens.live}')",
+                ""
+            ]
+        },
+        "/tokens": {
+            "child_order": [
+                "non_attr_tokens"
+            ],
+            "comment": "Any attr of any node can be accessed via tokens.\nTokens are recursivly resolved, so if a token resolves to a token we contrinue resolving it until no more tokens are returned.\n\nThere are fiew things you should note about tokens.\n\n- They are direct string subs, they do not work with non-stringable objects.\n- Be careful using quote marks in attribute values as they may cause syntax errors.\n- Tokens are live, which is to say if a node changes the attrs value, a node executed later will get the new value in its tokens.",
+            "attrs": {
+                "my_custom_attr": {
+                    "type": "str",
+                    "value": "\"${/.example_attr}\""
+                },
+                "quotes": {
+                    "type": "str",
+                    "value": "'World'"
+                }
+            },
+            "code": [
+                "\"\"\"",
+                "${_comment}",
+                "\"\"\"",
+                "# Example of improper useage of quotes in an attr value",
+                "msg = 'Hello ${quotes}'",
+                "# If you do need quotes try something like this",
+                "msg = 'Hello' + ${quotes}",
+                "",
+                "# Other examples",
+                "",
+                "'${/hello_world.noun}' # Getting an attr from another node",
+                "'${/counting.count}'  # Get an attr from another node",
+                "'${/.my_num}'  # Getting an attr directly from the world node",
+                "${my_custom_attr}  # Tokens resolve though multiple references, have a look at the actuall value of `.my_custom_attr`",
+                "",
+                "'${_nxtcolor}'  # Getting the node's color (Very useful for workflow nodes)",
+                "",
+                "'${_nxtpath}'  # Get the full node path of the node the token is in",
+                "",
+                "'${_name}'  # Get the node's name."
+            ]
+        },
+        "/tokens/non_attr_tokens": {
+            "code": [
+                "\"\"\"",
+                "Below are some examples of other tokens we provide",
+                "",
+                "As you'll see below, another cool feature of tokens is they can be nested.",
+                "\"\"\"",
+                "# File token, resolves to real and valid file/folder path.",
+                "'${file::}' #  The folder this graph is saved in.",
+                "'${file::../}' #  The parent folder of this graphs folder.",
+                "'${file::the_basics.nxt}' #  This graph.",
+                "",
+                "# Path token, like the file token the path token creates a valid path, but the file/folder doesn't have to exsist.",
+                "'${path::output_dir}'",
+                "'${path::/home/fakefile.txt}'",
+                "",
+                "# Contents token, allows you to resolve the contents of a file anywhere. ",
+                "# If you open that file in a text editor you'll notice it contains a token.",
+                "'${contents::${file::example_file.txt}}'"
+            ]
+        }
+    }
+}

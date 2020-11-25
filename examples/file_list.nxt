@@ -1,0 +1,60 @@
+{
+    "version": "1.17",
+    "alias": "file_list",
+    "color": "#aa50a3",
+    "mute": false,
+    "solo": false,
+    "meta_data": {
+        "positions": {
+            "/list_files": [
+                0,
+                0
+            ]
+        }
+    },
+    "nodes": {
+        "/": {
+            "attrs": {
+                "files": {
+                    "comment": "A list that will be populated with file paths",
+                    "type": "list",
+                    "value": "[]"
+                },
+                "root_dir": {
+                    "comment": "Folder to list files in",
+                    "type": "raw",
+                    "value": "/path/to/dir"
+                }
+            },
+            "code": [
+                "import os"
+            ]
+        },
+        "/list_files": {
+            "start_point": true,
+            "child_order": [
+                "save_to_STAGE"
+            ],
+            "comment": "This graph simply lists files in its directory. It is used by sub_graphs.nxt.",
+            "code": [
+                "\"\"\"",
+                "${_comment}",
+                "\"\"\"",
+                "if os.path.isdir('${root_dir}'):",
+                "    self.files = os.listdir('${root_dir}')",
+                "else:",
+                "    raise IOError('\"${root_dir}\" is not a valid directory path!')"
+            ]
+        },
+        "/list_files/save_to_STAGE": {
+            "code": [
+                "\"\"\"",
+                "In this node we push the files we found back up to the world node via the STAGE keyword.",
+                "Any attributes on the STAGE (aka layer or world node) will be sent back to super graphs.",
+                "\"\"\"",
+                "STAGE.files = ${files}",
+                "STAGE.a_message_for_you = 'A message from the sub graph.'  # We'll send back an extra message here just as an example"
+            ]
+        }
+    }
+}

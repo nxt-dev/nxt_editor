@@ -1,0 +1,59 @@
+{
+    "version": "1.17",
+    "alias": "my_sub_graph",
+    "color": "#991c24",
+    "mute": false,
+    "solo": false,
+    "references": [
+        "$NXT_BUILTINS/sub_graphs.nxt"
+    ],
+    "meta_data": {
+        "positions": {
+            "/_sub_graph": [
+                -600.0,
+                0.0
+            ],
+            "/execute_sub_graph": [
+                80.0,
+                100.0
+            ],
+            "/start": [
+                0,
+                0
+            ]
+        }
+    },
+    "nodes": {
+        "/": {
+            "child_order": [
+                "start",
+                "execute_sub_graph"
+            ],
+            "attrs": {
+                "sub_graph_file": {
+                    "type": "raw",
+                    "value": "${path::/another_graph.nxt}"
+                }
+            }
+        },
+        "/start": {
+            "start_point": true,
+            "child_order": [
+                "execute_sub_graph"
+            ],
+            "comment": "Put any setup here that should run before the sub graph exec.",
+            "code": [
+                "# Setup before you run your graph"
+            ]
+        },
+        "/start/execute_sub_graph": {
+            "instance": "/_sub_graph",
+            "comment": "Any attrs  from the sub graph that you want to use after exec should be added to this node.\nChildren of this node will then inhert the values.",
+            "attrs": {
+                "_graph_path": {
+                    "value": "${sub_graph_file}"
+                }
+            }
+        }
+    }
+}
