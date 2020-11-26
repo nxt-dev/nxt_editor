@@ -16,7 +16,7 @@ import maya.api.OpenMaya as om
 from Qt import QtCore
 
 # Internal
-import nxt.ui.main_window
+import nxt_editor.main_window
 import nxt.remote.nxt_socket
 from nxt import nxt_log
 
@@ -87,18 +87,11 @@ class NxtUiCmd(om.MPxCommand):
             string_args = []
             for arg in range(len(args)):
                 string_args += [args.asString(arg)]
-            if 'reload' in string_args:
-                try:
-                    from showtools.shared.imports.reload import autoreload
-                    autoreload(nxt.ui.main_window)
-                except:
-                    logger.exception("Unable to reload!")
-                    return
             if 'close' in string_args:
                 if __NXT_INSTANCE__:
                     __NXT_INSTANCE__.close()
                 return
-        nxt_win = nxt.ui.main_window.MainWindow()
+        nxt_win = nxt_editor.main_window.MainWindow()
         if 'win32' in sys.platform:
             # gives nxt it's own entry on taskbar
             nxt_win.setWindowFlags(QtCore.Qt.Window)

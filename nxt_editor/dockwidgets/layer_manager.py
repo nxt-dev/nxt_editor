@@ -12,6 +12,7 @@ from nxt_editor import user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
 
+
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
@@ -192,7 +193,6 @@ class LayerTreeView(QtWidgets.QTreeView):
         menu.addAction(self.actions.ref_layer_above_action)
         self.actions.ref_layer_below_action.setData(layer)
         menu.addAction(self.actions.ref_layer_below_action)
-
         menu.popup(QtGui.QCursor.pos())
 
 

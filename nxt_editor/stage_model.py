@@ -2709,13 +2709,12 @@ class StageModel(QtCore.QObject):
             # can know we're in a thread safe environment.
             t._run()
             self.process_events()
-            return
         else:
             self.processing.emit(True)
             t.start()
-        while not t.isFinished():
-            self.process_events()
-        self.processing.emit(False)
+            while not t.isFinished():
+                self.process_events()
+            self.processing.emit(False)
         if t.raised_exception:
             raise t.raised_exception
 

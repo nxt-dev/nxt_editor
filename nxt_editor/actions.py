@@ -394,7 +394,7 @@ class LayerActions(NxtActionContainer):
 
         def save_layer():
             layer = self.save_layer_action.data()
-            self.save_layer_action.setData(None)
+            clear_action_data(self.actions())
             self.main_window.save_layer(layer)
         self.save_layer_action.triggered.connect(save_layer)
         # Save as
@@ -407,7 +407,7 @@ class LayerActions(NxtActionContainer):
 
         def save_layer_as():
             layer = self.save_layer_as_action.data()
-            self.save_layer_as_action.setData(None)
+            clear_action_data(self.actions())
             self.main_window.save_layer_as(layer)
         self.save_layer_as_action.triggered.connect(save_layer_as)
         # Save all layers
@@ -427,7 +427,7 @@ class LayerActions(NxtActionContainer):
 
         def open_source():
             layer = self.open_source_action.data()
-            self.open_source_action.setData(None)
+            clear_action_data(self.actions())
             self.main_window.open_source(layer)
         self.open_source_action.triggered.connect(open_source)
         # Change color
@@ -469,6 +469,7 @@ class LayerActions(NxtActionContainer):
 
         def remove_layer():
             layer = self.remove_layer_action.data()
+            clear_action_data(self.actions())
             if not layer:
                 layer = self.main_window.model.display_layer
             if not layer:
@@ -488,7 +489,7 @@ class LayerActions(NxtActionContainer):
 
         def mute_layer():
             layer = self.mute_layer_action.data()
-            self.mute_layer_action.setData(None)
+            clear_action_data(self.actions())
             if not layer:
                 layer = self.main_window.model.target_layer
             if not layer:
@@ -505,7 +506,7 @@ class LayerActions(NxtActionContainer):
 
         def solo_layer():
             layer = self.solo_layer_action.data()
-            self.solo_layer_action.setData(None)
+            clear_action_data(self.actions())
             if not layer:
                 layer = self.main_window.model.target_layer
             if not layer:
@@ -520,6 +521,7 @@ class LayerActions(NxtActionContainer):
 
         def new_above():
             layer = self.new_layer_above_action.data()
+            clear_action_data(self.actions())
             if not layer:
                 layer = self.main_window.model.target_layer
             if not layer:
@@ -535,6 +537,7 @@ class LayerActions(NxtActionContainer):
 
         def new_below():
             layer = self.new_layer_below_action.data()
+            clear_action_data(self.actions())
             if not layer:
                 layer = self.main_window.model.target_layer
             if not layer:
@@ -551,6 +554,7 @@ class LayerActions(NxtActionContainer):
 
         def ref_above():
             layer = self.ref_layer_above_action.data()
+            clear_action_data(self.actions())
             if not layer:
                 layer = self.main_window.model.target_layer
             if not layer:
@@ -567,6 +571,7 @@ class LayerActions(NxtActionContainer):
 
         def ref_below():
             layer = self.ref_layer_below_action.data()
+            clear_action_data(self.actions())
             if not layer:
                 layer = self.main_window.model.target_layer
             if not layer:
@@ -1758,3 +1763,9 @@ class CodeEditorActions(NxtActionContainer):
                                      self.unindent_line,
                                      self.run_line_global_action,
                                      self.run_line_local_action]
+
+
+def clear_action_data(action_list):
+    """Resets the data for each action in the given list to None"""
+    for action in action_list:
+        action.setData(None)
