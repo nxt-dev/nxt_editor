@@ -113,7 +113,7 @@
                 "import shutil",
                 "# Internal",
                 "import nxt",
-                "from nxt.constants import API_VERSION",
+                "from nxt.constants import API_VERSION, GRAPH_VERSION",
                 "from nxt_editor.constants import EDITOR_VERSION"
             ]
         },
