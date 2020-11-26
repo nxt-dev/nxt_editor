@@ -89,6 +89,11 @@
                 "make_module_folder",
                 "versions"
             ],
+            "attrs": {
+                "repo": {
+                    "value": "nxt_editor"
+                }
+            },
             "code": [
                 "# Builtin",
                 "import sys",
@@ -133,6 +138,13 @@
         },
         "/ReleaseLoop": {
             "execute_in": "/make_module_folder"
+        },
+        "/ValidatePushed/GetRemoteHEAD": {
+            "attrs": {
+                "repo": {
+                    "value": "nxt_editor"
+                }
+            }
         },
         "/make_module_folder": {
             "start_point": false,
