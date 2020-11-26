@@ -144,7 +144,13 @@
             }
         },
         "/ReleaseLoop": {
-            "execute_in": "/make_module_folder"
+            "execute_in": "/make_module_folder",
+            "attrs": {
+                "release_types": {
+                    "type": "tuple",
+                    "value": "(${/versions.EDITOR})"
+                }
+            }
         },
         "/ValidatePushed/GetRemoteHEAD": {
             "attrs": {
