@@ -1,5 +1,6 @@
 # Builtin
 import logging
+from functools import partial
 
 # External
 from Qt import QtWidgets
@@ -11,6 +12,8 @@ import nxt_editor
 from nxt_editor import user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
+from nxt_editor.actions import clear_action_data
+
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -192,7 +195,8 @@ class LayerTreeView(QtWidgets.QTreeView):
         menu.addAction(self.actions.ref_layer_above_action)
         self.actions.ref_layer_below_action.setData(layer)
         menu.addAction(self.actions.ref_layer_below_action)
-
+        menu.aboutToHide.connect(partial(clear_action_data,
+                                         self.actions.actions()))
         menu.popup(QtGui.QCursor.pos())
 
 

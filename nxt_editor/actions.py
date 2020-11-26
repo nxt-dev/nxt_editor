@@ -1758,3 +1758,9 @@ class CodeEditorActions(NxtActionContainer):
                                      self.unindent_line,
                                      self.run_line_global_action,
                                      self.run_line_local_action]
+
+
+def clear_action_data(action_list):
+    """Resets the data for each action in the given list to None"""
+    for action in action_list:
+        action.setData(None)
