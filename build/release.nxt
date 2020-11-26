@@ -1,0 +1,125 @@
+{
+    "version": "1.17",
+    "alias": "release",
+    "color": "#008bbe",
+    "mute": false,
+    "solo": false,
+    "references": [
+        "D:/Projects/nxt_editor/build/make_maya_plugin.nxt",
+        "D:/Projects/nxt/build/release.nxt"
+    ],
+    "comp_overrides": {
+        "../../nxt/build/GitUtils.nxt": {
+            "solo": false
+        }
+    },
+    "meta_data": {
+        "positions": {
+            "/CreateRelease": [
+                2180.0,
+                60.0
+            ],
+            "/CreateRelease_pasted": [
+                2220.0,
+                240.0
+            ],
+            "/GitClone": [
+                -1000.0,
+                640.0
+            ],
+            "/GitCmd": [
+                -1000.0,
+                540.0
+            ],
+            "/GitCurBranch": [
+                -1000.0,
+                300.0
+            ],
+            "/GitPR": [
+                -1000.0,
+                360.0
+            ],
+            "/GitRelease": [
+                -1000.0,
+                480.0
+            ],
+            "/GitStatus": [
+                -1020.0,
+                120.0
+            ],
+            "/GitUpload": [
+                -1000.0,
+                740.0
+            ],
+            "/JsonLoad": [
+                -1000.0,
+                420.0
+            ],
+            "/ReleaseLoop": [
+                2140.0,
+                0.0
+            ],
+            "/build_maya_plugin": [
+                1800.0,
+                0.0
+            ],
+            "/clone_fresh_source": [
+                1840.0,
+                300.0
+            ],
+            "/make_module_folder": [
+                1820.0,
+                0.0
+            ]
+        },
+        "collapse": {
+            "/CreateRelease/UploadMayaPlugin": true,
+            "/clone_fresh_source": true
+        }
+    },
+    "nodes": {
+        "/CreateRelease": {
+            "child_order": [
+                "DraftRelease",
+                "UploadMayaPlugin",
+                "OpenReleaseURL"
+            ]
+        },
+        "/CreateRelease/UploadMayaPlugin": {
+            "instance": "/GitUpload",
+            "attrs": {
+                "asset_path": {
+                    "type": "raw",
+                    "value": "${/make_module_folder/zip_maya_plugin.zip_path}"
+                },
+                "content_type": {
+                    "type": "raw",
+                    "value": "application/zip"
+                }
+            }
+        },
+        "/ReleaseLoop": {
+            "execute_in": "/make_module_folder"
+        },
+        "/make_module_folder": {
+            "start_point": false,
+            "execute_in": "/GenerateChangelog"
+        },
+        "/make_module_folder/zip_maya_plugin": {
+            "attrs": {
+                "zip_name": {
+                    "type": "raw",
+                    "value": "${release_dir}/nxt_maya"
+                },
+                "zip_path": {
+                    "type": "raw",
+                    "value": "${zip_name}.zip"
+                }
+            },
+            "code": [
+                "self.zip_path = shutil.make_archive('D:/Projects/nxt_editor/build/TEMP/nxt_maya', 'zip', 'D:/Projects/nxt_editor/build/TEMP/nxt_maya')",
+                "shutil.rmtree('D:/Projects/nxt_editor/build/TEMP/nxt_maya')"
+            ]
+        }
+    }
+}
