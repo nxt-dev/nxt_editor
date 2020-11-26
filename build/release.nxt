@@ -70,6 +70,10 @@
             "/make_module_folder": [
                 1820.0,
                 0.0
+            ],
+            "/versions": [
+                140.0,
+                0.0
             ]
         },
         "collapse": {
@@ -103,7 +107,10 @@
         },
         "/make_module_folder": {
             "start_point": false,
-            "execute_in": "/GenerateChangelog"
+            "execute_in": "/GenerateChangelog",
+            "child_order": [
+                "zip_maya_plugin"
+            ]
         },
         "/make_module_folder/zip_maya_plugin": {
             "attrs": {
