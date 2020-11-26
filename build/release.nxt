@@ -166,8 +166,8 @@
                 }
             },
             "code": [
-                "self.zip_path = shutil.make_archive('D:/Projects/nxt_editor/build/TEMP/nxt_maya', 'zip', 'D:/Projects/nxt_editor/build/TEMP/nxt_maya')",
-                "shutil.rmtree('D:/Projects/nxt_editor/build/TEMP/nxt_maya')"
+                "self.zip_path = shutil.make_archive('${zip_name}', 'zip', '${mod_folder}')",
+                "shutil.rmtree('${mod_folder}')"
             ]
         },
         "/versions": {
