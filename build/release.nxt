@@ -148,7 +148,7 @@
             "attrs": {
                 "release_types": {
                     "type": "tuple",
-                    "value": "(${/versions.EDITOR})"
+                    "value": "(${/versions.EDITOR},)"
                 }
             }
         },
