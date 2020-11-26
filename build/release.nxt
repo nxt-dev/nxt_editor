@@ -5,8 +5,8 @@
     "mute": false,
     "solo": false,
     "references": [
-        "D:/Projects/nxt_editor/build/make_maya_plugin.nxt",
-        "D:/Projects/nxt/build/release.nxt"
+        "make_maya_plugin.nxt",
+        "../../nxt/build/release.nxt"
     ],
     "comp_overrides": {
         "../../nxt/build/GitUtils.nxt": {
