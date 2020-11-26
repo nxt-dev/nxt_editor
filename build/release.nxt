@@ -14,6 +14,12 @@
         }
     },
     "meta_data": {
+        "aliases": {
+            "../../nxt/build/release.nxt": "Release_Core"
+        },
+        "colors": {
+            "../../nxt/build/release.nxt": "#aaaaff"
+        },
         "positions": {
             "/CreateRelease": [
                 2180.0,
