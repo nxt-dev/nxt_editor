@@ -77,7 +77,8 @@
             ]
         },
         "collapse": {
-            "/CreateRelease/UploadMayaPlugin": true,
+            "/CreateRelease/UploadMayaPlugin": false,
+            "/ValidatePushed/Push": false,
             "/clone_fresh_source": true
         }
     },
@@ -112,7 +113,7 @@
         },
         "/BeginRelease/set_version_string": {
             "code": [
-                "STAGE.version = 'editor v' + EDITOR_VERSION.VERSION_STR",
+                "STAGE.version = 'editor-v' + EDITOR_VERSION.VERSION_STR",
                 ""
             ]
         },
