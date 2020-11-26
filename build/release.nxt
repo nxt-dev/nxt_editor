@@ -79,7 +79,7 @@
         "collapse": {
             "/CreateRelease/UploadMayaPlugin": false,
             "/ValidatePushed/Push": false,
-            "/clone_fresh_source": true
+            "/clone_fresh_source": false
         }
     },
     "nodes": {
@@ -151,6 +151,11 @@
             "start_point": false,
             "execute_in": "/GenerateChangelog",
             "child_order": [
+                "copy_source",
+                "qt_py",
+                "make_resources",
+                "populate_mod_template",
+                "clean_up",
                 "zip_maya_plugin"
             ]
         },
