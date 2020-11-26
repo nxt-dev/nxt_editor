@@ -82,6 +82,35 @@
         }
     },
     "nodes": {
+        "/": {
+            "child_order": [
+                "CreateRelease",
+                "ReleaseLoop",
+                "make_module_folder",
+                "versions"
+            ],
+            "code": [
+                "# Builtin",
+                "import sys",
+                "import os",
+                "import subprocess",
+                "import json",
+                "import requests",
+                "import pickle",
+                "import webbrowser",
+                "import shutil",
+                "# Internal",
+                "import nxt",
+                "from nxt.constants import API_VERSION",
+                "from nxt_editor.constants import EDITOR_VERSION"
+            ]
+        },
+        "/BeginRelease/set_version_string": {
+            "code": [
+                "STAGE.version = 'editor v' + EDITOR_VERSION.VERSION_STR",
+                ""
+            ]
+        },
         "/CreateRelease": {
             "child_order": [
                 "DraftRelease",
