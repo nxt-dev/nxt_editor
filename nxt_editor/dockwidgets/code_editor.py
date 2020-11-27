@@ -788,6 +788,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
         # get current line text
         cursor.movePosition(QtGui.QTextCursor.StartOfLine)
+        start_of_line = cursor.position()
         cursor.movePosition(QtGui.QTextCursor.EndOfLine,
                             QtGui.QTextCursor.KeepAnchor)
         end = cursor.position()
@@ -798,7 +799,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         indent_text = ''
 
         # add indent for statements
-        if line_text.endswith(':'):
+        if line_text.endswith(':') and pos != start_of_line:
             indent_text += self.indent
 
         # add whitespace to match current line

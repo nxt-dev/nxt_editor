@@ -51,7 +51,7 @@ except ImportError:
     make_resources(qrc_path, result_path)
 
 
-def launch_editor(paths=None):
+def launch_editor(paths=None, no_rpc=False):
     """Creates a new QApplication with editor main window and shows it.
     """
     # Deferred import since main window relies on us
@@ -68,7 +68,7 @@ def launch_editor(paths=None):
     style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
     stream = QtCore.QTextStream(style_file)
     app.setStyleSheet(stream.readAll())
-    instance = MainWindow(filepath=path)
+    instance = MainWindow(filepath=path, no_rpc=no_rpc)
     for other_path in paths:
         instance.load_file(other_path)
     pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
