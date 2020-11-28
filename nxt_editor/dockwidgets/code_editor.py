@@ -230,6 +230,8 @@ class CodeEditor(DockWidgetBase):
         self.model_signal_connections = [
             (model.node_focus_changed, self.accept_edit),
             (model.node_focus_changed, self.set_represented_node),
+            (model.nodes_changed, self.update_editor),
+            (model.attrs_changed, self.update_editor),
             (model.data_state_changed, self.update_editor),
             (model.comp_layer_changed, self.update_editor),
             (model.target_layer_changed, self.set_represented_node),
@@ -287,7 +289,16 @@ class CodeEditor(DockWidgetBase):
         else:
             self.details_frame.hide()
 
-    def update_editor(self):
+    def update_editor(self, node_list=()):
+        try:
+            iter(node_list)
+        except TypeError:
+            node_list = ()
+        safe_node_paths = []
+        for attr_path in node_list:  # Because the attrs changed signal
+            safe_node_paths += [nxt_path.node_path_from_attr_path(attr_path)]
+        if node_list and self.node_path not in safe_node_paths:
+            return
         code_layers = self.stage_model.get_layers_with_opinion(self.node_path,
                                                                INTERNAL_ATTRS.COMPUTE)
         self.code_layer_colors = self.stage_model.get_layer_colors(code_layers)
@@ -304,6 +315,8 @@ class CodeEditor(DockWidgetBase):
                 self.editor.clear()
                 return
             self.update_code_is_local()
+            # TODO: We should break the code update out into its own function
+            #  for faster updates. And avoid that early exit check at the top.
             get_code = self.stage_model.get_node_code_string
             code_string = get_code(self.node_path,
                                       self.stage_model.data_state,
