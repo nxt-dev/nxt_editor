@@ -1,4 +1,11 @@
+# Examples
+Checkout our example content [here](https://github.com/nxt-dev/nxt_editor/tree/release/examples), you'll find `.nxt` graphs demonstrating these same topics.
+
+If you're not quite sure how nxt fits into your workflow checkout our workflow and transition map [here](workflows.md).
+Over there we explain nxt from different vantage points to help illuminate how nxt can work for you.
+
 # Tutorials
+- <a href="https://www.youtube.com/playlist?list=PL1rrB33w2Z6XJLjK0MU613euB06Z0xMuC" target=blank>Getting started YouTube Playlist</a>
 
 ## Introduction to tokens
 <iframe width="560" height="315" src="https://www.youtube.com/embed/L-0UGm0tPzc" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>

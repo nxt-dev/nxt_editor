@@ -92,6 +92,11 @@
                 "Each node has a little comment explaining what it does and how to use it.",
                 "One node you won't see on the `Stage View` is the `World` node. You can access it by double clicking the layer name in the `Layer Manager`.",
                 "If you don't see a widget called `Layer Manager` you can open it by navigating to `Window` > `Layer Manager`.",
+                "",
+                "Checkout our video tutorials on YouTube: ",
+                "        ",
+                "        https://www.youtube.com/playlist?list=PL1rrB33w2Z6XJLjK0MU613euB06Z0xMuC",
+                "",
                 "\"\"\""
             ]
         },
@@ -253,6 +258,11 @@
             "code": [
                 "\"\"\"",
                 "${_comment}",
+                "",
+                "Watch our video about attr ref tokens here:",
+                "        ",
+                "        https://youtu.be/BeCY2fNhw4c",
+                "    ",
                 "\"\"\"",
                 "# Example of improper useage of quotes in an attr value",
                 "msg = 'Hello ${quotes}'",

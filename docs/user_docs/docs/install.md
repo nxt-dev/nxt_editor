@@ -2,6 +2,8 @@
 
 ### Linux/OSX
 
+*The following also works for Windows Python 3.7, if you're trying to install on Windows in a Python 2 environment see [here](#windows-python-27)*
+
 To install the latest release directly from [PyPi](https://pypi.org/project/nxt-editor/) follow the following steps.
 
 - First time install
@@ -11,16 +13,28 @@ To install the latest release directly from [PyPi](https://pypi.org/project/nxt-
     - `pip install -U nxt-core`
     - `pip install -U nxt-editor`
 
-If you would like to install a previous release download the `.tar.gz` from 
-our [releases page](https://github.com/SunriseProductions/nxt/releases).
-To install use the following commands. 
+If you would like to install directly from GitHub use the following command. 
+
+```
+pip install git+https://github.com/nxt-dev/nxt.git@{ tag name }
+``` 
+
+Assuming you wanted to install API version `0.7.1` the command would look like:
+```
+pip install git+https://github.com/nxt-dev/nxt.git@api_v0.7.1
+``` 
+
+Omit `@{ tag name}` if you want the latest from the `release` branch.
+
 
 - First time install
-    - `pip install path/to/release.tar.gz`
+    - `pip install git+https://github.com/nxt-dev/nxt.git`
 - Update
-    - `pip install -U path/to/release.tar.gz`
+    - `pip install -U git+https://github.com/nxt-dev/nxt.git`
 
-### Windows
+
+### Windows (Python 2.7)
+*If you're installing into a Python 3.7.x environment you can use the above [steps](#linuxosx)*
 
 Due to the limited availability of PySide2 on Windows for Python 2.7 the steps to install on Windows are slightly more involved.
 The following steps are a simplified version of those found in our

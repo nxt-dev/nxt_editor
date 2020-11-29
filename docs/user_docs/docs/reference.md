@@ -1,3 +1,8 @@
+# Example Graphs
+Checkout our example graphs [here](https://github.com/nxt-dev/nxt_editor/tree/release/examples).
+
+*If you're looking for workflow checkout our workflow and transition map [here](workflows.md).*
+
 # Editors
 
 Stage

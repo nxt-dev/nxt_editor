@@ -8,7 +8,6 @@ nav:
     - Tutorials: tutorials.md
     - Installation: install.md
     - Reference: reference.md
-    - Workflows: workflows.md
     - Extensions: extensions.md
     - API: api/index.html
     - License: license.md

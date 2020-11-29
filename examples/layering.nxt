@@ -46,6 +46,9 @@
                 "At the bottom right of the code editor there are 2 colored dots inidcating that both layers have an opinion about the code on this node.",
                 "",
                 "Attributes also have what's called `Historical Values`, try right clicking on the source cell of the `.example_attr`.",
+                "",
+                "See our video about layers here:",
+                "    https://youtu.be/XlXfue-7oQk",
                 "\"\"\""
             ]
         },

@@ -2,6 +2,8 @@
 
 NXT can easily extended to better meet a user's/studio's needs. In this section you will find examples of how to use NXT's configuration and plugin system.
 
+**If you're looking for a quick test and not trying to dive too deep, we have an *almost* drag and drop example Maya context [here](https://github.com/nxt-dev/nxt_editor/tree/release/examples/quick_start_graphs).** 
+
 # Config dir
 
 Custom configurations are graphs and code that extends or alters the functionality of nxt. Cofigs are not to be confused with preferences which are soley UX related.
