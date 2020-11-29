@@ -9,9 +9,9 @@ from Qt import QtCore
 # Internal
 from . import colors
 from nxt import nxt_path, nxt_node
+import nxt_editor
 
-
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class AttrConnectionGraphic(QtWidgets.QGraphicsLineItem):

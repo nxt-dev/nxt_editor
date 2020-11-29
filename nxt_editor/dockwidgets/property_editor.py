@@ -1,5 +1,6 @@
 # Built-in
 import textwrap
+import sys
 from functools import partial
 
 # External
@@ -14,7 +15,7 @@ except AttributeError:
 
 # Internal
 from nxt_editor import user_dir
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors
@@ -1243,6 +1244,8 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
             # column widths
             if self.state:
+                if sys.version_info[0] > 2 and isinstance(self.state, str):
+                    self.state = bytes(self.state, 'utf-8')
                 self.horizontal_header.restoreState(self.state)
             self.view.resizeColumnToContents(COLUMNS.nxt_type)
 
@@ -1258,8 +1261,8 @@ class PropertyModel(QtCore.QAbstractTableModel):
         self.state = self.horizontal_header.saveState()
         col = self.horizontal_header.sortIndicatorSection()
         order = self.horizontal_header.sortIndicatorOrder().name
-        state = {'column': col,
-                 'order':  order}
+        state = {'column': int(col),
+                 'order':  str(order)}
         if state == self.parent.user_sort_pref:
             return
         user_dir.user_prefs[self.parent.PREF_KEY] = state

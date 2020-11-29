@@ -7,17 +7,17 @@ import time
 from Qt.QtWidgets import QUndoCommand
 
 # Internal
-import colors
+from nxt_editor import colors
 from nxt_editor import user_dir
-from nxt import nxt_path
 from nxt import nxt_path
 from nxt.nxt_layer import LAYERS, SAVE_KEY
 from nxt.nxt_node import (INTERNAL_ATTRS, META_ATTRS, get_node_as_dict,
                           list_merger)
 from nxt import nxt_io
-from nxt import DATA_STATE, GRID_SIZE
+from nxt import GRID_SIZE
+import nxt_editor
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 def processing(func):
@@ -841,7 +841,7 @@ class ParentNodes(NxtCommand):
             prev_parent_node = layer.lookup(prev_parent_path)
             new_path = self.node_path_data[old_path]
             node = layer.lookup(new_path)
-            if prev_parent_path not in common_parent_nodes.keys():
+            if prev_parent_path not in list(common_parent_nodes.keys()):
                 common_parent_nodes[prev_parent_path] = {node: old_path}
             else:
                 common_parent_nodes[prev_parent_path][node] = old_path
@@ -852,11 +852,11 @@ class ParentNodes(NxtCommand):
                 if ancestor:
                     self.stage.set_node_child_order(ancestor, child_order,
                                                     layer)
-            if new_path in self.model.top_layer.positions.keys():
+            if new_path in list(self.model.top_layer.positions.keys()):
                 source_layer = self.stage.get_node_source_layer(node)
                 source_layer.positions.pop(new_path)
         for parent_path, nodes_dict in common_parent_nodes.items():
-            self.stage.parent_nodes(nodes=nodes_dict.keys(),
+            self.stage.parent_nodes(nodes=list(nodes_dict.keys()),
                                     parent_path=parent_path,
                                     layer=layer)
         for parent_path, nodes_dict in common_parent_nodes.items():
@@ -1160,7 +1160,7 @@ class SetNodeCollapse(NxtCommand):
         for node_path, prev_value in self.prev_values.items():
             layer.collapse[node_path] = prev_value
             self.model.comp_layer.collapse[node_path] = prev_value
-        self.model.collapse_changed.emit(self.prev_values.keys())
+        self.model.collapse_changed.emit(list(self.prev_values.keys()))
 
     @processing
     def redo(self):
@@ -1173,7 +1173,7 @@ class SetNodeCollapse(NxtCommand):
             layer.collapse[node_path] = self.value
             self.model.comp_layer.collapse[node_path] = self.value
 
-        self.model.collapse_changed.emit(self.prev_values.keys())
+        self.model.collapse_changed.emit(list(self.prev_values.keys()))
         if len(self.node_paths) == 1:
             path_str = self.node_paths[0]
         else:
@@ -1263,7 +1263,7 @@ class ClearBreakpoints(QUndoCommand):
     @processing
     def redo(self):
         self.prev_breaks = user_dir.breakpoints.get(self.layer_path, [])
-        if self.layer_path in user_dir.breakpoints.keys():
+        if self.layer_path in list(user_dir.breakpoints.keys()):
             user_dir.breakpoints.pop(self.layer_path)
         self.model.nodes_changed.emit(tuple(self.prev_breaks))
         self.setText("Clear all breakpoints")

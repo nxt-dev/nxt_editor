@@ -1,0 +1,103 @@
+{
+    "version": "1.17",
+    "alias": "builtin_graphs",
+    "color": "#f38b00",
+    "mute": false,
+    "solo": false,
+    "references": [
+        "$NXT_BUILTINS/sub_graphs.nxt"
+    ],
+    "meta_data": {
+        "positions": {
+            "/README": [
+                0.0,
+                -200.0
+            ],
+            "/_sub_graph": [
+                -600.0,
+                0.0
+            ],
+            "/execute_sub_graph": [
+                0.0,
+                0.0
+            ],
+            "/node": [
+                0.0,
+                140.0
+            ],
+            "/process_return": [
+                40.0,
+                20.0
+            ]
+        }
+    },
+    "nodes": {
+        "/": {
+            "attrs": {
+                "another_graph": {
+                    "comment": "The graph we want to execute.",
+                    "type": "raw",
+                    "value": "${file::file_list.nxt}"
+                }
+            }
+        },
+        "/README": {
+            "code": [
+                "\"\"\"",
+                "This graph contains a simple example of a sub-graph.",
+                "If you inspect this graph in a text editor you'll see its referencing our builtin graph \"${file::$NXT_BUILTINS/sub_graphs.nxt}\".",
+                "When using a builtin graph its generaly best practice to use the environment variable $NXT_BUILTINS as the graph filepath's root.",
+                "Doing so maximizes portibility of your graph.",
+                "",
+                "In this graph we're going to execute \"${another_graph}\".",
+                "Any attributes avaible on the calling node (In this case node `/execute_sub_graph`), will be passed to the sub_graphs world node.",
+                "So in our case we're going to be most interested in passing down the attr `.root_dir` as it needed by the sub graph.",
+                "Check out `/execute_sub_graph/process_return` to see what is returned from sub graphs.",
+                "\"\"\""
+            ]
+        },
+        "/execute_sub_graph": {
+            "start_point": true,
+            "instance": "/_sub_graph",
+            "child_order": [
+                "process_return"
+            ],
+            "attrs": {
+                "_graph_path": {
+                    "type": "raw",
+                    "value": "${another_graph}"
+                },
+                "a_message_for_you": {
+                    "comment": "Expected return from sub graph",
+                    "type": "NoneType"
+                },
+                "files": {
+                    "comment": "Expected return from sub graph",
+                    "type": "list",
+                    "value": "[]"
+                },
+                "root_dir": {
+                    "type": "raw",
+                    "value": "${file::}"
+                }
+            }
+        },
+        "/execute_sub_graph/process_return": {
+            "comment": "All of the attrs from the sub graphs world node are passed back to the calling node.\nNote: Attrs created at runtime are not inherited by child nodes. We intent to enable this in the future.\nIf you want to use a returned attr from a sub graph, add an attr on the calling node with the same name as the attr in the sub graph.\n\nIf you execute this graph and check cached mode you'll see we got back a list of files as well as a message from the sub graph.\n",
+            "code": [
+                "\"\"\"",
+                "${_comment}",
+                "\"\"\"",
+                "# Notice these tokens resolve to nothing before we execute. ",
+                "# Thats because the attrs referenced here will be created and returned by the sub graph at runtime.",
+                "print('-'*79)",
+                "print('The sub graph ran. These are the files contained in \"${root_dir}\"')",
+                "",
+                "for filepath in ${files}:",
+                "    print(' '*3 + '- ' + filepath)",
+                "",
+                "print('The sub graph also sent back a message: \"${a_message_for_you}\"')"
+            ]
+        }
+    }
+}

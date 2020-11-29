@@ -5,9 +5,10 @@ import logging
 from Qt import QtWidgets
 
 # Internal
-from dock_widget_base import DockWidgetBase
+import nxt_editor
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class HistoryView(DockWidgetBase):

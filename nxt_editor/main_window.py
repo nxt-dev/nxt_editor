@@ -7,7 +7,7 @@ import traceback
 from collections import OrderedDict
 import webbrowser
 from functools import partial
-import threading
+import time
 
 # External
 from Qt import QtWidgets
@@ -15,6 +15,7 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
+import nxt_editor
 from nxt_editor import user_dir
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION
@@ -27,16 +28,16 @@ from nxt_editor.dockwidgets.output_log import (FileTailingThread,
                                                QtLogStreamHandler)
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
 from nxt import nxt_log, nxt_io, nxt_layer
-from dialogs import (NxtFileDialog, NxtWarningDialog, UnsavedLayersDialogue,
-                     UnsavedChangesMessage)
+from nxt_editor.dialogs import (NxtFileDialog, NxtWarningDialog,
+                                UnsavedLayersDialogue, UnsavedChangesMessage)
 from nxt_editor import actions, LoggingSignaler
-from nxt.constants import API_VERSION, GRAPH_VERSION
+from nxt.constants import API_VERSION, GRAPH_VERSION, USER_PLUGIN_DIR
 from nxt.remote.client import NxtClient
-import resources
+from nxt_editor import resources
 
 
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
 
 
@@ -48,7 +49,7 @@ class MainWindow(QtWidgets.QMainWindow):
     close_signal = QtCore.Signal()
     new_log_signal = QtCore.Signal(logging.LogRecord)
 
-    def __init__(self, filepath=None, parent=None):
+    def __init__(self, filepath=None, parent=None, start_rpc=True):
         """Create NXT window.
 
         :param parent: parent to attach this UI to.
@@ -87,11 +88,12 @@ class MainWindow(QtWidgets.QMainWindow):
             dcc = 'maya'
         self.host_app = dcc
         self.setWindowTitle("nxt {} - Editor v{} | Graph v{} | API v{} "
-                            "{}".format(self.host_app,
-                                        EDITOR_VERSION.VERSION_STR,
-                                        GRAPH_VERSION.VERSION_STR,
-                                        API_VERSION.VERSION_STR,
-                                        current_branch))
+                            "(Python {}) {}".format(self.host_app,
+                                                    EDITOR_VERSION.VERSION_STR,
+                                                    GRAPH_VERSION.VERSION_STR,
+                                                    API_VERSION.VERSION_STR,
+                                                    '.'.join([str(n) for n in sys.version_info[:3]]),
+                                                    current_branch))
         self.setObjectName('Main Window')
         self._closing = False
         self.last_focused_start = 0  # Start point focus tracker
@@ -237,13 +239,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.display_actions.resolve_action.setChecked(True)
         # Rpc startup
         self.rpc_log_tail = None
-        self.startup_rpc_server(join=False)
+        if start_rpc:
+            self.startup_rpc_server(join=False)
         # Should this be a signal? Like Startup done, now you can refresh?
         self.splash_screen.finish(self)
         self.in_startup = False
         app = QtWidgets.QApplication.instance()
         app.aboutToQuit.connect(self.shutdown_rpc_server)
-        self.close_signal.connect(self.shutdown_rpc_server)
 
     # RPC
     def startup_rpc_server(self, join=True):
@@ -280,6 +282,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.nxt.shutdown_rpc_server()
         if self.model:
             self.model.processing.emit(False)
+        if not self.rpc_log_tail:
+            return
+        wait_started = time.time()
+        while not self.rpc_log_tail.isFinished():
+            QtWidgets.QApplication.processEvents()
+            if time.time() - wait_started > 5:
+                logger.error('Failed to stop rpc log tail!')
+                return
         self.rpc_log_tail = None
 
     def safe_stop_rpc_tailing(self):
@@ -734,11 +744,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 event.ignore()
                 return
         event.accept()
+        self.shutdown_rpc_server()
         # Window state
         state_key = user_dir.EDITOR_CACHE.WINODW_STATE
         geo_key = user_dir.EDITOR_CACHE.MAIN_WIN_GEO
-        user_dir.editor_cache[state_key] = str(self.saveState())
-        user_dir.editor_cache[geo_key] = str(self.saveGeometry())
+        user_dir.editor_cache[state_key] = self.saveState()
+        user_dir.editor_cache[geo_key] = self.saveGeometry()
         state_key = user_dir.EDITOR_CACHE.NODE_PROPERTY_STATE
         property_state = self.property_editor.model.state
         if property_state:
@@ -1024,6 +1035,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.help_menu.setTearOffEnabled(True)
         prefs_dir_action = self.help_menu.addAction('Open Prefs Dir')
         prefs_dir_action.triggered.connect(self.open_prefs_dir)
+        config_dir_action = self.help_menu.addAction('Open Plugins Dir')
+        config_dir_action.triggered.connect(self.open_plugins_dir)
         self.help_menu.addSeparator()
         self.help_menu.addAction(self.main_window.app_actions.docs_action)
         github_action = self.help_menu.addAction('GitHub')
@@ -1115,6 +1128,19 @@ class MenuBar(QtWidgets.QMenuBar):
                 os.system('xdg-open {}'.format(d))
             except:
                 logger.exception('Failed to open user dir')
+
+    @staticmethod
+    def open_plugins_dir():
+        d = USER_PLUGIN_DIR
+        if 'darwin' in sys.platform:
+            os.system('open {}'.format(d))
+        elif 'win' in sys.platform:
+            os.startfile(d)
+        else:
+            try:
+                os.system('xdg-open {}'.format(d))
+            except:
+                logger.exception('Failed to open user config dir')
 
     def about_message(self):
         text = ('nxt {} \n'
@@ -1212,7 +1238,7 @@ class MenuBar(QtWidgets.QMenuBar):
 
     def __force_uncaught_exception(self):
         sys.excepthook = nxt_execpthook
-        print foo
+        print(foo)
         sys.excepthook = og_excepthook
 
     def __compile_node_code(self):
@@ -1388,6 +1414,8 @@ class StartRPCThread(QtCore.QThread):
         except OSError:
             logger.warning('Failed to start/connect to rpc server. Please try '
                            'starting the rpc server via the UI')
+            if self.main_window.model:
+                self.main_window.model.processing.emit(False)
             return
         remote_rpc_log_file_path = None
         if not self.main_window.nxt.rpc_server:

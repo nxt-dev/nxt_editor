@@ -1,121 +1,180 @@
 {
-    "version": "1.15", 
-    "alias": "make_maya_plugin", 
-    "color": "#0052aa", 
-    "mute": false, 
-    "solo": false, 
+    "version": "1.17",
+    "alias": "make_maya_plugin",
+    "color": "#0052aa",
+    "mute": false,
+    "solo": false,
+    "references": [
+        "../../nxt/build/GitUtils.nxt"
+    ],
     "meta_data": {
         "positions": {
             "/": [
-                0.0, 
-                0.0, 
+                0.0,
+                0.0,
                 0.0
-            ], 
+            ],
+            "/clone_fresh_source": [
+                540.0,
+                80.0
+            ],
             "/make_module_folder": [
-                -135.0, 
-                -149.0
-            ], 
+                560.0,
+                -220.0
+            ],
             "/zip_maya_plugin": [
-                -142.0, 
+                -142.0,
                 -162.0
             ]
         }
-    }, 
+    },
     "nodes": {
         "/": {
             "child_order": [
-                "make_module_folder"
-            ], 
+                "make_module_folder",
+                "clone_fresh_source"
+            ],
+            "attrs": {
+                "mod_folder": {
+                    "type": "raw",
+                    "value": "${output_dir}/nxt_maya"
+                },
+                "nxt_root": {
+                    "type": "raw",
+                    "value": "${path::..}"
+                },
+                "output_dir": {
+                    "type": "raw",
+                    "value": "${nxt_root}/build"
+                },
+                "src": {
+                    "type": "raw",
+                    "value": "remote"
+                },
+                "src_clone": {
+                    "type": "raw",
+                    "value": "${path::nxt-src}"
+                }
+            },
             "code": [
-                "import os", 
-                "import shutil", 
-                "import sys"
+                "import os",
+                "import shutil",
+                "import sys",
+                "import subprocess"
             ]
-        }, 
+        },
+        "/clone_fresh_source": {
+            "instance": "/GitClone",
+            "attrs": {
+                "cmd_args": {
+                    "type": "str",
+                    "value": "\"clone\", \"git@github.com:nxt-dev/nxt.git\", \"${dir}\""
+                },
+                "dir": {
+                    "type": "raw",
+                    "value": "${src_clone}"
+                }
+            }
+        },
+        "/make_module_folder": {
+            "start_point": true,
+            "child_order": [
+                "copy_source",
+                "qt_py",
+                "make_resources",
+                "populate_mod_template",
+                "clean_up"
+            ],
+            "code": [
+                "if os.path.isdir('${mod_folder}'):",
+                "    shutil.rmtree('${mod_folder}')",
+                "    print('removed old build')",
+                "template_mod = os.path.join('${nxt_root}', 'integration', 'maya')",
+                "shutil.copytree(template_mod, '${mod_folder}')"
+            ]
+        },
+        "/make_module_folder/clean_up": {
+            "code": [
+                "if os.path.isdir('D:/Projects/nxt_editor/build/nxt-src'):",
+                "    try:",
+                "        shutil.rmtree('${src_clone}')",
+                "    except:",
+                "        print('!' * 79)",
+                "        print('Failed to delete soruce clone, do so by hand!')",
+                "        print(' '* 3 + '${src_clone}')"
+            ]
+        },
         "/make_module_folder/copy_source": {
             "attrs": {
-                "source_folder": {
-                    "type": "raw", 
+                "clone_node": {
+                    "type": "raw",
+                    "value": "/clone_fresh_source"
+                },
+                "core_script_src": {
+                    "type": "raw",
                     "value": "${mod_folder}/scripts/nxt"
+                },
+                "editor_script_src": {
+                    "type": "raw",
+                    "value": "${mod_folder}/scripts/nxt_editor"
                 }
-            }, 
+            },
             "code": [
-                "shutil.copytree('${nxt_root}/nxt', '${source_folder}')"
+                "shutil.copytree('${path::${nxt_root}/nxt_editor}', '${editor_script_src}')",
+                "",
+                "# Get core code",
+                "if '${src}' == 'local':",
+                "    shutil.copytree('${path::${nxt_root}/../nxt/nxt}', '${core_script_src}')",
+                "else:",
+                "    if os.path.isdir('${src_clone}'):",
+                "        shutil.rmtree('${src_clone}')",
+                "    execute(start='${clone_node}')",
+                "    shutil.copytree('${path::${src_clone}/nxt}', '${core_script_src}')"
             ]
-        }, 
+        },
         "/make_module_folder/make_resources": {
             "code": [
-                "import subprocess", 
-                "result_path = '${../copy_source.source_folder}/ui/resources.py'", 
-                "result_pyc = result_path + 'c'", 
-                "qrc_path = '${../copy_source.source_folder}/ui/resources/resources.qrc'", 
-                "if os.path.isfile(result_path):", 
-                "    os.remove(result_path)", 
-                "    print('removed old {}'.format(result_path))", 
-                "if os.path.isfile(result_pyc):", 
-                "    os.remove(result_pyc)", 
-                "    print('removed old {}'.format(result_pyc))", 
-                "print('generating nxt resources from {} to {}'.format(qrc_path, result_path))", 
+                "import subprocess",
+                "result_path = '${../copy_source.source_folder}/ui/resources.py'",
+                "result_pyc = result_path + 'c'",
+                "qrc_path = '${../copy_source.source_folder}/ui/resources/resources.qrc'",
+                "if os.path.isfile(result_path):",
+                "    os.remove(result_path)",
+                "    print('removed old {}'.format(result_path))",
+                "if os.path.isfile(result_pyc):",
+                "    os.remove(result_pyc)",
+                "    print('removed old {}'.format(result_pyc))",
+                "print('generating nxt resources from {} to {}'.format(qrc_path, result_path))",
                 "subprocess.call(['pyside2-rcc', qrc_path, '-o', result_path])"
             ]
-        }, 
+        },
         "/make_module_folder/populate_mod_template": {
             "attrs": {
                 "mod_file": {
-                    "type": "raw", 
+                    "type": "raw",
                     "value": "${mod_folder}/nxt.mod"
                 }
-            }, 
+            },
             "code": [
-                "# from nxt_maya import MAYA_PLUGIN_VERSION", 
-                "with open('${mod_file}', 'r') as fp:", 
-                "    content = fp.read()", 
-                "content = content.replace('<VERSION>', '0.1.0')", 
-                "with open('${mod_file}', 'w') as fp:", 
+                "# from nxt_maya import MAYA_PLUGIN_VERSION",
+                "with open('${mod_file}', 'r') as fp:",
+                "    content = fp.read()",
+                "content = content.replace('<VERSION>', '0.1.0')",
+                "with open('${mod_file}', 'w') as fp:",
                 "    fp.write(content)"
             ]
-        }, 
+        },
         "/make_module_folder/qt_py": {
             "code": [
-                "import requests", 
-                "", 
-                "result = requests.get(\"https://raw.githubusercontent.com/mottosso/Qt.py/master/Qt.py\")", 
-                "", 
-                "# Making qt.py into a differently shaped module so it doesn't display in plugin list.", 
-                "os.makedirs('${mod_folder}/scripts/Qt')", 
-                "", 
-                "with open('${mod_folder}/scripts/Qt/__init__.py', 'w+') as fp:", 
+                "import requests",
+                "",
+                "result = requests.get(\"https://raw.githubusercontent.com/mottosso/Qt.py/master/Qt.py\")",
+                "",
+                "# Making qt.py into a differently shaped module so it doesn't display in plugin list.",
+                "os.makedirs('${mod_folder}/scripts/Qt')",
+                "",
+                "with open('${mod_folder}/scripts/Qt/__init__.py', 'w+') as fp:",
                 "    fp.write(result.content)"
-            ]
-        }, 
-        "/make_module_folder": {
-            "attrs": {
-                "mod_folder": {
-                    "type": "raw", 
-                    "value": "${output_dir}/nxt_maya"
-                }, 
-                "nxt_root": {
-                    "type": "raw", 
-                    "value": "${path::..}"
-                }, 
-                "output_dir": {
-                    "type": "raw", 
-                    "value": "${nxt_root}/build"
-                }
-            }, 
-            "start_point": true, 
-            "child_order": [
-                "copy_source", 
-                "qt_py", 
-                "make_resources", 
-                "populate_mod_template"
-            ], 
-            "code": [
-                "if os.path.isdir('${mod_folder}'):", 
-                "    shutil.rmtree('${mod_folder}')", 
-                "    print('removed old build')", 
-                "template_mod = os.path.join('${nxt_root}', 'integration', 'maya')", 
-                "shutil.copytree(template_mod, '${mod_folder}')"
             ]
         }
     }

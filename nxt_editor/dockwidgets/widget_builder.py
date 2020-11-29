@@ -6,6 +6,7 @@ import ast
 from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
+# Maya fix
 try:
     QtCore.QStringListModel
 except AttributeError:
@@ -13,11 +14,12 @@ except AttributeError:
     from PySide2 import QtCore
 
 # Internal
+import nxt_editor
 from nxt_editor import user_dir
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import DATA_STATE, nxt_path
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 WINDOW_ATTR = '_widget_window'
 WIDGET_TYPES = ['window', 'tab', 'panel', 'gridLayout', 'button', 'menuItem',

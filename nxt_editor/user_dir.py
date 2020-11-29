@@ -7,15 +7,22 @@ will be made that the user directory is a directory.
 """
 # Built-in
 import os
-import pickle
+
 import json
 import logging
+import sys
+
+if sys.version_info[0] == 2:
+    import cPickle as pickle
+else:
+    import pickle
 
 # Internal
 from nxt.constants import USER_DIR
-from constants import PREF_DIR
+from nxt_editor.constants import PREF_DIR
+import nxt_editor
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 # Constants
 USER_PREFS_PATH = os.path.join(PREF_DIR, 'prefs.json')
@@ -23,6 +30,8 @@ EDITOR_CACHE_PATH = os.path.join(PREF_DIR, 'editor_cache')
 BREAKPOINT_FILE = os.path.join(PREF_DIR, 'breakpoints')
 HOTKEYS_PREF = os.path.join(PREF_DIR, 'hotkeys.json')
 MAX_RECENT_FILES = 10
+
+broken_files = {}
 
 
 # Make sure the user dir is setup
@@ -142,6 +151,11 @@ class PrefFile(dict):
 
 
 class JsonPref(PrefFile):
+    if sys.version_info[0] == 2:
+        json_decode_err = Exception
+    else:
+        json_decode_err = json.decoder.JSONDecodeError
+
     def write(self):
         out = {}
         out.update(self)
@@ -151,8 +165,22 @@ class JsonPref(PrefFile):
 
     def read(self):
         contents = {}
-        with open(self.path, 'r+') as fp:
-            contents = json.load(fp)
+        if not os.path.isfile(self.path):
+            return
+        try:
+            with open(self.path, 'r') as fp:
+                contents = json.load(fp)
+        except self.json_decode_err:
+            broken_files.setdefault(self.path, 0)
+            times_hit = broken_files[self.path]
+            if times_hit < 3:
+                warning = ''
+                if times_hit == 2:
+                    warning = "(I'll stop nagging now)"
+                logger.error('Invalid json file "{}", please fix by hand or '
+                             'delete it. {}'.format(self.path, warning))
+            times_hit += 1
+            broken_files[self.path] = times_hit
         self.clear()
         self.update(contents)
 
@@ -161,13 +189,31 @@ class PicklePref(PrefFile):
     def write(self):
         out = {}
         out.update(self)
-        with open(self.path, 'w+') as fp:
-            pickle.dump(out, fp)
+        with open(self.path, 'wb+') as fp:
+            pickle.dump(out, fp, protocol=2)
 
     def read(self):
         contents = {}
-        with open(self.path, 'r+') as fp:
-            contents = pickle.load(fp)
+        if not os.path.isfile(self.path):
+            return
+        try:
+            with open(self.path, 'r+b') as fp:
+                if sys.version_info[0] == 2:
+                    contents = pickle.load(fp)
+                else:
+                    contents = pickle.load(fp, encoding='bytes')
+        except pickle.UnpicklingError:
+            broken_files.setdefault(self.path, 0)
+            times_hit = broken_files[self.path]
+            if times_hit < 3:
+                warning = ''
+                if times_hit == 2:
+                    warning = "(I'll stop nagging now)"
+                logger.error('Failed to load pickle pref "{}", probably '
+                             'changed interpreter versions. {}'
+                             ''.format(os.path.basename(self.path), warning))
+            times_hit += 1
+            broken_files[self.path] = times_hit
         self.clear()
         self.update(contents)
 
@@ -258,13 +304,13 @@ class MultiFilePref(object):
         out_keys = set()
         for pref_file in self.pref_files:
             pref_file.read()
-            out_keys.union(pref_file.keys())
+            out_keys.union(list(pref_file.keys()))
         return out_keys
 
 
 user_prefs = JsonPref(USER_PREFS_PATH)
 hotkeys = JsonPref(HOTKEYS_PREF)
-breakpoints = PicklePref(BREAKPOINT_FILE)
+breakpoints = JsonPref(BREAKPOINT_FILE)
 editor_cache = PicklePref(EDITOR_CACHE_PATH)
 editor_cache.set_handler(USER_PREF.LAST_OPEN, LastOpenedHandler)
 # TODO as a session starts(or ends?), let's create a symlink to

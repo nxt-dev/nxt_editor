@@ -10,14 +10,14 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Interal
-from nxt_editor import user_dir
-from nxt import GRID_SIZE, nxt_path, nxt_node, tokens
+import nxt_editor
+from nxt import nxt_node, tokens
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.commands import *
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class CONNECTION_SIDES:
@@ -622,7 +622,7 @@ class StageView(QtWidgets.QGraphicsView):
                                layer=self.model.target_layer)
 
     def select_all(self):
-        node_paths = self._node_graphics.keys()
+        node_paths = list(self._node_graphics.keys())
         self.model.set_selection(paths=node_paths)
 
     def keyPressEvent(self, event):
@@ -1223,7 +1223,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene().removeItem(graphic)
         # because node graphics are parented to one another, removing parent
         # implicitly removes descendants.
-        for key in self._node_graphics.keys()[:]:
+        for key in list(self._node_graphics.keys()):
             if nxt_path.is_ancestor(key, node_path):
                 self._node_graphics.pop(key)
                 self.remove_node_connection_graphics(key)

@@ -8,9 +8,10 @@ import os
 from Qt import QtCore, QtWidgets, QtGui
 
 # Internal
+import nxt_editor
 from nxt_editor import user_dir
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class FilePathPrefEditor(QtWidgets.QDialog):

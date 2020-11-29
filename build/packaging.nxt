@@ -1,0 +1,19 @@
+{
+    "version": "1.17",
+    "alias": "packaging",
+    "color": "#fed03f",
+    "mute": false,
+    "solo": false,
+    "references": [
+        "../../nxt/build/packaging.nxt"
+    ],
+    "nodes": {
+        "/make_package": {
+            "attrs": {
+                "package_name": {
+                    "value": "nxt_editor"
+                }
+            }
+        }
+    }
+}

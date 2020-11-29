@@ -1,0 +1,393 @@
+{
+    "version": "1.15",
+    "alias": "StageInstanceTest",
+    "color": "#119B77",
+    "references": [],
+    "meta_data": {
+        "positions": {
+            "/inst_target6": [
+                340.0,
+                600.0
+            ],
+            "/inst_target4": [
+                300.0,
+                220.0
+            ],
+            "/inst_source2_middle": [
+                320.0,
+                -240.0
+            ],
+            "/inst_target2": [
+                660.0,
+                -240.0
+            ],
+            "/inst_target1": [
+                340.0,
+                0.0
+            ],
+            "/instFrom": [
+                -20.0,
+                -480.0
+            ],
+            "/inst_target5": [
+                340.0,
+                440.0
+            ],
+            "/load": [
+                880.0,
+                160.0
+            ],
+            "/mid_tgt": [
+                360.0,
+                -680.0
+            ],
+            "/inst_source2": [
+                -20.0,
+                -240.0
+            ],
+            "/top2": [
+                0.0,
+                -720.0
+            ],
+            "/inst_source5": [
+                0.0,
+                440.0
+            ],
+            "/top": [
+                280.0,
+                -520.0
+            ],
+            "/rig_workflow": [
+                1160.0,
+                0.0
+            ],
+            "/inst_source4_2": [
+                406.54863308417725,
+                389.77510395267683
+            ],
+            "/inst_source6": [
+                0.0,
+                600.0
+            ],
+            "/inst_source4": [
+                -20.0,
+                220.0
+            ],
+            "/inst_source1": [
+                -20.0,
+                0.0
+            ]
+        }
+    },
+    "nodes": {
+        "/instFrom": {
+            "child_order": [
+                "instChild1",
+                "instChild2"
+            ],
+            "enabled": true
+        },
+        "/instFrom/instChild1": {
+            "enabled": true
+        },
+        "/instFrom/instChild2": {
+            "enabled": true
+        },
+        "/inst_source1": {
+            "child_order": [
+                "inst_source1_child"
+            ],
+            "code": [
+                "# Inst Source"
+            ],
+            "enabled": true,
+            "attrs": {
+                "InstSourceAttr": {
+                    "type": "raw",
+                    "value": "Hello"
+                }
+            }
+        },
+        "/inst_source1/inst_source1_child": {
+            "code": [
+                "# Inst Child"
+            ],
+            "enabled": true
+        },
+        "/inst_source2": {
+            "child_order": [
+                "inst_source2_child"
+            ],
+            "code": [
+                "# Instance Root Code"
+            ],
+            "enabled": true,
+            "attrs": {
+                "attr0": {
+                    "type": "NoneType"
+                }
+            }
+        },
+        "/inst_source2/inst_source2_child": {
+            "code": [
+                "# Instance Code"
+            ],
+            "enabled": true,
+            "attrs": {
+                "attr0_1": {
+                    "type": "NoneType"
+                }
+            }
+        },
+        "/inst_source2_middle": {
+            "instance": "/inst_source2",
+            "child_order": [
+                "inst_source2_middle_child",
+                "inst_source2_child"
+            ],
+            "attrs": {
+                "attr1": {
+                    "type": "NoneType"
+                }
+            },
+            "enabled": true
+        },
+        "/inst_source2_middle/inst_source2_middle_child": {
+            "code": [
+                "# Instance Middle Code"
+            ],
+            "enabled": true,
+            "attrs": {
+                "attr1_1": {
+                    "type": "NoneType"
+                }
+            }
+        },
+        "/inst_source4": {
+            "child_order": [
+                "inst_source4_child"
+            ],
+            "enabled": true,
+            "attrs": {
+                "base": {
+                    "type": "int",
+                    "value": "0"
+                }
+            }
+        },
+        "/inst_source4/inst_source4_child": {
+            "code": [
+                "\"The base should be 1 is it? base == ${base}\""
+            ],
+            "enabled": true,
+            "attrs": {
+                "base": {
+                    "type": "int",
+                    "value": "1"
+                }
+            }
+        },
+        "/inst_source5": {
+            "child_order": [
+                "inst_source5_child"
+            ],
+            "enabled": true,
+            "attrs": {
+                "base": {
+                    "type": "int",
+                    "value": "0"
+                }
+            }
+        },
+        "/inst_source5/inst_source5_child": {
+            "code": [
+                "\"The base should be 5 is it? base == ${base}\""
+            ],
+            "enabled": true,
+            "attrs": {
+                "base": {
+                    "type": "int",
+                    "value": "1"
+                }
+            }
+        },
+        "/inst_source6": {
+            "child_order": [
+                "inst_source6_child"
+            ],
+            "enabled": true,
+            "attrs": {
+                "base": {
+                    "type": "raw",
+                    "value": "A"
+                }
+            }
+        },
+        "/inst_source6/inst_source6_child": {
+            "code": [
+                "\"The base should be B is it? base == ${base}\""
+            ],
+            "enabled": true
+        },
+        "/inst_target1": {
+            "instance": "/inst_source1",
+            "child_order": [
+                "RealChild",
+                "inst_source1_child"
+            ],
+            "attrs": {
+                "InstTargetAttr": {
+                    "type": "raw",
+                    "value": "World"
+                }
+            },
+            "enabled": true
+        },
+        "/inst_target1/RealChild": {
+            "code": [
+                "\"${InstSourceAttr} ${InstTargetAttr}\""
+            ],
+            "enabled": true
+        },
+        "/inst_target2": {
+            "instance": "/inst_source2_middle",
+            "child_order": [
+                "inst_source2_middle_child",
+                "inst_source2_child"
+            ],
+            "enabled": true
+        },
+        "/inst_target4": {
+            "instance": "/inst_source4",
+            "child_order": [
+                "inst_source4_child"
+            ],
+            "enabled": true,
+            "execute_in": "/inst_source4"
+        },
+        "/inst_target5": {
+            "instance": "/inst_source5",
+            "child_order": [
+                "inst_source5_child"
+            ],
+            "attrs": {
+                "base": {
+                    "type": "int",
+                    "value": "5"
+                }
+            },
+            "enabled": true,
+            "execute_in": "/inst_source5"
+        },
+        "/inst_target6": {
+            "child_order": [
+                "RealChild"
+            ],
+            "enabled": true,
+            "attrs": {
+                "base": {
+                    "type": "raw",
+                    "value": "B"
+                }
+            },
+            "execute_in": "/inst_source6"
+        },
+        "/inst_target6/RealChild": {
+            "instance": "/inst_source6",
+            "child_order": [
+                "inst_source6_child"
+            ],
+            "enabled": true
+        },
+        "/load": {
+            "child_order": [
+                "joints"
+            ]
+        },
+        "/load/joints": {
+            "child_order": [
+                "connect_twist"
+            ]
+        },
+        "/load/joints/connect_twist": {
+            "child_order": [
+                "left",
+                "right"
+            ]
+        },
+        "/load/joints/connect_twist/left": {
+            "child_order": [
+                "node"
+            ]
+        },
+        "/load/joints/connect_twist/left/node": {},
+        "/load/joints/connect_twist/right": {},
+        "/mid_tgt": {
+            "instance": "/top2/mid",
+            "child_order": [
+                "c1",
+                "c2"
+            ]
+        },
+        "/rig_workflow": {
+            "child_order": [
+                "file_io"
+            ]
+        },
+        "/rig_workflow/file_io": {
+            "child_order": [
+                "importers"
+            ]
+        },
+        "/rig_workflow/file_io/importers": {
+            "child_order": [
+                "joint_importers"
+            ]
+        },
+        "/rig_workflow/file_io/importers/joint_importers": {
+            "child_order": [
+                "joints_layout"
+            ]
+        },
+        "/rig_workflow/file_io/importers/joint_importers/joints_layout": {
+            "child_order": [
+                "skeleton"
+            ]
+        },
+        "/rig_workflow/file_io/importers/joint_importers/joints_layout/skeleton": {
+            "child_order": [
+                "connect_twist"
+            ]
+        },
+        "/rig_workflow/file_io/importers/joint_importers/joints_layout/skeleton/connect_twist": {
+            "instance": "/load/joints/connect_twist"
+        },
+        "/top": {
+            "child_order": [
+                "instTo"
+            ],
+            "enabled": true
+        },
+        "/top/instTo": {
+            "instance": "/instFrom",
+            "child_order": [
+                "instChild1",
+                "instChild2"
+            ],
+            "enabled": true
+        },
+        "/top2": {
+            "child_order": [
+                "mid"
+            ]
+        },
+        "/top2/mid": {
+            "child_order": [
+                "c2",
+                "c1"
+            ]
+        },
+        "/top2/mid/c1": {},
+        "/top2/mid/c2": {}
+    }
+}

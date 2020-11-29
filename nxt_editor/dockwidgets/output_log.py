@@ -10,12 +10,13 @@ import time
 from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
+import nxt_editor
 from nxt_editor import user_dir
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_log
 from nxt_editor import LoggingSignaler, colors
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class VisualLogHandler(logging.Handler):

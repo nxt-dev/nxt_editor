@@ -8,16 +8,17 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS
-import syntax
+from nxt_editor.dockwidgets import syntax
+import nxt_editor
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class CodeEditor(DockWidgetBase):
@@ -229,6 +230,8 @@ class CodeEditor(DockWidgetBase):
         self.model_signal_connections = [
             (model.node_focus_changed, self.accept_edit),
             (model.node_focus_changed, self.set_represented_node),
+            (model.nodes_changed, self.update_editor),
+            (model.attrs_changed, self.update_editor),
             (model.data_state_changed, self.update_editor),
             (model.comp_layer_changed, self.update_editor),
             (model.target_layer_changed, self.set_represented_node),
@@ -286,7 +289,16 @@ class CodeEditor(DockWidgetBase):
         else:
             self.details_frame.hide()
 
-    def update_editor(self):
+    def update_editor(self, node_list=()):
+        try:
+            iter(node_list)
+        except TypeError:
+            node_list = ()
+        safe_node_paths = []
+        for attr_path in node_list:  # Because the attrs changed signal
+            safe_node_paths += [nxt_path.node_path_from_attr_path(attr_path)]
+        if node_list and self.node_path not in safe_node_paths:
+            return
         code_layers = self.stage_model.get_layers_with_opinion(self.node_path,
                                                                INTERNAL_ATTRS.COMPUTE)
         self.code_layer_colors = self.stage_model.get_layer_colors(code_layers)
@@ -303,6 +315,8 @@ class CodeEditor(DockWidgetBase):
                 self.editor.clear()
                 return
             self.update_code_is_local()
+            # TODO: We should break the code update out into its own function
+            #  for faster updates. And avoid that early exit check at the top.
             get_code = self.stage_model.get_node_code_string
             code_string = get_code(self.node_path,
                                       self.stage_model.data_state,
@@ -671,7 +685,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
     def get_lines(self):
         doc = self.document()
-        return [str(doc.findBlockByLineNumber(i).text().encode("utf8")) for i in range(doc.lineCount())]
+        return [str(doc.findBlockByLineNumber(i).text()) for i in range(doc.lineCount())]
 
     def resizeEvent(self, *e):
         """overload resizeEvent handler"""
@@ -787,6 +801,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
         # get current line text
         cursor.movePosition(QtGui.QTextCursor.StartOfLine)
+        start_of_line = cursor.position()
         cursor.movePosition(QtGui.QTextCursor.EndOfLine,
                             QtGui.QTextCursor.KeepAnchor)
         end = cursor.position()
@@ -797,7 +812,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         indent_text = ''
 
         # add indent for statements
-        if line_text.endswith(':'):
+        if line_text.endswith(':') and pos != start_of_line:
             indent_text += self.indent
 
         # add whitespace to match current line

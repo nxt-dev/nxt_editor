@@ -5,10 +5,11 @@ import logging
 from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
-from dock_widget_base import DockWidgetBase
+import nxt_editor
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor import colors, dialogs
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 TOOLTIP_INFO = ('<p style="font-size:12px;color:white;">'
                 '<h3>How to:</h3>'
                 '<ul>'
@@ -316,7 +317,7 @@ class HotkeyModel(QtCore.QAbstractTableModel):
                 # in a list
                 self.user_changes[row] = [value, action]
                 value_set = True
-            if row in self.user_changes.keys():
+            if row in list(self.user_changes.keys()):
                 action = self.user_changes[row][1]
                 if value == action.shortcut().toString(self.cast_mode):
                     self.user_changes.pop(row)
@@ -417,7 +418,7 @@ class KeySequenceEdit(QtWidgets.QLineEdit):
                          QtCore.Qt.Key_Shift: QtCore.Qt.SHIFT,
                          QtCore.Qt.Key_Alt: QtCore.Qt.ALT,
                          QtCore.Qt.Key_Meta: QtCore.Qt.META}
-        if key in modifier_key_map.keys() and not len(self.keys):
+        if key in list(modifier_key_map.keys()) and not len(self.keys):
             shift_held = bool(event_modifiers & QtCore.Qt.ShiftModifier)
             ctrl_held = bool(event_modifiers & QtCore.Qt.ControlModifier)
             alt_held = bool(event_modifiers & QtCore.Qt.AltModifier)

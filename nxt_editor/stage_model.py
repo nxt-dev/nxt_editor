@@ -12,13 +12,13 @@ from Qt import QtWidgets
 from Qt import QtCore
 
 # Internal
-from nxt_editor import user_dir
 from nxt import clean_json
 from nxt_editor.commands import *
 from nxt_editor.dialogs import NxtFileDialog
 from nxt.constants import API_VERSION
 from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
+import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler
 from nxt.nxt_layer import LAYERS, CompLayer
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
@@ -29,7 +29,7 @@ from nxt.runtime import GraphError
 from nxt_editor.dialogs import NxtConfirmDialog
 from nxt.remote import nxt_socket
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 LAYER_DATA_KEYS = ['position_data', 'enabled_data', 'execute_data' 'break_data']
 
 
@@ -554,7 +554,11 @@ class StageModel(QtCore.QObject):
         return layers_colors
 
     def get_layer_color(self, layer, local=False):
-        if isinstance(layer, basestring):
+        if sys.version_info[0] == 2:
+            layer_is_str = isinstance(layer, basestring)
+        else:
+            layer_is_str = isinstance(layer, str)
+        if layer_is_str:
             layer = self.stage.lookup_layer(layer)
         if not layer:
             layer = self.target_layer
@@ -657,7 +661,11 @@ class StageModel(QtCore.QObject):
         return [self.get_layer_path(l) for l in layers]
 
     def get_node_color(self, node_path, layer=None):
-        if isinstance(layer, str) or isinstance(layer, unicode):
+        if sys.version_info[0] == 2:
+            layer_is_str = isinstance(layer, basestring)
+        else:
+            layer_is_str = isinstance(layer, str)
+        if layer_is_str:
             layer = self.lookup_layer(layer)
         layer = layer or self.target_layer
         if self.node_exists(node_path):
@@ -1583,7 +1591,11 @@ class StageModel(QtCore.QObject):
 
     def get_node_enabled(self, node_path, layer=None, allow_none=False):
         enabled = True
-        if isinstance(layer, basestring):
+        if sys.version_info[0] == 2:
+            layer_is_str = isinstance(layer, basestring)
+        else:
+            layer_is_str = isinstance(layer, str)
+        if layer_is_str:
             layer = self.lookup_layer(layer)
             if not layer:
                 logger.error('Invalid layer path {}, unable to detect '
@@ -1879,7 +1891,11 @@ class StageModel(QtCore.QObject):
         :param offset: offset [x, y]
         :param layer: NxtLayer or LayerPath string
         """
-        if layer and isinstance(layer, basestring):
+        if sys.version_info[0] == 2:
+            layer_is_str = isinstance(layer, basestring)
+        else:
+            layer_is_str = isinstance(layer, str)
+        if layer and layer_is_str:
             layer = self.lookup_layer(layer)
         if layer and nxt_path.get_root_path(node_path) != node_path:
             try:
@@ -1891,7 +1907,11 @@ class StageModel(QtCore.QObject):
             except KeyError:
                 pass
             return
-        if layer and isinstance(layer, basestring):
+        if sys.version_info[0] == 2:
+            layer_is_str = isinstance(layer, basestring)
+        else:
+            layer_is_str = isinstance(layer, str)
+        if layer and layer_is_str:
             layer = self.lookup_layer(layer)
         if layer:
             new_layer_pos = self.get_pos_offset(node_path, offset, layer)
@@ -2038,7 +2058,6 @@ class StageModel(QtCore.QObject):
             self.undo_stack.push(cmd)
         self.undo_stack.endMacro()
 
-
     def clear_breakpoints(self, layer=None):
         layer = layer or self.top_layer
         cmd = ClearBreakpoints(model=self, layer_path=layer.real_path)
@@ -2054,7 +2073,8 @@ class StageModel(QtCore.QObject):
         """
         if not node_path:
             return
-        layer_path = layer.real_path
+        node_path = str(node_path)
+        layer_path = str(layer.real_path)
         layer_breaks = user_dir.breakpoints.get(layer_path, [])
         if node_path in layer_breaks:
             # no need to re-write existing data to pref
@@ -2689,13 +2709,12 @@ class StageModel(QtCore.QObject):
             # can know we're in a thread safe environment.
             t._run()
             self.process_events()
-            return
         else:
             self.processing.emit(True)
             t.start()
-        while not t.isFinished():
-            self.process_events()
-        self.processing.emit(False)
+            while not t.isFinished():
+                self.process_events()
+            self.processing.emit(False)
         if t.raised_exception:
             raise t.raised_exception
 
@@ -3186,7 +3205,7 @@ class CompLayerStash:
         self.delta['target'] = compare_data(self.pre_target_data,
                                             self.post_target_data)
         _comp_changes = compare_data(self.pre_comp_data, self.post_comp_data)
-        _keys = self.delta['target'].keys()
+        _keys = list(self.delta['target'].keys())
         for k, v in _comp_changes.items():
             if k not in _keys:
                 self.delta['comp'][k] = v

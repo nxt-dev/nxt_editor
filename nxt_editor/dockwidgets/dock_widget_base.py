@@ -6,7 +6,10 @@ import logging
 from Qt import QtCore
 from Qt.QtWidgets import QDockWidget
 
-logger = logging.getLogger(__name__)
+# Internal
+import nxt_editor
+
+logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class DockWidgetBase(QDockWidget):

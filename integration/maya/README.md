@@ -11,7 +11,7 @@ This is a maya module folder for nxt.
 3. Restart maya
 4. Now `nxt_maya.py` should be available for you to activate in the plugin browser.
 
-**Remember** not to delete this folder after installing in maya. This is where maya loads nxt from. When there is an update to nxt, you can replace this folder, and your nxt plugin will continue to work with the updated code.
+    **Remember** not to delete this folder after installing in maya. This is where maya loads nxt from. When there is an update to nxt, you can replace this folder, and your nxt plugin will continue to work with the updated code.
 
 # Usage
 * When the nxt plugin is loaded, there is an "nxt" menu at the top of maya where you can select "Open Editor" and get started.

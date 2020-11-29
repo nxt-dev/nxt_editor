@@ -6,7 +6,12 @@ import logging
 # External
 from Qt import QtCore, QtWidgets, QtGui
 
-logger = logging.getLogger('nxt.editor')
+# Internal
+import nxt
+
+logger = logging.getLogger('nxt.nxt_editor')
+
+LOGGER_NAME = logger.name
 
 
 class DIRECTIONS:
@@ -36,7 +41,7 @@ def make_resources(qrc_path, result_path):
 
 
 try:
-    from . import resources
+    from nxt_editor import resources
 except ImportError:
     this_dir = os.path.dirname(os.path.realpath(__file__))
     qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
@@ -46,7 +51,7 @@ except ImportError:
     make_resources(qrc_path, result_path)
 
 
-def launch_editor(paths=None):
+def launch_editor(paths=None, start_rpc=True):
     """Creates a new QApplication with editor main window and shows it.
     """
     # Deferred import since main window relies on us
@@ -59,7 +64,11 @@ def launch_editor(paths=None):
         paths = []
     app = QtWidgets.QApplication(sys.argv)
     app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
-    instance = MainWindow(filepath=path)
+    style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
+    style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
+    stream = QtCore.QTextStream(style_file)
+    app.setStyleSheet(stream.readAll())
+    instance = MainWindow(filepath=path, start_rpc=start_rpc)
     for other_path in paths:
         instance.load_file(other_path)
     pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
@@ -67,4 +76,3 @@ def launch_editor(paths=None):
     app.setActiveWindow(instance)
     instance.show()
     return app.exec_()
-    sys.exit()
