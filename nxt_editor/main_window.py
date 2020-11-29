@@ -49,7 +49,7 @@ class MainWindow(QtWidgets.QMainWindow):
     close_signal = QtCore.Signal()
     new_log_signal = QtCore.Signal(logging.LogRecord)
 
-    def __init__(self, filepath=None, parent=None, no_rpc=False):
+    def __init__(self, filepath=None, parent=None, start_rpc=True):
         """Create NXT window.
 
         :param parent: parent to attach this UI to.
@@ -239,7 +239,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.display_actions.resolve_action.setChecked(True)
         # Rpc startup
         self.rpc_log_tail = None
-        if not no_rpc:
+        if start_rpc:
             self.startup_rpc_server(join=False)
         # Should this be a signal? Like Startup done, now you can refresh?
         self.splash_screen.finish(self)
