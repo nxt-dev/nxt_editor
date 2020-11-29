@@ -4,14 +4,14 @@ copyright: 2020 NXT authors
 
 nav:
     - Home: index.md
-    - Installation: install.md
+    - Concepts: concepts.md
     - Tutorials: tutorials.md
+    - Installation: install.md
     - Reference: reference.md
-    - Workflows: workflows.md
     - Extensions: extensions.md
     - API: api/index.html
-    - Hotkeys: hotkeys.md
     - License: license.md
+    - About: about.md
 
 markdown_extensions:
   - admonition
