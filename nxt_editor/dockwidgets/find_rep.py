@@ -274,6 +274,7 @@ class SearchModel(QtGui.QStandardItemModel):
                                                            attr_name,
                                                            data_state=raw,
                                                            layer=comp_layer)
+                val = str(val)
             if val is None:
                 continue
             if self.query_str in val:
@@ -314,6 +315,7 @@ class SearchModel(QtGui.QStandardItemModel):
                 else:
                     existing = self.stage_model.get_node_attr_value(node_path, attr_name,
                                                                     data_state=state)
+                    existing = str(existing)
                     val = existing.replace(self.query_str, rep_value)
                 to_replace[(node_path, attr_name)] = val
         if len(to_replace) == 0:
