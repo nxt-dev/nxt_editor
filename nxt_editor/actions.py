@@ -257,6 +257,19 @@ class AppActions(NxtActionContainer):
         self.close_tab_action.setWhatsThis('Close active tab')
         self.close_tab_action.triggered.connect(close_tab)
 
+        # Open Find and Replace
+        def open_find_rep():
+            find_rep_widget = self.main_window.find_rep
+            if not find_rep_widget.isVisible():
+                find_rep_widget.show()
+            find_rep_widget.raise_()
+
+        self.find_rep_action = NxtAction(text='Find and Replace', parent=self)
+        self.find_rep_action.setShortcut('Ctrl+F')
+        self.find_rep_action.setShortcutContext(context)
+        self.find_rep_action.setWhatsThis('Open find and replace dialog')
+        self.find_rep_action.triggered.connect(open_find_rep)
+
         # Dock Widget Actions
         # Layer Manager
         self.layer_manager_action = NxtAction(text='Layer Manager',

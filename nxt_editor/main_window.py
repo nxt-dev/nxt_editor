@@ -23,7 +23,8 @@ from nxt_editor.stage_view import StageView
 from nxt_editor.stage_model import StageModel
 from nxt_editor.dockwidgets import (DockWidgetBase, CodeEditor, PropertyEditor,
                                     HotkeyEditor, LayerManager, OutputLog,
-                                    HistoryView, WidgetBuilder, BuildView)
+                                    HistoryView, WidgetBuilder, BuildView,
+                                    FindRepDockWidget)
 from nxt_editor.dockwidgets.output_log import (FileTailingThread,
                                                QtLogStreamHandler)
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
@@ -175,6 +176,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.code_editor.editor.viewport().installEventFilter(self)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.code_editor)
 
+        # Find and Replace
+        self.find_rep = FindRepDockWidget(parent=self)
+        self.addDockWidget(QtCore.Qt.BottomDockWidgetArea, self.find_rep)
+        self.find_rep.hide()
         # layer manager
         self.layer_manager = LayerManager(parent=self)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.layer_manager)
@@ -211,6 +216,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setStatusBar(self.status_bar)
 
         self.log_button = QtWidgets.QPushButton("Show Log")
+        self.log_button.setMinimumWidth(75)
         self.log_button.setStyleSheet(self.stylesheet)
         self.output_log.visibilityChanged.connect(self.refresh_log_button)
         self.log_button.clicked.connect(self.log_button_clicked)
@@ -618,6 +624,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.history_view.set_stage_model(model)
             self.workflow_tools.set_stage_model(model)
             self.build_view.set_stage_model(model)
+            self.find_rep.set_stage_model(model)
             self.output_log.set_stage_model(model)
             self.update_target_color()
             logger.debug("Successfully set up new tab.")
