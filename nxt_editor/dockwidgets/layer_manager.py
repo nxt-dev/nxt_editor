@@ -109,6 +109,7 @@ class LayerTreeView(QtWidgets.QTreeView):
         table_pref_key = user_dir.USER_PREF.LAYER_TABLE
         indent_pref = user_dir.USER_PREF.TREE_INDENT
         if user_dir.user_prefs.get(table_pref_key, False):
+            self.expandAll()
             self.setIndentation(0)
         else:
             self.setIndentation(user_dir.user_prefs.get(indent_pref, 20))

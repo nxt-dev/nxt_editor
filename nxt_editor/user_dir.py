@@ -66,6 +66,8 @@ class USER_PREF():
     ZOOM_MULT = 'zoom_mult'
     LAYER_TABLE = 'layer_table'
     TREE_INDENT = 'layer_tree_indent'
+    FIND_REP_NODE_PATTERNS = 'find_replace_nodes_patterns'
+    FIND_REP_ATTRS = 'find_replace_attrs'
 
 
 class EDITOR_CACHE():
