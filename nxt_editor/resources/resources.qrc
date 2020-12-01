@@ -207,6 +207,7 @@
         <file>icons/frame_all.png</file>
         <file>icons/frame_all_hover.png</file>
         <file>icons/BDiagPattern.png</file>
+        <file>icons/diagline_pattern.png</file>
     </qresource>
     <qresource prefix="dark_style">
         <file>styles/dark/rc/up_arrow_disabled.png</file>
