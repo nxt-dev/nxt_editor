@@ -23,7 +23,7 @@ before_install:
 
 install:
   - cd ..
-  - git clone git+ssh://git@github.com/nxt-dev/nxt.git
+  - git clone https://github.com/nxt-dev/nxt.git
   - pip install ./nxt
   - pip install ./nxt_editor
   - pip install twine
@@ -38,6 +38,6 @@ script:
     fi
   - |
     if [ "$TRAVIS_BRANCH" = "release" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
-          python -m nxt.cli exec nxt/build/packaging.nxt -s /make_and_test_upload
+          python -m nxt.cli exec nxt/build/packaging.nxt -s /make_and_upload
           exit $?
     fi
