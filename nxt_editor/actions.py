@@ -9,6 +9,7 @@ from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from . import DIRECTIONS
+from nxt_editor.constants import NXT_WEBSITE
 from nxt_editor import user_dir
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, finder, file_search
@@ -179,7 +180,7 @@ class AppActions(NxtActionContainer):
         # User docs
 
         def open_user_docs():
-            webbrowser.open_new('https://sunriseproductions.github.io/nxt/')
+            webbrowser.open_new(NXT_WEBSITE)
         self.docs_action = NxtAction(text='User Docs', parent=self)
         self.docs_action.setShortcut('F1')
         self.docs_action.triggered.connect(open_user_docs)

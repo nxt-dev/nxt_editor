@@ -34,6 +34,7 @@ from nxt_editor.dialogs import (NxtFileDialog, NxtWarningDialog,
 from nxt_editor import actions, LoggingSignaler
 from nxt.constants import API_VERSION, GRAPH_VERSION, USER_PLUGIN_DIR
 from nxt.remote.client import NxtClient
+import nxt.remote.contexts
 from nxt_editor import resources
 
 
@@ -322,6 +323,50 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         else:
             QtWidgets.QApplication.restoreOverrideCursor()
+
+    @staticmethod
+    def create_remote_context(place_holder_text='',
+                              interpreter_exe=sys.executable,
+                              context_graph=None):
+        cur_context = nxt.remote.contexts.get_current_context_exe_name()
+        pop_up = QtWidgets.QDialog()
+        pop_up.setWindowTitle('Create context for "{}"'.format(cur_context))
+        v_layout = QtWidgets.QVBoxLayout()
+        pop_up.setLayout(v_layout)
+        label = QtWidgets.QPlainTextEdit()
+        info = ('Create context for "{}" your host '
+                'python interpreter\n'
+                'Type your desired name in the box below '
+                'and click create.'.format(cur_context))
+        label.setPlainText(info)
+        label.setReadOnly(True)
+        font_metric = QtGui.QFontMetrics(label.document().defaultFont())
+        text_size = font_metric.size(QtCore.Qt.TextExpandTabs, info)
+        label.setFixedSize(text_size.width() + 50, text_size.height() + 30)
+        v_layout.addWidget(label)
+        h_layout = QtWidgets.QHBoxLayout()
+        v_layout.addLayout(h_layout)
+        name = QtWidgets.QLineEdit()
+        name.setPlaceholderText(str(place_holder_text))
+        create_button = QtWidgets.QPushButton('Create!')
+        h_layout.addWidget(name)
+        h_layout.addWidget(create_button)
+
+        def do_create():
+            try:
+                nxt.create_context(name.text(),
+                                   interpreter_exe=interpreter_exe,
+                                   context_graph=context_graph)
+                pop_up.close()
+            except (IOError, NameError) as e:
+                info = str(e)
+                msg = 'Failed to create context!'
+                logger.error(info)
+                nxt_editor.dialogs.NxtWarningDialog.show_message(msg,
+                                                                 info=info)
+
+        create_button.pressed.connect(do_create)
+        pop_up.exec_()
 
     def get_global_actions(self):
         """Get a list of NxtActions with the WindowShortcut context
@@ -1033,6 +1078,13 @@ class MenuBar(QtWidgets.QMenuBar):
         self.populate_window_menu()
         # Remote Menu
         self.remote_menu = self.addMenu('Remote')
+        remote_context_action = self.remote_menu.addAction('Create Remote '
+                                                           'Context')
+        remote_context_func = self.main_window.create_remote_context
+        remote_context_action.triggered.connect(remote_context_func)
+        if nxt.remote.contexts.get_current_context_exe_name() == 'maya':
+            remote_context_action.setEnabled(False)
+        self.remote_menu.addSeparator()
         self.remote_menu.addAction(self.exec_actions.enable_cmd_port_action)
         self.remote_menu.addSeparator()
         self.remote_menu.addAction(self.exec_actions.startup_rpc_action)
@@ -1047,7 +1099,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.help_menu.addSeparator()
         self.help_menu.addAction(self.main_window.app_actions.docs_action)
         github_action = self.help_menu.addAction('GitHub')
-        url = 'https://github.com/SunriseProductions/nxt'
+        url = 'https://github.com/nxt-dev/nxt_editor'
         github_action.triggered.connect(partial(webbrowser.open_new, url))
         self.help_menu.addSeparator()
         del_resources = self.help_menu.addAction('Clear UI Icon Cache')
