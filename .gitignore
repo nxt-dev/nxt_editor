@@ -8,4 +8,4 @@
 docs/build/
 build/
 site/
-nxt/ui/resources.py
+nxt_editor/resources.py*
