@@ -109,6 +109,7 @@ class LayerTreeView(QtWidgets.QTreeView):
         table_pref_key = user_dir.USER_PREF.LAYER_TABLE
         indent_pref = user_dir.USER_PREF.TREE_INDENT
         if user_dir.user_prefs.get(table_pref_key, False):
+            self.expandAll()
             self.setIndentation(0)
         else:
             self.setIndentation(user_dir.user_prefs.get(indent_pref, 20))
@@ -577,12 +578,19 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
         self.is_tgt = False
         self.has_selected = False
         self.unsaved = False
+        self.diag_bitmap = QtGui.QBitmap(':icons/icons/diagline_pattern.png')
 
     def paint_swatch(self, painter, brush, rect):
         swatch_size = QtCore.QSize(rect.height(), rect.height())
-        swatch_rect = QtCore.QRect(rect.topLeft(), swatch_size)
+        swatch_rect = QtCore.QRectF(rect.topLeft(), swatch_size)
         painter.setPen(QtCore.Qt.NoPen)
-        painter.setBrush(brush)
+        if not self.is_tgt:
+            painter.setPen(brush.color())
+        if self.unsaved:
+            diag_brush = QtGui.QBrush(brush.color(), self.diag_bitmap)
+            painter.setBrush(diag_brush)
+        else:
+            painter.setBrush(brush)
         if self.soloed:
             painter.drawEllipse(swatch_rect)
         else:
@@ -597,7 +605,11 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
                 pen.setStyle(QtCore.Qt.DashLine)
             painter.setPen(pen)
         elif self.is_tgt:
-            painter.setBrush(bg_brush)
+            if self.unsaved:
+                diag_brush = QtGui.QBrush(bg_brush.color(), self.diag_bitmap)
+                painter.setBrush(diag_brush)
+            else:
+                painter.setBrush(bg_brush)
         painter.drawRoundedRect(rect, 2, 2)
 
     def paint_text(self, painter, text, text_rect):
@@ -628,15 +640,19 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
         self.has_selected = model.data(sel_idx, role=QtCore.Qt.EditRole)
         effected_idx = model.index(row, LayerModel.UNSAVED, parent)
         self.unsaved = model.data(effected_idx, role=QtCore.Qt.EditRole)
+        # Global drawing info
         self.initStyleOption(option, index)
-        inner_rect = QtCore.QRect().united(option.rect)
+        inner_rect = QtCore.QRectF().united(option.rect)
         inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
+        # Swatch
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(QtCore.Qt.NoBrush)
         self.paint_swatch(painter, option.backgroundBrush, inner_rect)
+        # BG
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(QtCore.Qt.NoBrush)
         self.paint_bg(painter, option.backgroundBrush, inner_rect)
+        # Text
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(QtCore.Qt.NoBrush)
         text_rect = inner_rect.adjusted(inner_rect.height() + 4, 0, 0, 0)

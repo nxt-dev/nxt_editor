@@ -9,6 +9,7 @@ from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from . import DIRECTIONS
+from nxt_editor.constants import NXT_WEBSITE
 from nxt_editor import user_dir
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, finder, file_search
@@ -179,7 +180,7 @@ class AppActions(NxtActionContainer):
         # User docs
 
         def open_user_docs():
-            webbrowser.open_new('https://sunriseproductions.github.io/nxt/')
+            webbrowser.open_new(NXT_WEBSITE)
         self.docs_action = NxtAction(text='User Docs', parent=self)
         self.docs_action.setShortcut('F1')
         self.docs_action.triggered.connect(open_user_docs)
@@ -256,6 +257,19 @@ class AppActions(NxtActionContainer):
         self.close_tab_action.setShortcutContext(context)
         self.close_tab_action.setWhatsThis('Close active tab')
         self.close_tab_action.triggered.connect(close_tab)
+
+        # Open Find and Replace
+        def open_find_rep():
+            find_rep_widget = self.main_window.find_rep
+            if not find_rep_widget.isVisible():
+                find_rep_widget.show()
+            find_rep_widget.raise_()
+
+        self.find_rep_action = NxtAction(text='Find and Replace', parent=self)
+        self.find_rep_action.setShortcut('Ctrl+F')
+        self.find_rep_action.setShortcutContext(context)
+        self.find_rep_action.setWhatsThis('Open find and replace dialog')
+        self.find_rep_action.triggered.connect(open_find_rep)
 
         # Dock Widget Actions
         # Layer Manager

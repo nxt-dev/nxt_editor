@@ -1,0 +1,256 @@
+{
+    "version": "1.17",
+    "alias": "validate_version_numbers",
+    "color": "#2065be",
+    "mute": false,
+    "solo": false,
+    "references": [
+        "../../nxt/build/validate_version_numbers.nxt"
+    ],
+    "meta_data": {
+        "positions": {
+            "/CheckoutMaster": [
+                140.0,
+                0.0
+            ],
+            "/CheckoutWorking": [
+                700.0,
+                0.0
+            ],
+            "/GitClone": [
+                -1200.0,
+                -220.0
+            ],
+            "/GitCmd": [
+                -1600.0,
+                -200.0
+            ],
+            "/GitCurBranch": [
+                -1180.0,
+                -120.0
+            ],
+            "/GitPR": [
+                -1600.0,
+                -60.0
+            ],
+            "/GitRelease": [
+                -1600.0,
+                -280.0
+            ],
+            "/GitStatus": [
+                -1200.0,
+                -280.0
+            ],
+            "/GitUpload": [
+                -1600.0,
+                240.0
+            ],
+            "/JsonLoad": [
+                -1600.0,
+                60.0
+            ],
+            "/ParseVersionJSON": [
+                480.0,
+                0.0
+            ],
+            "/ParseVersions": [
+                340.0,
+                0.0
+            ],
+            "/ParseVersions/Parse_EDITOR_Version": [
+                0.0,
+                0.0
+            ],
+            "/PreCheck": [
+                -160.0,
+                0.0
+            ],
+            "/ValidateVersion": [
+                1040.0,
+                0.0
+            ],
+            "/ValidateWorking": [
+                -20.0,
+                120.0
+            ],
+            "/init": [
+                -340.0,
+                0.0
+            ],
+            "/init2": [
+                -340.0,
+                -60.0
+            ],
+            "/make_module_folder": [
+                -1600.0,
+                160.0
+            ],
+            "/node": [
+                -292.3593249283184,
+                -295.4476276564344
+            ]
+        },
+        "collapse": {
+            "/CheckoutRelease/CheckoutRelease": false,
+            "/CheckoutRelease/GitPull": false,
+            "/CheckoutRelease/ValidateRelease": false,
+            "/CheckoutWorking/CheckoutWorking": true,
+            "/CheckoutWorking/ValidateWorking": true,
+            "/GitCurBranch": true,
+            "/GitStatus": true,
+            "/GitUpload": true,
+            "/ParseVersions": false,
+            "/ParseVersions/Parse_API_Version": false,
+            "/make_module_folder": true
+        }
+    },
+    "nodes": {
+        "/": {
+            "child_order": [
+                "CheckCommits",
+                "ValidatePushed",
+                "CreateRelease",
+                "BeginPR",
+                "ParseGitReturn",
+                "ParseGitReturn2",
+                "GitCmd",
+                "GitCmd2",
+                "CheckoutRelease",
+                "JsonLoad2",
+                "BeginRelease",
+                "GitCurBranch2",
+                "CheckoutWorking",
+                "make_package",
+                "GenerateHotkeysMD",
+                "make_module_folder",
+                "UpdateReleasePR",
+                "GenerateChangelog",
+                "ParseVersionJSON",
+                "ValidateWorking",
+                "ParseVersions",
+                "init",
+                "ValidateVersion"
+            ],
+            "attrs": {
+                "EDITOR": {
+                    "type": "NoneType",
+                    "value": "None"
+                },
+                "release_editor_version": {
+                    "comment": "Expected EDITOR version number",
+                    "type": "list",
+                    "value": "[0, 0, 0]"
+                },
+                "version_attrs": {
+                    "type": "tuple",
+                    "value": "('EDITOR',)"
+                }
+            },
+            "code": [
+                "# Builtin",
+                "import subprocess",
+                "import json",
+                "# Internal",
+                "from nxt_editor.constants import EDITOR_VERSION",
+                "attrs = ('API', 'EDITOR', 'GRAPH')",
+                "for attr in attrs:",
+                "    val = getattr(self, attr)",
+                "    if val == 'None' or val is None:",
+                "        continue",
+                "    if not val.startswith((\"'\", \"\\\"\")):",
+                "        setattr(STAGE, attr, w(val))",
+                ""
+            ]
+        },
+        "/ParseVersions/Parse_API_Version": {
+            "enabled": false
+        },
+        "/ParseVersions/Parse_EDITOR_Version": {
+            "instance": "../Parse_API_Version",
+            "enabled": true,
+            "attrs": {
+                "file_path": {
+                    "type": "raw",
+                    "value": "${file::../../nxt_editor/nxt_editor/version.json}"
+                }
+            }
+        },
+        "/ValidateVersion": {
+            "code": [
+                "# The index of the int that should incriment in the version num",
+                "version_data = {",
+                "'EDITOR': {'rel_type': ${/.EDITOR},",
+                "            'version': ${/.release_editor_version},",
+                "            'actual': EDITOR_VERSION.VERSION_TUPLE}",
+                "            }",
+                "passed = True",
+                "for rel_cat, rel_dict in version_data.items():",
+                "    actual = rel_dict['actual']",
+                "    release = rel_dict['version']",
+                "    print release",
+                "    rel_type = rel_dict['rel_type']",
+                "    if rel_type is None:",
+                "        continue",
+                "    incriment_idx = self.release_types.get(rel_type)",
+                "    expected = release[:]",
+                "    expected[incriment_idx] += 1",
+                "    for i in range(incriment_idx+1, 3):",
+                "        print('resetting' + str(i))",
+                "        try:",
+                "            expected[i] = 0",
+                "        except IndexError:",
+                "            continue",
+                "    expected = tuple(expected)",
+                "    if expected != actual:",
+                "        passed = False",
+                "        print('Invlaid {} version number! Expected:{} Actual:{}'.format(rel_cat, expected, actual))",
+                "        continue",
+                "    version_str = '.'.join(str(i) for i in actual)",
+                "    version_info = [rel_cat, version_str]",
+                "    print('Pushing to STAGE: ', rel_cat, version_info)",
+                "    setattr(STAGE, rel_cat, version_info)",
+                "    print('{} version number {} is valid {}'.format(rel_cat, actual, rel_type))",
+                "if not passed:",
+                "    raise Exception('Invlaid version numbers detected! See log')",
+                "",
+                ""
+            ]
+        },
+        "/init": {
+            "attrs": {
+                "rel_cats": {
+                    "value": "(${/.EDITOR},)"
+                }
+            },
+            "code": [
+                "rel_cats = ${rel_cats}",
+                "if not any(rel_cats):",
+                "    print(${rel_cats})",
+                "    raise Exception('Unable to validate version numbers, no parameters provided!')",
+                "",
+                "for mode in rel_cats:",
+                "    if mode is None:",
+                "        continue",
+                "    if mode.lower() not in ('major', 'minor', 'hotfix', 'patch'):",
+                "        raise Exception('Unknown release type \"{}\"'.format(mode))",
+                "if ${/.GRAPH} is not None and ${/.GRAPH}.lower() == 'hotfix':",
+                "    raise Exception('Cannot hotfix GRAPH versions!')",
+                "if not '${/.branch}':",
+                "    raise Exception('No working branch provided!')",
+                "STAGE.hotfix = True",
+                "hotfix_str = 'hotfix'",
+                "patch_str = 'patch'",
+                "",
+                "if ${EDITOR} and ${EDITOR} not in (hotfix_str, patch_str):",
+                "    STAGE.hotfix = False",
+                "",
+                "# Debug tool",
+                "# for rel_cat, actual in (('API', (0, 1, 1)), ('EDITOR', (2, 0, 0)), ('GRAPH', (1, 15, 0))):",
+                "#     version_str = '.'.join(str(i) for i in actual)",
+                "#     version_info = [rel_cat, version_str]",
+                "#     print('Setting', rel_cat, version_str)",
+                "#     setattr(STAGE, rel_cat, version_info)"
+            ]
+        }
+    }
+}

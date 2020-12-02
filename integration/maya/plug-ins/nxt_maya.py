@@ -7,6 +7,7 @@ import sys
 import webbrowser
 import logging
 import time
+import os
 
 # External
 # maya
@@ -19,6 +20,7 @@ from Qt import QtCore
 import nxt_editor.main_window
 import nxt.remote.nxt_socket
 from nxt import nxt_log
+from nxt_editor.constants import NXT_WEBSITE
 
 logger = logging.getLogger('nxt')
 CREATED_UI = []
@@ -43,8 +45,7 @@ class MAYA_PLUGIN_VERSION(object):
 
 
 def about_menu(*args):
-    url = 'https://github.com/SunriseProductions/nxt/blob/master/README.md'
-    webbrowser.open(url, new=2)
+    webbrowser.open_new(NXT_WEBSITE)
 
 
 def auto_reload(*args):
@@ -72,6 +73,19 @@ def enable_cmd_port(enable):
     #     cmds.commandPort(name=address, cl=True)
     #     model = nxt.remote.nxt_socket.get_nxt_model()
     #     model.close(notify_server=True)
+
+
+def create_remote_context(*args):
+    t = 'maya' + cmds.about(version=True)
+    if cmds.about(mac=True) or cmds.about(linux=True):
+        partial_exe_path = 'bin/mayapy'
+    elif cmds.about(win=True):
+        partial_exe_path = 'bin/mayapy.exe'
+    else:
+        raise OSError('You are running an unsupported OS.')
+    mayapy = os.path.join(os.environ['MAYA_LOCATION'], partial_exe_path)
+    create_func = nxt_editor.main_window.MainWindow.create_remote_context
+    create_func(place_holder_text=t, interpreter_exe=mayapy)
 
 
 class NxtUiCmd(om.MPxCommand):
@@ -152,13 +166,10 @@ def initializePlugin(plugin):
     nxt_menu = cmds.menu('nxt', parent=maya_window, tearOff=True)
     CREATED_UI.append(nxt_menu)
     cmds.menuItem('Open Editor', command=cmds.nxt_ui, parent=nxt_menu)
+    cmds.menuItem('Create Maya Context', command=create_remote_context,
+                  parent=nxt_menu)
     # cmds.menuItem('Open Command Port', command=enable_cmd_port,
     #               parent=nxt_menu, checkBox=False)
-    experimental_menu = cmds.menuItem('Experimental', parent=nxt_menu,
-                                      subMenu=True, tearOff=True)
-    cmds.menuItem('Auto Reload', command=auto_reload,
-                  parent=experimental_menu, ann='Reloads the nxt code. The '
-                                                'editor will close!')
     cmds.menuItem('About', command=about_menu, parent=nxt_menu)
 
 
