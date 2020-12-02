@@ -32,8 +32,7 @@ setuptools.setup(
     python_requires='>=2.7, <3.8',
     install_requires=['nxt-core',
                       'qt.py==1.1',
-                      'pyside2==5.6; python_version<"3"',
-                      'pyside2==5.11.1; python_version>="3"',
+                      'pyside2==5.11.1'
                       ],
     package_data={
         # covers text nxt files
