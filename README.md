@@ -25,11 +25,6 @@
 ### PIP package
 - From [PyPi](https://pypi.org/project/nxt-editor/):
     - `pip install nxt-editor`
-    
-- From GitHub:
-    1. Download the pip source distribution(`nxt-#.#.#.tar.gz`) from the [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
-
-    2. `pip install path/to/nxt-#.#.#.tar.gz`
 
 ### Maya plugin:
 
@@ -42,12 +37,6 @@
 ### PIP package
 - From [PyPi](https://pypi.org/project/nxt-editor/):
     - `pip install -U nxt-editor`
-
-
-- From GitHub:
-    1. Download the pip source distribution(`nxt-#.#.#.tar.gz`) from the [latest release](https://github.com/SunriseProductions/nxt_editor/releases/latest)
-    
-    2. `pip install --upgrade path/to/nxt-#.#.#.tar.gz`
 
 ### Maya plugin:
 
