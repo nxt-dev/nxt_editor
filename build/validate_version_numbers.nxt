@@ -100,7 +100,7 @@
             "/GitStatus": true,
             "/GitUpload": true,
             "/ParseVersions": false,
-            "/ParseVersions/Parse_API_Version": true,
+            "/ParseVersions/Parse_API_Version": false,
             "/make_module_folder": true
         }
     },
@@ -167,6 +167,7 @@
         },
         "/ParseVersions/Parse_EDITOR_Version": {
             "instance": "../Parse_API_Version",
+            "enabled": true,
             "attrs": {
                 "file_path": {
                     "type": "raw",
@@ -224,7 +225,7 @@
             "code": [
                 "rel_cats = ${rel_cats}",
                 "if not any(rel_cats):",
-                "    print(\"\"\"API: ${/.API}, EDITOR:${/.EDITOR}, GRAPH:${/.GRAPH}\"\"\")",
+                "    print(${rel_cats})",
                 "    raise Exception('Unable to validate version numbers, no parameters provided!')",
                 "",
                 "for mode in rel_cats:",
