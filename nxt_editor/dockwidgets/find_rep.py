@@ -10,7 +10,7 @@ from Qt import QtGui
 from Qt import QtCore
 
 # Internal
-from dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path, nxt_node
 from nxt.constants import DATA_STATE
 from nxt_editor import user_dir
