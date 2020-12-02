@@ -83,6 +83,7 @@
             ]
         },
         "collapse": {
+            "/BeginRelease/CheckCommits": false,
             "/CreateRelease/UploadMayaPlugin": false,
             "/ValidatePushed/Push": false,
             "/clone_fresh_source": false
@@ -192,6 +193,9 @@
                 "EDITOR": {
                     "type": "NoneType",
                     "value": "None"
+                },
+                "_graph_path": {
+                    "value": "${file::validate_version_numbers.nxt}"
                 }
             }
         }
