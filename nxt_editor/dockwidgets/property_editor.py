@@ -1460,7 +1460,7 @@ class AttrsTableView(QtWidgets.QTableView):
         super(AttrsTableView, self).mouseMoveEvent(event)
         if not self.drag_start_pos or not self.mouse_pressed:
             return
-        start_drag_dist = QtWidgets.QApplication.instance().startDragDistance()
+        start_drag_dist = QtWidgets.QApplication.startDragDistance()
         drag_delta = (event.pos() - self.drag_start_pos).manhattanLength()
         if drag_delta >= start_drag_dist:
             drag = QtGui.QDrag(self)
@@ -1469,7 +1469,7 @@ class AttrsTableView(QtWidgets.QTableView):
             token = tokens.make_token_str(attr_name)
             mime_data.setText(token)
             drag.setMimeData(mime_data)
-            drag.start(QtCore.Qt.DropAction)
+            drag.exec_()
             self.drag_start_pos = None
 
     def dragEnterEvent(self, event):
