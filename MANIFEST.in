@@ -1,0 +1,4 @@
+global-exclude *.pyc
+global-exclude qresources.py*
+global-exclude __pycache__
+global-exclude *.ai
