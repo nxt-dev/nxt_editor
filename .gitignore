@@ -8,4 +8,4 @@
 docs/build/
 build/
 site/
-nxt_editor/resources.py*
+nxt_editor/qresources.py*
