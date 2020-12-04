@@ -37,6 +37,9 @@ class StringSignaler(QtCore.QObject):
 
 
 def make_resources(qrc_path=None, result_path=None):
+    import PySide2
+    pyside_dir = os.path.dirname(PySide2.__file__)
+    full_rcc_path = os.path.join(pyside_dir, 'pyside2-rcc')
     this_dir = os.path.dirname(os.path.realpath(__file__))
     if not qrc_path:
         qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
@@ -48,7 +51,14 @@ def make_resources(qrc_path=None, result_path=None):
     ver = ['-py2']
     if sys.version_info[0] == 3:
         ver += ['-py3']
-    subprocess.call(['pyside2-rcc', qrc_path] + ver + ['-o', result_path])
+    args = [qrc_path] + ver + ['-o', result_path]
+    try:
+        subprocess.check_call(['pyside2-rcc'] + args)
+    except subprocess.CalledProcessError:
+        subprocess.check_call([full_rcc_path] + args)
+    except subprocess.CalledProcessError:
+        raise Exception("Cannot find pyside2-rcc to generate UI resources. "
+                        "Reinstalling pyside2 may fix the problem.")
 
 
 try:
