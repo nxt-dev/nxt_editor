@@ -2,6 +2,7 @@
 import os
 import sys
 import logging
+import sys
 
 # External
 from Qt import QtCore, QtWidgets, QtGui
@@ -35,20 +36,35 @@ class StringSignaler(QtCore.QObject):
     signal = QtCore.Signal(str)
 
 
-def make_resources(qrc_path, result_path):
+def make_resources(qrc_path=None, result_path=None):
+    import PySide2
+    pyside_dir = os.path.dirname(PySide2.__file__)
+    full_rcc_path = os.path.join(pyside_dir, 'pyside2-rcc')
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    if not qrc_path:
+        qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
+    if not result_path:
+        result_path = os.path.join(this_dir, 'qresources.py')
+    msg = 'First launch nxt resource generation from {} to {}'
+    logger.info(msg.format(qrc_path, result_path))
     import subprocess
-    subprocess.call(['pyside2-rcc', qrc_path, '-o', result_path])
+    ver = ['-py2']
+    if sys.version_info[0] == 3:
+        ver += ['-py3']
+    args = [qrc_path] + ver + ['-o', result_path]
+    try:
+        subprocess.check_call(['pyside2-rcc'] + args)
+    except subprocess.CalledProcessError:
+        subprocess.check_call([full_rcc_path] + args)
+    except subprocess.CalledProcessError:
+        raise Exception("Cannot find pyside2-rcc to generate UI resources. "
+                        "Reinstalling pyside2 may fix the problem.")
 
 
 try:
-    from nxt_editor import resources
+    from nxt_editor import qresources
 except ImportError:
-    this_dir = os.path.dirname(os.path.realpath(__file__))
-    qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
-    result_path = os.path.join(this_dir, 'resources.py')
-    msg = 'First launch nxt resource generation from {} to {}'
-    logger.info(msg.format(qrc_path, result_path))
-    make_resources(qrc_path, result_path)
+    make_resources()
 
 
 def launch_editor(paths=None, start_rpc=True):

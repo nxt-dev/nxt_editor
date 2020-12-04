@@ -35,7 +35,7 @@ from nxt_editor import actions, LoggingSignaler
 from nxt.constants import API_VERSION, GRAPH_VERSION, USER_PLUGIN_DIR
 from nxt.remote.client import NxtClient
 import nxt.remote.contexts
-from nxt_editor import resources
+from nxt_editor import qresources
 
 
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
@@ -85,10 +85,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 # logger.exception("Could not determine git branch.")
                 current_branch = ''
         os.chdir(old_cwd)
-        dcc = 'standalone'
-        if am_i_in_maya():
-            dcc = 'maya'
-        self.host_app = dcc
+        context = nxt.remote.contexts.get_current_context_exe_name()
+        if context.lower() == 'python':
+            context = 'standalone'
+        self.host_app = context
         self.setWindowTitle("nxt {} - Editor v{} | Graph v{} | API v{} "
                             "(Python {}) {}".format(self.host_app,
                                                     EDITOR_VERSION.VERSION_STR,
@@ -1222,10 +1222,9 @@ class MenuBar(QtWidgets.QMenuBar):
     @staticmethod
     def delete_resources_pyc():
         ui_dir = os.path.dirname(__file__)
-        resources_file = os.path.join(ui_dir, 'resources.py').replace(os.sep,
+        resources_file = os.path.join(ui_dir, 'qresources.py').replace(os.sep,
                                                                       '/')
-        resources_file_c = os.path.join(ui_dir, 'resources.pyc').replace(os.sep,
-                                                                         '/')
+        resources_file_c = os.path.join(ui_dir, 'qresources.pyc').replace('/')
         success = False
         if os.path.isfile(resources_file):
             try:
@@ -1245,6 +1244,8 @@ class MenuBar(QtWidgets.QMenuBar):
 
         if success:
             logger.info('Cleared UI icon cache, please restart nxt.')
+        from . import make_resources
+        make_resources()
 
     def build_test_graph(self):
         target_model = self.parent().model
@@ -1296,9 +1297,7 @@ class MenuBar(QtWidgets.QMenuBar):
         view.update_view()
 
     def __force_uncaught_exception(self):
-        sys.excepthook = nxt_execpthook
         print(foo)
-        sys.excepthook = og_excepthook
 
     def __compile_node_code(self):
         """Test the compile of a node's compute and if it works in the console
@@ -1512,11 +1511,13 @@ def nxt_execpthook(typ, value, tb):
     dialog.exec_()
 
 
-def am_i_in_maya():
-    return 'maya' in sys.executable.lower()
+def catch_exceptions():
+    debugger_attached = 'pydevd' in sys.modules
+    return not debugger_attached
 
 
-og_excepthook = sys.excepthook
+if sys.excepthook is not nxt_execpthook:
+    og_excepthook = sys.excepthook
 
-if am_i_in_maya():
+if catch_exceptions():
     sys.excepthook = nxt_execpthook

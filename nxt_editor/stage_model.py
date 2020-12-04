@@ -1099,7 +1099,7 @@ class StageModel(QtCore.QObject):
 
         pos = pos or [0.0, 0.0]
         for node_data in node_load_data:
-            node_path, data = node_data.items()[0]
+            node_path, data = list(node_data.items())[0]
             name = nxt_path.node_name_from_node_path(node_path)
             if node_path and name:
                 implied_pp = nxt_path.get_parent_path(node_path)
