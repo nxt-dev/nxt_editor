@@ -582,7 +582,7 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
 
     def paint_swatch(self, painter, brush, rect):
         swatch_size = QtCore.QSize(rect.height(), rect.height())
-        swatch_rect = QtCore.QRectF(rect.topLeft(), swatch_size)
+        swatch_rect = QtCore.QRect(rect.topLeft(), swatch_size)
         painter.setPen(QtCore.Qt.NoPen)
         if not self.is_tgt:
             painter.setPen(brush.color())
@@ -642,7 +642,7 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
         self.unsaved = model.data(effected_idx, role=QtCore.Qt.EditRole)
         # Global drawing info
         self.initStyleOption(option, index)
-        inner_rect = QtCore.QRectF().united(option.rect)
+        inner_rect = QtCore.QRect().united(option.rect)
         inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
         # Swatch
         painter.setPen(QtCore.Qt.NoPen)
