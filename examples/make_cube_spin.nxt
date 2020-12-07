@@ -1,0 +1,89 @@
+{
+    "version": "1.17",
+    "alias": "make_cube_spin",
+    "color": "#5285a6",
+    "mute": false,
+    "solo": false,
+    "meta_data": {
+        "positions": {
+            "/README": [
+                340.0,
+                -120.0
+            ],
+            "/make_cube": [
+                0.0,
+                0.0
+            ],
+            "/playblast_it": [
+                620.0,
+                0.0
+            ],
+            "/spin_it": [
+                320.0,
+                0.0
+            ]
+        }
+    },
+    "nodes": {
+        "/": {
+            "child_order": [
+                "spin_it",
+                "playblast_it",
+                "README"
+            ],
+            "attrs": {
+                "cube": {
+                    "type": "raw",
+                    "value": "MyAmazingCube"
+                }
+            },
+            "code": [
+                "from maya import cmds"
+            ]
+        },
+        "/README": {
+            "code": [
+                "\"\"\"",
+                "If you have the Maya plugin installed fire up Maya, activate the nxt_maya plugin.",
+                "",
+                "To run this graph remotely outside of Maya you'll want to create a context for Maya ",
+                "Navigate to `nxt > Create Maya Context`",
+                "Make note of the name you gave your Maya context (I named mine maya2020) and either open your terminal and run:",
+                "    ",
+                "    nxt exec ${file::make_cube_spin.nxt} --context maya2020",
+                "    ",
+                "or from open a new Python file and use run the following script:",
+                "    ",
+                "    import nxt",
+                "    nxt.execute_graph('${file::make_cube_spin.nxt}', context='maya2020')",
+                "",
+                "\"\"\""
+            ]
+        },
+        "/make_cube": {
+            "start_point": true,
+            "comment": "Create a poly cube and store it's name on the STAGE",
+            "code": [
+                "cmds.select(cl=True)",
+                "STAGE.cube, shape = cmds.polyCube(n='${cube}')"
+            ]
+        },
+        "/playblast_it": {
+            "execute_in": "/spin_it",
+            "comment": "Playblast the cube and open the viewer to see it",
+            "code": [
+                "cmds.select(cl=True)",
+                "cmds.viewFit(\"persp\")",
+                "cmds.playblast(st=1, et=59, format=\"image\", viewer=True)"
+            ]
+        },
+        "/spin_it": {
+            "execute_in": "/make_cube",
+            "comment": "Add some keyframes to the cube",
+            "code": [
+                "cmds.setKeyframe('${cube}', at='.ry', v=0.0, t=1)",
+                "cmds.setKeyframe('${cube}', at='.ry', v=360, t=60)"
+            ]
+        }
+    }
+}
