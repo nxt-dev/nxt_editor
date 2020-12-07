@@ -1,6 +1,5 @@
 # Builtin
 import os
-import sys
 import logging
 import sys
 
@@ -79,8 +78,11 @@ def launch_editor(paths=None, start_rpc=True):
         paths.pop(0)
     else:
         paths = []
-    app = QtWidgets.QApplication(sys.argv)
+    app = QtWidgets.QApplication
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
+    app = app(sys.argv)
     style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
     style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
     stream = QtCore.QTextStream(style_file)

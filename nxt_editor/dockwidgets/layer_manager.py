@@ -194,6 +194,11 @@ class LayerTreeView(QtWidgets.QTreeView):
         menu.addAction(self.actions.ref_layer_above_action)
         self.actions.ref_layer_below_action.setData(layer)
         menu.addAction(self.actions.ref_layer_below_action)
+        menu.addSeparator()
+        builtins_menu = QtWidgets.QMenu('Reference Builtin Graph')
+        nxt_editor.main_window.populate_builtins_menu(qmenu=builtins_menu,
+                                                      main_window=self.actions.main_window)
+        menu.addMenu(builtins_menu)
         menu.popup(QtGui.QCursor.pos())
 
 
