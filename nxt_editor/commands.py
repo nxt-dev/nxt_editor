@@ -945,7 +945,7 @@ class ParentNodes(NxtCommand):
         self.node_path_data = self.stage.parent_nodes(nodes,
                                                       self.parent_node_path,
                                                       layer)
-        self.new_node_paths = self.node_path_data.values()
+        self.new_node_paths = list(self.node_path_data.values())
         idx = 0
         for new_node_path in self.new_node_paths:
             old_node_path = self.node_paths[idx]
@@ -962,7 +962,7 @@ class ParentNodes(NxtCommand):
             idx += 1
         self.model.update_comp_layer(rebuild=True)
 
-        self.model.selection = self.node_path_data.values()
+        self.model.selection = list(self.node_path_data.values())
         if len(self.node_paths) == 1:
             path_str = self.node_paths[0]
         else:
