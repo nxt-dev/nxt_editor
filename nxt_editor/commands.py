@@ -1649,6 +1649,46 @@ class SetLayerColor(NxtCommand):
         self.setText("Set {} color to {}".format(layer.filepath, self.color))
 
 
+class SetLayerLock(NxtCommand):
+    def __init__(self, lock, layer_path, model):
+        """Sets the color for a given layer, if the layer is not a top layer
+        the top layer store an overrides.
+        :param lock: bool of the desired lock state, if None is passed its
+        considered a revert.
+        :param layer_path: real path of layer
+        :param model: StageModel
+        """
+        super(SetLayerLock, self).__init__(model)
+        self.layer_path = layer_path
+        self.lock = lock
+        self.old_lock = None
+        self.model = model
+        self.stage = model.stage
+
+    @processing
+    def undo(self):
+        layer = self.model.lookup_layer(self.layer_path)
+        if layer is self.model.top_layer:
+            layer.lock = self.old_lock
+        else:
+            layer.set_locked_over(self.old_lock)
+        self.remove_effected_layer(self.model.top_layer.real_path)
+        self.model.layer_lock_changed.emit(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self.model.lookup_layer(self.layer_path)
+        if layer is self.model.top_layer:
+            self.old_lock = layer.get_locked(local=True)
+            layer.lock = self.lock
+        else:
+            self.old_lock = layer.get_locked(fallback_to_local=False)
+            layer.set_locked_over(self.lock)
+        self.add_effected_layer(self.model.top_layer.real_path)
+        self.model.layer_lock_changed.emit(self.layer_path)
+        self.setText("Set {} lock to {}".format(layer.filepath, self.lock))
+
+
 def _add_node_hierarchy(base_node_path, model, layer):
     stage = model.stage
     comp_layer = model.comp_layer

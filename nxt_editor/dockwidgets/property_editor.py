@@ -52,6 +52,7 @@ class PropertyEditor(DockWidgetBase):
         self.stage_model = graph_model
         self.node_path = None
         self._resolved = True
+        self.locked = False
         self.node_path = ''
         self.node_instance = ''
         self.node_inst_source = ('', '')
@@ -204,15 +205,15 @@ class PropertyEditor(DockWidgetBase):
         self.instance_layout.addWidget(self.locate_instance_button, 0, 1)
         self.instance_opinions = OpinionDots(self, 'Instance Opinions')
         self.instance_layout.addWidget(self.instance_opinions, 0, 2)
-        self.remove_instance_button = PixmapButton(pixmap=':icons/icons/delete.png',
+        self.revert_instance_button = PixmapButton(pixmap=':icons/icons/delete.png',
                                                    pixmap_hover=':icons/icons/delete_hover.png',
                                                    pixmap_pressed=':icons/icons/delete_pressed.png',
                                                    size=12,
                                                    parent=self.properties_frame)
-        self.remove_instance_button.setToolTip('Revert Instance')
-        self.remove_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
-        self.remove_instance_button.set_action(self.revert_inst_path_action)
-        self.instance_layout.addWidget(self.remove_instance_button, 0, 3)
+        self.revert_instance_button.setToolTip('Revert Instance')
+        self.revert_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_instance_button.set_action(self.revert_inst_path_action)
+        self.instance_layout.addWidget(self.revert_instance_button, 0, 3)
 
         # execute in
         self.execute_label = QtWidgets.QLabel('Exec Input', parent=self)
@@ -237,15 +238,15 @@ class PropertyEditor(DockWidgetBase):
         self.execute_field.setCompleter(self.execute_field_completer)
         self.execute_opinions = OpinionDots(self, 'Execute Opinions')
         self.execute_layout.addWidget(self.execute_opinions, 0, 1)
-        self.remove_exec_source_button = PixmapButton(pixmap=':icons/icons/delete.png',
+        self.revert_exec_source_button = PixmapButton(pixmap=':icons/icons/delete.png',
                                                       pixmap_hover=':icons/icons/delete_hover.png',
                                                       pixmap_pressed=':icons/icons/delete_pressed.png',
                                                       size=12,
                                                       parent=self.properties_frame)
-        self.remove_exec_source_button.setToolTip('Revert Execute Source')
-        self.remove_exec_source_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
-        self.remove_exec_source_button.set_action(self.revert_exec_path_action)
-        self.execute_layout.addWidget(self.remove_exec_source_button, 0, 2)
+        self.revert_exec_source_button.setToolTip('Revert Execute Source')
+        self.revert_exec_source_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_exec_source_button.set_action(self.revert_exec_path_action)
+        self.execute_layout.addWidget(self.revert_exec_source_button, 0, 2)
         # execute_order
         self.child_order_label = QtWidgets.QLabel('Child Order',
                                                   parent=self)
@@ -321,17 +322,17 @@ class PropertyEditor(DockWidgetBase):
         self.position_layout.addWidget(self.enabled_opinions, 0,
                                        QtCore.Qt.AlignLeft)
         icn = ':icons/icons/'
-        self.revert_enabled = PixmapButton(pixmap=icn+'delete.png',
-                                           pixmap_hover=icn+'delete_hover.png',
-                                           pixmap_pressed=icn+'delete_pressed.png',
-                                           size=12,
-                                           parent=self.properties_frame)
-        self.revert_enabled.setToolTip('Revert Enabled State')
-        self.revert_enabled.setStyleSheet('QToolTip {color: white; '
+        self.revert_enabled_button = PixmapButton(pixmap=icn + 'delete.png',
+                                                  pixmap_hover=icn+'delete_hover.png',
+                                                  pixmap_pressed=icn+'delete_pressed.png',
+                                                  size=12,
+                                                  parent=self.properties_frame)
+        self.revert_enabled_button.setToolTip('Revert Enabled State')
+        self.revert_enabled_button.setStyleSheet('QToolTip {color: white; '
                                           'order: 1px solid #3E3E3E'
                                           '}')
-        self.revert_enabled.clicked.connect(self.revert_node_enabled)
-        self.position_layout.addWidget(self.revert_enabled, 0,
+        self.revert_enabled_button.clicked.connect(self.revert_node_enabled)
+        self.position_layout.addWidget(self.revert_enabled_button, 0,
                                        QtCore.Qt.AlignLeft)
 
         self.position_layout.addStretch()
@@ -352,15 +353,15 @@ class PropertyEditor(DockWidgetBase):
         self.comment_layout.addWidget(self.comment_field, 0, 0)
         self.comment_opinions = OpinionDots(self, 'Comment Opinions', vertical=True)
         self.comment_layout.addWidget(self.comment_opinions, 0, 1)
-        self.remove_comment_button = PixmapButton(pixmap=':icons/icons/delete.png',
+        self.revert_comment_button = PixmapButton(pixmap=':icons/icons/delete.png',
                                                   pixmap_hover=':icons/icons/delete_hover.png',
                                                   pixmap_pressed=':icons/icons/delete_pressed.png',
                                                   size=12,
                                                   parent=self.properties_frame)
-        self.remove_comment_button.setToolTip('Revert Comment')
-        self.remove_comment_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
-        self.remove_comment_button.clicked.connect(self.remove_comment)
-        self.comment_layout.addWidget(self.remove_comment_button, 0, 2)
+        self.revert_comment_button.setToolTip('Revert Comment')
+        self.revert_comment_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_comment_button.clicked.connect(self.remove_comment)
+        self.comment_layout.addWidget(self.revert_comment_button, 0, 2)
         # Comment
         self.accept_comment_action = self.comment_actions.accept_comment_action
         self.accept_comment_action.triggered.connect(self.accept_edit_comment)
@@ -510,6 +511,7 @@ class PropertyEditor(DockWidgetBase):
     def set_stage_model_connections(self, model, connect):
         self.model_signal_connections = [
             (model.node_focus_changed, self.set_represented_node),
+            (model.layer_lock_changed, self.handle_locking),
             (model.nodes_changed, self.handle_nodes_changed),
             (model.attrs_changed, self.handle_attrs_changed),
             (model.data_state_changed, self.update_resolved),
@@ -523,6 +525,33 @@ class PropertyEditor(DockWidgetBase):
     def on_stage_model_destroyed(self):
         super(PropertyEditor, self).on_stage_model_destroyed()
         self.properties_frame.hide()
+
+    def handle_locking(self, *args):
+        self.locked = self.stage_model.get_node_locked(self.node_path)
+        if self.locked:
+            self.table_view.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        else:
+            self.table_view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked)
+        # Read only
+        self.name_label.setReadOnly(self.locked)
+        self.instance_field.setReadOnly(self.locked)
+        self.execute_field.setReadOnly(self.locked)
+        self.child_order_field.setReadOnly(self.locked)
+        self.positionX_field.setReadOnly(self.locked)
+        self.positionY_field.setReadOnly(self.locked)
+        self.comment_field.setReadOnly(self.locked)
+        # Enable/Disable
+        self.revert_instance_button.setEnabled(not self.locked)
+        self.revert_exec_source_button.setEnabled(not self.locked)
+        self.revert_child_order_button.setEnabled(not self.locked)
+        self.enabled_checkbox.setEnabled(not self.locked)
+        self.revert_enabled_button.setEnabled(not self.locked)
+        self.revert_comment_button.setEnabled(not self.locked)
+        self.add_attr_button.setEnabled(not self.locked)
+        self.remove_attr_button.setEnabled(not self.locked)
+        # Actions
+        for action in self.authoring_actions.actions() + self._actions.actions() + self.comment_actions.actions():
+            action.setEnabled(not self.locked)
 
     def handle_nodes_changed(self, nodes):
         if self.node_path in nodes:
@@ -625,6 +654,7 @@ class PropertyEditor(DockWidgetBase):
 
         # update attribute model
         self.model.set_represented_node(node_path=self.node_path)
+        self.handle_locking()
 
     def view_instance_node(self):
         instance_path = self.instance_field.text()
@@ -653,6 +683,10 @@ class PropertyEditor(DockWidgetBase):
                                                                 expand=expand)
             if comp_path != path:
                 path = comp_path
+        if in_focus:
+            self.instance_field.focus_in_val = path
+        else:
+            self.instance_field.focus_in_val = ''
         self.instance_field.setText(path)
 
     def update_properties(self):
@@ -774,12 +808,12 @@ class PropertyEditor(DockWidgetBase):
             self.instance_label.setVisible(not is_world)
             self.instance_field.setVisible(not is_world)
             self.locate_instance_button.setVisible(not is_world)
-            self.remove_instance_button.setVisible(not is_world)
+            self.revert_instance_button.setVisible(not is_world)
             self.instance_opinions.setVisible(not is_world)
 
             self.execute_field.setVisible(is_top)
             self.execute_label.setVisible(is_top)
-            self.remove_exec_source_button.setVisible(is_top)
+            self.revert_exec_source_button.setVisible(is_top)
             self.execute_opinions.setVisible(not is_world)
 
 
@@ -794,7 +828,7 @@ class PropertyEditor(DockWidgetBase):
 
             self.enabled_checkbox.setVisible(not is_world)
             self.enabled_checkbox_label.setVisible(not is_world)
-            self.revert_enabled.setVisible(not is_world)
+            self.revert_enabled_button.setVisible(not is_world)
             self.enabled_opinions.setVisible(not is_world)
 
     def edit_name(self, new_name):
@@ -815,6 +849,7 @@ class PropertyEditor(DockWidgetBase):
         cur_inst_path = self.stage_model.get_node_instance_path(self.node_path,
                                                                 lookup_layer,
                                                                 expand=False)
+        cur_inst_path = str(self.instance_field.focus_in_val)
         instance_path = str(self.instance_field.text())
         if (not cur_inst_path and not instance_path
                 or cur_inst_path == instance_path):
@@ -880,6 +915,8 @@ class PropertyEditor(DockWidgetBase):
             self.stage_model.revert_node_enabled(self.node_path)
 
     def edit_position(self):
+        if self.locked:
+            return
         x = self.positionX_field.value()
         y = self.positionY_field.value()
         if not self.node_path or not self.stage_model.node_exists(self.node_path, self.stage_model.comp_layer):
@@ -1026,8 +1063,9 @@ class PropertyEditor(DockWidgetBase):
                                          self.stage_model)
         menu.popup(QtGui.QCursor.pos())
 
-    @staticmethod
-    def reset_action_enabled(actions):
+    def reset_action_enabled(self, actions):
+        if self.locked:
+            return
         for action in actions:
             action.setEnabled(True)
 
@@ -1061,12 +1099,13 @@ class PropertyEditor(DockWidgetBase):
                                                                 INTERNAL_ATTRS.EXECUTE_IN,
                                                                 self.stage_model.comp_layer)
         tgt_path = self.stage_model.target_layer.real_path
-        if src_path == self.node_path and layer == tgt_path:
-            self.localize_exec_path_action.setEnabled(False)
-            self.revert_exec_path_action.setEnabled(True)
-        else:
-            self.localize_exec_path_action.setEnabled(True)
-            self.revert_exec_path_action.setEnabled(False)
+        if not self.locked:
+            if src_path == self.node_path and layer == tgt_path:
+                self.localize_exec_path_action.setEnabled(False)
+                self.revert_exec_path_action.setEnabled(True)
+            else:
+                self.localize_exec_path_action.setEnabled(True)
+                self.revert_exec_path_action.setEnabled(False)
         link_to = HistoricalContextMenu.LINKS.SOURCE
         historical_menu = HistoricalContextMenu(self, self.node_path,
                                                 INTERNAL_ATTRS.EXECUTE_IN,
@@ -1449,6 +1488,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
 class AttrsTableView(QtWidgets.QTableView):
     def __init__(self, parent=None):
         super(AttrsTableView, self).__init__(parent=parent)
+        # self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
         self.setItemDelegateForColumn(COLUMNS.source, self.node_path_delegate)
         self.mouse_pressed = False
@@ -1458,6 +1498,8 @@ class AttrsTableView(QtWidgets.QTableView):
         self.installEventFilter(self)
 
     def mousePressEvent(self, event):
+        # if self._parent.stage_model.get_node_locked(self._parent.node_path):
+        #     return
         super(AttrsTableView, self).mousePressEvent(event)
         self.mouse_pressed = self.indexAt(event.pos())
         self.startDrag(event)
@@ -1686,6 +1728,7 @@ class LineEdit(QtWidgets.QLineEdit):
     def __init__(self, parent=None):
         # Cheat because hasFocus is the parent not the actual line
         self.has_focus = False
+        self.focus_in_val = ''
         super(LineEdit, self).__init__(parent)
 
     def keyPressEvent(self, event):

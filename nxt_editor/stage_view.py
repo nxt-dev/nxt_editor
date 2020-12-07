@@ -92,6 +92,7 @@ class StageView(QtWidgets.QGraphicsView):
         self._held_keys = []
         self._rubber_band_origin = None
         self._initial_click_pos = None
+        self._clicked_something_locked = False
         self.new_node_selected = False
         self.panning = False
         self.zooming = False
@@ -128,6 +129,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.model = model
         self.model.data_state_changed.connect(self.update_resolved)
         self.model.layer_color_changed.connect(self.update_view)
+        self.model.layer_lock_changed.connect(self.update_view)
         self.model.comp_layer_changed.connect(self.update_view)
         self.model.comp_layer_changed.connect(self.failure_check)
         self.model.nodes_changed.connect(self.handle_nodes_changed)
@@ -694,6 +696,7 @@ class StageView(QtWidgets.QGraphicsView):
 
     def mousePressEvent(self, event):
         # capture initial click position which is used in the release event
+        self._clicked_something_locked = False
         self._initial_click_pos = event.pos()
         self.zoom_button_down = event.button() is self.zoom_button
         self.zooming = False
@@ -724,6 +727,18 @@ class StageView(QtWidgets.QGraphicsView):
                 # Any click on a graphics item that isn't selectable
                 super(StageView, self).mousePressEvent(event)
                 return
+            not_intractable = self.model.get_node_locked(item_path)
+            if not_intractable:
+                self._clicked_something_locked = True
+                # selection = self.scene().selectedItems()
+                # keep = []
+                # for i in selection:
+                #     _path = self.get_sel_path_for_graphic(i)
+                #     if _path and not self.model.get_node_locked(_path):
+                #         keep += [i]
+                # self.scene().selection
+
+
             # item interaction
             curr_sel = self.model.is_selected(item_path)
             mods = event.modifiers()
@@ -744,6 +759,8 @@ class StageView(QtWidgets.QGraphicsView):
             elif mods == self.SEL_RMV_MODIFIERS:
                 self.model.remove_from_selection([item_path])
                 return  # block immediate node movement
+            if not_intractable:
+                return
 
         # middle and right button events
         elif event.button() == QtCore.Qt.MiddleButton:
@@ -836,7 +853,8 @@ class StageView(QtWidgets.QGraphicsView):
             node_paths = []
             for item in self.scene().items(selection_area_rect):
                 if isinstance(item, NodeGraphicsItem):
-                    node_paths.append(item.node_path)
+                    if not self.model.get_node_locked(item.node_path):
+                        node_paths.append(item.node_path)
             selected_paths = node_paths
             if selected_paths:
                 # add items to selection
@@ -883,7 +901,7 @@ class StageView(QtWidgets.QGraphicsView):
                         self.model.clear_selection()
                     return
                 # could be end of moving nodes around the scene.
-                else:
+                elif not self._clicked_something_locked:
                     node_positions = {}
                     for item in self.scene().selectedItems():
                         if isinstance(item, NodeGraphicsItem):
@@ -905,11 +923,14 @@ class StageView(QtWidgets.QGraphicsView):
                 if type(items_released_on[1]) is NodeGraphicsPlug:
                     dropped_plug = items_released_on[1]
                     dropped_node_path = dropped_plug.parentItem().node_path
+                    locked = dropped_plug.parentItem().locked
                     dropped_attr_name = dropped_plug.attr_name_represented
                     exec_attr_name = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
-                    if dropped_attr_name not in nxt_node.INTERNAL_ATTRS.ALL:
+                    if (dropped_attr_name not in nxt_node.INTERNAL_ATTRS.ALL
+                            and not locked):
                         if self.potential_connection.src_path:
                             if dropped_plug.is_input:
+                                # Fixme: This isn't how tokens are created now
                                 value = '${%s}' % self.potential_connection.src_path
                                 self.model.set_node_attr_value(node_path=dropped_node_path,
                                                                attr_name=dropped_attr_name,
@@ -928,17 +949,19 @@ class StageView(QtWidgets.QGraphicsView):
                                                                layer=self.model.target_layer)
                             else:
                                 logger.warning("cannot make connections from input to inputs")
-                    elif dropped_attr_name == exec_attr_name:
+                    elif dropped_attr_name == exec_attr_name and not locked:
                         src_path = self.potential_connection.src_node_path
                         tgt_path = self.potential_connection.tgt_node_path
-                        if src_path:
+                        locked = all((not locked,
+                                      self.model.get_node_locked(tgt_path)))
+                        if src_path and not locked:
                             if dropped_plug.is_input:
                                 self.model.set_node_exec_in(node_path=dropped_node_path,
                                                             source_node_path=src_path,
                                                             layer=self.model.target_layer)
                             else:
                                 logger.warning("cannot make connections from output to output.")
-                        elif tgt_path:
+                        elif tgt_path and not locked:
                             if not dropped_plug.is_input:
                                 self.model.set_node_exec_in(node_path=tgt_path,
                                                             source_node_path=dropped_node_path,
@@ -970,6 +993,8 @@ class StageView(QtWidgets.QGraphicsView):
             item = self.itemAt(event.pos())
             # TODO this is strictly a nodegraphicsitem's job, move there.
             if item and isinstance(item, NodeGraphicsItem):
+                if self.model.get_node_locked(item.node_path):
+                    return
                 if modifiers == QtCore.Qt.ControlModifier:
                     item.rename_node()
                 elif modifiers == QtCore.Qt.ShiftModifier:
