@@ -21,11 +21,13 @@ class OpinionDots(QtWidgets.QWidget):
         self._layer_colors = color_list
         layer_count = len(color_list)
         if self.vertical:
-            self.setFixedHeight(self.WIDGET_SIZE * layer_count)
-            self.setFixedWidth(self.WIDGET_SIZE)
+            self.setMinimumSize(self.WIDGET_SIZE, self.WIDGET_SIZE * layer_count)
+            #self.setFixedHeight(self.WIDGET_SIZE * layer_count)
+            #self.setFixedWidth(self.WIDGET_SIZE)
         else:
-            self.setFixedHeight(self.WIDGET_SIZE)
-            self.setFixedWidth(self.WIDGET_SIZE * layer_count)
+            self.setMinimumSize(self.WIDGET_SIZE * layer_count, self.WIDGET_SIZE)
+            # self.setFixedHeight(self.WIDGET_SIZE)
+            # self.setFixedWidth(self.WIDGET_SIZE * layer_count)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter()
@@ -42,7 +44,8 @@ class OpinionDots(QtWidgets.QWidget):
             painter.setPen(QtCore.Qt.NoPen)
             painter.setBrush(QtGui.QColor(color))
             point = QtCore.QPointF(x_pos, y_pos)
-            painter.drawEllipse(point, self.SIZE, self.SIZE)
+            painter.drawRect(self.rect())
+            # painter.drawEllipse(point, self.SIZE, self.SIZE)
             if self.vertical:
                 y_pos += (self.SIZE * 2.5)
             else:

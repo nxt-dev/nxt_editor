@@ -1516,8 +1516,8 @@ def catch_exceptions():
     return not debugger_attached
 
 
-if sys.excepthook is not nxt_execpthook:
-    og_excepthook = sys.excepthook
+# if sys.excepthook is not nxt_execpthook:
+#     og_excepthook = sys.excepthook
 
-if catch_exceptions():
-    sys.excepthook = nxt_execpthook
+# if catch_exceptions():
+#     sys.excepthook = nxt_execpthook

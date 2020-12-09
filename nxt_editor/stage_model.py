@@ -2248,16 +2248,14 @@ class StageModel(QtCore.QObject):
         """Checks if a node has an attr. Returns True or False
         :param node_path: Node path
         :param attr_name: String of an attribute name
-        :param layer: Layer to lookup node path on, if None the target layer
+        :param layer: Layer to lookup node path on, if None the comp layer
         will be used
         :returns: bool
         """
         if not attr_name and node_path:
             return False
-        node = None
-        if isinstance(node_path, str):
-            layer = layer or self.target_layer
-            node = layer.lookup(node_path)
+        layer = layer or self.comp_layer
+        node = layer.lookup(node_path)
         if node is None:
             return False
         return self.stage.node_attr_exists(node, attr_name)

@@ -17,6 +17,7 @@ class PixmapButton(QtWidgets.QAbstractButton):
         self.pixmap_checked_hover = pixmap_checked_hover
         self.pixmap_checked_pressed = pixmap_checked_pressed
         self.size = size
+        self.setFixedSize(self.size, self.size)
 
         if checkable:
             self.setCheckable(checkable)
@@ -61,6 +62,10 @@ class PixmapButton(QtWidgets.QAbstractButton):
 
         painter = QtGui.QPainter(self)
         painter.drawPixmap(event.rect(), pix)
+        # DEBUG BORDER DRAW
+        # painter.setBrush(QtCore.Qt.NoBrush)
+        # painter.setPen(QtCore.Qt.red)
+        # painter.drawRect(event.rect())
         del painter
 
     def enterEvent(self, event):

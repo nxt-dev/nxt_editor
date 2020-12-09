@@ -22,15 +22,251 @@ from nxt_editor import colors
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
-from nxt import tokens
+from nxt import tokens, nxt_path, nxt_layer
 
 # Fixme: Should this be a pref?
 HISTORICAL_MAX_CHARS = 50
 
 
+class AttributeEdit(QtWidgets.QWidget):
+    def __init__(self, node_path, attr_name, stage_model):
+        super(AttributeEdit, self).__init__()
+        self.node_path = node_path
+        self.attr_name = attr_name
+        self.stage_model = stage_model
+        self.visible_data_state = None
+        self.opinion_dots = self.make_opinion_dots()
+        self.revert_button = self.make_revert_button()
+        if self.revert_button:
+            self.revert_button.pressed.connect(self._revert_attr)
+        if self.stage_model:
+            self.set_stage_model(self.stage_model)
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def update_data_state(self, data_state):
+        if self.visible_data_state != data_state:
+            self.visible_data_state = data_state
+            self.refresh_value()
+
+    def refresh_value(self):
+        comp_layer = self.stage_model.comp_layer
+        val = self.stage_model.get_node_attr_value(node_path=self.node_path,
+                                                   attr_name=self.attr_name,
+                                                   data_state=self.stage_model.data_state,
+                                                   layer=comp_layer)
+        self._display_value(val)
+        self._update_stylesheet()
+        if not self.opinion_dots:
+            return
+        layers = self.stage_model.get_layers_with_opinion(self.node_path,
+                                                          self.attr_name)
+        layer_colors = [self.stage_model.get_layer_color(l) for l in layers]
+        self.opinion_dots.layer_colors = layer_colors
+
+    def _set_attr_val(self, val):
+        target_layer = self.stage_model.target_layer
+        self.stage_model.set_node_attr_value(node_path=self.node_path,
+                                             attr_name=self.attr_name,
+                                             value=val,
+                                             layer=target_layer)
+
+    def _revert_attr(self):
+        self.stage_model.revert_node_attrs(self.node_path, [self.attr_name])
+
+    def set_stage_model(self, stage_model):
+        self.stage_model = stage_model
+        if not self.stage_model:
+            return
+        self.update_data_state(self.stage_model.data_state)
+        self.stage_model.data_state_changed.connect(self.update_data_state)
+        self.stage_model.attrs_changed.connect(self.on_attrs_changed)
+
+    def on_attrs_changed(self, changed_attr_paths):
+        for attr_path in changed_attr_paths:
+            node_path, attr_name = nxt_path.path_attr_partition(attr_path)
+            if node_path == self.node_path and attr_name == self.attr_name:
+                break
+        else:
+            return
+        self.refresh_value()
+
+    def set_node_path(self, node_path):
+        self.node_path = node_path
+        self.refresh_value()
+
+    def make_opinion_dots(self):
+        return OpinionDots(None, 'Opinion Dots')
+
+    def make_revert_button(self):
+        return PixmapButton(pixmap=':icons/icons/delete.png',
+                            pixmap_hover=':icons/icons/delete_hover.png',
+                            pixmap_pressed=':icons/icons/delete_pressed.png',
+                            size=12)
+
+    def _update_stylesheet(self):
+        return
+
+    def _display_value(self, val):
+        raise NotImplementedError()
+
+
+class FilePathAttrEdit(AttributeEdit):
+    NXT_FILE_FILTERS = ['*.nxt', '*.nxtb']
+
+    def __init__(self, node_path, attr_name, stage_model, main_window,
+                 filters=None):
+        super(FilePathAttrEdit, self).__init__(node_path, attr_name,
+                                               stage_model)
+        self.main_window = main_window
+        # Path Input
+        self.path_input = QtWidgets.QLineEdit()
+        self.path_input.setStyleSheet(line_edit_style_factory('white'))
+        completer = QtWidgets.QCompleter(parent=self)
+        model = QtWidgets.QFileSystemModel(completer)
+        self.filters = filters
+        if self.filters:
+            model.setNameFilters(self.filters)
+            model.setNameFilterDisables(False)
+        completer.setModel(model)
+        completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        completer.setCompletionMode(completer.UnfilteredPopupCompletion)
+        self.path_input.setCompleter(completer)
+        self.path_input.editingFinished.connect(self.on_path_edited)
+        # Choose File Button
+        folder_icon = None
+        self.select_button = PixmapButton(pixmap=':icons/icons/folder.svg',
+                                          pixmap_hover=':icons/icons/folder.svg',
+                                          pixmap_pressed=':icons/icons/folder.svg',
+                                          size=16)
+        self.select_button.pressed.connect(self.open_file_picker)
+        # Open button
+        self.open_button = PixmapButton(pixmap=':icons/icons/locate_off.png',
+                                        pixmap_hover=':icons/icons/locate_on_hover.png',
+                                        pixmap_pressed=':icons/icons/locate_on_pressed.png',
+                                        size=16)
+        self.open_button.pressed.connect(self.open_attr_graph)
+        # Main Layout
+        self.main_layout = QtWidgets.QHBoxLayout()
+        self.main_layout.setSpacing(0)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(self.main_layout)
+
+        # self.main_layout.addWidget(QtWidgets.QLabel('Sub Graph Path'))
+        self.main_layout.addWidget(self.path_input)
+        # self.main_layout.addWidget(self.open_button)
+        # self.main_layout.addWidget(self.select_button)
+        # self.main_layout.addWidget(self.opinion_dots)
+        # self.main_layout.addWidget(self.revert_button)
+
+    def _display_value(self, val):
+        self.path_input.setText(val)
+
+    def on_path_edited(self):
+        self._set_attr_val(self.path_input.text())
+
+    def _update_stylesheet(self):
+        layers = self.stage_model.get_layers_with_opinion(self.node_path,
+                                                          self.attr_name)
+        txt_color = 'white'
+        if layers:
+            txt_color = self.stage_model.get_layer_color(layers[0])
+        tgt_layer = self.stage_model.target_layer
+        tgt_layer_color = self.stage_model.get_layer_color(tgt_layer)
+        style = line_edit_style_factory(txt_color=txt_color,
+                                        tgt_layer_color=tgt_layer_color)
+        self.path_input.setStyleSheet(style)
+
+    def open_file_picker(self):
+        path = QtWidgets.QFileDialog.getOpenFileName(filters=self.filters)[0]
+        self._set_attr_val(path)
+
+    def open_attr_graph(self):
+        # Pulling from visual value here, so button always opens what user
+        # sees, even if visual gets out of sync with true value.
+        self.main_window.load_file(self.path_input.text())
+
+
+class ComboEdit(AttributeEdit):
+    def __init__(self, node_path, attr_name, stage_model, choices):
+        super(ComboEdit, self).__init__(node_path, attr_name, stage_model)
+        self.choices = choices
+        # Value Combo
+        # self.value_combo = QtWidgets.QComboBox()
+        self.value_combo = ComboBoxEdFinished()
+        self.value_combo.editing_finished.connect(self.context_edited)
+        self.value_combo.setEditable(True)
+        self.value_combo.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+        self.value_combo.addItems(choices)
+        self.value_combo.activated.connect(self.context_chosen)
+        # Main Layout
+        self.main_layout = QtWidgets.QHBoxLayout()
+        self.main_layout.setSpacing(0)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(self.main_layout)
+
+        # self.main_layout.addWidget(QtWidgets.QLabel('Context'))
+        self.main_layout.addWidget(self.value_combo, 1)
+        # self.main_layout.addWidget(self.opinion_dots)
+        # self.main_layout.addWidget(self.revert_button)
+        self.main_layout.addStretch(1)
+
+    def _display_value(self, val):
+        self.value_combo.setEditText(val)
+
+    def _update_stylesheet(self):
+        layers = self.stage_model.get_layers_with_opinion(self.node_path,
+                                                          self.attr_name)
+        txt_color = 'white'
+        if layers:
+            txt_color = self.stage_model.get_layer_color(layers[0])
+        tgt_layer = self.stage_model.target_layer
+        tgt_layer_color = self.stage_model.get_layer_color(tgt_layer)
+        style = '''
+                QComboBox {
+                    border-radius: 11px;
+                    border: 1px solid transparent;
+                    background-color: #232323;
+                    color: %s
+                }
+                QComboBox:hover {
+                    border: 1px solid %s
+                }
+                QComboBox:focus {
+                    border: 2px solid %s
+                }
+                ''' % (txt_color, tgt_layer_color, tgt_layer_color)
+        self.value_combo.setStyleSheet(style)
+
+    def refresh_value(self):
+        self.value_combo.clear()
+        self.value_combo.addItems(self.choices)
+        super(ComboEdit, self).refresh_value()
+
+    def context_edited(self):
+        self._set_attr_val(self.value_combo.currentText())
+
+    def context_chosen(self, chosen_index):
+        self._set_attr_val(str(self.value_combo.itemText(chosen_index)))
+
+
+class ComboBoxEdFinished(QtWidgets.QComboBox):
+    editing_finished = QtCore.Signal()
+
+    def focusOutEvent(self, event):
+        super(ComboBoxEdFinished, self).focusOutEvent(event)
+        self.editing_finished.emit()
+
+    def keyPressEvent(self, event):
+        if event.key() in (QtCore.Qt.Key_Enter, QtCore.Qt.Key_Return):
+            self.editing_finished.emit()
+        super(ComboBoxEdFinished, self).keyPressEvent(event)
+
+
 class PropertyEditor(DockWidgetBase):
 
     PREF_KEY = user_dir.USER_PREF.ATTR_SORTING
+    GRAPH_PATH_ROW = 6
+    CONTEXT_ROW = 7
 
     def __init__(self, graph_model=None, title='Property Editor', parent=None,
                  minimum_width=300, minimum_height=350):
@@ -131,10 +367,10 @@ class PropertyEditor(DockWidgetBase):
         # name
         self.name_layout = QtWidgets.QHBoxLayout()
         self.name_layout.setContentsMargins(0, 0, 0, 0)
-        self.properties_layout.addLayout(self.name_layout)
+        # self.properties_layout.addLayout(self.name_layout)
 
         self.name_label = LabelEdit(parent=self)
-        self.name_label.setFont(QtGui.QFont("Roboto", 14))
+        self.name_label.setFont(QtGui.QFont("Roboto", 20))
         self.name_label.nameChangeRequested.connect(self.edit_name)
         self.name_layout.addWidget(self.name_label, 0, QtCore.Qt.AlignLeft)
 
@@ -146,17 +382,51 @@ class PropertyEditor(DockWidgetBase):
         self.name_edit_button.pressed.connect(self.name_label.edit_text)
         self.name_layout.addWidget(self.name_edit_button, 0, QtCore.Qt.AlignLeft)
 
-        self.name_layout.addStretch()
+        # self.name_layout.addStretch()
 
         # details
         self.details_layout = QtWidgets.QGridLayout()
-        self.details_layout.setContentsMargins(20, 4, 0, 4)
+        self.details_layout.setContentsMargins(0, 4, 0, 4)
         self.details_layout.setSpacing(2)
+        self.details_layout.setColumnStretch(1, 1)
         self.properties_layout.addLayout(self.details_layout)
+
+        # Custom Attr Edits
+        self.custom_attr_edits = []
+        # self.custom_attr_edits_layout = QtWidgets.QVBoxLayout()
+        # self.custom_attr_edits_layout.setSpacing(2)
+        # self.custom_attr_edits_layout.setContentsMargins(0, 4, 0, 4)
+        self._graph_path_edit = FilePathAttrEdit(None, '_graph_path', None, self.main_window, FilePathAttrEdit.NXT_FILE_FILTERS)
+        self.custom_attr_edits.append(self._graph_path_edit)
+        # self.custom_attr_edits_layout.addWidget(self._graph_path_edit)
+        from nxt.remote.contexts import iter_context_names
+        context_names = list(iter_context_names())
+        self._context_combo = ComboEdit(None, '_context', None, context_names)
+        self.custom_attr_edits.append(self._context_combo)
+        # self.custom_attr_edits_layout.addWidget(self._context_combo)
+        # self.properties_layout.addLayout(self.custom_attr_edits_layout)
+        self._sub_graph_label = QtWidgets.QLabel('Sub Graph')
+        self.details_layout.addWidget(self._sub_graph_label, 6, 0)
+        self.details_layout.addWidget(self._graph_path_edit, 6, 1)
+        self._graph_path_opinions_layout = QtWidgets.QHBoxLayout()
+        self._graph_path_opinions_layout.addWidget(self._graph_path_edit.opinion_dots)
+        self._graph_path_opinions_layout.addWidget(self._graph_path_edit.open_button)
+        self._graph_path_opinions_layout.addWidget(self._graph_path_edit.select_button)
+        self._graph_path_opinions_layout.addWidget(self._graph_path_edit.revert_button)
+        self.details_layout.addLayout(self._graph_path_opinions_layout, 6, 2)
+
+        self._context_label = QtWidgets.QLabel('Context')
+        self.details_layout.addWidget(self._context_label, 7, 0)
+        self.details_layout.addWidget(self._context_combo, 7, 1)
+        self._context_opinoins_layout = QtWidgets.QHBoxLayout()
+        self._context_opinoins_layout.addWidget(self._context_combo.opinion_dots)
+        self._context_opinoins_layout.addStretch()
+        self._context_opinoins_layout.addWidget(self._context_combo.revert_button)
+        self.details_layout.addLayout(self._context_opinoins_layout, 7, 2)
 
         # path
         self.path_label = QtWidgets.QLabel('Path', parent=self)
-        self.details_layout.addWidget(self.path_label, 0, 0)
+        self.details_layout.addWidget(self.path_label, 1, 0)
 
         self.path_field = QtWidgets.QLineEdit(parent=self)
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
@@ -164,21 +434,22 @@ class PropertyEditor(DockWidgetBase):
         self.path_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.path_field.setReadOnly(True)
-        self.details_layout.addWidget(self.path_field, 0, 1)
+        self.details_layout.addWidget(self.path_field, 1, 1)
 
         # instance
         self.instance_label = QtWidgets.QLabel('Instance', parent=self)
-        self.details_layout.addWidget(self.instance_label, 1, 0)
+        self.details_layout.addWidget(self.instance_label, 2, 0)
 
-        self.instance_layout = QtWidgets.QGridLayout()
-        self.details_layout.addLayout(self.instance_layout, 1, 1)
+        self.instance_layout = QtWidgets.QHBoxLayout()
+        self.details_layout.addLayout(self.instance_layout, 2, 2)
 
         self.instance_field = LineEdit(parent=self)
+        self.details_layout.addWidget(self.instance_field, 2, 1)
         self.instance_field.focus_changed.connect(self.focus_instance_field)
         self.instance_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.instance_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.instance_field.editingFinished.connect(self.edit_instance)
-        self.instance_layout.addWidget(self.instance_field, 0, 0)
+        # self.instance_layout.addWidget(self.instance_field, 0, 0)
 
         self.instance_field_model = QtCore.QStringListModel()
         self.instance_field_completer = QtWidgets.QCompleter()
@@ -187,6 +458,10 @@ class PropertyEditor(DockWidgetBase):
         self.instance_field.setCompleter(self.instance_field_completer)
         self.instance_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.instance_field.customContextMenuRequested.connect(self.instance_context_menu)
+
+        self.instance_opinions = OpinionDots(self, 'Instance Opinions')
+        self.instance_layout.addWidget(self.instance_opinions)
+        self.instance_layout.addStretch()
 
         self.locate_instance_button = PixmapButton(pixmap=':icons/icons/locate_off.png',
                                                    pixmap_hover=':icons/icons/locate_on_hover.png',
@@ -198,9 +473,7 @@ class PropertyEditor(DockWidgetBase):
         self.locate_instance_button.setFixedWidth(17)
         self.locate_instance_button.setFixedHeight(16)
         self.locate_instance_button.clicked.connect(self.view_instance_node)
-        self.instance_layout.addWidget(self.locate_instance_button, 0, 1)
-        self.instance_opinions = OpinionDots(self, 'Instance Opinions')
-        self.instance_layout.addWidget(self.instance_opinions, 0, 2)
+        self.instance_layout.addWidget(self.locate_instance_button)
         self.remove_instance_button = PixmapButton(pixmap=':icons/icons/delete.png',
                                                    pixmap_hover=':icons/icons/delete_hover.png',
                                                    pixmap_pressed=':icons/icons/delete_pressed.png',
@@ -209,23 +482,24 @@ class PropertyEditor(DockWidgetBase):
         self.remove_instance_button.setToolTip('Revert Instance')
         self.remove_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.remove_instance_button.set_action(self.revert_inst_path_action)
-        self.instance_layout.addWidget(self.remove_instance_button, 0, 3)
+        self.instance_layout.addWidget(self.remove_instance_button)
 
         # execute in
         self.execute_label = QtWidgets.QLabel('Exec Input', parent=self)
-        self.details_layout.addWidget(self.execute_label, 2, 0)
+        self.details_layout.addWidget(self.execute_label, 3, 0)
 
-        self.execute_layout = QtWidgets.QGridLayout()
-        self.details_layout.addLayout(self.execute_layout, 2, 1)
+        self.execute_layout = QtWidgets.QHBoxLayout()
+        self.details_layout.addLayout(self.execute_layout, 3, 2)
 
         self.execute_field = LineEdit(parent=self)
+        self.details_layout.addWidget(self.execute_field, 3, 1)
         self.execute_field.setStyleSheet(line_edit_style_factory('white'))
         self.execute_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.execute_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.execute_field.editingFinished.connect(self.edit_exec_source)
         self.execute_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.execute_field.customContextMenuRequested.connect(self.exec_context_menu)
-        self.execute_layout.addWidget(self.execute_field, 0, 0)
+        # self.execute_layout.addWidget(self.execute_field, 0, 0)
 
         self.execute_field_model = QtCore.QStringListModel()
         self.execute_field_completer = QtWidgets.QCompleter()
@@ -233,7 +507,8 @@ class PropertyEditor(DockWidgetBase):
         self.execute_field_completer.setModel(self.execute_field_model)
         self.execute_field.setCompleter(self.execute_field_completer)
         self.execute_opinions = OpinionDots(self, 'Execute Opinions')
-        self.execute_layout.addWidget(self.execute_opinions, 0, 1)
+        self.execute_layout.addWidget(self.execute_opinions)
+        self.execute_layout.addStretch()
         self.remove_exec_source_button = PixmapButton(pixmap=':icons/icons/delete.png',
                                                       pixmap_hover=':icons/icons/delete_hover.png',
                                                       pixmap_pressed=':icons/icons/delete_pressed.png',
@@ -242,22 +517,23 @@ class PropertyEditor(DockWidgetBase):
         self.remove_exec_source_button.setToolTip('Revert Execute Source')
         self.remove_exec_source_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.remove_exec_source_button.set_action(self.revert_exec_path_action)
-        self.execute_layout.addWidget(self.remove_exec_source_button, 0, 2)
+        self.execute_layout.addWidget(self.remove_exec_source_button)
         # execute_order
         self.child_order_label = QtWidgets.QLabel('Child Order',
                                                   parent=self)
-        self.details_layout.addWidget(self.child_order_label, 3, 0)
+        self.details_layout.addWidget(self.child_order_label, 4, 0)
 
-        self.child_order_layout = QtWidgets.QGridLayout()
-        self.details_layout.addLayout(self.child_order_layout, 3, 1)
+        self.child_order_layout = QtWidgets.QHBoxLayout()
+        self.details_layout.addLayout(self.child_order_layout, 4, 2)
 
         self.child_order_field = LineEdit(parent=self)
+        self.details_layout.addWidget(self.child_order_field, 4, 1)
         self.child_order_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #232323')
         self.child_order_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.child_order_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.child_order_field.accept.connect(self.accept_edit_child_order)
         self.child_order_field.cancel.connect(self.cancel_edit_child_order)
-        self.child_order_layout.addWidget(self.child_order_field, 0, 0)
+        # self.child_order_layout.addWidget(self.child_order_field, 0, 0)
 
         self.child_order_field_model = QtCore.QStringListModel()
         self.child_order_field_completer = QtWidgets.QCompleter()
@@ -265,7 +541,8 @@ class PropertyEditor(DockWidgetBase):
         self.child_order_field_completer.setModel(self.child_order_field_model)
         self.child_order_field.setCompleter(self.child_order_field_completer)
         self.child_order_opinions = OpinionDots(self, 'Child Order Opinions')
-        self.child_order_layout.addWidget(self.child_order_opinions, 0, 1)
+        self.child_order_layout.addWidget(self.child_order_opinions)
+        self.child_order_layout.addStretch()
         self.revert_child_order_button = PixmapButton(
             pixmap=':icons/icons/delete.png',
             pixmap_hover=':icons/icons/delete_hover.png',
@@ -276,47 +553,24 @@ class PropertyEditor(DockWidgetBase):
         self.revert_child_order_button.setStyleSheet(
             'QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.revert_child_order_button.clicked.connect(self.revert_child_order)
-        self.child_order_layout.addWidget(self.revert_child_order_button, 0, 2)
-
-        # position
-        self.position_label = QtWidgets.QLabel('Position', parent=self)
-        self.position_label.setMaximumWidth(80)
-        self.details_layout.addWidget(self.position_label, 4, 0)
+        self.child_order_layout.addWidget(self.revert_child_order_button)
 
         self.position_layout = QtWidgets.QHBoxLayout()
-        self.details_layout.addLayout(self.position_layout, 4, 1)
 
-        self.positionX_field = NodePositionSpinbox(parent=self)
-        self.positionX_field.setFixedWidth(80)
-        self.positionX_field.setAlignment(QtCore.Qt.AlignRight)
-        self.positionX_field.setSingleStep(1)
-        self.positionX_field.setMaximum(10000)
-        self.positionX_field.setMinimum(-10000)
-        self.positionX_field.stepChanged.connect(self.edit_position)
-        self.positionX_field.editingFinished.connect(self.edit_position)
-        self.position_layout.addWidget(self.positionX_field, 0, QtCore.Qt.AlignLeft)
-
-        self.positionY_field = NodePositionSpinbox(parent=self)
-        self.positionY_field.setFixedWidth(80)
-        self.positionY_field.setAlignment(QtCore.Qt.AlignRight)
-        self.positionY_field.setSingleStep(1)
-        self.positionY_field.setMaximum(10000)
-        self.positionY_field.setMinimum(-10000)
-        self.positionY_field.stepChanged.connect(self.edit_position)
-        self.positionY_field.editingFinished.connect(self.edit_position)
-        self.position_layout.addWidget(self.positionY_field, 0, QtCore.Qt.AlignLeft)
-
-        self.enabled_checkbox_label = QtWidgets.QLabel('Enabled: ',
-                                                       parent=self)
-        self.position_layout.addWidget(self.enabled_checkbox_label, 0,
-                                       QtCore.Qt.AlignLeft)
+        # Enabled
+        # self.enabled_checkbox_label = QtWidgets.QLabel('Enabled: ',
+        #                                                parent=self)
+        # self.position_layout.addWidget(self.enabled_checkbox_label, 0,
+        #                                QtCore.Qt.AlignLeft)
         self.enabled_checkbox = QtWidgets.QCheckBox()
+        self.position_layout.addWidget(self.enabled_checkbox)
         self.enabled_checkbox.stateChanged.connect(self.toggle_node_enabled)
-        self.position_layout.addWidget(self.enabled_checkbox, 0,
-                                       QtCore.Qt.AlignLeft)
+        # self.position_layout.addWidget(self.enabled_checkbox, 0,
+        #                                QtCore.Qt.AlignLeft)
         self.enabled_opinions = OpinionDots(self, 'Enabled Opinions')
-        self.position_layout.addWidget(self.enabled_opinions, 0,
-                                       QtCore.Qt.AlignLeft)
+        self.position_layout.addWidget(self.enabled_opinions)
+        # self.position_layout.addWidget(self.enabled_opinions, 0,
+        #                                QtCore.Qt.AlignLeft)
         icn = ':icons/icons/'
         self.revert_enabled = PixmapButton(pixmap=icn+'delete.png',
                                            pixmap_hover=icn+'delete_hover.png',
@@ -328,27 +582,59 @@ class PropertyEditor(DockWidgetBase):
                                           'order: 1px solid #3E3E3E'
                                           '}')
         self.revert_enabled.clicked.connect(self.revert_node_enabled)
-        self.position_layout.addWidget(self.revert_enabled, 0,
-                                       QtCore.Qt.AlignLeft)
-
+        # self.position_layout.addWidget(self.revert_enabled, 0,
+        #                                QtCore.Qt.AlignLeft)
+        self.position_layout.addWidget(self.revert_enabled)
         self.position_layout.addStretch()
+
+        # position
+        # self.position_label = QtWidgets.QLabel('Position', parent=self)
+        # self.position_label.setMaximumWidth(80)
+        # self.details_layout.addWidget(self.position_label, 4, 0)
+
+        # self.details_layout.addLayout(self.position_layout, 4, 1)
+
+        self.positionX_field = NodePositionSpinbox(parent=self)
+        self.positionX_field.setFixedWidth(80)
+        self.positionX_field.setAlignment(QtCore.Qt.AlignRight)
+        self.positionX_field.setSingleStep(1)
+        self.positionX_field.setMaximum(10000)
+        self.positionX_field.setMinimum(-10000)
+        self.positionX_field.stepChanged.connect(self.edit_position)
+        self.positionX_field.editingFinished.connect(self.edit_position)
+        self.position_layout.addWidget(self.positionX_field, 0, QtCore.Qt.AlignRight)
+
+        self.positionY_field = NodePositionSpinbox(parent=self)
+        self.positionY_field.setFixedWidth(80)
+        self.positionY_field.setAlignment(QtCore.Qt.AlignRight)
+        self.positionY_field.setSingleStep(1)
+        self.positionY_field.setMaximum(10000)
+        self.positionY_field.setMinimum(-10000)
+        self.positionY_field.stepChanged.connect(self.edit_position)
+        self.positionY_field.editingFinished.connect(self.edit_position)
+        self.position_layout.addWidget(self.positionY_field, 0, QtCore.Qt.AlignRight)
+
+        self.details_layout.addLayout(self.name_layout, 0, 0)
+        self.details_layout.addLayout(self.position_layout, 0, 1)
 
         # comment
         self.comment_label = QtWidgets.QLabel('Comment')
-        self.details_layout.addWidget(self.comment_label, 5, 0)
+        self.details_layout.addWidget(self.comment_label, 8, 0)
 
-        self.comment_layout = QtWidgets.QGridLayout()
-        self.details_layout.addLayout(self.comment_layout, 5, 1)
+        self.comment_layout = QtWidgets.QHBoxLayout()
+        self.details_layout.addLayout(self.comment_layout, 8, 2)
 
         self.comment_field = TextEdit(self, 'Node Comment')
+        self.details_layout.addWidget(self.comment_field, 8, 1)
         self.comment_field.addActions(self.comment_actions.actions())
         self.comment_field.setFixedHeight(44)
         self.comment_field.setTabChangesFocus(False)
         self.comment_field.accept.connect(self.accept_edit_comment)
         self.comment_field.cancel.connect(self.cancel_edit_comment)
-        self.comment_layout.addWidget(self.comment_field, 0, 0)
-        self.comment_opinions = OpinionDots(self, 'Comment Opinions', vertical=True)
-        self.comment_layout.addWidget(self.comment_opinions, 0, 1)
+        # self.comment_layout.addWidget(self.comment_field, 0, 0)
+        self.comment_opinions = OpinionDots(self, 'Comment Opinions')
+        self.comment_layout.addWidget(self.comment_opinions)
+        self.comment_layout.addStretch()
         self.remove_comment_button = PixmapButton(pixmap=':icons/icons/delete.png',
                                                   pixmap_hover=':icons/icons/delete_hover.png',
                                                   pixmap_pressed=':icons/icons/delete_pressed.png',
@@ -357,7 +643,7 @@ class PropertyEditor(DockWidgetBase):
         self.remove_comment_button.setToolTip('Revert Comment')
         self.remove_comment_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.remove_comment_button.clicked.connect(self.remove_comment)
-        self.comment_layout.addWidget(self.remove_comment_button, 0, 2)
+        self.comment_layout.addWidget(self.remove_comment_button)
         # Comment
         self.accept_comment_action = self.comment_actions.accept_comment_action
         self.accept_comment_action.triggered.connect(self.accept_edit_comment)
@@ -503,6 +789,8 @@ class PropertyEditor(DockWidgetBase):
         if self.stage_model:
             self.model.stage_model = self.stage_model
             self.set_represented_node()
+            for attr_edit in self.custom_attr_edits:
+                attr_edit.set_stage_model(self.stage_model)
 
     def set_stage_model_connections(self, model, connect):
         self.model_signal_connections = [
@@ -673,6 +961,8 @@ class PropertyEditor(DockWidgetBase):
         self.enabled_opinions.layer_colors = self.enabled_layer_colors
         self.child_order_field.setText(' '.join(self.node_child_order))
         self.child_order_opinions.layer_colors = self.co_layer_colors
+        for attr_edit in self.custom_attr_edits:
+            attr_edit.set_node_path(self.node_path)
 
     def update_styles(self):
         if not self.stage_model or not self.node_path:
@@ -765,6 +1055,8 @@ class PropertyEditor(DockWidgetBase):
         if self.stage_model:
             is_world = self.node_path == nxt_path.WORLD
             is_top = self.stage_model.is_top_node(self.node_path)
+            has_graph_path = self.stage_model.node_attr_exists(self.node_path, '_graph_path')
+            has_context_attr = self.stage_model.node_attr_exists(self.node_path, '_context')
             self.name_label.setEnabled(not is_world)
             self.name_edit_button.setVisible(not is_world)
 
@@ -779,20 +1071,31 @@ class PropertyEditor(DockWidgetBase):
             self.remove_exec_source_button.setVisible(is_top)
             self.execute_opinions.setVisible(not is_world)
 
-
             self.child_order_label.setVisible(not is_world)
             self.child_order_field.setVisible(not is_world)
             self.revert_child_order_button.setVisible(not is_world)
             self.child_order_opinions.setVisible(not is_world)
 
-            self.position_label.setVisible(is_top)
+            # self.position_label.setVisible(is_top)
             self.positionX_field.setVisible(is_top)
             self.positionY_field.setVisible(is_top)
 
             self.enabled_checkbox.setVisible(not is_world)
-            self.enabled_checkbox_label.setVisible(not is_world)
+            # self.enabled_checkbox_label.setVisible(not is_world)
             self.revert_enabled.setVisible(not is_world)
             self.enabled_opinions.setVisible(not is_world)
+
+            self._sub_graph_label.setVisible(has_graph_path)
+            self._graph_path_edit.setVisible(has_graph_path)
+            self._graph_path_edit.opinion_dots.setVisible(has_graph_path)
+            self._graph_path_edit.revert_button.setVisible(has_graph_path)
+            self._graph_path_edit.open_button.setVisible(has_graph_path)
+            self._graph_path_edit.select_button.setVisible(has_graph_path)
+
+            self._context_label.setVisible(has_context_attr)
+            self._context_combo.setVisible(has_context_attr)
+            self._context_combo.opinion_dots.setVisible(has_context_attr)
+            self._context_combo.revert_button.setVisible(has_context_attr)
 
     def edit_name(self, new_name):
         self.stage_model.set_node_name(self.node_path, new_name, self.stage_model.target_layer)
@@ -937,8 +1240,8 @@ class PropertyEditor(DockWidgetBase):
 
         # update general
         self.update_name()
-        self.update_properties()
-        self.display_properties()
+        # self.update_properties()
+        # self.display_properties()
 
         # update attribute model
         self.model.set_represented_node(node_path=self.node_path)
@@ -1124,6 +1427,9 @@ class PropertyModel(QtCore.QAbstractTableModel):
         :param node_path:
         :return:
         """
+        # if not self.stage_model:
+        #     self.clear()
+        #     return
         comp_layer = self.stage_model.comp_layer
         stage_model = self.stage_model
         self.node_path = node_path
@@ -1713,36 +2019,6 @@ class TextEdit(QtWidgets.QTextEdit):
     def focusOutEvent(self, event):
         super(TextEdit, self).focusOutEvent(event)
         self.accept.emit()
-
-
-class OverlayWidget(QtWidgets.QWidget):
-
-    def __init__(self, parent=None):
-        super(OverlayWidget, self).__init__(parent)
-        self._parent = parent
-        self.ext_color = QtGui.QColor(62, 62, 62, 190)
-        self.base_color = QtGui.QColor(62, 62, 62, 0)
-        self.main_color = self.base_color
-        self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
-        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
-        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
-        self.data_state = ''
-
-    def paintEvent(self, event):
-        painter = QtGui.QPainter()
-        painter.begin(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        # actual_display_state
-        self.data_state = DATA_STATE.RAW
-        if self.data_state == DATA_STATE.RAW:
-            color = QtGui.QColor(100, 0, 0, 200)
-            painter.fillRect(self.parent().rect(),
-                             QtGui.QBrush(color, QtCore.Qt.BDiagPattern))
-        painter.end()
-
-    def update(self):
-        self.setGeometry(self.parent().rect())
-        super(OverlayWidget, self).update()
 
 
 class LOCALITIES:

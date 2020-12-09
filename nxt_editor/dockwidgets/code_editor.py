@@ -1284,6 +1284,8 @@ class OverlayWidget(QtWidgets.QWidget):
     def paintEvent(self, event):
         painter = QtGui.QPainter()
         painter.begin(self)
+        painter.end()
+        return
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         # actual_display_state
         code_editor = self._parent.ce_widget
