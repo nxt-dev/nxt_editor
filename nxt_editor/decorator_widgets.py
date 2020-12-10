@@ -34,18 +34,16 @@ class OpinionDots(QtWidgets.QWidget):
         painter.begin(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         if self.vertical:
-            x_pos = self.rect().center().x()
+            x_pos = self.rect().left()
             y_pos = self.rect().top() + self.SIZE
         else:
-            x_pos = self.rect().right() - self.SIZE
-            y_pos = self.rect().center().y()
+            x_pos = self.rect().right() - self.SIZE * 2.5
+            y_pos = self.rect().top()
         for c in self.layer_colors:
             color = QtGui.QColor(c)
             painter.setPen(QtCore.Qt.NoPen)
             painter.setBrush(QtGui.QColor(color))
-            point = QtCore.QPointF(x_pos, y_pos)
-            painter.drawRect(self.rect())
-            # painter.drawEllipse(point, self.SIZE, self.SIZE)
+            painter.drawRect(x_pos, y_pos, self.SIZE * 2.5, self.rect().height())
             if self.vertical:
                 y_pos += (self.SIZE * 2.5)
             else:

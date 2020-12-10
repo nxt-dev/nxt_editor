@@ -178,6 +178,8 @@ class FilePathAttrEdit(AttributeEdit):
 
     def open_file_picker(self):
         path = QtWidgets.QFileDialog.getOpenFileName(filters=self.filters)[0]
+        if path == '':
+            return
         self._set_attr_val(path)
 
     def open_attr_graph(self):
@@ -223,7 +225,7 @@ class ComboEdit(AttributeEdit):
         tgt_layer_color = self.stage_model.get_layer_color(tgt_layer)
         style = '''
                 QComboBox {
-                    border-radius: 11px;
+                    border-radius: 0px;
                     border: 1px solid transparent;
                     background-color: #232323;
                     color: %s
@@ -430,7 +432,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.path_field = QtWidgets.QLineEdit(parent=self)
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
-        self.path_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #323232')
+        self.path_field.setStyleSheet('border-radius: 0px; border: 1px solid transparent; background-color: #323232')
         self.path_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.path_field.setReadOnly(True)
@@ -528,7 +530,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.child_order_field = LineEdit(parent=self)
         self.details_layout.addWidget(self.child_order_field, 4, 1)
-        self.child_order_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #232323')
+        self.child_order_field.setStyleSheet('border-radius: 0px; border: 1px solid transparent; background-color: #232323')
         self.child_order_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.child_order_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.child_order_field.accept.connect(self.accept_edit_child_order)
@@ -655,7 +657,7 @@ class PropertyEditor(DockWidgetBase):
         style = '''
                 QTableView {
                     outline: none;
-                    border-radius: 11px;
+                    border-radius: 0px;
                     border: 1px solid transparent;
                     font-family: "Roboto Mono";
                     font-size: 12px
@@ -675,7 +677,7 @@ class PropertyEditor(DockWidgetBase):
                 }
 
                 QHeaderView {
-                    border-radius: 8px;
+                    border-radius: 0px;
                     border: 0px solid transparent;
                 }
 
@@ -984,7 +986,7 @@ class PropertyEditor(DockWidgetBase):
                         padding-bottom: 2px;
                         padding-left: 0px;
                         padding-right: 0px;
-                        border-radius: 11px;
+                        border-radius: 0px;
                     }
 
                     QAbstractSpinBox:hover {
@@ -2071,7 +2073,7 @@ def line_edit_style_factory(txt_color='white', tgt_layer_color='white',
     style = '''
                 QTextEdit,
                 QLineEdit {
-                    border-radius: 11px;
+                    border-radius: 0px;
                     border: 1px solid transparent;
                     background-color: %s;
                     color: %s
