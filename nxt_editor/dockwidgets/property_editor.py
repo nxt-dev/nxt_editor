@@ -274,7 +274,6 @@ class PropertyEditor(DockWidgetBase):
                  minimum_width=300, minimum_height=350):
         super(PropertyEditor, self).__init__(title=title,
                                              parent=parent,
-                                             minimum_width=minimum_width,
                                              minimum_height=minimum_height)
 
         self.setObjectName('Property Editor')
@@ -374,7 +373,7 @@ class PropertyEditor(DockWidgetBase):
         self.name_label = LabelEdit(parent=self)
         self.name_label.setFont(QtGui.QFont("Roboto", 20))
         self.name_label.nameChangeRequested.connect(self.edit_name)
-        self.name_layout.addWidget(self.name_label, 0, QtCore.Qt.AlignLeft)
+        self.name_layout.addWidget(self.name_label)
 
         self.name_edit_button = PixmapButton(pixmap=':icons/icons/pencil.png',
                                              pixmap_hover=':icons/icons/pencil_hover.png',
@@ -382,7 +381,7 @@ class PropertyEditor(DockWidgetBase):
                                              size=16,
                                              parent=self)
         self.name_edit_button.pressed.connect(self.name_label.edit_text)
-        self.name_layout.addWidget(self.name_edit_button, 0, QtCore.Qt.AlignLeft)
+        self.name_layout.addWidget(self.name_edit_button)
 
         # self.name_layout.addStretch()
 
@@ -565,12 +564,12 @@ class PropertyEditor(DockWidgetBase):
         # self.position_layout.addWidget(self.enabled_checkbox_label, 0,
         #                                QtCore.Qt.AlignLeft)
         self.enabled_checkbox = QtWidgets.QCheckBox()
-        self.position_layout.addWidget(self.enabled_checkbox)
+        self.name_layout.addWidget(self.enabled_checkbox)
         self.enabled_checkbox.stateChanged.connect(self.toggle_node_enabled)
         # self.position_layout.addWidget(self.enabled_checkbox, 0,
         #                                QtCore.Qt.AlignLeft)
         self.enabled_opinions = OpinionDots(self, 'Enabled Opinions')
-        self.position_layout.addWidget(self.enabled_opinions)
+        self.name_layout.addWidget(self.enabled_opinions)
         # self.position_layout.addWidget(self.enabled_opinions, 0,
         #                                QtCore.Qt.AlignLeft)
         icn = ':icons/icons/'
@@ -586,8 +585,8 @@ class PropertyEditor(DockWidgetBase):
         self.revert_enabled.clicked.connect(self.revert_node_enabled)
         # self.position_layout.addWidget(self.revert_enabled, 0,
         #                                QtCore.Qt.AlignLeft)
-        self.position_layout.addWidget(self.revert_enabled)
-        self.position_layout.addStretch()
+        self.name_layout.addWidget(self.revert_enabled)
+        self.name_layout.addStretch()
 
         # position
         # self.position_label = QtWidgets.QLabel('Position', parent=self)
@@ -604,7 +603,7 @@ class PropertyEditor(DockWidgetBase):
         self.positionX_field.setMinimum(-10000)
         self.positionX_field.stepChanged.connect(self.edit_position)
         self.positionX_field.editingFinished.connect(self.edit_position)
-        self.position_layout.addWidget(self.positionX_field, 0, QtCore.Qt.AlignRight)
+        self.name_layout.addWidget(self.positionX_field)
 
         self.positionY_field = NodePositionSpinbox(parent=self)
         self.positionY_field.setFixedWidth(80)
@@ -614,10 +613,10 @@ class PropertyEditor(DockWidgetBase):
         self.positionY_field.setMinimum(-10000)
         self.positionY_field.stepChanged.connect(self.edit_position)
         self.positionY_field.editingFinished.connect(self.edit_position)
-        self.position_layout.addWidget(self.positionY_field, 0, QtCore.Qt.AlignRight)
+        self.name_layout.addWidget(self.positionY_field)
 
-        self.details_layout.addLayout(self.name_layout, 0, 0)
-        self.details_layout.addLayout(self.position_layout, 0, 1)
+        self.details_layout.addLayout(self.name_layout, 0, 0, 1, 2)
+        # self.details_layout.addLayout(self.position_layout, 0, 1)
 
         # comment
         self.comment_label = QtWidgets.QLabel('Comment')
