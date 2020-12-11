@@ -1773,6 +1773,8 @@ class AttrsTableView(QtWidgets.QTableView):
             drag = QtGui.QDrag(self)
             mime_data = QtCore.QMimeData()
             attr_name = self.get_attr_name()
+            if attr_name is None:
+                return
             token = tokens.make_token_str(attr_name)
             mime_data.setText(token)
             drag.setMimeData(mime_data)

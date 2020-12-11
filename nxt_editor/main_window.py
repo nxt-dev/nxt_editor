@@ -38,9 +38,7 @@ import nxt.remote.contexts
 from nxt_editor import qresources
 
 
-os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
-QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -1003,6 +1001,12 @@ class MenuBar(QtWidgets.QMenuBar):
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.layer_actions.ref_layer_above_action)
         self.file_menu.addAction(self.layer_actions.ref_layer_below_action)
+        self.file_menu.addSeparator()
+        self.builtins_menu = QtWidgets.QMenu('Reference Builtin Graph')
+        self.builtins_menu.aboutToShow.connect(partial(populate_builtins_menu,
+                                                       qmenu=self.builtins_menu,
+                                                       main_window=self.main_window))
+        self.file_menu.addMenu(self.builtins_menu)
         # Close app
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.main_window.app_actions.close_tab_action)
@@ -1490,6 +1494,37 @@ class StartRPCThread(QtCore.QThread):
             self.main_window.rpc_log_tail.last_read_pos = end_pos
         if self.main_window.model:
             self.main_window.model.processing.emit(False)
+
+
+def populate_builtins_menu(qmenu, main_window, layer=None):
+    """Populates a QMenu object with actions for referencing each builtin layer.
+    :param qmenu: QMenu object to be filled with actions
+    :param main_window: nxt MainWindow
+    :param layer: Optional layer to reference builtin layer under, if none is
+    supplied the target layer is used.
+    :return: QMenu
+    """
+    qmenu.clear()
+    stage_model = main_window.model
+    if not stage_model:
+        enable = False
+        idx = -1
+    else:
+        enable = True
+        layer = layer or stage_model.target_layer
+        idx = layer.layer_idx() + 1
+
+    for file_name in os.listdir(nxt_io.BUILTIN_GRAPHS_DIR):
+        if not file_name.endswith('.nxt'):
+            continue
+        new_action = qmenu.addAction(file_name)
+        path = '${var}/{file_name}'.format(var=nxt_io.BUILTIN_GRAPHS_ENV_VAR,
+                                           file_name=file_name)
+        if enable:
+            new_action.triggered.connect(partial(stage_model.reference_layer,
+                                                 path, idx))
+        new_action.setEnabled(enable)
+    return qmenu
 
 
 def nxt_execpthook(typ, value, tb):

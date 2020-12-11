@@ -2530,24 +2530,36 @@ class StageModel(QtCore.QObject):
         self.about_to_execute.emit(True)
         rt_layer = rt_layer or self.current_rt_layer
         path_mismatch = False
+        valid_node = True
         reset_cache_now = False
         if rt_layer:
             rt_paths = set(rt_layer.descendants())
             comp_paths = set(self.comp_layer.descendants())
             path_mismatch = comp_paths.difference(rt_paths)
+            valid_node = bool(rt_layer.lookup(node_path))
         if path_mismatch:
             logger.error("{} invalid node(s) in the runtime "
                          "layer.".format(len(path_mismatch)))
             title = "Invalid cache node(s)!"
-            info = ("Some nodes from the runtime layer are invalid.\n"
-                    "Would you like to rebuild the runtime layer?\n"
-                    "Cache data will be lost!".format(node_path))
+
+            if valid_node:
+                cancel_text = 'Ignore and Continue'
+                info = ("Some nodes from the runtime layer are invalid.\n"
+                        "Would you like to rebuild the runtime layer?\n"
+                        "Cache data will be lost!")
+            else:
+                info = ("`{}`\nis not present in the current runtime "
+                        "layer.\nWould you like to rebuild the runtime "
+                        "layer?\nCache data will be lost!".format(node_path))
+                cancel_text = 'Cancel Execute'
             button_text = {QtWidgets.QMessageBox.Ok: 'Rebuild',
-                           QtWidgets.QMessageBox.Cancel: 'Ignore and Continue'}
+                           QtWidgets.QMessageBox.Cancel: cancel_text}
             confirm = NxtConfirmDialog.show_message(title, info,
                                                     button_text=button_text)
             if confirm:
                 reset_cache_now = True
+            elif not valid_node:
+                return
         if not rt_layer or reset_cache_now:
             temp_comp = self.stage.build_stage(self.comp_layer.layer_idx())
             rt_layer = self.stage.setup_runtime_layer(temp_comp)
@@ -2556,8 +2568,8 @@ class StageModel(QtCore.QObject):
         self._set_executing(True)
         try:
             self.stage.execute_custom_code(code_string, node_path, rt_layer)
-        except GraphError:
-            pass
+        except GraphError as err:
+            logger.grapherror(str(err), links=[node_path])
         self._set_executing(False)
 
     def validate_socket_connection(self):
