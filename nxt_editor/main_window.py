@@ -1228,7 +1228,8 @@ class MenuBar(QtWidgets.QMenuBar):
         ui_dir = os.path.dirname(__file__)
         resources_file = os.path.join(ui_dir, 'qresources.py').replace(os.sep,
                                                                       '/')
-        resources_file_c = os.path.join(ui_dir, 'qresources.pyc').replace('/')
+        resources_file_c = os.path.join(ui_dir, 'qresources.pyc').replace(os.sep,
+                                                                          '/')
         success = False
         if os.path.isfile(resources_file):
             try:
