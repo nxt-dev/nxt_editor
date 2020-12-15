@@ -8,7 +8,7 @@ class PixmapButton(QtWidgets.QAbstractButton):
     """https://stackoverflow.com/questions/2711033/how-code-a-image-button-in-pyqt"""
     def __init__(self, pixmap, pixmap_hover, pixmap_pressed, pixmap_checked=None,
                  pixmap_checked_hover=None, pixmap_checked_pressed=None, size=32, checkable=False,
-                 parent=None):
+                 parent=None, enter_function=None, exit_function=None):
         super(PixmapButton, self).__init__(parent=parent)
         self.pixmap = pixmap
         self.pixmap_hover = pixmap_hover
@@ -18,6 +18,8 @@ class PixmapButton(QtWidgets.QAbstractButton):
         self.pixmap_checked_pressed = pixmap_checked_pressed
         self.size = size
         self.setFixedSize(self.size, self.size)
+        self.enter_function = enter_function
+        self.exit_function = exit_function
 
         if checkable:
             self.setCheckable(checkable)
@@ -26,6 +28,9 @@ class PixmapButton(QtWidgets.QAbstractButton):
         self.released.connect(self.update)
 
         self.action = None
+
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.timer.stop)
 
     def set_action(self, action):
         self.action = action
@@ -70,9 +75,15 @@ class PixmapButton(QtWidgets.QAbstractButton):
 
     def enterEvent(self, event):
         self.update()
+        if callable(self.enter_function):
+            self.timer.timeout.connect(self.enter_function)
+            self.timer.start(100)
 
     def leaveEvent(self, event):
         self.update()
+        if callable(self.exit_function):
+            self.timer.stop()
+            self.exit_function()
 
     def sizeHint(self):
         return QtCore.QSize(self.size, self.size)

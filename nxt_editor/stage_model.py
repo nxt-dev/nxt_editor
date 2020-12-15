@@ -24,7 +24,7 @@ from nxt.nxt_layer import LAYERS, CompLayer
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
 from nxt.stage import (determine_nxt_type, INTERNAL_ATTRS,
-                       get_historical_opinions)
+                       get_historical_opinions, Stage)
 from nxt.runtime import GraphError
 from nxt_editor.dialogs import NxtConfirmDialog
 from nxt.remote import nxt_socket
@@ -1130,6 +1130,26 @@ class StageModel(QtCore.QObject):
             return []
         return self.stage.get_node_attr_names(node)
 
+    def get_remote_attr_dict(self, node_path):
+        attr_dict = {}
+        node = self.comp_layer.lookup(node_path)
+        graph_path = getattr(node, '_graph_path', '')
+        if not node or not graph_path:
+            return attr_dict
+        is_real = os.path.isfile(graph_path)
+        if not is_real:
+            return attr_dict
+        layer_data = nxt_io.load_file_data(graph_path)
+        stage = Stage(layer_data=layer_data)
+        sparse_comp = stage.build_stage(node_paths=(nxt_path.WORLD,))
+        attrs = self.get_node_attr_names(nxt_path.WORLD, layer=sparse_comp)
+        world_node = sparse_comp.lookup(nxt_path.WORLD)
+
+        for attr in attrs:
+            val = getattr(world_node, attr, '')
+            attr_dict[attr] = val
+        return attr_dict
+
     def get_cached_attr_names(self, node_path):
         if not self.current_rt_layer:
             return []
@@ -1364,6 +1384,15 @@ class StageModel(QtCore.QObject):
                                     value=value, model=self,
                                     layer_path=layer_path)
         self.undo_stack.push(cmd)
+
+    def set_multiple_node_attr_values(self, node_path, attr_dict,
+                                      layer=None):
+        self.undo_stack.beginMacro('Set multiple attr value on '
+                                   '{}'.format(node_path))
+        for attr_name, value in attr_dict.items():
+            self.set_node_attr_value(node_path, attr_name=attr_name,
+                                     value=value, layer=layer)
+        self.undo_stack.endMacro()
 
     def node_has_code(self, node_path, layer=None):
         if not node_path:

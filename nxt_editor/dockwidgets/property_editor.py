@@ -1,6 +1,7 @@
 # Built-in
 import textwrap
 import sys
+import os
 from functools import partial
 
 # External
@@ -133,7 +134,6 @@ class FilePathAttrEdit(AttributeEdit):
         self.path_input.setCompleter(completer)
         self.path_input.editingFinished.connect(self.on_path_edited)
         # Choose File Button
-        folder_icon = None
         self.select_button = PixmapButton(pixmap=':icons/icons/folder.svg',
                                           pixmap_hover=':icons/icons/folder.svg',
                                           pixmap_pressed=':icons/icons/folder.svg',
@@ -177,7 +177,13 @@ class FilePathAttrEdit(AttributeEdit):
         self.path_input.setStyleSheet(style)
 
     def open_file_picker(self):
-        path = QtWidgets.QFileDialog.getOpenFileName(filters=self.filters)[0]
+        tgt_layer = self.stage_model.target_layer
+        if tgt_layer:
+            base = os.path.dirname(tgt_layer.real_path)
+        else:
+            base = os.getcwd()
+        path = QtWidgets.QFileDialog.getOpenFileName(filters=self.filters,
+                                                     dir=base)[0]
         if path == '':
             return
         self._set_attr_val(path)
@@ -286,6 +292,7 @@ class PropertyEditor(DockWidgetBase):
         self.stage_model = graph_model
         self.node_path = None
         self._resolved = True
+        self.show_remotes = False
         self.node_path = ''
         self.node_instance = ''
         self.node_inst_source = ('', '')
@@ -399,6 +406,39 @@ class PropertyEditor(DockWidgetBase):
         # self.custom_attr_edits_layout.setContentsMargins(0, 4, 0, 4)
         self._graph_path_edit = FilePathAttrEdit(None, '_graph_path', None, self.main_window, FilePathAttrEdit.NXT_FILE_FILTERS)
         self.custom_attr_edits.append(self._graph_path_edit)
+
+        def enter():
+            state = self.show_remotes
+            if state:
+                return
+            self.show_remotes = True
+            self.set_represented_node()
+            self.show_remotes = state
+
+        def _exit():
+            state = self.show_remotes
+            if state:
+                return
+            self.show_remotes = False
+            self.set_represented_node()
+            self.show_remotes = state
+
+        self.show_remotes_button = PixmapButton(pixmap=':icons/icons/eye_checkbox_checked',
+                                                pixmap_hover=':icons/icons/eye_checkbox_checked_disabled.png',
+                                                pixmap_pressed=':icons/icons/eye_checkbox_checked.png',
+                                                pixmap_checked=':icons/icons/eye_checkbox_checked_focus.png',
+                                                pixmap_checked_hover=':icons/icons/eye_checkbox_checked_disabled.png',
+                                                size=16,
+                                                checkable=True,
+                                                enter_function=enter,
+                                                exit_function=_exit)
+        self.show_remotes_button.setStyleSheet(self.main_window.styleSheet())
+        self.show_remotes_button.setToolTip('Preview sub-graph STAGE attrs')
+
+        def set_remotes():
+            self.show_remotes = not self.show_remotes
+            self.set_represented_node()
+        self.show_remotes_button.pressed.connect(set_remotes)
         # self.custom_attr_edits_layout.addWidget(self._graph_path_edit)
         from nxt.remote.contexts import iter_context_names
         context_names = list(iter_context_names())
@@ -412,6 +452,7 @@ class PropertyEditor(DockWidgetBase):
         self._graph_path_opinions_layout = QtWidgets.QHBoxLayout()
         self._graph_path_opinions_layout.addWidget(self._graph_path_edit.opinion_dots)
         self._graph_path_opinions_layout.addWidget(self._graph_path_edit.open_button)
+        self._graph_path_opinions_layout.addWidget(self.show_remotes_button)
         self._graph_path_opinions_layout.addWidget(self._graph_path_edit.select_button)
         self._graph_path_opinions_layout.addWidget(self._graph_path_edit.revert_button)
         self.details_layout.addLayout(self._graph_path_opinions_layout, 6, 2)
@@ -1279,10 +1320,20 @@ class PropertyEditor(DockWidgetBase):
     def localize_attrs(self):
         data = self.model._data
         path = self.node_path
-        attr_names = list()
+        attr_names = []
+        ephemeral_attrs = {}
         for index in self.model.selected_indexes:
-            attr_names.append(data[index.row()][0])
-        self.stage_model.localize_node_attrs(path, attr_names)
+            if data[index.row()][COLUMNS.locality] == LOCALITIES.code:
+                key = data[index.row()][COLUMNS.name]
+                val = data[index.row()][COLUMNS.value]
+                ephemeral_attrs[key] = val
+            else:
+                attr_names.append(data[index.row()][0])
+        if attr_names:
+            self.stage_model.localize_node_attrs(path, attr_names)
+        if ephemeral_attrs:
+            self.stage_model.set_multiple_node_attr_values(path,
+                                                           ephemeral_attrs)
 
     def revert_attrs(self):
         data = self.model._data
@@ -1455,8 +1506,15 @@ class PropertyModel(QtCore.QAbstractTableModel):
                 if attr not in self.node_attr_names:
                     self.node_attr_names += [attr]
         cached_attrs = stage_model.get_cached_attr_names(node_path)
+        remote_attrs = {}
+        if self.parent.show_remotes:
+            remote_attrs = stage_model.get_remote_attr_dict(node_path)
         if stage_model.data_state == DATA_STATE.CACHED:
             for attr_name in cached_attrs:
+                if attr_name not in self.node_attr_names:
+                    self.node_attr_names += [attr_name]
+        if self.parent.show_remotes:
+            for attr_name in remote_attrs.keys():
                 if attr_name not in self.node_attr_names:
                     self.node_attr_names += [attr_name]
         self.attr_data = []
@@ -1465,19 +1523,24 @@ class PropertyModel(QtCore.QAbstractTableModel):
         for attr_name in self.node_attr_names:
             # get cached data
             cached = DATA_STATE.CACHED
-            attr_cached = stage_model.get_node_attr_value(self.node_path,
-                                                          attr_name,
-                                                          data_state=cached,
-                                                          as_string=True)
+            if attr_name in remote_attrs:
+                attr_cached = remote_attrs[attr_name]
+            else:
+                attr_cached = stage_model.get_node_attr_value(self.node_path,
+                                                              attr_name,
+                                                              data_state=cached,
+                                                              as_string=True)
             self.attr_data_cached += [attr_cached]
             # get resolved data
             resolved = DATA_STATE.RESOLVED
-            resolved_val = stage_model.get_node_attr_value(node_path,
-                                                           attr_name,
-                                                           comp_layer,
-                                                           data_state=resolved)
+            if attr_name in remote_attrs:
+                resolved_val = remote_attrs[attr_name]
+            else:
+                resolved_val = stage_model.get_node_attr_value(node_path,
+                                                               attr_name,
+                                                               comp_layer,
+                                                               data_state=resolved)
             self.attr_data_resolved += [resolved_val]
-
             # Get locality
             if attr_name in local_attrs:
                 locality = LOCALITIES.local
@@ -1485,17 +1548,20 @@ class PropertyModel(QtCore.QAbstractTableModel):
                 locality = LOCALITIES.inherited
             elif attr_name in inst_attrs:
                 locality = LOCALITIES.instanced
-            elif attr_name in cached_attrs:
+            elif attr_name in cached_attrs + remote_attrs.keys():
                 locality = LOCALITIES.code
             # get raw data
             raw = DATA_STATE.RAW
-            attr_value = stage_model.get_node_attr_value(node_path, attr_name,
-                                                         comp_layer,
-                                                         data_state=raw,
-                                                         as_string=True)
+            if attr_name in remote_attrs:
+                attr_value = remote_attrs[attr_name]
+            else:
+                attr_value = stage_model.get_node_attr_value(node_path, attr_name,
+                                                             comp_layer,
+                                                             data_state=raw,
+                                                             as_string=True)
             type_layer = comp_layer
             if (stage_model.data_state == DATA_STATE.CACHED and
-                stage_model.current_rt_layer):
+                    stage_model.current_rt_layer):
                 type_layer = stage_model.current_rt_layer.cache_layer
             attr_type = stage_model.get_node_attr_type(node_path, attr_name,
                                                        type_layer)
@@ -1691,8 +1757,10 @@ class PropertyModel(QtCore.QAbstractTableModel):
             attr_name = self._data[row][COLUMNS.name]
             locality_idx = self._data[row][COLUMNS.locality]
             color = self.node_attr_draw_details[attr_name]['color']
-            if locality_idx in (LOCALITIES.local, LOCALITIES.code):
+            if locality_idx == LOCALITIES.local:
                 return QtGui.QColor(color).lighter(150)
+            elif locality_idx == LOCALITIES.code:
+                return QtGui.QColor(color).darker(110)
             else:
                 return QtGui.QColor(color).darker(150)
 
