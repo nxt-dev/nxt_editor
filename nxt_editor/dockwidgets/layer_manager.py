@@ -71,8 +71,9 @@ class LayerTreeView(QtWidgets.QTreeView):
         self.target_delegate = PixMapCheckboxDelegate(pencil_pix)
         layer_pix = QtGui.QPixmap(':icons/icons/layers_hover.png')
         self.display_delegate = PixMapCheckboxDelegate(layer_pix)
-        self.solo_delegate = LetterCheckboxDelegeate('S')
         self.mute_delgate = LetterCheckboxDelegeate('M')
+        self.solo_delegate = LetterCheckboxDelegeate('S')
+        self.lock_delegate = LetterCheckboxDelegeate('L')
         self.setItemDelegateForColumn(LayerModel.ALIAS_COLUMN,
                                       self.alias_delegate)
         self.setItemDelegateForColumn(LayerModel.TARGET_COLUMN,
@@ -83,6 +84,8 @@ class LayerTreeView(QtWidgets.QTreeView):
                                       self.mute_delgate)
         self.setItemDelegateForColumn(LayerModel.SOLO_COLUMN,
                                       self.solo_delegate)
+        self.setItemDelegateForColumn(LayerModel.LOCK_COLUMN,
+                                      self.lock_delegate)
         self.setHeaderHidden(True)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.custom_context_menu)
@@ -121,12 +124,18 @@ class LayerTreeView(QtWidgets.QTreeView):
             return
         layer = clicked_idx.internalPointer()
         layer_path = self.model().stage_model.get_layer_path(layer)
+        if self.model().stage_model.get_layer_locked(layer_path):
+            return
         self.model().stage_model.set_target_layer(layer_path)
 
     def on_item_dbl_clicked(self, clicked_idx):
         if not clicked_idx.column() == LayerModel.ALIAS_COLUMN:
             return
         if not self.model().stage_model:
+            return
+        layer = clicked_idx.internalPointer()
+        layer_path = self.model().stage_model.get_layer_path(layer)
+        if self.model().stage_model.get_layer_locked(layer_path):
             return
         self.model().stage_model.set_selection([nxt_path.WORLD])
 
@@ -208,8 +217,9 @@ class LayerModel(QtCore.QAbstractItemModel):
     TARGET_COLUMN = 2
     MUTE_COLUMN = 3
     SOLO_COLUMN = 4
-    HAS_SELECTED_COLUMN = 5
-    UNSAVED = 6
+    LOCK_COLUMN = 5
+    HAS_SELECTED_COLUMN = 6
+    UNSAVED = 7
 
     def __init__(self, stage_model):
         super(LayerModel, self).__init__()
@@ -406,7 +416,7 @@ class LayerModel(QtCore.QAbstractItemModel):
         """Returns number of columns in the model.
         Part of QAbstractItemModel
         """
-        return 5
+        return 6
 
     def data(self, index, role=None):
         """Returns the data continaed at given model index with given role.
@@ -423,6 +433,7 @@ class LayerModel(QtCore.QAbstractItemModel):
             return
         is_disp = layer == self.stage_model.display_layer
         is_target = layer == self.stage_model.target_layer
+        is_locked = layer.get_locked()
         if role == QtCore.Qt.EditRole:
             if column == self.ALIAS_COLUMN:
                 return layer.get_alias()
@@ -434,6 +445,8 @@ class LayerModel(QtCore.QAbstractItemModel):
                 return layer.get_muted()
             if column == self.SOLO_COLUMN:
                 return layer.get_soloed()
+            if column == self.LOCK_COLUMN:
+                return is_locked
             if column == self.HAS_SELECTED_COLUMN:
                 return layer in self.layers_with_selected
             if column == self.UNSAVED:
@@ -450,6 +463,8 @@ class LayerModel(QtCore.QAbstractItemModel):
             if column == self.SOLO_COLUMN:
                 soloed = layer.get_soloed()
                 return QtCore.Qt.Checked if soloed else QtCore.Qt.Unchecked
+            if column == self.LOCK_COLUMN:
+                return QtCore.Qt.Checked if is_locked else QtCore.Qt.Unchecked
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
         """Allows editing of layers via qt model interface.
@@ -481,12 +496,16 @@ class LayerModel(QtCore.QAbstractItemModel):
             if column == self.SOLO_COLUMN:
                 self.stage_model.solo_toggle_layer(layer)
                 return True
+            if column == self.LOCK_COLUMN:
+                self.stage_model.set_layer_locked(layer_path,
+                                                  lock=not layer.get_locked())
+                return True
         return False
 
     def flags(self, index):
         column = index.column()
         if column in (self.TARGET_COLUMN, self.DISPLAY_COLUMN,
-                      self.MUTE_COLUMN, self.SOLO_COLUMN,):
+                      self.MUTE_COLUMN, self.SOLO_COLUMN, self.LOCK_COLUMN):
             return (QtCore.Qt.ItemIsEnabled |
                     QtCore.Qt.ItemIsUserCheckable)
         return (QtCore.Qt.ItemIsEnabled |
@@ -580,6 +599,7 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
         super(AliasDelegate, self).__init__()
         self.muted = False
         self.soloed = False
+        self.locked = False
         self.is_tgt = False
         self.has_selected = False
         self.unsaved = False
@@ -639,6 +659,8 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
         self.muted = model.data(mute_index, role=QtCore.Qt.EditRole)
         solo_index = model.index(row, LayerModel.SOLO_COLUMN, parent)
         self.soloed = model.data(solo_index, role=QtCore.Qt.EditRole)
+        lock_index = model.index(row, LayerModel.LOCK_COLUMN, parent)
+        self.locked = model.data(lock_index, role=QtCore.Qt.EditRole)
         tgt_index = model.index(row, LayerModel.TARGET_COLUMN, parent)
         self.is_tgt = model.data(tgt_index, role=QtCore.Qt.EditRole)
         sel_idx = model.index(row, LayerModel.HAS_SELECTED_COLUMN, parent)

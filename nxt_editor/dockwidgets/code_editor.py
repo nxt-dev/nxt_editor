@@ -24,7 +24,8 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 class CodeEditor(DockWidgetBase):
 
     def __init__(self, title='Code Editor', parent=None, minimum_width=500):
-        super(CodeEditor, self).__init__(title=title, parent=parent, minimum_width=minimum_width)
+        super(CodeEditor, self).__init__(title=title, parent=parent,
+                                         minimum_width=minimum_width)
         self.setObjectName('Code Editor')
         self.main_window = parent
         self.ce_actions = self.main_window.code_editor_actions
@@ -32,6 +33,7 @@ class CodeEditor(DockWidgetBase):
         # local attributes
         self.editing_active = False
         self.code_is_local = False
+        self.locked = False
         self.node_path = None
         self.node_name = ''
         self.actual_display_state = ''
@@ -187,15 +189,15 @@ class CodeEditor(DockWidgetBase):
                                       QtCore.Qt.AlignRight)
 
         # remove code button
-        self.remove_code_button = PixmapButton(pixmap=':icons/icons/delete.png',
-                                                  pixmap_hover=':icons/icons/delete_hover.png',
-                                                  pixmap_pressed=':icons/icons/delete_pressed.png',
-                                                  size=12,
-                                                  parent=self.code_frame)
-        self.remove_code_button.setToolTip('Remove Compute')
-        self.remove_code_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
-        self.remove_code_button.clicked.connect(self.revert_code)
-        self.buttons_layout.addWidget(self.remove_code_button, 0, 7,
+        self.revert_code_button = PixmapButton(pixmap=':icons/icons/delete.png',
+                                               pixmap_hover=':icons/icons/delete_hover.png',
+                                               pixmap_pressed=':icons/icons/delete_pressed.png',
+                                               size=12,
+                                               parent=self.code_frame)
+        self.revert_code_button.setToolTip('Remove Compute')
+        self.revert_code_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_code_button.clicked.connect(self.revert_code)
+        self.buttons_layout.addWidget(self.revert_code_button, 0, 7,
                                       QtCore.Qt.AlignRight)
         if not self.main_window.in_startup:
             # default state
@@ -230,6 +232,7 @@ class CodeEditor(DockWidgetBase):
         self.model_signal_connections = [
             (model.node_focus_changed, self.accept_edit),
             (model.node_focus_changed, self.set_represented_node),
+            (model.layer_lock_changed, self.handle_lock_changed),
             (model.nodes_changed, self.update_editor),
             (model.attrs_changed, self.update_editor),
             (model.data_state_changed, self.update_editor),
@@ -246,6 +249,19 @@ class CodeEditor(DockWidgetBase):
         self.editor.clearFocus()
         self.editor.hide()
         self.update_background()
+
+    def handle_lock_changed(self, *args):
+        self.locked = self.stage_model.get_node_locked(self.node_path)
+        self.name_label.setReadOnly(self.locked)
+        # Enable/Disable
+        self.accept_button.setEnabled(not self.locked)
+        self.cancel_button.setEnabled(not self.locked)
+        self.revert_code_button.setEnabled(not self.locked)
+        keep_active = [self.ce_actions.copy_resolved_action]
+        for action in self.ce_actions.actions() + self.exec_actions.actions():
+            if action in keep_active:
+                continue
+            action.setEnabled(not self.locked)
 
     def set_represented_node(self):
         self.node_path = self.stage_model.node_focus
@@ -265,6 +281,7 @@ class CodeEditor(DockWidgetBase):
 
         self.display_editor()
         self.display_details()
+        self.handle_lock_changed()
 
     def copy_resolved(self):
         if not self.stage_model:
@@ -427,7 +444,7 @@ class CodeEditor(DockWidgetBase):
 
     def enter_editing(self):
         # prevent re-activating when the mouse is clicked inside the editor
-        if self.editing_active:
+        if self.editing_active or self.locked:
             return
         self.cached_code = self.editor.toPlainText()
         self.cached_code_lines = self.cached_code.split('\n')

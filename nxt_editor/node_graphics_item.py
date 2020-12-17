@@ -30,6 +30,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
 
     ATTR_PLUG_RADIUS = 4
     EXEC_PLUG_RADIUS = 6
+    ROUND_X = 2.
+    ROUND_Y = 2.
 
     def __init__(self, model, node_path, view):
         super(NodeGraphicsItem, self).__init__()
@@ -65,6 +67,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
         self.is_start = False
         self.start_color = colors.ERROR
         self.is_proxy = False
+        self.locked = False
         self.is_real = True
         self.attr_dots = [False, False, False]
         self.error_list = []
@@ -180,6 +183,13 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
         self.draw_title(painter)
         self.draw_attributes(painter)
         self.draw_border(painter)
+        if self.locked:
+            self.setFlags(QtWidgets.QGraphicsItem.ItemSendsScenePositionChanges)
+        else:
+            self.setFlags(QtWidgets.QGraphicsItem.ItemIsMovable |
+                          QtWidgets.QGraphicsItem.ItemIsFocusable |
+                          QtWidgets.QGraphicsItem.ItemIsSelectable |
+                          QtWidgets.QGraphicsItem.ItemSendsScenePositionChanges)
 
     def closest_grid_point(self, position):
         snapped_pos = self.model.snap_pos_to_grid((position.x(), position.y()))
@@ -201,17 +211,24 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
         else:
             painter.setPen(QtCore.Qt.NoPen)
             return
-            color = self.colors[-1].darker(self.dim_factor)
         if self.is_proxy:
             pen = QtGui.QPen(color, 1, QtCore.Qt.PenStyle.DashLine)
         else:
             pen = QtGui.QPen(color)
-        painter.setPen(pen)
-        painter.setBrush(QtCore.Qt.NoBrush)
-        painter.drawRect(QtCore.QRectF(self.get_selection_rect().x() + 1,
-                         self.get_selection_rect().y() + 1,
-                         self.get_selection_rect().width() - 2,
-                         self.get_selection_rect().height() - 2))
+        if self.locked:
+            c = QtGui.QColor(self.colors[-1])
+            c.setAlphaF(.3)
+            b = QtGui.QBrush(c)
+            painter.setBrush(b)
+            painter.setPen(QtCore.Qt.NoPen)
+        else:
+            painter.setPen(pen)
+            painter.setBrush(QtCore.Qt.NoBrush)
+        rect = QtCore.QRectF(self.get_selection_rect().x() + 1,
+                             self.get_selection_rect().y() + 1,
+                             self.get_selection_rect().width() - 2,
+                             self.get_selection_rect().height() - 2)
+        painter.drawRoundedRect(rect, self.ROUND_X, self.ROUND_Y)
 
     def draw_title(self, painter):
         """Draw title of the node. Called exclusively in paint.
@@ -223,7 +240,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
         painter.setPen(QtCore.Qt.NoPen)
         bg = painter.background()
         bgm = painter.backgroundMode()
-        if self.is_real:
+        if self.is_real and not self.locked:
             painter.setBackgroundMode(QtCore.Qt.OpaqueMode)
         else:
             painter.setBackgroundMode(QtCore.Qt.TransparentMode)
@@ -236,16 +253,23 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
                 painter.setBackground(color.darker(self.dim_factor))
                 brush = QtGui.QBrush(color.darker(self.dim_factor*2),
                                      QtCore.Qt.FDiagPattern)
-                painter.setBrush(brush)
             else:
-                painter.setBrush(color.darker(self.dim_factor))
+                brush = QtGui.QBrush(color.darker(self.dim_factor))
+            if self.locked:
+                c = color.darker(self.dim_factor)
+                c.setAlphaF(.5)
+                painter.setBackground(c)
+                brush = QtGui.QBrush(c.darker(self.dim_factor * 2),
+                                     QtCore.Qt.Dense1Pattern)
+            painter.setBrush(brush)
             if i != color_count - 1:
-                painter.drawRect(i*color_band_width, 0, color_band_width,
-                                 self.title_rect_height)
+                rect = QtCore.QRectF(i*color_band_width, 0, color_band_width,
+                                     self.title_rect_height)
             else:
                 remaining_width = self.max_width - i*color_band_width
-                painter.drawRect(i*color_band_width, 0, remaining_width,
-                                 self.title_rect_height)
+                rect = QtCore.QRectF(i*color_band_width, 0, remaining_width,
+                                     self.title_rect_height)
+            painter.drawRoundedRect(rect, self.ROUND_X, self.ROUND_Y)
         painter.setBackground(bg)
         painter.setBackgroundMode(bgm)
         # draw exec plugs
@@ -522,6 +546,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
     def hoverEnterEvent(self, event):
         """Override of QtWidgets.QGraphicsItem hoverEnterEvent."""
         self.is_hovered = True
+        if self.locked:
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WhatsThisCursor)
         if self.view.view_actions.tooltip_action.isChecked():
             self.setToolTip(self.get_node_tool_tip())
         else:
@@ -530,6 +556,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
 
     def hoverLeaveEvent(self, event):
         """Override of QtWidgets.QGraphicsItem hoverLeaveEvent."""
+        QtWidgets.QApplication.restoreOverrideCursor()
         self.is_hovered = False
         self.update()
         super(NodeGraphicsItem, self).hoverLeaveEvent(event)
@@ -555,6 +582,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
             self.setPos(pos[0], pos[1])
         self.is_real = self.model.node_exists(node_path)
         self.is_proxy = self.model.get_node_is_proxy(node_path)
+        self.locked = self.model.get_node_locked(node_path)
         self.collapse_state = self.model.get_node_collapse(self.node_path,
                                                            comp)
         self.node_enabled = self.model.get_node_enabled(self.node_path)
@@ -889,8 +917,11 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
         # break attribute connections
         if event.modifiers() == QtCore.Qt.AltModifier:
             raise NotImplementedError("Alt to clear attribute is broken.")
+        node_path = self.parentItem().node_path
+        if self.parentItem().locked:
+            event.accept()
+            return
         if self.attr_name_represented:
-            node_path = self.parentItem().node_path
             path = nxt_path.make_attr_path(node_path, self.attr_name_represented)
         else:
             path = self.parentItem().node_path
