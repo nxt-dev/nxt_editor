@@ -1422,12 +1422,12 @@ class StageModel(QtCore.QObject):
                          layer_path=layer_path)
         self.undo_stack.push(cmd)
 
-    def get_node_attr_type(self, node_path, attr_name, layer=None):
-        layer = layer or self.target_layer
-        node = layer.lookup(node_path)
-        if node:
-            value = self.stage.get_node_attr_value(node, attr_name, layer)
-            return determine_nxt_type(value)
+    def get_node_attr_type(self, node_path, attr_name, layer=None,
+                           data_state=DATA_STATE.RESOLVED):
+        layer = layer or self.comp_layer
+        value = self.get_node_attr_value(node_path, attr_name, layer=layer,
+                                         data_state=data_state)
+        return determine_nxt_type(value)
 
     def get_node_attr_comment(self, node_path, attr_name, layer=None):
         layer = layer or self.target_layer
