@@ -25,6 +25,330 @@ from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
 from nxt import tokens
 
+
+class AttributeEditor(DockWidgetBase):
+    def __init__(self):
+        super(AttributeEditor, self).__init__(title='Attribute Editor')
+        self.setWindowFlags(QtCore.Qt.Tool)
+
+        self.represented_path = None
+
+        self.node_url_field = QtWidgets.QLineEdit()
+        self.node_url_field.editingFinished.connect(self.node_url_changed)
+
+        self.follow_focus_checkbox = QtWidgets.QCheckBox('Follow')
+        self.follow_focus_checkbox.stateChanged.connect(self.follow_focus_changed)
+
+        self.node_attrs = NodeAttrTableView()
+        self.attrs_model = NodeAttrModel()
+        self.node_attrs.setModel(self.attrs_model)
+
+        self.main_widget = QtWidgets.QWidget()
+        self.main_layout = QtWidgets.QVBoxLayout()
+        self.main_widget.setLayout(self.main_layout)
+        self.setWidget(self.main_widget)
+
+        self.node_url_layout = QtWidgets.QHBoxLayout()
+        self.node_url_layout.addWidget(self.node_url_field)
+        self.node_url_layout.addWidget(self.follow_focus_checkbox)
+
+        self.main_layout.addLayout(self.node_url_layout)
+        self.main_layout.addWidget(self.node_attrs)
+
+    def follow_focus_changed(self, state):
+        if not self.stage_model:
+            return
+        if state:
+            self.stage_model.node_focus_changed.connect(self.set_represented_node)
+        else:
+            self.stage_model.node_focus_changed.disconnect(self.set_represented_node)
+
+    def node_url_changed(self):
+        if str(self.node_url_field.text()).strip() == '':
+            return
+        self.set_represented_node(self.node_url_field.text())
+
+    def set_represented_node(self, node_path):
+        if self.represented_path == node_path:
+            return
+        self.represented_path = node_path
+        self.attrs_model.set_represented_node(node_path)
+        self.node_url_field.setText(self.represented_path)
+
+    def set_stage_model(self, stage_model):
+        super(AttributeEditor, self).set_stage_model(stage_model=stage_model)
+        self.attrs_model.set_stage_model(stage_model)
+
+
+class NodeAttrTableView(QtWidgets.QTableView):
+    def __init__(self):
+        super(NodeAttrTableView, self).__init__()
+        self.setSortingEnabled(True)
+
+    def setModel(self, model):
+        super(NodeAttrTableView, self).setModel(model)
+        h_header = self.horizontalHeader()
+        h_header.setStretchLastSection(False)
+        if h_header.count():
+            h_header.setSectionResizeMode(NodeAttrModel.VALUE_COLUMN, h_header.Stretch)
+            self.hideColumn(NodeAttrModel.COLOR_COLUMN)
+            self.hideColumn(NodeAttrModel.RAW_COLUMN)
+            self.hideColumn(NodeAttrModel.RESOLVED_COLUMN)
+            self.hideColumn(NodeAttrModel.CACHED_COLUMN)
+        v_header = self.verticalHeader()
+        v_header.hide()
+
+
+class NodeAttrModel(QtCore.QAbstractTableModel):
+    NAME = 'Name'
+    VALUE = 'Value'
+    RAW = 'Raw'
+    RESOLVED = 'Resolved'
+    CACHED = 'Cached '
+    NXT_TYPE = 'Type'
+    SOURCE = 'Source'
+    LOCALITY = 'Locality'
+    COMMENT = 'Comment'
+    COLOR = 'Color'
+
+    COLUMN_ORDER = (NAME,
+                    VALUE,
+                    RAW,
+                    RESOLVED,
+                    CACHED,
+                    NXT_TYPE,
+                    SOURCE,
+                    LOCALITY,
+                    COMMENT,
+                    COLOR)
+    NAME_COLUMN = COLUMN_ORDER.index(NAME)
+    VALUE_COLUMN = COLUMN_ORDER.index(VALUE)
+    RAW_COLUMN = COLUMN_ORDER.index(RAW)
+    RESOLVED_COLUMN = COLUMN_ORDER.index(RESOLVED)
+    CACHED_COLUMN = COLUMN_ORDER.index(CACHED)
+    NXT_TYPE_COLUMN = COLUMN_ORDER.index(NXT_TYPE)
+    SOURCE_COLUMN = COLUMN_ORDER.index(SOURCE)
+    LOCALITY_COLUMN = COLUMN_ORDER.index(LOCALITY)
+    COMMENT_COLUMN = COLUMN_ORDER.index(COMMENT)
+    COLOR_COLUMN = COLUMN_ORDER.index(COLOR)
+
+    EDITABLE_COLUMNS = (VALUE_COLUMN,
+                        RAW_COLUMN,
+                        NAME_COLUMN,
+                        COMMENT_COLUMN,)
+
+    def __init__(self, node_path=None, stage_model=None):
+        super(NodeAttrModel, self).__init__()
+        self._node_path = node_path
+        self._stage_model = stage_model
+        self._attr_names = []
+
+    @property
+    def node_path(self):
+        return self._node_path
+
+    def set_represented_node(self, node_path):
+        self.beginResetModel()
+        self._node_path = node_path
+        self.cache_attr_names()
+        self.endResetModel()
+
+    @property
+    def stage_model(self):
+        return self._stage_model
+
+    def set_stage_model(self, stage_model):
+        self._stage_model = stage_model
+        self.set_represented_node(None)
+        return # Disabled below since it doesn't appear necessary.
+        if self.stage_model:
+            self.stage_model.attrs_changed.connect(self.on_attrs_changed)
+
+    def on_attrs_changed(self, changed_attr_paths):
+        return # Disabled since it doesn't appear necessary.
+        changed_attrs = []
+        for attr_path in changed_attr_paths:
+            node_path, attr_name = nxt_path.path_attr_partition(attr_path)
+            if node_path != self.node_path:
+                continue
+            if attr_name in changed_attrs:
+                continue
+            try:
+                row = self._attr_names.index(attr_name)
+            except ValueError:
+                continue
+            changed_attrs += [attr_name]
+            # invalidate entire row since color could have changed
+            top_left = self.createIndex(row, 0)
+            bot_right = self.createIndex(row, len(self.COLUMN_ORDER) - 1)
+            self.dataChanged.emit(top_left, bot_right)
+            tl_data = self.data(top_left)
+            br_data = self.data(bot_right)
+            # print(tl_data + ' to ' + br_data + ' changed')
+
+    def cache_attr_names(self):
+        if not self.stage_model:
+            return
+        if not self.node_path:
+            return
+        stage_model = self.stage_model
+        comp_layer = stage_model.comp_layer
+        local_attrs = stage_model.get_node_local_attr_names(self.node_path,
+                                                            comp_layer)
+        self._local_attrs = sorted(local_attrs)
+        parent_attrs = stage_model.get_node_inherited_attr_names(self.node_path,
+                                                                 comp_layer)
+        self._parent_attrs = sorted(parent_attrs)
+        inst_attrs = stage_model.get_node_instanced_attr_names(self.node_path,
+                                                               comp_layer)
+        self._inst_attrs = sorted(inst_attrs)
+        self._cached_attrs = stage_model.get_cached_attr_names(self.node_path)
+
+        self._attr_names = []
+        for attr_list in (INTERNAL_ATTRS.SAVED, local_attrs,
+                          parent_attrs, inst_attrs):
+            for attr_name in attr_list:
+                if attr_name in self._attr_names:
+                    continue
+                self._attr_names += [attr_name]
+
+    def data(self, index, role=QtCore.Qt.DisplayRole):
+        if len(self._attr_names) == 0:
+            return
+        row = index.row()
+        column = index.column()
+        if row >= len(self._attr_names):
+            return
+        attr_name = self._attr_names[row]
+        comp_layer = self.stage_model.comp_layer
+        # Locality is first since it can influence color
+        locality = 'uknown'
+        if attr_name in INTERNAL_ATTRS.SAVED:
+            locality = LOCALITIES.builtin
+        if attr_name in self._local_attrs:
+            locality = LOCALITIES.local
+        elif attr_name in self._parent_attrs:
+            locality = LOCALITIES.inherited
+        elif attr_name in self._inst_attrs:
+            locality = LOCALITIES.instanced
+        elif attr_name in self._cached_attrs:
+            locality = LOCALITIES.code
+        if column == self.LOCALITY_COLUMN and role == QtCore.Qt.DisplayRole:
+            return locality
+        # Color
+        color_display = (column == self.COLOR_COLUMN and
+                         role == QtCore.Qt.DisplayRole)
+        if role == QtCore.Qt.ForegroundRole or color_display:
+            color = self.stage_model.get_node_attr_color(self.node_path,
+                                                         attr_name,
+                                                         comp_layer)
+            if color_display:
+                return color
+            qcolor = QtGui.QColor(color)
+            if locality in (LOCALITIES.local, LOCALITIES.code):
+                qcolor = qcolor.lighter(150)
+            return qcolor
+        # Below roles require valid column
+        if column >= self.columnCount(None):
+            return
+        if role not in (QtCore.Qt.DisplayRole, QtCore.Qt.EditRole):
+            return
+        # Name column
+        if column == self.NAME_COLUMN:
+            return attr_name
+        # Value Columns
+        elif column in (self.VALUE_COLUMN, self.RAW_COLUMN,
+                        self.RESOLVED_COLUMN, self.CACHED_COLUMN):
+            if role == QtCore.Qt.EditRole:
+                state = DATA_STATE.RAW
+            elif column == self.VALUE_COLUMN:
+                state = self.stage_model.data_state
+            elif column == self.RAW_COLUMN:
+                state = DATA_STATE.RAW
+            elif column == self.RESOLVED_COLUMN:
+                state = DATA_STATE.RESOLVED
+            elif column == self.CACHED_COLUMN:
+                state = DATA_STATE.CACHED
+            val = self.stage_model.get_node_attr_value(self.node_path,
+                                                       attr_name,
+                                                       comp_layer,
+                                                       data_state=state)
+            if val is None:
+                return ''
+            return str(val)
+        # Type Column
+        # Type column is driven by model data state, like value, but
+        # does not have a column per state
+        elif column == self.NXT_TYPE_COLUMN:
+            state = self.stage_model.data_state
+            type_ = self.stage_model.get_node_attr_type(self.node_path,
+                                                        attr_name,
+                                                        layer=comp_layer,
+                                                        data_state=state)
+            return type_
+        # Source
+        elif column == self.SOURCE_COLUMN:
+            if locality == LOCALITIES.builtin:
+                return 'builtin'
+            elif locality == LOCALITIES.local:
+                return self.node_path
+            return self.stage_model.get_node_attr_source_path(self.node_path,
+                                                              attr_name,
+                                                              comp_layer)
+        elif column == self.COMMENT_COLUMN:
+            return self.stage_model.get_node_attr_comment(self.node_path,
+                                                          attr_name,
+                                                          comp_layer)
+
+    def setData(self, index, value, role=QtCore.Qt.EditRole):
+        if role != QtCore.Qt.EditRole:
+            return False
+        row = index.row()
+        column = index.column()
+        if column not in self.EDITABLE_COLUMNS:
+            return False
+        attr_name = self._attr_names[row]
+        target_layer = self.stage_model.target_layer
+        if column == self.NAME_COLUMN:
+            self.stage_model.rename_node_attr(node_path=self.node_path,
+                                              attr_name=attr_name,
+                                              new_attr_name=value,
+                                              layer=target_layer)
+            return True
+        elif column in (self.VALUE_COLUMN, self.RAW_COLUMN):
+            # HACK DAAAANGER ZONE!
+            # if attr_name in INTERNAL_ATTRS.SAVED:
+            #     value = eval(value)
+            self.stage_model.set_node_attr_value(node_path=self.node_path,
+                                                 attr_name=attr_name,
+                                                 value=value,
+                                                 layer=target_layer)
+            return True
+        elif column == self.COMMENT_COLUMN:
+            self.stage_model.node_setattr_comment(self.node_path, attr_name,
+                                                  value, target_layer)
+            return True
+        return False
+
+    def flags(self, index):
+        column = index.column()
+        if column in self.EDITABLE_COLUMNS:
+            return (QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsEditable)
+        return QtCore.Qt.ItemIsEnabled
+
+    def rowCount(self, parent):
+        if not self.stage_model:
+            return 0
+        return len(self._attr_names)
+
+    def columnCount(self, parent):
+        return len(self.COLUMN_ORDER)
+
+    def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
+        if orientation == QtCore.Qt.Horizontal:
+            if role == QtCore.Qt.DisplayRole:
+                return self.COLUMN_ORDER[section]
+
 # Fixme: Should this be a pref?
 HISTORICAL_MAX_CHARS = 50
 
@@ -78,6 +402,16 @@ class PropertyEditor(DockWidgetBase):
         self.setWidget(self.main)
 
         self.layout = QtWidgets.QVBoxLayout()
+        self.new_editor_button = QtWidgets.QPushButton('Pop')
+        self.popped = []
+        def pop_new_editor():
+            new = AttributeEditor()
+            self.popped += [new]
+            new.show()
+            new.set_stage_model(self.stage_model)
+            if self.node_path:
+                new.set_represented_node(self.node_path)
+        self.new_editor_button.pressed.connect(pop_new_editor)
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
         self.main.setLayout(self.layout)
@@ -131,6 +465,8 @@ class PropertyEditor(DockWidgetBase):
         self.properties_layout.setContentsMargins(4, 0, 4, 0)
         self.properties_layout.setSpacing(0)
         self.properties_frame.setLayout(self.properties_layout)
+
+        self.properties_layout.addWidget(self.new_editor_button)
 
         # name
         self.name_layout = QtWidgets.QHBoxLayout()
@@ -504,6 +840,9 @@ class PropertyEditor(DockWidgetBase):
 
     def set_stage_model(self, stage_model):
         super(PropertyEditor, self).set_stage_model(stage_model=stage_model)
+        for attr_editor in self.popped:
+            if attr_editor.isVisible():
+                attr_editor.set_stage_model(self.stage_model)
         if self.stage_model:
             self.model.stage_model = self.stage_model
             self.set_represented_node()
@@ -1796,6 +2135,7 @@ class OverlayWidget(QtWidgets.QWidget):
 
 
 class LOCALITIES:
+    builtin = '-1.Builtin'
     code = '0.Code'
     local = '1.Local'
     inherited = '2.Parent'
