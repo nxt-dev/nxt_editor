@@ -239,12 +239,15 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
                 painter.setBrush(brush)
             else:
                 painter.setBrush(color.darker(self.dim_factor))
-            if i != color_count - 1:
-                painter.drawRect(i*color_band_width, 0, color_band_width,
+            # Top Opinion
+            if i+1 == color_count:
+                remaining_width = self.max_width - (i*color_band_width)
+                painter.drawRect(0, 0, remaining_width,
                                  self.title_rect_height)
+            # Lower Opinions
             else:
-                remaining_width = self.max_width - i*color_band_width
-                painter.drawRect(i*color_band_width, 0, remaining_width,
+                x_pos = self.max_width - (i+1)*color_band_width
+                painter.drawRect(x_pos, 0, color_band_width,
                                  self.title_rect_height)
         painter.setBackground(bg)
         painter.setBackgroundMode(bgm)
