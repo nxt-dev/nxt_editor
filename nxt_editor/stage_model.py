@@ -15,7 +15,7 @@ from Qt import QtCore
 from nxt import clean_json
 from nxt_editor.commands import *
 from nxt_editor.dialogs import NxtFileDialog
-from nxt.constants import API_VERSION
+from nxt.constants import API_VERSION, is_standalone
 from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
 import nxt_editor
@@ -84,6 +84,7 @@ class StageModel(QtCore.QObject):
         self.effected_layers = UnsavedLayerSet()
 
         # execution
+        self.is_standalone = is_standalone()
         self.build_start_time = .0
         self.build_paused_time = .0
         self.last_step_time = .0
@@ -2715,18 +2716,17 @@ class StageModel(QtCore.QObject):
 
     def _execute_node(self, node_path):
         t = ExecuteNodeThread(self, node_path)
-        # Fixme: Me: @Me lets not do this
-        if 'maya' in sys.executable.lower():
-            # Maya isn't thread safe, we need to get attached working so we
-            # can know we're in a thread safe environment.
-            t._run()
-            self.process_events()
-        else:
+        if self.is_standalone:
             self.processing.emit(True)
             t.start()
             while not t.isFinished():
                 self.process_events()
             self.processing.emit(False)
+        else:
+            # DCCs aren't thread safe, we need to get attached working so we
+            # can know we're in a thread safe environment.
+            t._run()
+            self.process_events()
         if t.raised_exception:
             raise t.raised_exception
 

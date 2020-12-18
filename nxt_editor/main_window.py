@@ -32,7 +32,8 @@ from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (NxtFileDialog, NxtWarningDialog,
                                 UnsavedLayersDialogue, UnsavedChangesMessage)
 from nxt_editor import actions, LoggingSignaler
-from nxt.constants import API_VERSION, GRAPH_VERSION, USER_PLUGIN_DIR
+from nxt.constants import (API_VERSION, GRAPH_VERSION, USER_PLUGIN_DIR,
+                           NXT_DCC_ENV_VAR, is_standalone)
 from nxt.remote.client import NxtClient
 import nxt.remote.contexts
 from nxt_editor import qresources
@@ -83,9 +84,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 # logger.exception("Could not determine git branch.")
                 current_branch = ''
         os.chdir(old_cwd)
-        context = nxt.remote.contexts.get_current_context_exe_name()
-        if context.lower() == 'python':
+        if is_standalone():
             context = 'standalone'
+        else:
+            context = os.environ.get(NXT_DCC_ENV_VAR) or ''
         self.host_app = context
         self.setWindowTitle("nxt {} - Editor v{} | Graph v{} | API v{} "
                             "(Python {}) {}".format(self.host_app,
@@ -1086,7 +1088,7 @@ class MenuBar(QtWidgets.QMenuBar):
                                                            'Context')
         remote_context_func = self.main_window.create_remote_context
         remote_context_action.triggered.connect(remote_context_func)
-        if nxt.remote.contexts.get_current_context_exe_name() == 'maya':
+        if not is_standalone():
             remote_context_action.setEnabled(False)
         self.remote_menu.addSeparator()
         self.remote_menu.addAction(self.exec_actions.enable_cmd_port_action)
