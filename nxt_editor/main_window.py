@@ -1426,7 +1426,7 @@ class RecentFilesMenu(QtWidgets.QMenu):
             action = self.addAction('No recents found')
             action.setEnabled(False)
         for file_path in recents:
-            self.addAction(file_path)
+            self.addAction(str(file_path))
 
     def recent_selected(self, action):
         self.action_target(action.text())
