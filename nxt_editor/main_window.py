@@ -532,6 +532,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.model.effected_layers.remove(layer.real_path)
         except KeyError:  # Layer may not have been changed
             pass
+        self.model.layer_saved.emit(layer.real_path)
         self.set_waiting_cursor(False)
 
     def save_layer_as(self, layer=None, open_in_new_tab=True):

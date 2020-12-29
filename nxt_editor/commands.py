@@ -33,20 +33,102 @@ class NxtCommand(QUndoCommand):
     def __init__(self, model):
         super(NxtCommand, self).__init__()
         self.model = model
-        self._first_effected_by_me = False
+        self.model.layer_saved.connect(self.reset_layer_effected)
+        self._layers_effected_by_me = {}
 
-    def add_effected_layer(self, layer_path):
-        if layer_path in self.model.effected_layers:
+    def _get_effects(self, layer_path):
+        """Gets the effected state for a given layer with context to this
+        command. Since a single command can effect layers in different ways.
+
+        :param layer_path: string of layer real path
+        :return: (bool, bool) | (first_effected_by_undo, first_effected_by_redo)
+        """
+        first_eff_by_undo = False
+        first_eff_by_redo = False
+        try:
+            first_eff_by_undo = self._layers_effected_by_me[layer_path]['undo']
+        except KeyError:
+            pass
+        try:
+            first_eff_by_redo = self._layers_effected_by_me[layer_path]['redo']
+        except KeyError:
+            pass
+        return first_eff_by_undo, first_eff_by_redo
+
+    def reset_layer_effected(self, layer_just_saved):
+        """When the model marks a layer as saved we reset the class attr
+        `_first_effected_by_redo` to False. This makes sure the layer is
+        properly marked as unsaved even if we undo an action after saving it.
+
+        :param layer_just_saved: string of layer real path
+        :return: None
+        """
+        eff_by_undo, eff_by_redo = self._get_effects(layer_just_saved)
+        where_were_at = self.model.undo_stack.index()
+        cur_cmd = self.model.undo_stack.command(max(0, where_were_at - 1))
+        if cur_cmd is self:
             return
-        self._first_effected_by_me = True
-        self.model.effected_layers.add(layer_path)
+        if layer_just_saved in self._layers_effected_by_me:
+            if eff_by_undo:
+                # This command has already been marked as undo effects the
+                # layer, meaning the layer has been saved and the undo queue
+                # was moved to an index before this command and the same
+                # layer was saved again.
+                eff_by_redo = True
+                eff_by_undo = False
+            else:
+                # Now the undo of this command  effects the layer not the redo
+                eff_by_redo = False
+                eff_by_undo = True
+        self._layers_effected_by_me[layer_just_saved] = {'undo': eff_by_undo,
+                                                         'redo': eff_by_redo}
 
-    def remove_effected_layer(self, layer_path):
-        if self._first_effected_by_me:
+    def redo_effected_layer(self, layer_path):
+        """Adds layer to the model's set of effected (unsaved) layers. If
+        this command was the first to effect the layer we mark it as such
+        by setting the class attr `_first_effected_by_redo` to True.
+
+        :param layer_path: string of layer real path
+        :return: None
+        """
+        layer_unsaved = layer_path in self.model.effected_layers
+        eff_by_undo, eff_by_redo = self._get_effects(layer_path)
+        if not eff_by_undo and layer_unsaved:
+            return
+        if not eff_by_undo:
+            self._layers_effected_by_me[layer_path] = {'undo': False,
+                                                       'redo': True}
+            self.model.effected_layers.add(layer_path)
+        else:
+            # Layer was saved and then undo was called, thus this redo has a
+            # net zero effect on the layer
             try:
                 self.model.effected_layers.remove(layer_path)
             except KeyError:  # Removed by a save action
                 pass
+
+    def undo_effected_layer(self, layer_path):
+        """Removes layer from the model's set of effected (unsaved) layers.
+        If the layer is not marked as effected in the model we mark it as
+        effected. This case happens when undo is called after a layer is saved.
+
+        :param layer_path: string of layer real path
+        :return: None
+        """
+        eff_by_undo, eff_by_redo = self._get_effects(layer_path)
+        layer_saved = layer_path not in self.model.effected_layers
+        if layer_saved:
+            eff_by_undo = True
+            # Set redo to False since now its been saved & the undo effects it
+            eff_by_redo = False
+            self.model.effected_layers.add(layer_path)
+        elif eff_by_redo:
+            try:
+                self.model.effected_layers.remove(layer_path)
+            except KeyError:  # Removed by a save action
+                pass
+        self._layers_effected_by_me[layer_path] = {'undo': eff_by_undo,
+                                                   'redo': eff_by_redo}
 
 
 class AddNode(NxtCommand):
@@ -95,7 +177,7 @@ class AddNode(NxtCommand):
             dirty_nodes += dirty
         dirty_nodes += self.created_node_paths
         dirty_nodes += [self.node_path]
-        self.remove_effected_layer(self.layer_path)
+        self.undo_effected_layer(self.layer_path)
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
         self.model.selection = self.prev_selection
 
@@ -114,7 +196,7 @@ class AddNode(NxtCommand):
                                  layer=layer)
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
         self.model.selection = [self.node_path]
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
         self.setText('Added node: {}'.format(self.node_path))
 
 
@@ -166,7 +248,7 @@ class DeleteNode(NxtCommand):
         if pos:
             self.model.top_layer.positions[self.node_path] = pos
             # This might be a bug? We don't touch the top layer in redo...
-            self.remove_effected_layer(self.stage.top_layer.real_path)
+            self.undo_effected_layer(self.stage.top_layer.real_path)
         attr_display = self.node_data.get('attr_display')
         if attr_display is not None:
             self.model._set_attr_display_state(self.node_path, attr_display)
@@ -181,7 +263,7 @@ class DeleteNode(NxtCommand):
         self.model.selection = self.prev_selection
         # Fixme: Does not account for rebuilding proxy nodes for the dirty nodes
         dirty_set = tuple(set(dirty))
-        self.remove_effected_layer(self.layer_path)
+        self.undo_effected_layer(self.layer_path)
         if dirty_set != (self.node_path,):
             self.model.update_comp_layer(rebuild=True)
         else:
@@ -247,7 +329,7 @@ class DeleteNode(NxtCommand):
             fix_selection.remove(self.node_path)
             self.model.selection = fix_selection
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
         self.setText("Delete node: {}".format(self.node_path))
 
 
@@ -274,7 +356,7 @@ class SetNodeAttributeData(NxtCommand):
     def undo(self):
         start = time.time()
         layer = self.model.lookup_layer(self.layer_path)
-        self.remove_effected_layer(layer.real_path)
+        self.undo_effected_layer(layer.real_path)
         comp = self.model.comp_layer
         dirties = [self.node_path]
         # delete any created nodes
@@ -323,7 +405,7 @@ class SetNodeAttributeData(NxtCommand):
         created_node = False
         self.prev_selection = self.model.selection
         layer = self.model.lookup_layer(self.layer_path)
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
         comp = self.model.comp_layer
         self.remove_attr = False
         self.created_node_paths = []
@@ -460,7 +542,7 @@ class DuplicateNodes(NxtCommand):
 
         self.model.selection = self.prev_selection
         self.model.update_comp_layer(rebuild=True)
-        self.remove_effected_layer(target_layer.real_path)
+        self.undo_effected_layer(target_layer.real_path)
 
     @processing
     def redo(self):
@@ -468,7 +550,7 @@ class DuplicateNodes(NxtCommand):
         self.new_node_paths = []
         source_layer = self.model.lookup_layer(self.source_layer_path)
         target_layer = self.model.lookup_layer(self.target_layer_path)
-        self.add_effected_layer(target_layer.real_path)
+        self.redo_effected_layer(target_layer.real_path)
         for node_path in self.node_paths:
             node = source_layer.lookup(node_path)
             # duplicate node
@@ -548,7 +630,7 @@ class SetNodesPosition(NxtCommand):
         for node_path, old_pos in self.old_positions.items():
             self.model._set_node_pos(node_path=node_path,
                                      pos=old_pos, layer=layer)
-        self.remove_effected_layer(self.layer_path)
+        self.undo_effected_layer(self.layer_path)
 
     @processing
     def redo(self):
@@ -569,7 +651,7 @@ class SetNodesPosition(NxtCommand):
                 else:
                     nodes_str = 'nodes'
                 self.setText('Move {} {}'.format(nodes_str, delta_str))
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
 
 
 class SetSelection(QUndoCommand):
@@ -659,7 +741,7 @@ class LocalizeNodes(NxtCommand):
                 if attr not in attrs_to_keep:
                     self.stage.delete_node_attr(node=node, attr_name=attr)
         self.model.update_comp_layer(rebuild=True)
-        self.remove_effected_layer(layers[0].real_path)
+        self.undo_effected_layer(layers[0].real_path)
         self.model.selection = self.prev_selection
 
     @processing
@@ -690,7 +772,7 @@ class LocalizeNodes(NxtCommand):
 
             self.prev_node_data[node_path] = node_data
         self.model.update_comp_layer(rebuild=bool(self.created_node_paths))
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
         self.model.selection = self.prev_selection
         if len(self.node_paths) == 1:
             path_str = self.node_paths[0]
@@ -833,7 +915,7 @@ class ParentNodes(NxtCommand):
     @processing
     def undo(self):
         layer = self.model.target_layer
-        self.remove_effected_layer(layer.real_path)
+        self.undo_effected_layer(layer.real_path)
         # undo parent
         common_parent_nodes = {}
         for old_path, node_data in self.prev_node_data.items():
@@ -897,7 +979,7 @@ class ParentNodes(NxtCommand):
         self.created_node_paths = []
         nodes = []
         layer = self.model.target_layer
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
         for node_path in self.node_paths:
             node = layer.lookup(node_path)
             name = getattr(node, INTERNAL_ATTRS.NAME)
@@ -1001,14 +1083,14 @@ class DeleteAttribute(AddAttribute):
     def undo(self):
         super(DeleteAttribute, self).redo()
         layer = self.model.lookup_layer(self.layer_path)
-        self.remove_effected_layer(layer.real_path)
+        self.undo_effected_layer(layer.real_path)
 
     def redo(self):
         # Overload remove attr here to insure attr is deleted
         self.remove_attr = True
         super(DeleteAttribute, self).undo()
         layer = self.model.lookup_layer(self.layer_path)
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
         self.setText("Remove {} attr from {}".format(self.attr_name,
                                                      self.node_path))
 
@@ -1044,13 +1126,13 @@ class RenameAttribute(NxtCommand):
     def undo(self):
         layer = self.model.lookup_layer(self.layer_path)
         self.rename_attribute(layer, self.new_attr_name, self.attr_name)
-        self.remove_effected_layer(layer.real_path)
+        self.undo_effected_layer(layer.real_path)
 
     @processing
     def redo(self):
         layer = self.model.lookup_layer(self.layer_path)
         self.rename_attribute(layer, self.attr_name, self.new_attr_name)
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
 
     def rename_attribute(self, layer, attr_name, new_attr_name):
 
@@ -1156,7 +1238,7 @@ class SetNodeCollapse(NxtCommand):
     @processing
     def undo(self):
         layer = self.model.lookup_layer(self.layer_path)
-        self.remove_effected_layer(layer.real_path)
+        self.undo_effected_layer(layer.real_path)
         for node_path, prev_value in self.prev_values.items():
             layer.collapse[node_path] = prev_value
             self.model.comp_layer.collapse[node_path] = prev_value
@@ -1165,7 +1247,7 @@ class SetNodeCollapse(NxtCommand):
     @processing
     def redo(self):
         layer = self.model.lookup_layer(self.layer_path)
-        self.add_effected_layer(layer.real_path)
+        self.redo_effected_layer(layer.real_path)
         self.prev_values = {}
         for np in self.node_paths:
             self.prev_values[np] = self.model.get_node_collapse(np, layer)
@@ -1312,7 +1394,7 @@ class SetLayerAlias(NxtCommand):
             layer.set_alias(self.old_alias)
         else:
             layer.set_alias_over(self.old_alias)
-        self.remove_effected_layer(self.model.top_layer.real_path)
+        self.undo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_alias_changed.emit(self.layer_path)
 
     @processing
@@ -1324,7 +1406,7 @@ class SetLayerAlias(NxtCommand):
         else:
             self.old_alias = layer.get_alias(fallback_to_local=False)
             layer.set_alias_over(self.alias)
-        self.add_effected_layer(self.model.top_layer.real_path)
+        self.redo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_alias_changed.emit(self.layer_path)
         self.setText("Set {} alias to {}".format(layer.filepath, self.alias))
 
@@ -1347,11 +1429,11 @@ class NewLayer(NxtCommand):
     def undo(self):
         new_layer = self.model.lookup_layer(self.new_layer_path)
         if new_layer in self.stage._sub_layers:
-            self.remove_effected_layer(new_layer.parent_layer.real_path)
+            self.undo_effected_layer(new_layer.parent_layer.real_path)
             self.stage.remove_sublayer(new_layer)
         self.model.update_comp_layer(rebuild=True)
         self.model.set_target_layer(LAYERS.TOP)
-        self.remove_effected_layer(self.new_layer_path)
+        self.undo_effected_layer(self.new_layer_path)
         self.model.layer_removed.emit(self.new_layer_path)
 
     @processing
@@ -1359,7 +1441,7 @@ class NewLayer(NxtCommand):
         sub_layer_count = len(self.stage._sub_layers)
         if 0 < self.insert_idx <= sub_layer_count:
             parent_layer = self.stage._sub_layers[self.insert_idx - 1]
-            self.add_effected_layer(parent_layer.real_path)
+            self.redo_effected_layer(parent_layer.real_path)
         else:
             parent_layer = None
         layer_color_index = [str(k.name()) for k in colors.LAYER_COLORS]
@@ -1384,7 +1466,7 @@ class NewLayer(NxtCommand):
         new_layer = self.stage.new_sublayer(layer_data=layer_data,
                                             idx=self.insert_idx)
         self.new_layer_path = new_layer.real_path
-        self.add_effected_layer(new_layer.real_path)
+        self.redo_effected_layer(new_layer.real_path)
         # Fixme: The next 2 lines each build once
         self.model.update_comp_layer(rebuild=True)
         self.model.set_target_layer(self.new_layer_path)
@@ -1406,7 +1488,7 @@ class ReferenceLayer(NxtCommand):
     def undo(self):
         new_layer = self.model.lookup_layer(self.real_path)
         if new_layer in self.stage._sub_layers:
-            self.remove_effected_layer(new_layer.parent_layer.real_path)
+            self.undo_effected_layer(new_layer.parent_layer.real_path)
             self.stage.remove_sublayer(new_layer)
         self.model.set_target_layer(LAYERS.TOP)
         self.model.update_comp_layer(rebuild=True)
@@ -1417,7 +1499,7 @@ class ReferenceLayer(NxtCommand):
         sub_layer_count = len(self.stage._sub_layers)
         if 0 < self.insert_idx <= sub_layer_count:
             parent_layer = self.stage._sub_layers[self.insert_idx - 1]
-            self.add_effected_layer(parent_layer.real_path)
+            self.redo_effected_layer(parent_layer.real_path)
         else:
             parent_layer = None
         layer_data = nxt_io.load_file_data(self.real_path)
@@ -1466,13 +1548,13 @@ class MuteToggleLayer(NxtCommand):
     def undo(self):
         self.toggle_state()
         for layer_path in self.layer_paths:
-            self.remove_effected_layer(layer_path)
+            self.undo_effected_layer(layer_path)
 
     def redo(self):
         self.layer_paths = []
         self.toggle_state()
         for layer_path in self.layer_paths:
-            self.add_effected_layer(layer_path)
+            self.redo_effected_layer(layer_path)
 
     @processing
     def toggle_state(self):
@@ -1503,13 +1585,13 @@ class SoloToggleLayer(NxtCommand):
     def undo(self):
         self.toggle_state()
         for layer_path in self.layer_paths:
-            self.remove_effected_layer(layer_path)
+            self.undo_effected_layer(layer_path)
 
     def redo(self):
         self.layer_paths = []
         self.toggle_state()
         for layer_path in self.layer_paths:
-            self.add_effected_layer(layer_path)
+            self.redo_effected_layer(layer_path)
 
     @processing
     def toggle_state(self):
@@ -1550,7 +1632,7 @@ class SetLayerColor(NxtCommand):
             layer.color = self.old_color
         else:
             layer.set_color_over(self.old_color)
-        self.remove_effected_layer(self.model.top_layer.real_path)
+        self.undo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_color_changed.emit(self.layer_path)
 
     @processing
@@ -1562,7 +1644,7 @@ class SetLayerColor(NxtCommand):
         else:
             self.old_color = layer.get_color(fallback_to_local=False)
             layer.set_color_over(self.color)
-        self.add_effected_layer(self.model.top_layer.real_path)
+        self.redo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_color_changed.emit(self.layer_path)
         self.setText("Set {} color to {}".format(layer.filepath, self.color))
 

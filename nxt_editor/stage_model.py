@@ -12,7 +12,7 @@ from Qt import QtWidgets
 from Qt import QtCore
 
 # Internal
-from nxt import clean_json
+from nxt import clean_json, nxt_io
 from nxt_editor.commands import *
 from nxt_editor.dialogs import NxtFileDialog
 from nxt.constants import API_VERSION, is_standalone
@@ -20,7 +20,7 @@ from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
 import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler
-from nxt.nxt_layer import LAYERS, CompLayer
+from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
 from nxt.stage import (determine_nxt_type, INTERNAL_ATTRS,
@@ -61,6 +61,7 @@ class StageModel(QtCore.QObject):
     layer_alias_changed = QtCore.Signal(str)  # Layer path whose alias changed
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
+    layer_saved = QtCore.Signal(str)  # Layer path that was just saved
     nodes_changed = QtCore.Signal(tuple)
     attrs_changed = QtCore.Signal(tuple)
     node_added = QtCore.Signal(str)
@@ -3058,7 +3059,7 @@ class StageModel(QtCore.QObject):
                 disc_data = json.dumps(disc_data, indent=4, sort_keys=True)
                 if live_data != disc_data:
                     unsaved_layers.add(layer)
-        elif self.undo_stack.canUndo():
+        elif self.undo_stack.count():
             for layer_path in self.effected_layers:
                 layer = self.lookup_layer(layer_path)
                 if layer and layer not in unsaved_layers:
