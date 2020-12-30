@@ -38,6 +38,6 @@ script:
     fi
   - |
     if [ "$TRAVIS_BRANCH" = "release" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
-          python -m nxt.cli exec nxt/build/packaging.nxt -s /make_and_upload
+          python -m nxt.cli exec nxt_editor/build/packaging.nxt -s /make_and_upload
           exit $?
     fi
