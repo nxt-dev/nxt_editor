@@ -21,6 +21,7 @@ import nxt_editor.main_window
 import nxt.remote.nxt_socket
 from nxt import nxt_log
 from nxt_editor.constants import NXT_WEBSITE
+from nxt.constants import NXT_DCC_ENV_VAR
 
 logger = logging.getLogger('nxt')
 CREATED_UI = []
@@ -97,6 +98,7 @@ class NxtUiCmd(om.MPxCommand):
 
     def doIt(self, args):
         global __NXT_INSTANCE__
+        os.environ[NXT_DCC_ENV_VAR] = 'maya'
         if args:
             string_args = []
             for arg in range(len(args)):
