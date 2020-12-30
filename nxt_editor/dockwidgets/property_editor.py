@@ -805,8 +805,12 @@ class PropertyEditor(DockWidgetBase):
     def edit_instance(self):
         comp_layer = self.stage_model.comp_layer
         target_layer = self.stage_model.target_layer
+        if self.stage_model.node_exists(self.node_path, target_layer):
+            lookup_layer = target_layer
+        else:
+            lookup_layer = comp_layer
         cur_inst_path = self.stage_model.get_node_instance_path(self.node_path,
-                                                                target_layer,
+                                                                lookup_layer,
                                                                 expand=False)
         instance_path = str(self.instance_field.text())
         if (not cur_inst_path and not instance_path
@@ -1466,6 +1470,8 @@ class AttrsTableView(QtWidgets.QTableView):
             drag = QtGui.QDrag(self)
             mime_data = QtCore.QMimeData()
             attr_name = self.get_attr_name()
+            if attr_name is None:
+                return
             token = tokens.make_token_str(attr_name)
             mime_data.setText(token)
             drag.setMimeData(mime_data)

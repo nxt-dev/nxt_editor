@@ -106,31 +106,6 @@
     },
     "nodes": {
         "/": {
-            "child_order": [
-                "CheckCommits",
-                "ValidatePushed",
-                "CreateRelease",
-                "BeginPR",
-                "ParseGitReturn",
-                "ParseGitReturn2",
-                "GitCmd",
-                "GitCmd2",
-                "CheckoutRelease",
-                "JsonLoad2",
-                "BeginRelease",
-                "GitCurBranch2",
-                "CheckoutWorking",
-                "make_package",
-                "GenerateHotkeysMD",
-                "make_module_folder",
-                "UpdateReleasePR",
-                "GenerateChangelog",
-                "ParseVersionJSON",
-                "ValidateWorking",
-                "ParseVersions",
-                "init",
-                "ValidateVersion"
-            ],
             "attrs": {
                 "EDITOR": {
                     "type": "NoneType",

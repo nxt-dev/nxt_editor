@@ -12,15 +12,15 @@ from Qt import QtWidgets
 from Qt import QtCore
 
 # Internal
-from nxt import clean_json
+from nxt import clean_json, nxt_io
 from nxt_editor.commands import *
 from nxt_editor.dialogs import NxtFileDialog
-from nxt.constants import API_VERSION
+from nxt.constants import API_VERSION, is_standalone
 from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
 import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler
-from nxt.nxt_layer import LAYERS, CompLayer
+from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
 from nxt.stage import (determine_nxt_type, INTERNAL_ATTRS,
@@ -61,6 +61,7 @@ class StageModel(QtCore.QObject):
     layer_alias_changed = QtCore.Signal(str)  # Layer path whose alias changed
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
+    layer_saved = QtCore.Signal(str)  # Layer path that was just saved
     nodes_changed = QtCore.Signal(tuple)
     attrs_changed = QtCore.Signal(tuple)
     node_added = QtCore.Signal(str)
@@ -84,6 +85,7 @@ class StageModel(QtCore.QObject):
         self.effected_layers = UnsavedLayerSet()
 
         # execution
+        self.is_standalone = is_standalone()
         self.build_start_time = .0
         self.build_paused_time = .0
         self.last_step_time = .0
@@ -1508,6 +1510,15 @@ class StageModel(QtCore.QObject):
             logger.error('You should use revert instance path, you can not '
                          'set an instance path to NoneType.')
             return
+        expanded_inst_path = nxt_path.expand_relative_node_path(instance_path,
+                                                                node_path)
+        return_path = self.comp_layer.RETURNS.Path
+        ancestors = self.comp_layer.ancestors(node_path,
+                                              return_type=return_path,
+                                              include_implied=True)
+        if expanded_inst_path in ancestors:
+            logger.error('Can not instance an ancestor!')
+            return
         cmd = SetNodeInstance(node_path=node_path,
                               instance_path=instance_path, model=self,
                               layer_path=layer_path)
@@ -2532,24 +2543,36 @@ class StageModel(QtCore.QObject):
         self.about_to_execute.emit(True)
         rt_layer = rt_layer or self.current_rt_layer
         path_mismatch = False
+        valid_node = True
         reset_cache_now = False
         if rt_layer:
             rt_paths = set(rt_layer.descendants())
             comp_paths = set(self.comp_layer.descendants())
             path_mismatch = comp_paths.difference(rt_paths)
+            valid_node = bool(rt_layer.lookup(node_path))
         if path_mismatch:
             logger.error("{} invalid node(s) in the runtime "
                          "layer.".format(len(path_mismatch)))
             title = "Invalid cache node(s)!"
-            info = ("Some nodes from the runtime layer are invalid.\n"
-                    "Would you like to rebuild the runtime layer?\n"
-                    "Cache data will be lost!".format(node_path))
+
+            if valid_node:
+                cancel_text = 'Ignore and Continue'
+                info = ("Some nodes from the runtime layer are invalid.\n"
+                        "Would you like to rebuild the runtime layer?\n"
+                        "Cache data will be lost!")
+            else:
+                info = ("`{}`\nis not present in the current runtime "
+                        "layer.\nWould you like to rebuild the runtime "
+                        "layer?\nCache data will be lost!".format(node_path))
+                cancel_text = 'Cancel Execute'
             button_text = {QtWidgets.QMessageBox.Ok: 'Rebuild',
-                           QtWidgets.QMessageBox.Cancel: 'Ignore and Continue'}
+                           QtWidgets.QMessageBox.Cancel: cancel_text}
             confirm = NxtConfirmDialog.show_message(title, info,
                                                     button_text=button_text)
             if confirm:
                 reset_cache_now = True
+            elif not valid_node:
+                return
         if not rt_layer or reset_cache_now:
             temp_comp = self.stage.build_stage(self.comp_layer.layer_idx())
             rt_layer = self.stage.setup_runtime_layer(temp_comp)
@@ -2558,8 +2581,8 @@ class StageModel(QtCore.QObject):
         self._set_executing(True)
         try:
             self.stage.execute_custom_code(code_string, node_path, rt_layer)
-        except GraphError:
-            pass
+        except GraphError as err:
+            logger.grapherror(str(err), links=[node_path])
         self._set_executing(False)
 
     def validate_socket_connection(self):
@@ -2703,18 +2726,17 @@ class StageModel(QtCore.QObject):
 
     def _execute_node(self, node_path):
         t = ExecuteNodeThread(self, node_path)
-        # Fixme: Me: @Me lets not do this
-        if 'maya' in sys.executable.lower():
-            # Maya isn't thread safe, we need to get attached working so we
-            # can know we're in a thread safe environment.
-            t._run()
-            self.process_events()
-        else:
+        if self.is_standalone:
             self.processing.emit(True)
             t.start()
             while not t.isFinished():
                 self.process_events()
             self.processing.emit(False)
+        else:
+            # DCCs aren't thread safe, we need to get attached working so we
+            # can know we're in a thread safe environment.
+            t._run()
+            self.process_events()
         if t.raised_exception:
             raise t.raised_exception
 
@@ -3046,7 +3068,7 @@ class StageModel(QtCore.QObject):
                 disc_data = json.dumps(disc_data, indent=4, sort_keys=True)
                 if live_data != disc_data:
                     unsaved_layers.add(layer)
-        elif self.undo_stack.canUndo():
+        elif self.undo_stack.count():
             for layer_path in self.effected_layers:
                 layer = self.lookup_layer(layer_path)
                 if layer and layer not in unsaved_layers:

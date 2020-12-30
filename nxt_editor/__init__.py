@@ -1,6 +1,5 @@
 # Builtin
 import os
-import sys
 import logging
 import sys
 
@@ -55,11 +54,24 @@ def make_resources(qrc_path=None, result_path=None):
     try:
         subprocess.check_call(['pyside2-rcc'] + args)
     except:
-        try:
-            subprocess.check_call([full_rcc_path] + args)
-        except:
-            raise Exception("Cannot find pyside2-rcc to generate UI resources."
-                            " Reinstalling pyside2 may fix the problem.")
+        pass
+    else:
+        return
+
+    try:
+        subprocess.check_call([full_rcc_path] + args)
+    except:
+        pass
+    else:
+        return
+
+    try:
+        subprocess.check_call(['rcc', '-g', 'python', qrc_path, result_path])
+    except:
+        raise Exception("Cannot find pyside2 rcc to generate UI resources."
+                        " Reinstalling pyside2 may fix the problem.")
+    else:
+        return
 
 
 try:
@@ -69,27 +81,43 @@ except ImportError:
 
 
 def launch_editor(paths=None, start_rpc=True):
-    """Creates a new QApplication with editor main window and shows it.
+    """Launch an instance of the editor. Will attach to existing QApp if found,
+    otherwise will create and open one.
     """
-    # Deferred import since main window relies on us
-    from nxt_editor.main_window import MainWindow
+    existing = QtWidgets.QApplication.instance()
+    if existing:
+        app = existing
+    else:
+        app = QtWidgets.QApplication
+        os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+        app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+        app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
+        app = app(sys.argv)
+        style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
+        style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
+        stream = QtCore.QTextStream(style_file)
+        app.setStyleSheet(stream.readAll())
+        pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
+        app.setWindowIcon(QtGui.QIcon(pixmap))
+    instance = show_new_editor(paths, start_rpc)
+    app.setActiveWindow(instance)
+    if not existing:
+        app.exec_()
+    return app
+
+
+def show_new_editor(paths=None, start_rpc=True):
     path = None
     if paths is not None:
         path = paths[0]
         paths.pop(0)
     else:
         paths = []
-    app = QtWidgets.QApplication(sys.argv)
-    app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
-    style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
-    style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
-    stream = QtCore.QTextStream(style_file)
-    app.setStyleSheet(stream.readAll())
+    # Deferred import since main window relies on us
+    from nxt_editor.main_window import MainWindow
     instance = MainWindow(filepath=path, start_rpc=start_rpc)
     for other_path in paths:
         instance.load_file(other_path)
-    pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
-    app.setWindowIcon(QtGui.QIcon(pixmap))
-    app.setActiveWindow(instance)
     instance.show()
-    return app.exec_()
+    return instance
+
