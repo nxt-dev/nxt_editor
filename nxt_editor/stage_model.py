@@ -1510,6 +1510,15 @@ class StageModel(QtCore.QObject):
             logger.error('You should use revert instance path, you can not '
                          'set an instance path to NoneType.')
             return
+        expanded_inst_path = nxt_path.expand_relative_node_path(instance_path,
+                                                                node_path)
+        return_path = self.comp_layer.RETURNS.Path
+        ancestors = self.comp_layer.ancestors(node_path,
+                                              return_type=return_path,
+                                              include_implied=True)
+        if expanded_inst_path in ancestors:
+            logger.error('Can not instance an ancestor!')
+            return
         cmd = SetNodeInstance(node_path=node_path,
                               instance_path=instance_path, model=self,
                               layer_path=layer_path)
