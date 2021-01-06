@@ -25,8 +25,8 @@ from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
 from nxt.stage import (determine_nxt_type, INTERNAL_ATTRS,
                        get_historical_opinions)
-from nxt.runtime import GraphError
-from nxt_editor.dialogs import NxtConfirmDialog
+from nxt.runtime import GraphError, InvalidNodeError
+from nxt_editor.dialogs import NxtConfirmDialog, NxtWarningDialog
 from nxt.remote import nxt_socket
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -2541,42 +2541,14 @@ class StageModel(QtCore.QObject):
         :return: None
         """
         self.about_to_execute.emit(True)
-        rt_layer = rt_layer or self.current_rt_layer
-        path_mismatch = False
-        valid_node = True
-        reset_cache_now = False
-        if rt_layer:
-            rt_paths = set(rt_layer.descendants())
-            comp_paths = set(self.comp_layer.descendants())
-            path_mismatch = comp_paths.difference(rt_paths)
-            valid_node = bool(rt_layer.lookup(node_path))
-        if path_mismatch:
-            logger.error("{} invalid node(s) in the runtime "
-                         "layer.".format(len(path_mismatch)))
-            title = "Invalid cache node(s)!"
-
-            if valid_node:
-                cancel_text = 'Ignore and Continue'
-                info = ("Some nodes from the runtime layer are invalid.\n"
-                        "Would you like to rebuild the runtime layer?\n"
-                        "Cache data will be lost!")
-            else:
-                info = ("`{}`\nis not present in the current runtime "
-                        "layer.\nWould you like to rebuild the runtime "
-                        "layer?\nCache data will be lost!".format(node_path))
-                cancel_text = 'Cancel Execute'
-            button_text = {QtWidgets.QMessageBox.Ok: 'Rebuild',
-                           QtWidgets.QMessageBox.Cancel: cancel_text}
-            confirm = NxtConfirmDialog.show_message(title, info,
-                                                    button_text=button_text)
-            if confirm:
-                reset_cache_now = True
-            elif not valid_node:
-                return
-        if not rt_layer or reset_cache_now:
-            temp_comp = self.stage.build_stage(self.comp_layer.layer_idx())
-            rt_layer = self.stage.setup_runtime_layer(temp_comp)
-            self.current_rt_layer = rt_layer
+        rt = rt_layer
+        np = [node_path]
+        valid, bad_paths = self.validate_runtime_layer(rt_layer=rt,
+                                                       node_paths=np)
+        if not rt_layer or not valid:
+            new_rt = self.prompt_runtime_rebuild(must_rebuild=bool(bad_paths))
+            if new_rt:
+                rt_layer = new_rt
         rt_layer._console.run_as_global = globally
         self._set_executing(True)
         try:
@@ -2584,6 +2556,56 @@ class StageModel(QtCore.QObject):
         except GraphError as err:
             logger.grapherror(str(err), links=[node_path])
         self._set_executing(False)
+
+    def validate_runtime_layer(self, rt_layer=None,
+                               comp_layer=None, node_paths=()):
+        rt_layer = rt_layer or self.current_rt_layer
+        comp_layer = comp_layer or self.comp_layer
+        paths_match = False
+        invalid_nodes = []
+        node_paths = list(node_paths)
+        if rt_layer and comp_layer:
+            rt_paths = set(rt_layer.descendants())
+            comp_paths = set(comp_layer.descendants())
+            path_diff = comp_paths.symmetric_difference(rt_paths)
+            paths_match = not bool(path_diff)
+            if not paths_match:
+                for p in node_paths:
+                    if bool(rt_layer.lookup(p)):
+                        invalid_nodes += [p]
+        all_nodes_valid = not invalid_nodes
+        if not all_nodes_valid:
+            logger.error("{} invalid node(s) in the runtime layer."
+                         "".format(len(invalid_nodes)))
+        valid = paths_match and all_nodes_valid
+        return valid, invalid_nodes
+
+    def prompt_runtime_rebuild(self, must_rebuild=False):
+        rt_layer = None
+        title = "Invalid runtime node(s)!"
+
+        if must_rebuild:
+            cancel_text = 'Ignore and Continue'
+            info = ("Some nodes from the runtime layer are invalid.\n"
+                    "Would you like to rebuild the runtime layer?\n"
+                    "Cache data will be lost!\n\n"
+                    "Ignoring this warning may result in graph errors!")
+        else:
+            info = ("Some node(s) are not present in the current runtime "
+                    "layer.\nWould you like to rebuild the runtime "
+                    "layer?\nCache data will be lost!")
+            cancel_text = 'Cancel Execute'
+        button_text = {QtWidgets.QMessageBox.Ok: 'Rebuild',
+                       QtWidgets.QMessageBox.Cancel: cancel_text}
+        icon = NxtConfirmDialog.Icon.Warning
+        confirm = NxtConfirmDialog.show_message(title, info,
+                                                button_text=button_text,
+                                                icon=icon)
+        if confirm:
+            temp_comp = self.stage.build_stage(self.comp_layer.layer_idx())
+            rt_layer = self.stage.setup_runtime_layer(temp_comp)
+            self.current_rt_layer = rt_layer
+        return rt_layer
 
     def validate_socket_connection(self):
         """Attempts a round trip, if the client gets its message and returns
@@ -2716,13 +2738,22 @@ class StageModel(QtCore.QObject):
                                                MODEL=nxt_socket.MODEL_VAR)
         self._send_cmd(cmd)
 
-    def execute_nodes(self, node_paths, rt_layer=None):
-        self.about_to_execute.emit(True)
+    def execute_nodes(self, node_paths, rt_layer=None, safe_exec=True):
+        """Executes given node paths in the given runtime layer. If no rt
+        layer is given a new one is built.
+
+        :param node_paths: list of node paths
+        :param rt_layer: CompLayer (must have self.runtime set to True)
+        :param safe_exec: If True the rt layer is validated against the comp
+        :return: CompLayer (the runtime layer that ran)
+        """
         if not node_paths:
             logger.error("No node paths specified for execution")
             return
+        self.about_to_execute.emit(True)
         self.setup_build(node_paths, rt_layer=rt_layer)
         self.resume_build()
+        return rt_layer
 
     def _execute_node(self, node_path):
         t = ExecuteNodeThread(self, node_path)
@@ -2738,6 +2769,17 @@ class StageModel(QtCore.QObject):
             t._run()
             self.process_events()
         if t.raised_exception:
+            if isinstance(t.raised_exception, InvalidNodeError):
+                details = ("To resolve this try navigating to "
+                           "'Execute > Clear cache'. \n\n"
+                           "This error is raised when layers"
+                           " are muted or nodes are deleted and then execute "
+                           "is called without clearing the cache.")
+                NxtWarningDialog.show_message(text='NXT attempted to execute '
+                                                   'an invalid node!',
+                                              info=str(t.raised_exception),
+                                              details=details)
+                raise BuildStop
             raise t.raised_exception
 
     def execute_stage(self, start=None):
@@ -3000,9 +3042,11 @@ class StageModel(QtCore.QObject):
         self._executing = executing
         self.executing_changed.emit(self._executing)
 
-    def finish_build(self):
+    def finish_build(self, verbose=True):
         build_seconds = round(time.time() - self.build_start_time)
-        logger.execinfo("Build exec time: {} second(s).".format(build_seconds))
+        if verbose:
+            logger.execinfo("Build exec time: "
+                            "{} second(s).".format(build_seconds))
         self.last_built_idx = None
         self.last_hit_break = None
         self.current_build_order = None
@@ -3032,6 +3076,7 @@ class StageModel(QtCore.QObject):
         self._send_cmd(cmd, wait=True)
 
     def clear_cache(self):
+        self.finish_build()
         self.current_rt_layer = None
         self.data_state_changed.emit(True)
 
@@ -3439,7 +3484,10 @@ class ExecuteNodeThread(QtCore.QThread):
                                                           layer)
             except GraphError as err:
                 logger.grapherror(str(err), links=[self.node_path])
-                self.raised_exception = BuildStop
+                if isinstance(err, InvalidNodeError):
+                    self.raised_exception = err
+                else:
+                    self.raised_exception = BuildStop
                 return
         if self.stage_model._build_should_stop:
             self.raised_exception = BuildStop

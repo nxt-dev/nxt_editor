@@ -374,7 +374,7 @@ class NxtWarningDialog(QtWidgets.QDialog):
 
 class NxtConfirmDialog(QtWidgets.QMessageBox):
     def __init__(self, text='Title', info='Confirm something!',
-                 button_text=None):
+                 button_text=None, icon=QtWidgets.QMessageBox.Icon.Question):
         """Simple message box used for user confirmation
         :param text: Title text
         :param info: Main info text
@@ -386,7 +386,7 @@ class NxtConfirmDialog(QtWidgets.QMessageBox):
         self.setText(text)
         self.setInformativeText(info)
         self.setStandardButtons(self.Ok)
-        self.setIcon(self.Icon.Question)
+        self.setIcon(icon)
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.setStandardButtons(self.Ok | self.Cancel)
         if button_text:
