@@ -25,8 +25,8 @@ from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
 from nxt.stage import (determine_nxt_type, INTERNAL_ATTRS,
                        get_historical_opinions)
-from nxt.runtime import GraphError
-from nxt_editor.dialogs import NxtConfirmDialog
+from nxt.runtime import GraphError, InvalidNodeError
+from nxt_editor.dialogs import NxtConfirmDialog, NxtWarningDialog
 from nxt.remote import nxt_socket
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -2750,15 +2750,6 @@ class StageModel(QtCore.QObject):
         if not node_paths:
             logger.error("No node paths specified for execution")
             return
-        if safe_exec and rt_layer:
-            np = node_paths
-            valid, bad_paths = self.validate_runtime_layer(rt_layer=rt_layer,
-                                                           node_paths=np)
-            if not valid:
-                rebuild = bool(bad_paths)
-                new_rt = self.prompt_runtime_rebuild(must_rebuild=rebuild)
-                if new_rt:
-                    rt_layer = self.current_rt_layer
         self.about_to_execute.emit(True)
         self.setup_build(node_paths, rt_layer=rt_layer)
         self.resume_build()
@@ -2778,6 +2769,17 @@ class StageModel(QtCore.QObject):
             t._run()
             self.process_events()
         if t.raised_exception:
+            if isinstance(t.raised_exception, InvalidNodeError):
+                details = ("To resolve this try navigating to "
+                           "'Execute > Clear cache'. \n\n"
+                           "This error is raised when layers"
+                           " are muted or nodes are deleted and then execute "
+                           "is called without clearing the cache.")
+                NxtWarningDialog.show_message(text='NXT attempted to execute '
+                                                   'an invalid node!',
+                                              info=str(t.raised_exception),
+                                              details=details)
+                raise BuildStop
             raise t.raised_exception
 
     def execute_stage(self, start=None):
@@ -3040,9 +3042,11 @@ class StageModel(QtCore.QObject):
         self._executing = executing
         self.executing_changed.emit(self._executing)
 
-    def finish_build(self):
+    def finish_build(self, verbose=True):
         build_seconds = round(time.time() - self.build_start_time)
-        logger.execinfo("Build exec time: {} second(s).".format(build_seconds))
+        if verbose:
+            logger.execinfo("Build exec time: "
+                            "{} second(s).".format(build_seconds))
         self.last_built_idx = None
         self.last_hit_break = None
         self.current_build_order = None
@@ -3072,6 +3076,7 @@ class StageModel(QtCore.QObject):
         self._send_cmd(cmd, wait=True)
 
     def clear_cache(self):
+        self.finish_build()
         self.current_rt_layer = None
         self.data_state_changed.emit(True)
 
@@ -3479,7 +3484,10 @@ class ExecuteNodeThread(QtCore.QThread):
                                                           layer)
             except GraphError as err:
                 logger.grapherror(str(err), links=[self.node_path])
-                self.raised_exception = BuildStop
+                if isinstance(err, InvalidNodeError):
+                    self.raised_exception = err
+                else:
+                    self.raised_exception = BuildStop
                 return
         if self.stage_model._build_should_stop:
             self.raised_exception = BuildStop
