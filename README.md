@@ -1,7 +1,7 @@
 # NXT Editor
 
 **nxt** (**/ɛn·ɛks·ti/**) is a general purpose code compositor designed for rigging, scene assembly, and automation. (node execution tree)  
-[Installation/Usage](#installationusage) | [Docs](https://nxt-devs.github.io/) | [Contributing](CONTRIBUTING.md) | [Licensing](LICENSE)
+[Installation/Usage](#installationusage) | [Docs](https://nxt-dev.github.io/) | [Contributing](CONTRIBUTING.md) | [Licensing](LICENSE)
 
 # Installation/Usage
 **To Use NXT please use the [NXT Standalone](#nxt-standalone) or [DCC plugin zip.](#maya-plugin)**  
