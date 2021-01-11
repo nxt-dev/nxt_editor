@@ -68,21 +68,28 @@ class MainWindow(QtWidgets.QMainWindow):
         old_cwd = os.getcwd()
         ui_dir = os.path.dirname(__file__)
         os.chdir(ui_dir)
+        # Test to see if we're launching from a git branch, if so the title
+        # bar will be updated for easy reference.
+
+        # Used to hide the stderr from the user as it doesn't matter
+        f = open(nxt_io.generate_temp_file('NxtGitErr'))
         try:
-            git_out = subprocess.check_output(["git", "branch"]).decode("utf8")
+            git_out = subprocess.check_output(["git", "branch"],
+                                              stderr=f).decode("utf8")
             cur = next(line for line in git_out.split("\n")
                        if line.startswith("*"))
             current_branch = cur.strip("*").strip()
         except:  # Broad because Maya
-            # logger.exception("Failed to run git branch, attempting fallback "
-            #                  "method.")
+            # Failed to run git branch, attempting fallback method
             try:
                 with open('../../.git/HEAD') as f:
                     head = f.read()
                 _, __, current_branch = head.rpartition('/')
-            except IOError:
-                # logger.exception("Could not determine git branch.")
+            except:
+                # Could not determine git branch, must be pip package.
                 current_branch = ''
+        finally:
+            f.close()
         os.chdir(old_cwd)
         if is_standalone():
             context = 'standalone'
