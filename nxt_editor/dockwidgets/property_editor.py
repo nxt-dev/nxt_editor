@@ -41,7 +41,38 @@ class AttributeEditor(DockWidgetBase):
 
         self.node_attrs = NodeAttrTableView()
         self.attrs_model = NodeAttrModel()
-        self.node_attrs.setModel(self.attrs_model)
+        self.user_attrs_model = AtrrEditorProxyModel()
+        self.user_attrs_model.setSourceModel(self.attrs_model)
+        self.node_attrs.setModel(self.user_attrs_model)
+
+        self.filter_attrs_field = QtWidgets.QLineEdit()
+        self.filter_attrs_field.setPlaceholderText('Filter Attributes')
+        self.filter_attrs_field.textChanged.connect(self.user_attrs_model.setFilterWildcard)
+
+        self.filter_column_button = QtWidgets.QPushButton()
+        self.filter_column_menu = QtWidgets.QMenu()
+        self.filter_column_button.setMenu(self.filter_column_menu)
+        filter_column_names = (NodeAttrModel.NAME,
+                               NodeAttrModel.VALUE,
+                               NodeAttrModel.RAW,
+                               NodeAttrModel.RESOLVED,
+                               NodeAttrModel.CACHED,
+                               NodeAttrModel.SOURCE,
+                               NodeAttrModel.COMMENT)
+        self.filter_action_grp = QtWidgets.QActionGroup(self.filter_column_menu)
+        self.filter_action_grp.triggered.connect(self.filter_menu_triggered)
+        i = -1
+        for column_name in NodeAttrModel.COLUMN_ORDER:
+            i += 1
+            if column_name not in filter_column_names:
+                continue
+            new_action = self.filter_column_menu.addAction(column_name)
+            self.filter_action_grp.addAction(new_action)
+            new_action.setCheckable(True)
+            new_action.setData(i)
+            if column_name == NodeAttrModel.VALUE:
+                new_action.setChecked(True)
+                self.filter_menu_triggered(None)
 
         self.main_widget = QtWidgets.QWidget()
         self.main_layout = QtWidgets.QVBoxLayout()
@@ -52,7 +83,12 @@ class AttributeEditor(DockWidgetBase):
         self.node_url_layout.addWidget(self.node_url_field)
         self.node_url_layout.addWidget(self.follow_focus_checkbox)
 
+        self.filter_layout = QtWidgets.QHBoxLayout()
+        self.filter_layout.addWidget(self.filter_attrs_field, 1)
+        self.filter_layout.addWidget(self.filter_column_button)
+
         self.main_layout.addLayout(self.node_url_layout)
+        self.main_layout.addLayout(self.filter_layout)
         self.main_layout.addWidget(self.node_attrs)
 
     def follow_focus_changed(self, state):
@@ -62,6 +98,13 @@ class AttributeEditor(DockWidgetBase):
             self.stage_model.node_focus_changed.connect(self.set_represented_node)
         else:
             self.stage_model.node_focus_changed.disconnect(self.set_represented_node)
+
+    def filter_menu_triggered(self, action):
+        checked = self.filter_action_grp.checkedAction()
+        if not checked:
+            return
+        self.user_attrs_model.setFilterKeyColumn(checked.data())
+        self.filter_column_button.setText(checked.text())
 
     def node_url_changed(self):
         if str(self.node_url_field.text()).strip() == '':
@@ -247,6 +290,8 @@ class NodeAttrModel(QtCore.QAbstractTableModel):
             qcolor = QtGui.QColor(color)
             if locality in (LOCALITIES.local, LOCALITIES.code):
                 qcolor = qcolor.lighter(150)
+            else:
+                qcolor = qcolor.darker(150)
             return qcolor
         # Below roles require valid column
         if column >= self.columnCount(None):
@@ -348,6 +393,24 @@ class NodeAttrModel(QtCore.QAbstractTableModel):
         if orientation == QtCore.Qt.Horizontal:
             if role == QtCore.Qt.DisplayRole:
                 return self.COLUMN_ORDER[section]
+
+
+class AtrrEditorProxyModel(QtCore.QSortFilterProxyModel):
+    def __init__(self):
+        super(AtrrEditorProxyModel, self).__init__()
+        self.show_user_attrs = False
+
+    def filterAcceptsRow(self, src_row, src_parent):
+        if not self.show_user_attrs:
+            locality_column = NodeAttrModel.LOCALITY_COLUMN
+            locality_idx = self.sourceModel().createIndex(src_row,
+                                                          locality_column)
+            locality = self.sourceModel().data(locality_idx)
+            if locality == LOCALITIES.builtin:
+                return False
+        return super(AtrrEditorProxyModel, self).filterAcceptsRow(src_row,
+                                                                  src_parent)
+
 
 # Fixme: Should this be a pref?
 HISTORICAL_MAX_CHARS = 50
