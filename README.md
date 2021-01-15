@@ -28,7 +28,7 @@ Our releases are hosted on [PyPi](https://pypi.org/project/nxt-editor/).
 
 - Install:
     1. Download the maya module(`nxt_maya.zip`) from the [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
-    2. Follow the [nxt_maya](integration/maya/README.md) instructions (also included in the download)
+    2. Follow the [nxt_maya](nxt_editor/integration/maya/README.md) instructions (also included in the download)
 - Launch:
     1. Load `nxt_maya` plugin in Maya
     2. Select the `nxt` menu from the menus at the top of Maya
