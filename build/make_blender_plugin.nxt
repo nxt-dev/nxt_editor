@@ -1,0 +1,45 @@
+{
+    "version": "1.17",
+    "alias": "make_blender_plugin",
+    "color": "#e87d0d",
+    "mute": false,
+    "solo": false,
+    "meta_data": {
+        "positions": {
+            "/make_addon": [
+                0.0,
+                0.0
+            ]
+        },
+        "collapse": {
+            "/make_addon": false
+        }
+    },
+    "nodes": {
+        "/": {
+            "attrs": {
+                "addon_folder": {
+                    "type": "raw",
+                    "value": "${path::nxt_blender}"
+                },
+                "intergation_folder": {
+                    "type": "raw",
+                    "value": "${file::../nxt_editor/integration/blender}"
+                }
+            },
+            "code": [
+                "import os",
+                "import shutil"
+            ]
+        },
+        "/make_addon": {
+            "start_point": true,
+            "code": [
+                "if os.path.isdir('${addon_folder}'):",
+                "    shutil.rmtree('${addon_folder}')",
+                "    print('removed old blender build')",
+                "shutil.copytree('${intergation_folder}', '${addon_folder}')"
+            ]
+        }
+    }
+}

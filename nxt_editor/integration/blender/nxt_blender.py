@@ -21,7 +21,7 @@ bl_info = {
     "wiki_url": "https://nxt-dev.github.io/",
     "tracker_url": "https://github.com/nxt-dev/nxt_editor/issues",
     "category": "nxt",
-    "warning": "This is an experimental version of nxt_blend. Save early, "
+    "warning": "This is an experimental version of nxt_blender. Save early, "
                "save often."
 }
 
