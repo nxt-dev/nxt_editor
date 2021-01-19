@@ -15,3 +15,7 @@ This is a maya module folder for nxt.
 
 # Usage
 * When the nxt plugin is loaded, there is an "nxt" menu at the top of maya where you can select "Open Editor" and get started.
+
+# Update
+Copy the contents of `nxt_maya/scripts` and `nxt_maya/plug-ins` and replace the existing contents of your NXT Maya installation.  
+Restart Maya

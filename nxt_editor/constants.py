@@ -23,4 +23,4 @@ class EDITOR_VERSION(object):
 _pref_dir_name = str(EDITOR_VERSION.MAJOR)
 PREF_DIR = os.path.join(USER_DIR, 'prefs', _pref_dir_name)
 
-NXT_WEBSITE = 'https://opennxt.dev/'
+NXT_WEBSITE = 'https://nxt-dev.github.io/'

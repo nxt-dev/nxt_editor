@@ -6,6 +6,7 @@
     "solo": false,
     "references": [
         "make_maya_plugin.nxt",
+        "make_blender_plugin.nxt",
         "../../nxt/build/release.nxt"
     ],
     "comp_overrides": {
@@ -22,7 +23,7 @@
         },
         "positions": {
             "/CreateRelease": [
-                2180.0,
+                2460.0,
                 60.0
             ],
             "/GitClone": [
@@ -58,7 +59,7 @@
                 420.0
             ],
             "/ReleaseLoop": [
-                2140.0,
+                2420.0,
                 0.0
             ],
             "/build_maya_plugin": [
@@ -69,6 +70,10 @@
                 1840.0,
                 300.0
             ],
+            "/make_addon": [
+                2120.0,
+                0.0
+            ],
             "/make_module_folder": [
                 1820.0,
                 0.0
@@ -76,6 +81,10 @@
             "/versions": [
                 140.0,
                 0.0
+            ],
+            "/zip_blender_addon": [
+                2140.0,
+                80.0
             ]
         },
         "collapse": {
@@ -87,12 +96,6 @@
     },
     "nodes": {
         "/": {
-            "child_order": [
-                "CreateRelease",
-                "ReleaseLoop",
-                "make_module_folder",
-                "versions"
-            ],
             "attrs": {
                 "repo": {
                     "value": "nxt_editor"
@@ -123,9 +126,23 @@
         "/CreateRelease": {
             "child_order": [
                 "DraftRelease",
+                "UploadBlenderAddon",
                 "UploadMayaPlugin",
                 "OpenReleaseURL"
             ]
+        },
+        "/CreateRelease/UploadBlenderAddon": {
+            "instance": "/GitUpload",
+            "attrs": {
+                "asset_path": {
+                    "type": "raw",
+                    "value": "${/make_addon/zip_blender_addon.zip_path}"
+                },
+                "content_type": {
+                    "type": "raw",
+                    "value": "application/zip"
+                }
+            }
         },
         "/CreateRelease/UploadMayaPlugin": {
             "instance": "/GitUpload",
@@ -141,7 +158,7 @@
             }
         },
         "/ReleaseLoop": {
-            "execute_in": "/make_module_folder",
+            "execute_in": "/make_addon",
             "attrs": {
                 "release_types": {
                     "type": "tuple",
@@ -155,6 +172,29 @@
                     "value": "nxt_editor"
                 }
             }
+        },
+        "/make_addon": {
+            "start_point": false,
+            "execute_in": "/make_module_folder",
+            "child_order": [
+                "zip_blender_addon"
+            ]
+        },
+        "/make_addon/zip_blender_addon": {
+            "attrs": {
+                "zip_name": {
+                    "type": "raw",
+                    "value": "${release_dir}/nxt_blender"
+                },
+                "zip_path": {
+                    "type": "raw",
+                    "value": "${zip_name}.zip"
+                }
+            },
+            "code": [
+                "self.zip_path = shutil.make_archive('${zip_name}', 'zip', '${addon_folder}')",
+                "shutil.rmtree('${addon_folder}')"
+            ]
         },
         "/make_module_folder": {
             "start_point": false,
