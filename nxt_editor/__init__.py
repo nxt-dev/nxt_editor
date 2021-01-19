@@ -80,6 +80,21 @@ except ImportError:
     make_resources()
 
 
+def _new_qapp():
+    app = QtWidgets.QApplication
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+    app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
+    app = app(sys.argv)
+    style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
+    style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
+    stream = QtCore.QTextStream(style_file)
+    app.setStyleSheet(stream.readAll())
+    pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
+    app.setWindowIcon(QtGui.QIcon(pixmap))
+    return app
+
+
 def launch_editor(paths=None, start_rpc=True):
     """Launch an instance of the editor. Will attach to existing QApp if found,
     otherwise will create and open one.
@@ -88,22 +103,12 @@ def launch_editor(paths=None, start_rpc=True):
     if existing:
         app = existing
     else:
-        app = QtWidgets.QApplication
-        os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-        app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
-        app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
-        app = app(sys.argv)
-        style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
-        style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
-        stream = QtCore.QTextStream(style_file)
-        app.setStyleSheet(stream.readAll())
-        pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
-        app.setWindowIcon(QtGui.QIcon(pixmap))
+        app = _new_qapp()
     instance = show_new_editor(paths, start_rpc)
     app.setActiveWindow(instance)
     if not existing:
         app.exec_()
-    return app
+    return instance
 
 
 def show_new_editor(paths=None, start_rpc=True):

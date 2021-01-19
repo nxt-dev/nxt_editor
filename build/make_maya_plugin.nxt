@@ -30,10 +30,6 @@
     },
     "nodes": {
         "/": {
-            "child_order": [
-                "make_module_folder",
-                "clone_fresh_source"
-            ],
             "attrs": {
                 "mod_folder": {
                     "type": "raw",
@@ -89,7 +85,7 @@
                 "if os.path.isdir('${mod_folder}'):",
                 "    shutil.rmtree('${mod_folder}')",
                 "    print('removed old build')",
-                "template_mod = os.path.join('${nxt_root}', 'integration', 'maya')",
+                "template_mod = os.path.join('${nxt_root}', 'nxt_editor/integration', 'maya')",
                 "shutil.copytree(template_mod, '${mod_folder}')"
             ]
         },

@@ -24,11 +24,24 @@ Our releases are hosted on [PyPi](https://pypi.org/project/nxt-editor/).
 - Update:
     - `pip install -U nxt-editor`
 
+### Blender addon:
+- Install:
+    1. Download Blender addon (nxt_blender.zip) [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
+    2. Extract and follow `README.md` inside  [nxt_blender](nxt_editor/integration/blender/README.md) instructions (also included in the download)
+- Launch:
+    1. Load the `nxt_blender` Addon (Edit > Preferences > Add-ons)
+    2. Navigate the newly created NXT menu and select Open Editor.
+- Update:
+    - Automatically: NXT > Update NXT
+    - By Hand: `/path/to/python.exe -m pip install -U nxt-editor`
+    - Relaunch Blender after
+
+
 ### Maya plugin:
 
 - Install:
     1. Download the maya module(`nxt_maya.zip`) from the [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
-    2. Follow the [nxt_maya](integration/maya/README.md) instructions (also included in the download)
+    2. Follow the [nxt_maya](nxt_editor/integration/maya/README.md) instructions (also included in the download)
 - Launch:
     1. Load `nxt_maya` plugin in Maya
     2. Select the `nxt` menu from the menus at the top of Maya
