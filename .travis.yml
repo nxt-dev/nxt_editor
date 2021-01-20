@@ -26,6 +26,7 @@ install:
   - git clone https://github.com/nxt-dev/nxt.git
   - pip install ./nxt
   - pip install ./nxt_editor
+  - pip install importlib-metadata==3.4
   - pip install twine
   - sudo apt-get install -y libxkbcommon-x11-0
   - sudo apt-get install -y libgl1-mesa-dev
