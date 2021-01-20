@@ -104,6 +104,9 @@ class MainWindow(QtWidgets.QMainWindow):
                                                     '.'.join([str(n) for n in sys.version_info[:3]]),
                                                     current_branch))
         self.setObjectName('Main Window')
+        self.zoom_keys = QtGui.QKeySequence(QtCore.Qt.Key_Alt)
+        self.zoom_keys_down = False
+        self._held_keys = []
         self._closing = False
         self.last_focused_start = 0  # Start point focus tracker
         # FIXME: Fix with MV signal
@@ -744,7 +747,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self.property_editor.update_styles()
 
     def keyPressEvent(self, event):
+        key = event.key()
+        if key not in self._held_keys:
+            self._held_keys.append(key)
+        self.zoom_keys_down = False
+        match = QtGui.QKeySequence(*self._held_keys).matches(self.zoom_keys)
+        if match == QtGui.QKeySequence.SequenceMatch.ExactMatch:
+            self.zoom_keys_down = True
         event.accept()
+
+    def keyReleaseEvent(self, event):
+        key = event.key()
+        if key in self._held_keys:
+            self._held_keys.remove(key)
+        self.zoom_keys_down = False
+        match = QtGui.QKeySequence(*self._held_keys).matches(self.zoom_keys)
+        if match == QtGui.QKeySequence.SequenceMatch.ExactMatch:
+            self.zoom_keys_down = True
 
     def eventFilter(self, widget, event):
         # enter editing after update_code_is_local
