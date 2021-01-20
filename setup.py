@@ -18,7 +18,6 @@ ed_major = ed_v_data['MAJOR']
 ed_minor = ed_v_data['MINOR']
 ed_patch = ed_v_data['PATCH']
 editor_version = '{}.{}.{}'.format(ed_major, ed_minor, ed_patch)
-
 setuptools.setup(
     name="nxt-editor",
     version=editor_version,
@@ -39,6 +38,9 @@ setuptools.setup(
         "": ["*.nxt"],
         # Covers builtin, and full depth of resources
         "nxt_editor": ["version.json",
+                       "integration/*",
+                       "integration/*/*",
+                       "integration/*/*/*",
                        "resources/*",
                        "resources/*/*",
                        "resources/*/*/*",
