@@ -2540,6 +2540,9 @@ class StageModel(QtCore.QObject):
         :param globally: If True code will be run in the global scope.
         :return: None
         """
+        if not code_string:
+            logger.warning('No code to execute!')
+            return
         self.about_to_execute.emit(True)
         rt = rt_layer
         np = [node_path]
@@ -2549,6 +2552,13 @@ class StageModel(QtCore.QObject):
             new_rt = self.prompt_runtime_rebuild(must_rebuild=bool(bad_paths))
             if new_rt:
                 rt_layer = new_rt
+            elif not rt_layer:
+                return
+        if not rt_layer or not hasattr(rt_layer, '_console'):
+            logger.grapherror('Tried to execute snippet from {} '
+                              'in invalid runtime layer!'.format(node_path),
+                              links=[node_path])
+            return
         rt_layer._console.run_as_global = globally
         self._set_executing(True)
         try:

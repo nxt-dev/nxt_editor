@@ -79,8 +79,10 @@ class StageView(QtWidgets.QGraphicsView):
         self.new_node_selected = False
         self.panning = False
         self.zooming = False
-        self.zoom_keys = QtGui.QKeySequence(QtCore.Qt.Key_Alt)
-        self.zoom_keys_down = False
+        self._num_scheduled_scalings = 0
+        self.zoom_start_pos = QtCore.QPointF(.0, .0)
+        self._view_pos = self.zoom_start_pos
+        self._scene_pos = self.zoom_start_pos
         self.zoom_button = QtCore.Qt.RightButton
         self.zoom_button_down = False
         self.block_context_menu = True
@@ -629,11 +631,8 @@ class StageView(QtWidgets.QGraphicsView):
         key = event.key()
         if key not in self._held_keys:
             self._held_keys.append(key)
-        self.zoom_keys_down = False
         self.zooming = False
-        match = QtGui.QKeySequence(*self._held_keys).matches(self.zoom_keys)
-        if match == QtGui.QKeySequence.SequenceMatch.ExactMatch:
-            self.zoom_keys_down = True
+        if self._parent.zoom_keys_down:
             if self.zoom_button_down:
                 self._previous_mouse_pos = self.mouse_scene_pos
                 self.zooming = True
@@ -643,11 +642,8 @@ class StageView(QtWidgets.QGraphicsView):
         key = event.key()
         if key in self._held_keys:
             self._held_keys.remove(key)
-        self.zoom_keys_down = False
         self.zooming = False
-        match = QtGui.QKeySequence(*self._held_keys).matches(self.zoom_keys)
-        if match == QtGui.QKeySequence.SequenceMatch.ExactMatch:
-            self.zoom_keys_down = True
+        if self._parent.zoom_keys_down:
             if self.zoom_button_down:
                 self._previous_mouse_pos = self.mouse_scene_pos
                 self.zooming = True
@@ -658,12 +654,14 @@ class StageView(QtWidgets.QGraphicsView):
         self._initial_click_pos = event.pos()
         self.zoom_button_down = event.button() is self.zoom_button
         self.zooming = False
-        if self.zoom_keys_down and self.zoom_button_down:
+        if self._parent.zoom_keys_down and self.zoom_button_down:
             self.zooming = True
+            self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
             event.accept()
         if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MidButton:
             self.zooming = True
+            self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
             event.accept()
 
@@ -733,19 +731,23 @@ class StageView(QtWidgets.QGraphicsView):
         if self.zooming:
             if not self._previous_mouse_pos:
                 self._previous_mouse_pos = event.pos()
-            dist = event.pos().x() - self._previous_mouse_pos.x()
+            dist_x = event.pos().x() - self._previous_mouse_pos.x()
             zoom_pref_key = user_dir.USER_PREF.ZOOM_MULT
             pref_mult = user_dir.user_prefs.get(zoom_pref_key, 1.0)
             mult = pref_mult * 0.005
-            dist = dist * mult + 1.0
+            dist = dist_x * mult + 1.0
+            self._view_pos = self.zoom_start_pos
+            self._scene_pos = self.mapToScene(self._view_pos)
             if 0 < dist < 1:
                 if self.scale_factor > self._scale_minimum:
                     self.scale(dist, dist)
+                    self._center_view()
                 else:
                     self.scale(1, 1)
             elif dist > 1:
                 if self.scale_factor < self._scale_maximum:
                     self.scale(dist, dist)
+                    self._center_view()
                 else:
                     self.scale(1, 1)
             self._previous_mouse_pos = event.pos()
@@ -771,7 +773,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.zooming = False
         if event.button() is self.zoom_button:
             self.zoom_button_down = False
-        if self.zoom_keys_down and self.zoom_button_down:
+        if self._parent.zoom_keys_down and self.zoom_button_down:
             self.zooming = True
             event.accept()
 
@@ -942,23 +944,50 @@ class StageView(QtWidgets.QGraphicsView):
                     item.collapse_node()
 
     def wheelEvent(self, event):
-        try:
-            new_scale = event.delta() * .001 + 1.0
-        except AttributeError:
-            new_scale = 1.1
-
-        if 0 < new_scale < 1:
-            if self.scale_factor > self._scale_minimum:
-                self.scale(new_scale, new_scale)
-            else:
-                self.scale(1, 1)
-        elif new_scale > 1:
-            if self.scale_factor < self._scale_maximum:
-                self.scale(new_scale, new_scale)
-            else:
-                self.scale(1, 1)
+        num_degrees = event.delta() / 8.
+        num_steps = num_degrees / 15.
+        self._num_scheduled_scalings += num_steps
+        if self._num_scheduled_scalings * num_steps < 0.:
+            self._num_scheduled_scalings = num_steps
+        anim = QtCore.QTimeLine(duration=150, parent=self)
+        anim.setUpdateInterval(20)
+        anim.valueChanged.connect(self.scaling_time)
+        anim.finished.connect(self.anim_finished)
+        self._view_pos = event.pos()
+        self._scene_pos = self.mapToScene(self._view_pos)
+        anim.start()
         event.accept()
         return
+
+    def scaling_time(self, f):
+        zoom_pref_key = user_dir.USER_PREF.ZOOM_MULT
+        pref_mult = user_dir.user_prefs.get(zoom_pref_key, 1.0)
+        mult = 150 / pref_mult
+        factor = 1.0 + self._num_scheduled_scalings / mult
+        if 0 < factor < 1:
+            if self.scale_factor > self._scale_minimum:
+                self.scale(factor, factor)
+                self._center_view()
+
+            else:
+                self.scale(1, 1)
+        elif factor > 1:
+            if self.scale_factor < self._scale_maximum:
+                self.scale(factor, factor)
+                self._center_view()
+            else:
+                self.scale(1, 1)
+
+    def _center_view(self):
+        view_center = self.mapToScene(self.viewport().rect().center())
+        delta = self.mapToScene(self._view_pos) - view_center
+        self.centerOn(self._scene_pos - delta)
+
+    def anim_finished(self):
+        if self._num_scheduled_scalings > 0:
+            self._num_scheduled_scalings -= 1
+        else:
+            self._num_scheduled_scalings += 1
 
     def start_connection_draw(self, src_path=None, tgt_path=None):
         """Start drawing a connection from either source or target. With
