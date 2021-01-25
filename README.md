@@ -4,7 +4,7 @@
 [Installation/Usage](#installationusage) | [Docs](https://nxt-dev.github.io/) | [Contributing](CONTRIBUTING.md) | [Licensing](LICENSE)
 
 # Installation/Usage
-**To Use NXT please use the [NXT Standalone](#nxt-standalone) or [DCC plugin zip.](#maya-plugin)**  
+**To Use NXT please use the [NXT Standalone](#nxt-standalone) or [DCC plugin zip.](#DCC-Plugins)**  
 Only clone this repo if you're [contributing](CONTRIBUTING.md) to the NXT codebase.
 
 <br>
@@ -24,32 +24,14 @@ Our releases are hosted on [PyPi](https://pypi.org/project/nxt-editor/).
 - Update:
     - `pip install -U nxt-editor`
 
-### Blender addon:
-- Install:
-    1. Download Blender addon (nxt_blender.zip) [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
-    2. Extract and follow `README.md` inside  [nxt_blender](nxt_editor/integration/blender/README.md) instructions (also included in the download)
-- Launch:
-    1. Load the `nxt_blender` Addon (Edit > Preferences > Add-ons)
-    2. Navigate the newly created NXT menu and select Open Editor.
-- Update:
-    - Automatically: NXT > Update NXT
-    - By Hand: `/path/to/python.exe -m pip install -U nxt-editor`
-    - Relaunch Blender after
+### DCC Plugins
 
+Each of our supported DCC's get a zip file on our [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
 
-### Maya plugin:
-
-- Install:
-    1. Download the maya module(`nxt_maya.zip`) from the [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
-    2. Follow the [nxt_maya](nxt_editor/integration/maya/README.md) instructions (also included in the download)
-- Launch:
-    1. Load `nxt_maya` plugin in Maya
-    2. Select the `nxt` menu from the menus at the top of Maya
-    3. Click `Open Editor`
-- Update:
-    1. Download the `nxt_maya` zip from the [latest release](https://github.com/nxt-dev/nxt_editor/releases/latest)
-    2. Extract the zip and replace the existing `nxt_maya` files with the newly extracted files.
-    3. Re-launch Maya
+Each one contains a `README.md` inside to explain how to install/update them.
+- [nxt_maya](nxt_editor/integration/maya/README.md)
+- [nxt_blender](nxt_editor/integration/blender/README.md)
+- [nxt_unreal](nxt_editor/integration/unreal/README.md)
 
 <br>
 
