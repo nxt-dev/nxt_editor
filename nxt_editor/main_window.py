@@ -327,6 +327,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.rpc_log_tail.new_text.disconnect(raw_write_func)
             self.rpc_log_tail.new_text.disconnect(rich_write_func)
 
+    def event(self, event):
+        if event.type() == QtCore.QEvent.WindowDeactivate:
+            self._held_keys = []
+            self.zoom_keys_down = False
+        return super(MainWindow, self).event(event)
+
     @staticmethod
     def set_waiting_cursor(state=True):
         if state:
