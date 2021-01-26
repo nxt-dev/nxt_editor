@@ -337,15 +337,15 @@ class MainWindow(QtWidgets.QMainWindow):
     @staticmethod
     def create_remote_context(place_holder_text='',
                               interpreter_exe=sys.executable,
-                              context_graph=None):
+                              context_graph=None, exe_script_args=()):
         cur_context = nxt.remote.contexts.get_current_context_exe_name()
         pop_up = QtWidgets.QDialog()
         pop_up.setWindowTitle('Create context for "{}"'.format(cur_context))
         v_layout = QtWidgets.QVBoxLayout()
         pop_up.setLayout(v_layout)
         label = QtWidgets.QPlainTextEdit()
-        info = ('Create context for "{}" your host '
-                'python interpreter\n'
+        info = ('Create remote context for your host '
+                'Python interpreter/DCC\n'
                 'Type your desired name in the box below '
                 'and click create.'.format(cur_context))
         label.setPlainText(info)
@@ -358,6 +358,7 @@ class MainWindow(QtWidgets.QMainWindow):
         v_layout.addLayout(h_layout)
         name = QtWidgets.QLineEdit()
         name.setPlaceholderText(str(place_holder_text))
+        name.setText(str(place_holder_text))
         create_button = QtWidgets.QPushButton('Create!')
         h_layout.addWidget(name)
         h_layout.addWidget(create_button)
@@ -366,7 +367,8 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 nxt.create_context(name.text(),
                                    interpreter_exe=interpreter_exe,
-                                   context_graph=context_graph)
+                                   context_graph=context_graph,
+                                   exe_script_args=exe_script_args)
                 pop_up.close()
             except (IOError, NameError) as e:
                 info = str(e)
