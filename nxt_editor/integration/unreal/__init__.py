@@ -20,7 +20,7 @@ def launch_nxt_in_ue():
         unreal.log('Found existing QApp')
     else:
         unreal.log('Building new QApp for nxt')
-        nxt_editor._new_qapp()
+        existing = nxt_editor._new_qapp()
 
     global __NXT_WINDOW
     if __NXT_WINDOW:
@@ -28,3 +28,6 @@ def launch_nxt_in_ue():
         __NXT_WINDOW.raise_()
     else:
         __NXT_WINDOW = nxt_editor.show_new_editor()
+    
+    __NXT_WINDOW.close_signal.connect(existing.quit)
+    atexit.register(__NXT_WINDOW.close)

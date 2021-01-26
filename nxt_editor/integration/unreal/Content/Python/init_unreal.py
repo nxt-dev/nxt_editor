@@ -26,7 +26,7 @@ def install_nxt_to_interpreter():
 
 def update_installed_nxt():
     subprocess.check_call([get_python_exc_path(), '-m', 'pip',
-                           'install', '--upgrade', 'nxt-editor'])
+                           'install', '--upgrade', 'nxt-editor', 'nxt-core'])
 
 def uninstall_nxt_from_interpreter():
     subprocess.check_call([get_python_exc_path(), '-m', 'pip',
