@@ -5,6 +5,7 @@
     "mute": false,
     "solo": false,
     "references": [
+        "H:/Projects/nxt/nxt_editor/build/make_unreal_plugin.nxt",
         "make_maya_plugin.nxt",
         "make_blender_plugin.nxt",
         "../../nxt/build/release.nxt"
@@ -23,8 +24,8 @@
         },
         "positions": {
             "/CreateRelease": [
-                2460.0,
-                60.0
+                2861.9022362347496,
+                69.87218527196421
             ],
             "/GitClone": [
                 -1000.0,
@@ -59,8 +60,8 @@
                 420.0
             ],
             "/ReleaseLoop": [
-                2420.0,
-                0.0
+                2824.2201296032613,
+                7.554291903452558
             ],
             "/build_maya_plugin": [
                 1800.0,
@@ -78,6 +79,10 @@
                 1820.0,
                 0.0
             ],
+            "/make_plugin": [
+                2465.5358761299212,
+                1.3083409543444589
+            ],
             "/versions": [
                 140.0,
                 0.0
@@ -85,6 +90,10 @@
             "/zip_blender_addon": [
                 2140.0,
                 80.0
+            ],
+            "/zip_blender_addon2": [
+                2460.556716567386,
+                151.71085853406586
             ]
         },
         "collapse": {
@@ -128,6 +137,7 @@
                 "DraftRelease",
                 "UploadBlenderAddon",
                 "UploadMayaPlugin",
+                "UploadUnrealPlugin",
                 "OpenReleaseURL"
             ]
         },
@@ -157,8 +167,21 @@
                 }
             }
         },
+        "/CreateRelease/UploadUnrealPlugin": {
+            "instance": "/GitUpload",
+            "attrs": {
+                "asset_path": {
+                    "type": "raw",
+                    "value": "${/make_plugin/zip_unreal_plugin.zip_path}"
+                },
+                "content_type": {
+                    "type": "raw",
+                    "value": "application/zip"
+                }
+            }
+        },
         "/ReleaseLoop": {
-            "execute_in": "/make_addon",
+            "execute_in": "/make_plugin",
             "attrs": {
                 "release_types": {
                     "type": "tuple",
@@ -222,6 +245,34 @@
             "code": [
                 "self.zip_path = shutil.make_archive('${zip_name}', 'zip', '${mod_folder}')",
                 "shutil.rmtree('${mod_folder}')"
+            ]
+        },
+        "/make_plugin": {
+            "start_point": false,
+            "execute_in": "/make_addon",
+            "child_order": [
+                "zip_unreal_plugin"
+            ],
+            "attrs": {
+                "result_dir": {
+                    "value": "${path::${release_dir}/nxt_unreal}"
+                }
+            }
+        },
+        "/make_plugin/zip_unreal_plugin": {
+            "attrs": {
+                "zip_name": {
+                    "type": "raw",
+                    "value": "${result_dir}"
+                },
+                "zip_path": {
+                    "type": "raw",
+                    "value": "${zip_name}.zip"
+                }
+            },
+            "code": [
+                "self.zip_path = shutil.make_archive('${zip_name}', 'zip', '${result_dir}')",
+                "shutil.rmtree('${result_dir}')"
             ]
         },
         "/versions": {

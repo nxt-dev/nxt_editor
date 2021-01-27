@@ -1,0 +1,17 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "0.1.0",
+	"FriendlyName": "Nxt Unreal",
+	"Description": "Unreal editor connections to the nxt python module.",
+	"Category": "Scripting",
+	"CreatedBy": "The nxt Authors",
+	"CreatedByURL": "https://nxt-dev.github.io",
+	"DocsURL": "https://nxt-dev.github.io/tutorials",
+	"MarketplaceURL": "",
+	"SupportURL": "https://github.com/nxt-dev/nxt_editor/discussions",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"IsExperimentalVersion": false,
+	"Installed": false
+}
