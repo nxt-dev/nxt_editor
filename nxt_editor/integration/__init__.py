@@ -100,13 +100,26 @@ class NxtIntegration(object):
         if self.check_for_nxt_editor():
             self._update_package('nxt-editor')
 
-    @ staticmethod
-    def uninstall():
+    @staticmethod
+    def _uninstall_package(package_name):
+        """Calls a subprocess to pip uninstall the given package name. Will
+        NOT prompt the user to confrim uninstall.
+
+        :param package_name: pip package name
+        :raises: subprocess.CalledProcessError
+        :return: None
+        """
         environ_copy = dict(os.environ)
         environ_copy["PYTHONNOUSERSITE"] = "1"
         subprocess.run([sys.executable, "-m", "pip", "uninstall",
-                        "nxt-editor", "nxt-core"], check=True, env=environ_copy)
-        print('Please restart your DCC or Python interpreter')
+                        package_name, '-y'], check=True, env=environ_copy)
+
+    def uninstall(self):
+        if self.check_for_nxt_core():
+            self._uninstall_package('nxt-core')
+        if self.check_for_nxt_editor():
+            self._uninstall_package('nxt-editor')
+        # print('Please restart your DCC or Python interpreter')
 
     def launch_nxt(self):
         raise NotImplementedError('Your DCC needs it own nxt launch method.')

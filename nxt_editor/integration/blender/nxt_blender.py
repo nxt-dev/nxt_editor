@@ -130,7 +130,6 @@ class NxtInstallDependencies(bpy.types.Operator):
         environ_copy = dict(os.environ)
         environ_copy["PYTHONNOUSERSITE"] = "1"
         pkg = 'nxt-editor'
-        pkg = 'D:/Projects/nxt_editor'
         try:
             subprocess.run([sys.executable, "-m", "pip", "install", pkg],
                            check=True, env=environ_copy)
@@ -187,7 +186,7 @@ class NxtUninstallDependencies(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            blender.Blender.uninstall()
+            blender.Blender().uninstall()
         except subprocess.CalledProcessError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}

@@ -95,7 +95,7 @@ def _new_qapp():
     return app
 
 
-def launch_editor(paths=None, start_rpc=True, call_exec=True):
+def launch_editor(paths=None, start_rpc=True):
     """Launch an instance of the editor. Will attach to existing QApp if found,
     otherwise will create and open one.
     """
@@ -106,7 +106,7 @@ def launch_editor(paths=None, start_rpc=True, call_exec=True):
         app = _new_qapp()
     instance = show_new_editor(paths, start_rpc)
     app.setActiveWindow(instance)
-    if not existing and call_exec:
+    if not existing:
         app.exec_()
     return instance
 
