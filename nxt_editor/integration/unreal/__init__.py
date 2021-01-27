@@ -1,5 +1,6 @@
 # Built-in
 import os
+import atexit
 
 # External
 import unreal
@@ -28,6 +29,6 @@ def launch_nxt_in_ue():
         __NXT_WINDOW.raise_()
     else:
         __NXT_WINDOW = nxt_editor.show_new_editor()
-    
-    __NXT_WINDOW.close_signal.connect(existing.quit)
+
+    __NXT_WINDOW.close_signal.connect(existing.exit)
     atexit.register(__NXT_WINDOW.close)
