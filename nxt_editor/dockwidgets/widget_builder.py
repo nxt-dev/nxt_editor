@@ -18,6 +18,7 @@ import nxt_editor
 from nxt_editor import user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import DATA_STATE, nxt_path
+from nxt import nxt_node
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -881,15 +882,22 @@ class Button(QtWidgets.QPushButton):
 
         # filter out widget nodes
         filtered_nodes = []
-        widget_descendants = []
+        dont_run = []
         for path in descendants:
             widget_type = get_widget_type(path, self.stage_model)
             if widget_type:
                 des = self.stage_model.comp_layer.descendants(path,
                                                               ordered=True)
-                widget_descendants += des
-            if not widget_type and path not in widget_descendants:
-                filtered_nodes.append(path)
+                dont_run += des
+            if not widget_type and path not in dont_run:
+                enabled = self.stage_model.get_node_enabled(path)
+                anc_enabled = self.stage_model.get_node_ancestor_enabled(path)
+                if enabled and anc_enabled:
+                    filtered_nodes.append(path)
+                else:
+                    des = self.stage_model.comp_layer.descendants(path,
+                                                                  ordered=True)
+                    dont_run += [path] + des
 
         node_paths = [exec_path] + filtered_nodes
         if user_dir.user_prefs.get(RECOMP_PREF, True):
