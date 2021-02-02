@@ -5,7 +5,7 @@
     "mute": false,
     "solo": false,
     "references": [
-        "H:/Projects/nxt/nxt_editor/build/make_unreal_plugin.nxt",
+        "make_unreal_plugin.nxt",
         "make_maya_plugin.nxt",
         "make_blender_plugin.nxt",
         "../../nxt/build/release.nxt"
