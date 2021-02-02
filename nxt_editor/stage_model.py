@@ -2544,14 +2544,15 @@ class StageModel(QtCore.QObject):
             logger.warning('No code to execute!')
             return
         self.about_to_execute.emit(True)
-        rt = rt_layer
+        rt_layer = rt_layer or self.current_rt_layer
         np = [node_path]
-        valid, bad_paths = self.validate_runtime_layer(rt_layer=rt,
+        valid, bad_paths = self.validate_runtime_layer(rt_layer=rt_layer,
                                                        node_paths=np)
         if not rt_layer or not valid:
             new_rt = self.prompt_runtime_rebuild(must_rebuild=bool(bad_paths))
             if new_rt:
                 rt_layer = new_rt
+                self.current_rt_layer = new_rt
             elif not rt_layer:
                 return
         if not rt_layer or not hasattr(rt_layer, '_console'):
