@@ -319,19 +319,26 @@ class CodeEditor(DockWidgetBase):
             #  for faster updates. And avoid that early exit check at the top.
             get_code = self.stage_model.get_node_code_string
             code_string = get_code(self.node_path,
-                                      self.stage_model.data_state,
-                                      self.stage_model.comp_layer)
+                                   self.stage_model.data_state,
+                                   self.stage_model.comp_layer)
             cached_state = self.stage_model.data_state == DATA_STATE.CACHED
+            self.actual_display_state = DATA_STATE.RAW
             if code_string and cached_state:
                 self.actual_display_state = DATA_STATE.CACHED
             elif not code_string and cached_state:
                 self.actual_display_state = DATA_STATE.RAW
                 code_string = get_code(self.node_path, DATA_STATE.RAW,
-                                          self.stage_model.comp_layer)
+                                       self.stage_model.comp_layer)
+            else:
+                self.actual_display_state = self.stage_model.data_state
             if self.editing_active:
-                self.overlay_widget.main_color = self.overlay_widget.base_color
+                self.overlay_widget.hide()
+            elif self.code_is_local:
+                self.overlay_widget.main_color = None
+                self.overlay_widget.show()
             else:
                 self.overlay_widget.main_color = self.overlay_widget.ext_color
+                self.overlay_widget.show()
             self.overlay_widget.update()
             self.editor.verticalScrollBar().blockSignals(True)
             self.cached_code_lines = code_string.split('\n')
@@ -397,11 +404,6 @@ class CodeEditor(DockWidgetBase):
         self.editor.current_line_highlight = not is_local
         self.overlay_widget.main_color = self.overlay_widget.base_color
         self.update_background()
-        if self.editing_active or is_local:
-            self.overlay_widget.hide()
-        else:
-            self.overlay_widget.main_color = self.overlay_widget.ext_color
-            self.overlay_widget.show()
         self.code_is_local = is_local
 
     def localize_code(self):
@@ -1280,26 +1282,35 @@ class OverlayWidget(QtWidgets.QWidget):
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
         self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.data_state = ''
+        self.click_msg = 'Double Click To Edit'
 
     def paintEvent(self, event):
         painter = QtGui.QPainter()
         painter.begin(self)
+        painter.setFont(QtGui.QFont("Roboto", 14))
+        font_metrics = QtGui.QFontMetrics(painter.font())
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         # actual_display_state
         code_editor = self._parent.ce_widget
         model = code_editor.stage_model
         self.data_state = code_editor.actual_display_state
         painter.setPen(QtCore.Qt.white)
-        font_matrics = QtGui.QFontMetrics(painter.font())
-        offset = font_matrics.boundingRect(self.data_state).width()
-        offset += painter.font().pointSize()
+        # Draw top right data state text
+        offset = font_metrics.boundingRect(self.data_state).width()
+        offset += painter.font().pointSize() * 1.5
         painter.drawText(self.rect().right() - offset,
                          painter.font().pointSize() * 1.5, self.data_state)
+        # Draw center message text
+        msg_offset = font_metrics.boundingRect(self.click_msg).width()
+        msg_offset += painter.font().pointSize()
+        pos = (self.rect().center().x() - (msg_offset*.5),
+               self.rect().center().y())
+        painter.drawText(*pos, self.click_msg)
         painter.setCompositionMode(QtGui.QPainter.CompositionMode_Darken)
-
         path = QtGui.QPainterPath()
         path.addRoundedRect(QtCore.QRectF(self.rect()), 9, 9)
-        painter.fillPath(path, QtGui.QBrush(self.main_color))
+        if self.main_color:
+            painter.fillPath(path, QtGui.QBrush(self.main_color))
         painter.setCompositionMode(QtGui.QPainter.CompositionMode_Screen)
         display_is_raw = self.data_state == DATA_STATE.RAW
         mode_is_cache = model.data_state == DATA_STATE.CACHED
