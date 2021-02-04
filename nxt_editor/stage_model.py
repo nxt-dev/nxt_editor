@@ -2073,7 +2073,6 @@ class StageModel(QtCore.QObject):
         layer = layer or self.top_layer
         cmd = ClearBreakpoints(model=self, layer_path=layer.real_path)
         self.undo_stack.push(cmd)
-        self.nodes_changed.emit(cmd.prev_breaks)
         self.breaks_changed.emit([])
 
     def _add_breakpoint(self, node_path, layer):
