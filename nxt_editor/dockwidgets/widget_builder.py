@@ -40,6 +40,7 @@ class WidgetBuilder(DockWidgetBase):
                                             minimum_width=minimum_width,
                                             minimum_height=minimum_height)
 
+        self.updating = False
         self.setObjectName('Workflow Tools')
         self.default_title = title
 
@@ -263,6 +264,8 @@ class WidgetBuilder(DockWidgetBase):
             return title or None
 
     def update_window(self, changed_paths=None):
+        if self.updating:
+            return
         if not self.isVisible():
             return
 
@@ -286,7 +289,7 @@ class WidgetBuilder(DockWidgetBase):
                     break
         if not update:
             return
-
+        self.updating = True
         # window title
         title = self.get_window_title()
         self.setWindowTitle(title or self.default_title)
@@ -311,6 +314,7 @@ class WidgetBuilder(DockWidgetBase):
                     widget=self.window_frame,
                     items=None,
                     parent=self)
+        self.updating = False
 
     def set_window_style(self):
         background_color = self.stage_model.get_node_attr_value(
