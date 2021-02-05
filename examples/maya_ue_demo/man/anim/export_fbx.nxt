@@ -1,0 +1,253 @@
+{
+    "version": "1.17",
+    "alias": "export_maya_anim",
+    "color": "#e83723",
+    "mute": false,
+    "solo": false,
+    "meta_data": {
+        "positions": {
+            "/ensure_output_dir": [
+                540.0,
+                60.0
+            ],
+            "/export_anim": [
+                -20.0,
+                0.0
+            ],
+            "/get_joints": [
+                100.0,
+                60.0
+            ],
+            "/report_done": [
+                400.0,
+                0.0
+            ],
+            "/start_export": [
+                -420.0,
+                0.0
+            ]
+        },
+        "collapse": {
+            "/export_anim": false,
+            "/export_anim/get_asset_joints": false,
+            "/export_anim/get_asset_joints/parent_root_to_world": false
+        }
+    },
+    "nodes": {
+        "/": {
+            "attrs": {
+                "_open_file": {
+                    "type": "NoneType",
+                    "value": "None"
+                },
+                "_output_file": {
+                    "type": "raw",
+                    "value": "${path::${output_dir}/${name}_${variant}_${clip}.fbx}"
+                },
+                "_root": {
+                    "type": "raw",
+                    "value": "${namespace}:${root_joint}"
+                },
+                "clip": {
+                    "comment": "Anim clip name",
+                    "type": "raw",
+                    "value": "walk"
+                },
+                "in_frame": {
+                    "comment": "End export frame",
+                    "type": "int",
+                    "value": "1"
+                },
+                "name": {
+                    "comment": "Asset name",
+                    "type": "raw",
+                    "value": "man"
+                },
+                "namespace": {
+                    "comment": "Namespace of asset",
+                    "type": "raw",
+                    "value": "${name}_${variant}_rig"
+                },
+                "out_frame": {
+                    "comment": "Start export frame",
+                    "type": "int",
+                    "value": "29"
+                },
+                "output_dir": {
+                    "comment": "Folder to export anim clip too",
+                    "type": "raw",
+                    "value": "${path::data/${variant}/${clip}/export}"
+                },
+                "root_joint": {
+                    "comment": "Name of root node (without namespace)",
+                    "type": "raw",
+                    "value": "root"
+                },
+                "use_timeline": {
+                    "type": "bool",
+                    "value": "True"
+                },
+                "variant": {
+                    "type": "raw",
+                    "value": "base"
+                }
+            },
+            "code": [
+                "# Builtin",
+                "import os",
+                "# External",
+                "from maya import cmds",
+                "import pymel.core as pm",
+                "",
+                "if ${use_timeline}:",
+                "    self.in_frame = int(cmds.playbackOptions(q=True, min=True))",
+                "    self.out_frame = int(cmds.playbackOptions(q=True, max=True))"
+            ]
+        },
+        "/export_anim": {
+            "start_point": false,
+            "execute_in": "/start_export",
+            "child_order": [
+                "ensure_output_dir",
+                "get_asset_joints",
+                "do_export"
+            ],
+            "code": [
+                ""
+            ]
+        },
+        "/export_anim/do_export": {
+            "comment": "Export the FBX",
+            "code": [
+                "# This exporter doesn't deal with exporting meshes, just joints.",
+                "pm.mel.FBXExportSkins(v=False)",
+                "pm.mel.FBXExportShapes(v=False)",
+                "",
+                "pm.mel.FBXExportBakeComplexAnimation(v=True)  # Bake the animation",
+                "pm.mel.FBXExportBakeComplexStart(v=${in_frame}) # Export/bake start frame",
+                "pm.mel.FBXExportBakeComplexEnd(v=${out_frame}) # Export/bake end frame",
+                "pm.mel.FBXExportInputConnections(v=False) # Don't export input connections",
+                "# Export selection to given filepath",
+                "pm.mel.FBXExport(f='${_output_file}', s=True)  "
+            ]
+        },
+        "/export_anim/ensure_output_dir": {
+            "comment": "Make sure the output folder is created",
+            "code": [
+                "# Check if output dir is a dir",
+                "if not os.path.isdir('${output_dir}'):",
+                "    print('Created export folder: ${output_dir}')",
+                "    os.mkdir('${output_dir}')"
+            ]
+        },
+        "/export_anim/get_asset_joints": {
+            "start_point": false,
+            "child_order": [
+                "import_asset",
+                "parent_root_to_world",
+                "clean_joints"
+            ],
+            "comment": "Get a list of the asset's joints",
+            "attrs": {
+                "joints": {
+                    "type": "list",
+                    "value": "[]"
+                }
+            },
+            "code": [
+                "# Get all the descendant joints of the root joint and put them in a list (including the root joint)",
+                "self.joints = ['${_root}'] + cmds.listRelatives('${_root}', ad=True, typ='joint')",
+                ""
+            ]
+        },
+        "/export_anim/get_asset_joints/clean_joints": {
+            "child_order": [
+                "select_joints"
+            ],
+            "comment": "Clean the namespace off of the joints",
+            "attrs": {
+                "clean_joints": {
+                    "type": "list",
+                    "value": "[]"
+                }
+            },
+            "code": [
+                "for jnt in self.joints:",
+                "    self.clean_joints.append(cmds.rename(jnt, jnt.split(':')[-1]))"
+            ]
+        },
+        "/export_anim/get_asset_joints/clean_joints/select_joints": {
+            "comment": "Select the joints and only the joints",
+            "code": [
+                "cmds.select(self.clean_joints, r=True)"
+            ]
+        },
+        "/export_anim/get_asset_joints/import_asset": {
+            "comment": "If the asset is referenced, import it.",
+            "code": [
+                "node_name = '${namespace}:${root_joint}'",
+                "refs = cmds.ls(typ='reference')",
+                "for ref in refs:",
+                "    if node_name in cmds.referenceQuery(ref, n=True):",
+                "        ref_node = pm.FileReference(ref)",
+                "        ref_node.importContents()",
+                "        break"
+            ]
+        },
+        "/export_anim/get_asset_joints/parent_root_to_world": {
+            "comment": "Make sure the asset's root is parented to the world",
+            "code": [
+                "cmds.parent('${_root}', w=True)"
+            ]
+        },
+        "/report_done": {
+            "execute_in": "/export_anim",
+            "child_order": [
+                "restore_scene"
+            ],
+            "code": [
+                "print(\"Saved FBX to: ${_output_file}\")"
+            ]
+        },
+        "/report_done/restore_scene": {
+            "code": [
+                "# Force open the scene we started with",
+                "cmds.file(STAGE._open_file, open=True, force=True)"
+            ]
+        },
+        "/start_export": {
+            "start_point": true,
+            "child_order": [
+                "validate_saved",
+                "force_re_open",
+                "load_plugins"
+            ],
+            "code": [
+                "STAGE._open_file = cmds.file(q=True, l=True)[0]",
+                "if os.path.basename(STAGE._open_file) == 'untitled':",
+                "    raise Exception('No scene open!')"
+            ]
+        },
+        "/start_export/force_re_open": {
+            "comment": "Force re-opens the file to clear any unwatned edits.",
+            "code": [
+                "# Re-open our scene to clear edits (you don't have to do this)",
+                "cmds.file(STAGE._open_file, open=True, force=True)"
+            ]
+        },
+        "/start_export/load_plugins": {
+            "comment": "Load the FBX plugin",
+            "code": [
+                "cmds.loadPlugin('fbxmaya', qt=True)  # Quietly load the fbx plugin"
+            ]
+        },
+        "/start_export/validate_saved": {
+            "enabled": false,
+            "comment": "Makes sure your scene is saved, otherwise you might loose work.",
+            "code": [
+                "if cmds.file(q=True, modified=True):",
+                "    raise Exception('Please save your work before exporting!')"
+            ]
+        }
+    }
+}
