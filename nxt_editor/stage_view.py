@@ -38,6 +38,8 @@ class StageView(QtWidgets.QGraphicsView):
     def __init__(self, model, parent=None):
         super(StageView, self).__init__(parent=parent)
         self.main_window = parent
+        self.do_animations = True
+        self._animating = []
         # EXEC ACTIONS
         self.exec_actions = parent.execute_actions
         self.addActions(self.exec_actions.actions())
@@ -294,7 +296,10 @@ class StageView(QtWidgets.QGraphicsView):
         else:
             node_paths = self.model.get_descendants(nxt_path.WORLD,
                                                     include_implied=True)
+        og_do_anims = self.do_animations
+        self.do_animations = False
         self.handle_nodes_changed(node_paths)
+        self.do_animations = og_do_anims
 
     def draw_node(self, node_path):
         graphic = self.get_node_graphic(node_path)
@@ -1134,6 +1139,7 @@ class StageView(QtWidgets.QGraphicsView):
     def handle_nodes_changed(self, node_paths):
         updated_paths = []
         roots_hit = set()
+        new_nodes = []
         for path in node_paths:
             if path == nxt_path.WORLD:
                 # never draw world node.
@@ -1216,6 +1222,10 @@ class StageView(QtWidgets.QGraphicsView):
             node_item.setPos(pos[0], pos[1])
 
     def handle_collapse_changed(self, node_paths):
+        while self._animating:
+            QtWidgets.QApplication.processEvents()
+        og_do_anims = self.do_animations
+        self.do_animations = True
         comp_layer = self.model.comp_layer
         roots_hit = set()
         for path in node_paths:
@@ -1231,7 +1241,8 @@ class StageView(QtWidgets.QGraphicsView):
                                                    include_implied=True)
                 for child_path in children:
                     self.remove_node_graphic(child_path)
-                roots_hit.add(nxt_path.get_root_path(path))
+                if children:
+                    roots_hit.add(nxt_path.get_root_path(path))
             else:
                 descendants = self.model.get_descendants(path,
                                                          include_implied=True)
@@ -1241,6 +1252,7 @@ class StageView(QtWidgets.QGraphicsView):
             if not root_graphic:
                 continue
             root_graphic.arrange_descendants()
+        self.do_animations = og_do_anims
 
     def remove_node_graphic(self, node_path):
         if node_path not in self._node_graphics:
@@ -1249,13 +1261,12 @@ class StageView(QtWidgets.QGraphicsView):
         if not graphic:
             return
         self.remove_node_connection_graphics(node_path)
-        self.scene().removeItem(graphic)
-        # because node graphics are parented to one another, removing parent
-        # implicitly removes descendants.
-        for key in list(self._node_graphics.keys()):
-            if nxt_path.is_ancestor(key, node_path):
-                self._node_graphics.pop(key)
-                self.remove_node_connection_graphics(key)
+
+        def handle_del():
+            self.scene().removeItem(graphic)
+
+        graphic.out_anim_group.finished.connect(handle_del)
+        graphic.anim_out()
 
     def get_node_graphic(self, name):
         return self._node_graphics.get(name, None)

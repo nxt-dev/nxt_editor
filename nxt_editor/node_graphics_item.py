@@ -22,7 +22,7 @@ from .label_edit import NameEditDialog
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
-class NodeGraphicsItem(QtWidgets.QGraphicsItem):
+class NodeGraphicsItem(QtWidgets.QGraphicsObject):
     """The graphics item used to represent nodes in the graph. Contains
     instances of NodeGraphicsPlug for each attribute on the associated node.
     Contains functionality for arranging children into stacks.
@@ -44,11 +44,12 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
 
         # item settings
         self.setCacheMode(QtWidgets.QGraphicsItem.DeviceCoordinateCache)
-        #self.setCacheMode(QtWidgets.QGraphicsItem.ItemCoordinateCache)
+
         self.setFlags(QtWidgets.QGraphicsItem.ItemIsMovable |
                       QtWidgets.QGraphicsItem.ItemIsFocusable |
                       QtWidgets.QGraphicsItem.ItemIsSelectable |
-                      QtWidgets.QGraphicsItem.ItemSendsScenePositionChanges)
+                      QtWidgets.QGraphicsItem.ItemSendsScenePositionChanges |
+                      QtWidgets.QGraphicsItem.ItemNegativeZStacksBehindParent)
         self.setAcceptHoverEvents(True)
 
         # draw settings
@@ -84,6 +85,97 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
         self.node_instance = None
         # draw node
         self.update_from_model()
+
+        # Setup groups
+        # In
+        self.in_anim_group = QtCore.QParallelAnimationGroup()
+        self.in_anim_group.finished.connect(self.finished_anim)
+        # Out
+        self.out_anim_group = QtCore.QParallelAnimationGroup()
+        self.out_anim_group.finished.connect(self.finished_anim)
+
+    def _setup_anim_properties(self):
+        # Position anim property
+        self.pos_anim = QtCore.QPropertyAnimation(self, b"pos", self)
+        # Set graphics effect
+        effect = QtWidgets.QGraphicsOpacityEffect(self)
+        effect.setOpacity(1)
+        self.setGraphicsEffect(effect)
+        # Opacity anim property
+        self.opacity_anim = QtCore.QPropertyAnimation(effect, b"opacity",
+                                                      effect)
+        # Lower power caching
+        self.setCacheMode(QtWidgets.QGraphicsItem.ItemCoordinateCache)
+
+    def setup_in_anim(self):
+        self._setup_anim_properties()
+        self.in_anim_group.addAnimation(self.pos_anim)
+        self.in_anim_group.addAnimation(self.opacity_anim)
+
+    def setup_out_anim(self):
+        self._setup_anim_properties()
+        self.out_anim_group.addAnimation(self.pos_anim)
+        self.out_anim_group.addAnimation(self.opacity_anim)
+
+    def finished_anim(self):
+        self.setGraphicsEffect(None)
+        self.in_anim_group.clear()
+        self.out_anim_group.clear()
+        self.setCacheMode(QtWidgets.QGraphicsItem.DeviceCoordinateCache)
+        self.view.update()
+        self.view._animating.remove(self)
+
+    def get_is_animating(self):
+        i = self.in_anim_group.State.Running == self.in_anim_group.state()
+        o = self.out_anim_group.State.Running == self.out_anim_group.state()
+        return i or o
+
+    def anim_into_place(self, end_pos):
+        if self.get_is_animating():
+            return
+        if end_pos == self.pos():
+            return
+        self.view._animating.append(self)
+        self.setup_in_anim()
+        if not self.view.do_animations:
+            self.setPos(end_pos)
+            self.in_anim_group.finished.emit()
+            return
+
+        self.opacity_anim.setStartValue(0)
+        self.opacity_anim.setEndValue(1)
+        self.opacity_anim.setDuration(80)
+
+        curve = QtCore.QEasingCurve(QtCore.QEasingCurve.OutBack)
+        curve.setAmplitude(.8)
+        self.pos_anim.setEasingCurve(curve)
+
+        self.pos_anim.setDuration(100)
+        self.pos_anim.setEndValue(end_pos)
+        self.in_anim_group.start()
+
+    def anim_out(self):
+        if self.get_is_animating():
+            return
+        self.view._animating.append(self)
+        self.setup_out_anim()
+        if not self.view.do_animations:
+            self.out_anim_group.finished.emit()
+            return
+        self.setCacheMode(QtWidgets.QGraphicsItem.ItemCoordinateCache)
+        self.opacity_anim.setStartValue(1)
+        self.opacity_anim.setEndValue(0)
+        self.opacity_anim.setDuration(80)
+
+        self.pos_anim.setDuration(80)
+        self.pos_anim.setEasingCurve(QtCore.QEasingCurve.Linear)
+        x_move = self.stack_offset * -1 * .5
+        if not self.parentItem() or not self.parentItem().parentItem():
+            y_move = 0.0
+        else:
+            y_move = (self.parentItem().boundingRect().height() * -1.0) * .5
+        self.pos_anim.setEndValue(QtCore.QPointF(x_move, y_move))
+        self.out_anim_group.start()
 
     def update_color(self):
         layers = self.model.get_layers_with_opinion(self.node_path)
@@ -160,7 +252,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
             ml = QtWidgets.QApplication.mouseButtons() == QtCore.Qt.LeftButton
             shift = QtWidgets.QApplication.keyboardModifiers() == QtCore.Qt.ShiftModifier
             force_snap = self.view.alignment_actions.snap_action.isChecked()
-            if (ml & shift) or force_snap:
+            if (ml & shift) or force_snap and not self.get_is_animating():
                 value = self.closest_grid_point(value)
                 return value
 
@@ -372,7 +464,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
                 center_offset = (arrow_width * (num * .5) - arrow_width * .5)
                 cur_offset = (i * arrow_width)
                 pos = ((self.max_width * .5) + center_offset - cur_offset)
-                arrow.setPos(pos, self.title_rect_height)
+                arrow.setPos(pos, self.boundingRect().height())
                 self.collapse_arrows += [arrow]
                 i += 1
 
@@ -721,9 +813,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
         children_paths = self.model.get_children(self.node_path, ordered=True,
                                                  include_implied=True)
         prev_y = 0
-        offset_z = len(children_paths)
         prev_child = None
-        index = 0
+        index = 1
         for child_path in children_paths:
             child = self.view.get_node_graphic(child_path)
             if not child:
@@ -737,11 +828,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsItem):
             else:
                 y = self.get_selection_rect().height()
             y += prev_y
-            child.setPos(self.stack_offset, y)
-            child.setZValue(offset_z)
-
+            new_pos = QtCore.QPointF(self.stack_offset, y)
+            child.anim_into_place(new_pos)
             prev_y = y
-            offset_z -= 1
             child.arrange_descendants()
             prev_child = child
             index += 1
@@ -931,6 +1020,7 @@ class CollapseArrow(QtWidgets.QGraphicsItem):
             is_str = isinstance(self.color, str)
         if is_str:
             self.color = QtGui.QColor(self.color)
+        self.setZValue(30)
 
     def boundingRect(self):
         """Override of QtWidgets.QGraphicsItem boundingRect. If this rectangle
@@ -946,18 +1036,35 @@ class CollapseArrow(QtWidgets.QGraphicsItem):
         if self.filled:
             brush = QtGui.QBrush(self.color)
             painter.setBrush(brush)
+            if self.color.lightness() < 100:
+                pen_color = QtGui.QColor(self.color.lighter(300))
+            else:
+                pen_color = QtGui.QColor(self.color.darker(300))
+            pen = QtGui.QPen(pen_color)
+            pen.setJoinStyle(QtCore.Qt.RoundJoin)
             painter.setPen(QtCore.Qt.NoPen)
         else:
-            painter.setBrush(QtCore.Qt.NoBrush)
-            painter.setPen(QtCore.Qt.white)
+            brush = QtGui.QBrush(QtCore.Qt.white, QtCore.Qt.Dense6Pattern)
+            painter.setBrush(brush)
+            pen = QtGui.QPen(QtCore.Qt.white)
+            pen.setStyle(QtCore.Qt.DotLine)
+            painter.setPen(pen)
 
         # draw triangle
         points = [
-            QtCore.QPointF(0-(self.width*.5), 0),
+            QtCore.QPointF(0 - (self.width * .5), 0),
             QtCore.QPointF(self.width*.5, 0),
             QtCore.QPointF(0, self.height)
         ]
         painter.drawPolygon(points)
+        # Draw outline
+        if self.filled:
+            painter.setBrush(QtCore.Qt.NoBrush)
+            painter.setPen(pen)
+            painter.drawLine(0 - (self.width * .5), 0,
+                             0, self.height)
+            painter.drawLine(0, self.height,
+                             self.width * .5, 0)
 
     def itemChange(self, change, value):
         """Override of QtWidgets.QGraphicsItem itemChange."""

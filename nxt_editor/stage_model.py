@@ -748,7 +748,7 @@ class StageModel(QtCore.QObject):
         base_node = self.comp_layer.lookup(base_path)
         if base_node is None:
             return layer_colors
-        layers = [self.get_node_source_layer(base_path, self.comp_layer)]
+        layers = []
         des = self.get_descendants(base_path, self.comp_layer, True)
         for d in des:
             node = self.comp_layer.lookup(d)
