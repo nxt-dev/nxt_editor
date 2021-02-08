@@ -1,6 +1,7 @@
 # Built-in
 import logging
 import ast
+import collections.abc
 
 # External
 from Qt import QtWidgets
@@ -275,7 +276,9 @@ class WidgetBuilder(DockWidgetBase):
             return
 
         update = False if changed_paths else True
-        for path in (changed_paths or []):
+        if not isinstance(changed_paths, collections.abc.Iterable):
+            changed_paths = []
+        for path in changed_paths:
             node_path, _ = nxt_path.path_attr_partition(path)
             is_widget = get_widget_type(node_path, self.stage_model)
             if is_widget:

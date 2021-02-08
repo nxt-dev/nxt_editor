@@ -748,7 +748,7 @@ class StageModel(QtCore.QObject):
         base_node = self.comp_layer.lookup(base_path)
         if base_node is None:
             return layer_colors
-        layers = [self.get_node_source_layer(base_path, self.comp_layer)]
+        layers = []
         des = self.get_descendants(base_path, self.comp_layer, True)
         for d in des:
             node = self.comp_layer.lookup(d)
@@ -2866,7 +2866,7 @@ class StageModel(QtCore.QObject):
         return True
 
     def setup_build(self, node_paths, rt_layer=None):
-        # Reset timer vars
+        # Reset once_sec_timer vars
         self.build_start_time = time.time()
         self.build_paused_time = .0
         self.last_step_time = .0
@@ -2927,7 +2927,7 @@ class StageModel(QtCore.QObject):
             pause_delta = self.build_paused_time - time.time()
             self.build_start_time -= pause_delta
         # Always reset the paused time as a build step is the same as paused
-        # in regard to the build timer
+        # in regard to the build once_sec_timer
         self.build_paused_time = .0
         if not self.can_build_run():
             logger.error("Cannot step execution. Build is not ready.")
