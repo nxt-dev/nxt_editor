@@ -17,9 +17,12 @@ from nxt.nxt_layer import LAYERS
 from . import colors
 from nxt.stage import INTERNAL_ATTRS
 from .label_edit import NameEditDialog
+from .user_dir import USER_PREF, user_prefs
 
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
+
+MIN_LOD = user_prefs.get(USER_PREF.LOD, .4)
 
 
 class NodeGraphicsItem(QtWidgets.QGraphicsObject):
@@ -268,16 +271,22 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         """Override of QtWidgets.QGraphicsItem paint. Handles all visuals of the Node. Split up into 3
         functions for organization.
         """
-        painter.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.TextAntialiasing | QtGui.QPainter.SmoothPixmapTransform)
-        self.draw_title(painter)
-        self.draw_attributes(painter)
-        self.draw_border(painter)
+        lod = QtWidgets.QStyleOptionGraphicsItem.levelOfDetailFromTransform(painter.worldTransform())
+        if lod > MIN_LOD:
+            painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                                   QtGui.QPainter.TextAntialiasing |
+                                   QtGui.QPainter.SmoothPixmapTransform)
+        else:
+            painter.setRenderHints(False)
+        self.draw_title(painter, lod)
+        self.draw_attributes(painter, lod)
+        self.draw_border(painter, lod)
 
     def closest_grid_point(self, position):
         snapped_pos = self.model.snap_pos_to_grid((position.x(), position.y()))
         return QtCore.QPointF(*snapped_pos)
 
-    def draw_border(self, painter):
+    def draw_border(self, painter, lod=1.):
         """Draws border, called exclusively by paint.
 
         :param painter: painter from paint.
@@ -305,7 +314,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                          self.get_selection_rect().width() - 2,
                          self.get_selection_rect().height() - 2))
 
-    def draw_title(self, painter):
+    def draw_title(self, painter, lod=1.):
         """Draw title of the node. Called exclusively in paint.
 
         :param painter: painter from paint.
@@ -399,76 +408,92 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
             if self.exec_out_plug:
                 self.scene().removeItem(self.exec_out_plug)
                 self.exec_out_plug = None
-
-        # draw attr dots
-        offset = -6
-        for fill in self.attr_dots:
-            painter.setBrush(QtCore.Qt.white)
-            if fill:
+        if lod > MIN_LOD:
+            # draw attr dots
+            offset = -6
+            for fill in self.attr_dots:
                 painter.setBrush(QtCore.Qt.white)
-            else:
-                painter.setBrush(QtCore.Qt.NoBrush)
-            dots_color = QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor)
-            painter.setPen(QtGui.QPen(dots_color, 0.5))
-            dot_x = self.max_width - 15
-            dot_y = (self.title_rect_height / 2) + offset
-            painter.drawEllipse(QtCore.QPointF(dot_x, dot_y), 2, 2)
-            offset += 6
+                if fill:
+                    painter.setBrush(QtCore.Qt.white)
+                else:
+                    painter.setBrush(QtCore.Qt.NoBrush)
+                dots_color = QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor)
+                painter.setPen(QtGui.QPen(dots_color, 0.5))
+                dot_x = self.max_width - 15
+                dot_y = (self.title_rect_height / 2) + offset
+                painter.drawEllipse(QtCore.QPointF(dot_x, dot_y), 2, 2)
+                offset += 6
 
         # draw title
-        painter.setPen(QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor))
-        if not self.node_enabled:
-            painter.setPen(QtGui.QColor(QtCore.Qt.white).darker(150))
+
         painter.setFont(self.title_font)
         title_str = nxt_path.node_name_from_node_path(self.node_path)
         font_metrics = QtGui.QFontMetrics(self.title_font)
         width = self.max_width - 40
         if self.error_list:
             width -= 20
-        title = font_metrics.elidedText(title_str, QtCore.Qt.ElideRight, width)
-        painter.drawText(15, 0, self.max_width - 15, self.title_rect_height,
-                         QtCore.Qt.AlignVCenter, title)
-
-        # draw error
-        if self.error_list:
-            pos = QtCore.QPointF(self.max_width-45, self.title_rect_height/4)
-            error_item = ErrorItem(font=QtGui.QFont('Roboto', 16, 75),
-                                   pos=pos, text='!')
-            error_item.setParentItem(self)
-            error_item.setZValue(50)
-            self.error_item = error_item
+        if lod > MIN_LOD:
+            painter.setPen(
+                QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor))
+            if not self.node_enabled:
+                painter.setPen(QtGui.QColor(QtCore.Qt.white).darker(150))
+            title = font_metrics.elidedText(title_str,
+                                            QtCore.Qt.ElideRight, width)
+            painter.drawText(15, 0, self.max_width - 15, self.title_rect_height,
+                             QtCore.Qt.AlignVCenter, title)
         else:
-            if self.error_item:
-                self.scene().removeItem(self.error_item)
-                self.error_item.deleteLater()
-            self.error_item = None
+            painter.setBrush(QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor))
+            if not self.node_enabled:
+                painter.setBrush(QtGui.QColor(QtCore.Qt.white).darker(150))
+            proxy_rect = font_metrics.boundingRect(title_str)
+            r_width = proxy_rect.width() * .8
+            height = proxy_rect.height()
+            painter.drawRect(15, height * .8,
+                             min(r_width, width), height * .2)
 
+        if lod > MIN_LOD:
+            # draw error
+            if self.error_list:
+                pos = QtCore.QPointF(self.max_width-45, self.title_rect_height/4)
+                error_item = ErrorItem(font=QtGui.QFont('Roboto', 16, 75),
+                                       pos=pos, text='!')
+                error_item.setParentItem(self)
+                error_item.setZValue(50)
+                self.error_item = error_item
+            else:
+                if self.error_item:
+                    self.scene().removeItem(self.error_item)
+                    self.error_item.deleteLater()
+                self.error_item = None
+
+        # draw collapse state arrow
         for arrow in self.collapse_arrows:
             self.scene().removeItem(arrow)
-        self.collapse_arrows = []
-        # TODO calculation needed arrows should be done outside drawing
-        # draw collapse state arrow
-        if self.collapse_state:
-            des_colors = self.model.get_descendant_colors(self.node_path)
-            filled = self.model.has_children(self.node_path)
-            if not filled:
-                des_colors = [QtCore.Qt.white]
-            elif not des_colors:
-                disp = self.model.comp_layer
-                des_colors = [self.model.get_node_color(self.node_path, disp)]
-            i = 0
-            num = len(des_colors)
-            for c in des_colors:
-                arrow = CollapseArrow(self, filled=filled, color=c)
-                arrow_width = arrow.width * 1.1
-                center_offset = (arrow_width * (num * .5) - arrow_width * .5)
-                cur_offset = (i * arrow_width)
-                pos = ((self.max_width * .5) + center_offset - cur_offset)
-                arrow.setPos(pos, self.boundingRect().height())
-                self.collapse_arrows += [arrow]
-                i += 1
+        if lod > MIN_LOD:
+            self.collapse_arrows = []
+            # TODO calculation needed arrows should be done outside drawing
 
-    def draw_attributes(self, painter):
+            if self.collapse_state:
+                des_colors = self.model.get_descendant_colors(self.node_path)
+                filled = self.model.has_children(self.node_path)
+                if not filled:
+                    des_colors = [QtCore.Qt.white]
+                elif not des_colors:
+                    disp = self.model.comp_layer
+                    des_colors = [self.model.get_node_color(self.node_path, disp)]
+                i = 0
+                num = len(des_colors)
+                for c in des_colors:
+                    arrow = CollapseArrow(self, filled=filled, color=c)
+                    arrow_width = arrow.width * 1.1
+                    center_offset = (arrow_width * (num * .5) - arrow_width * .5)
+                    cur_offset = (i * arrow_width)
+                    pos = ((self.max_width * .5) + center_offset - cur_offset)
+                    arrow.setPos(pos, self.boundingRect().height())
+                    self.collapse_arrows += [arrow]
+                    i += 1
+
+    def draw_attributes(self, painter, lod=1.):
         """Draw attributes for this node. Called exclusively by paint.
 
         :param painter: painter from paint.
@@ -487,44 +512,60 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
             self._attr_plug_graphics.setdefault(attr_name, {})
             attr_plug_graphics = self._attr_plug_graphics[attr_name]
             current_in_plug = attr_plug_graphics.get('in_plug')
-            in_pos = self.get_attr_in_pos(attr_name, scene=False)
-            if current_in_plug:
-                current_in_plug.setPos(in_pos)
-                current_in_plug.color = target_color
-                current_in_plug.update()
-            else:
-                in_plug = NodeGraphicsPlug(pos=in_pos,
-                                           radius=self.ATTR_PLUG_RADIUS,
-                                           color=target_color,
-                                           attr_name_represented=attr_name,
-                                           is_input=True)
-                attr_plug_graphics['in_plug'] = in_plug
-                in_plug.setParentItem(self)
+            if lod > MIN_LOD:
+                in_pos = self.get_attr_in_pos(attr_name, scene=False)
+                if current_in_plug:
+                    current_in_plug.show()
+                    current_in_plug.setPos(in_pos)
+                    current_in_plug.color = target_color
+                    current_in_plug.update()
+                else:
+                    current_in_plug = NodeGraphicsPlug(pos=in_pos,
+                                                       radius=self.ATTR_PLUG_RADIUS,
+                                                       color=target_color,
+                                                       attr_name_represented=attr_name,
+                                                       is_input=True)
+                    attr_plug_graphics['in_plug'] = current_in_plug
+                    current_in_plug.setParentItem(self)
+            elif current_in_plug:
+                current_in_plug.hide()
 
             current_out_plug = attr_plug_graphics.get('out_plug')
-            out_pos = self.get_attr_out_pos(attr_name, scene=False)
-            if current_out_plug:
-                current_out_plug.setPos(out_pos)
-                current_out_plug.color = target_color
-                current_out_plug.update()
-            else:
-                out_plug = NodeGraphicsPlug(pos=out_pos,
-                                            radius=self.ATTR_PLUG_RADIUS,
-                                            color=target_color,
-                                            attr_name_represented=attr_name,
-                                            is_input=False)
-                attr_plug_graphics['out_plug'] = out_plug
-                out_plug.setParentItem(self)
+            if lod > MIN_LOD:
+                out_pos = self.get_attr_out_pos(attr_name, scene=False)
+                if current_out_plug:
+                    current_out_plug.show()
+                    current_out_plug.setPos(out_pos)
+                    current_out_plug.color = target_color
+                    current_out_plug.update()
+                else:
+                    out_plug = NodeGraphicsPlug(pos=out_pos,
+                                                radius=self.ATTR_PLUG_RADIUS,
+                                                color=target_color,
+                                                attr_name_represented=attr_name,
+                                                is_input=False)
+                    attr_plug_graphics['out_plug'] = out_plug
+                    out_plug.setParentItem(self)
+            elif current_out_plug:
+                current_out_plug.hide()
 
             # draw attr_name
-            painter.setPen(attr_details['title_color'])
-            painter.setFont(attr_details['title_font'])
             rect = attr_details['bg_rect']
+            painter.setFont(attr_details['title_font'])
             font_metrics = QtGui.QFontMetrics(self.attr_font)
             title = font_metrics.elidedText(attr_name, QtCore.Qt.ElideRight,
                                             self.max_width - 20)
-            painter.drawText(rect.x() + 10, rect.y() - 1, rect.width(),
-                             rect.height(), QtCore.Qt.AlignVCenter, title)
+            if lod > MIN_LOD:
+                painter.setPen(attr_details['title_color'])
+                painter.drawText(rect.x() + 10, rect.y() - 1, rect.width(),
+                                 rect.height(), QtCore.Qt.AlignVCenter, title)
+            else:
+                proxy_rect = font_metrics.boundingRect(title)
+                height = proxy_rect.height()
+                width = proxy_rect.width()
+                painter.setBrush(attr_details['title_color'].darker(150))
+                painter.drawRect(rect.x() + 10, rect.y() + height*.8,
+                                 width, height*.2)
 
     def calculate_attribute_draw_details(self):
         """Calculate position of all known attr names. Details stored in
@@ -913,7 +954,14 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
 
     def paint(self, painter, option, widget):
         """Override of QtWidgets.QGraphicsItem paint. Handles all visuals of the Plug."""
-        painter.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.TextAntialiasing | QtGui.QPainter.SmoothPixmapTransform)
+        lod = QtWidgets.QStyleOptionGraphicsItem.levelOfDetailFromTransform(
+            painter.worldTransform())
+        if lod > MIN_LOD:
+            painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                                   QtGui.QPainter.TextAntialiasing |
+                                   QtGui.QPainter.SmoothPixmapTransform)
+        else:
+            painter.setRenderHints(False)
         if self.is_hovered:
             painter.setPen(QtGui.QPen(QtCore.Qt.white, self.hover_width, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
         else:
@@ -925,7 +973,7 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
             # create triangle
             polygon = QtGui.QPolygonF()
             step_angle = 120
-            for i in range(4):
+            for i in [0, 1, 2, 3]:
                 step = step_angle * i
                 x = self.radius * 1.2 * math.cos(math.radians(step))
                 y = self.radius * 1.2 * math.sin(math.radians(step))
@@ -942,8 +990,6 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
             painter.setBrush(QtCore.Qt.green)
             painter.drawPolygon(polygon)
 
-            painter.setPen(QtCore.Qt.black)
-            painter.setFont(QtGui.QFont('Roboto', 12))
         elif self.is_break:
             painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
         else:
