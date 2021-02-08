@@ -23,19 +23,8 @@ class Blender(NxtIntegration):
         if b_major != 2 or b_minor < 80:
             raise RuntimeError('Blender version is not compatible with this '
                                'version of nxt.')
-
-        if 'darwin' in sys.platform:
-            user_dir = os.path.expandvars('/Users/$USER/Library/Application Support/Blender/{}.{}/')
-        elif 'linux' in sys.platform:
-            user_dir = os.path.expandvars('$HOME/.config/blender/{}.{}/')
-        elif 'win' in sys.platform:
-            user_dir = os.path.expanduser('~/AppData/Roaming/Blender '
-                                          'Foundation/Blender/'
-                                          '{}.{}')
-        else:
-            raise SystemError('Unsupported operating system!')
-
-        self.user_dir = user_dir.format(b_major, b_minor)
+        addons_dir = bpy.utils.user_resource('SCRIPTS', 'addons')
+        self.addons_dir = addons_dir.replace(os.sep, '/')
         self.instance = None
         self.nxt_qapp = QtWidgets.QApplication.instance()
 
@@ -43,9 +32,8 @@ class Blender(NxtIntegration):
     def setup(cls):
         self = cls()
         bpy.ops.preferences.addon_disable(module='nxt_' + self.name)
-        addons_dir = os.path.join(self.user_dir, 'scripts/addons')
         integration_filepath = self.get_integration_filepath()
-        shutil.copy(integration_filepath, addons_dir)
+        shutil.copy(integration_filepath, self.addons_dir)
         bpy.ops.preferences.addon_enable(module='nxt_' + self.name)
 
     @classmethod
@@ -54,11 +42,8 @@ class Blender(NxtIntegration):
         og_cwd = os.getcwd()
         super(Blender, self).update()
         os.chdir(og_cwd)
-        addons_dir = os.path.join(self.user_dir, 'scripts/addons')
-        addons_dir = addons_dir.replace(os.sep, '/')
-
         addon_file = os.path.join(os.path.dirname(__file__), 'nxt_blender.py')
-        shutil.copy(addon_file, addons_dir)
+        shutil.copy(addon_file, self.addons_dir)
 
     @classmethod
     def launch_nxt(cls):
