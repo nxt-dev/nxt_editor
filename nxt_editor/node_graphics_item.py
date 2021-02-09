@@ -9,6 +9,7 @@ from collections import OrderedDict
 from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
+from PySide2 import __version_info__ as qt_version
 
 # Internal
 import nxt_editor
@@ -24,8 +25,16 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 MIN_LOD = user_prefs.get(USER_PREF.LOD, .4)
 
+_pyside_version = qt_version
 
-class NodeGraphicsItem(QtWidgets.QGraphicsObject):
+
+if _pyside_version[1] < 11:
+    graphic_type = QtWidgets.QGraphicsItem
+else:
+    graphic_type = QtWidgets.QGraphicsObject
+
+
+class NodeGraphicsItem(graphic_type):
     """The graphics item used to represent nodes in the graph. Contains
     instances of NodeGraphicsPlug for each attribute on the associated node.
     Contains functionality for arranging children into stacks.
@@ -139,8 +148,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         if end_pos == self.pos():
             return
         self.view._animating.append(self)
-        self.setup_in_anim()
-        if not self.view.do_animations:
+        if self.view.do_animations:
+            self.setup_in_anim()
+        else:
             self.setPos(end_pos)
             self.in_anim_group.finished.emit()
             return
@@ -161,8 +171,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         if self.get_is_animating():
             return
         self.view._animating.append(self)
-        self.setup_out_anim()
-        if not self.view.do_animations:
+        if self.view.do_animations:
+            self.setup_out_anim()
+        else:
             self.out_anim_group.finished.emit()
             return
         self.setCacheMode(QtWidgets.QGraphicsItem.ItemCoordinateCache)

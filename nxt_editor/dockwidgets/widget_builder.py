@@ -279,7 +279,7 @@ class WidgetBuilder(DockWidgetBase):
             return
 
         update = False if changed_paths else True
-        if not isinstance(changed_paths, collections.abc.Iterable):
+        if not isinstance(changed_paths, Iterable):
             changed_paths = []
         for path in changed_paths:
             node_path, _ = nxt_path.path_attr_partition(path)
