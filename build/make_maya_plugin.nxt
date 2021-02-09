@@ -170,7 +170,11 @@
                 "os.makedirs('${mod_folder}/scripts/Qt')",
                 "",
                 "with open('${mod_folder}/scripts/Qt/__init__.py', 'w+') as fp:",
-                "    fp.write(result.content)"
+                "    if isinstance(result.content, str):",
+                "        fp.write(result.content)",
+                "    else:",
+                "        fp.write(result.content.decode())",
+                ""
             ]
         }
     }
