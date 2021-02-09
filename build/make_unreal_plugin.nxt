@@ -1,0 +1,60 @@
+{
+    "version": "1.17",
+    "alias": "make_unreal_plugin",
+    "color": "#879fda",
+    "mute": false,
+    "solo": false,
+    "meta_data": {
+        "positions": {
+            "/make_plugin": [
+                -144.0,
+                -49.0
+            ]
+        }
+    },
+    "nodes": {
+        "/": {
+            "code": [
+                "import os",
+                "import shutil"
+            ]
+        },
+        "/make_plugin": {
+            "start_point": true,
+            "attrs": {
+                "icon_path": {
+                    "type": "raw",
+                    "value": "${file::../nxt_editor/resources/icons/nxt_128.png}"
+                },
+                "result_dir": {
+                    "type": "raw",
+                    "value": "${path::nxt_unreal}"
+                },
+                "unreal_integration_dir": {
+                    "type": "raw",
+                    "value": "${file::../nxt_editor/integration/unreal}"
+                },
+                "uplugin_path": {
+                    "type": "raw",
+                    "value": "${file::${unreal_integration_dir}/nxt_unreal.uplugin}"
+                }
+            },
+            "code": [
+                "if os.path.exists('${result_dir}'):",
+                "    shutil.rmtree('${result_dir}')",
+                "shutil.copytree('${unreal_integration_dir}', '${result_dir}')",
+                "resources_dir = '${result_dir}/Resources'",
+                "os.makedirs(resources_dir)",
+                "target_icon_path = os.path.join(resources_dir, 'Icon128.png')",
+                "shutil.copyfile('${icon_path}', target_icon_path)",
+                "leftover_init = os.path.join(self.result_dir, '__init__.py')",
+                "leftover_pycache = os.path.join(self.result_dir, '__pycache__')",
+                "os.remove(leftover_init)",
+                "try:",
+                "    shutil.rmtree(leftover_pycache)",
+                "except FileNotFoundError:",
+                "    pass"
+            ]
+        }
+    }
+}
