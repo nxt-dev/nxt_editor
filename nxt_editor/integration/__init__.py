@@ -1,5 +1,6 @@
 import os
-import shutil
+import sys
+import subprocess
 import importlib
 
 
@@ -32,29 +33,41 @@ class NxtIntegration(object):
 
     def _install_and_import_package(self, module_name, package_name=None,
                                     global_name=None):
+        """Calls a subprocess to pip install the given package name and then
+        attempts to import the new package.
+
+        :param module_name: Desired module to import after install
+        :param package_name: pip package name
+        :param global_name: Global name to access the module if different
+        than the module name.
+        :raises: subprocess.CalledProcessError
+        :return: bool
+        """
         if package_name is None:
             package_name = module_name
         if global_name is None:
             global_name = module_name
-        args = ['install', package_name]
-        self.ensure_pip()
-        import pip
-        if hasattr(pip, 'main'):
-            pip.main(['install', package_name])
-        else:
-            pip._internal.main(['install', package_name])
+        environ_copy = dict(os.environ)
+        environ_copy["PYTHONNOUSERSITE"] = "1"
+        subprocess.run([sys.executable, "-m", "pip", "install",
+                        package_name], check=True, env=environ_copy)
+
         success = self._safe_import_package(package_name=package_name,
                                             global_name=global_name)
         return success
 
-    def _update_package(self, package_name):
-        args = ['install', '-U', package_name]
-        self.ensure_pip()
-        import pip
-        if hasattr(pip, 'main'):
-            pip.main(args)
-        else:
-            pip._internal.main(args)
+    @staticmethod
+    def _update_package(package_name):
+        """Calls a subprocess to pip update the given package name.
+
+        :param package_name: pip package name
+        :raises: subprocess.CalledProcessError
+        :return: None
+        """
+        environ_copy = dict(os.environ)
+        environ_copy["PYTHONNOUSERSITE"] = "1"
+        subprocess.run([sys.executable, "-m", "pip", "install", "-U",
+                        package_name], check=True, env=environ_copy)
         print('Please restart your DCC or Python interpreter')
 
     def check_for_nxt_core(self, install=False):
@@ -81,51 +94,39 @@ class NxtIntegration(object):
             print('Failed to import and/or install nxt-editor')
         return success
 
-    @staticmethod
-    def ensure_pip():
-        try:
-            import pip
-        except ImportError:
-            import ensurepip
-            ensurepip.bootstrap()
-            os.environ.pop('PIP_REQ_TRACKER', None)
-
     def update(self):
         if self.check_for_nxt_core():
             self._update_package('nxt-core')
         if self.check_for_nxt_editor():
             self._update_package('nxt-editor')
 
+    @staticmethod
+    def _uninstall_package(package_name):
+        """Calls a subprocess to pip uninstall the given package name. Will
+        NOT prompt the user to confrim uninstall.
 
-class Blender(NxtIntegration):
-    def __init__(self):
-        super(Blender, self).__init__(name='blender')
-        import bpy
-        b_major, b_minor, b_patch = bpy.app.version
-        if b_major != 2 or b_minor < 80:
-            raise RuntimeError('Blender version is not compatible with this '
-                               'version of nxt.')
-        user_dir = os.path.expanduser('~/AppData/Roaming/Blender '
-                                      'Foundation/Blender/'
-                                      '{}.{}'.format(b_major, b_minor))
-        self.user_dir = user_dir
-        nxt_modules = os.path.join(user_dir, 'scripts/addons/modules')
-        self.modules_dir = nxt_modules.replace(os.sep, '/')
+        :param package_name: pip package name
+        :raises: subprocess.CalledProcessError
+        :return: None
+        """
+        environ_copy = dict(os.environ)
+        environ_copy["PYTHONNOUSERSITE"] = "1"
+        subprocess.run([sys.executable, "-m", "pip", "uninstall",
+                        package_name, '-y'], check=True, env=environ_copy)
 
-    @classmethod
-    def setup(cls):
-        self = cls()
-        import bpy
-        bpy.ops.preferences.addon_disable(module='nxt_' + self.name)
-        addons_dir = os.path.join(self.user_dir, 'scripts/addons')
-        integration_filepath = self.get_integration_filepath()
-        shutil.copy(integration_filepath, addons_dir)
-        bpy.ops.preferences.addon_enable(module='nxt_' + self.name)
+    def uninstall(self):
+        if self.check_for_nxt_core():
+            self._uninstall_package('nxt-core')
+        if self.check_for_nxt_editor():
+            self._uninstall_package('nxt-editor')
+        # print('Please restart your DCC or Python interpreter')
 
-    @classmethod
-    def update(cls):
-        self = cls()
-        og_cwd = os.getcwd()
-        os.chdir(self.modules_dir)
-        super(Blender, self).update()
-        os.chdir(og_cwd)
+    def launch_nxt(self):
+        raise NotImplementedError('Your DCC needs it own nxt launch method.')
+
+    def quit_nxt(self):
+        raise NotImplementedError('Your DCC needs it own nxt quit method.')
+
+    def create_context(self):
+        raise NotImplementedError('Your DCC needs it own method of creating a '
+                                  'context.')

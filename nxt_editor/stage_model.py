@@ -748,7 +748,7 @@ class StageModel(QtCore.QObject):
         base_node = self.comp_layer.lookup(base_path)
         if base_node is None:
             return layer_colors
-        layers = [self.get_node_source_layer(base_path, self.comp_layer)]
+        layers = []
         des = self.get_descendants(base_path, self.comp_layer, True)
         for d in des:
             node = self.comp_layer.lookup(d)
@@ -2073,7 +2073,6 @@ class StageModel(QtCore.QObject):
         layer = layer or self.top_layer
         cmd = ClearBreakpoints(model=self, layer_path=layer.real_path)
         self.undo_stack.push(cmd)
-        self.nodes_changed.emit(cmd.prev_breaks)
         self.breaks_changed.emit([])
 
     def _add_breakpoint(self, node_path, layer):
@@ -2544,14 +2543,15 @@ class StageModel(QtCore.QObject):
             logger.warning('No code to execute!')
             return
         self.about_to_execute.emit(True)
-        rt = rt_layer
+        rt_layer = rt_layer or self.current_rt_layer
         np = [node_path]
-        valid, bad_paths = self.validate_runtime_layer(rt_layer=rt,
+        valid, bad_paths = self.validate_runtime_layer(rt_layer=rt_layer,
                                                        node_paths=np)
         if not rt_layer or not valid:
             new_rt = self.prompt_runtime_rebuild(must_rebuild=bool(bad_paths))
             if new_rt:
                 rt_layer = new_rt
+                self.current_rt_layer = new_rt
             elif not rt_layer:
                 return
         if not rt_layer or not hasattr(rt_layer, '_console'):
@@ -2866,7 +2866,7 @@ class StageModel(QtCore.QObject):
         return True
 
     def setup_build(self, node_paths, rt_layer=None):
-        # Reset timer vars
+        # Reset once_sec_timer vars
         self.build_start_time = time.time()
         self.build_paused_time = .0
         self.last_step_time = .0
@@ -2927,7 +2927,7 @@ class StageModel(QtCore.QObject):
             pause_delta = self.build_paused_time - time.time()
             self.build_start_time -= pause_delta
         # Always reset the paused time as a build step is the same as paused
-        # in regard to the build timer
+        # in regard to the build once_sec_timer
         self.build_paused_time = .0
         if not self.can_build_run():
             logger.error("Cannot step execution. Build is not ready.")

@@ -1,6 +1,10 @@
 # Built-in
 import logging
 import ast
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 
 # External
 from Qt import QtWidgets
@@ -18,6 +22,7 @@ import nxt_editor
 from nxt_editor import user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import DATA_STATE, nxt_path
+from nxt import nxt_node
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -39,6 +44,7 @@ class WidgetBuilder(DockWidgetBase):
                                             minimum_width=minimum_width,
                                             minimum_height=minimum_height)
 
+        self.updating = False
         self.setObjectName('Workflow Tools')
         self.default_title = title
 
@@ -262,6 +268,8 @@ class WidgetBuilder(DockWidgetBase):
             return title or None
 
     def update_window(self, changed_paths=None):
+        if self.updating:
+            return
         if not self.isVisible():
             return
 
@@ -271,7 +279,9 @@ class WidgetBuilder(DockWidgetBase):
             return
 
         update = False if changed_paths else True
-        for path in (changed_paths or []):
+        if not isinstance(changed_paths, Iterable):
+            changed_paths = []
+        for path in changed_paths:
             node_path, _ = nxt_path.path_attr_partition(path)
             is_widget = get_widget_type(node_path, self.stage_model)
             if is_widget:
@@ -285,7 +295,7 @@ class WidgetBuilder(DockWidgetBase):
                     break
         if not update:
             return
-
+        self.updating = True
         # window title
         title = self.get_window_title()
         self.setWindowTitle(title or self.default_title)
@@ -310,6 +320,7 @@ class WidgetBuilder(DockWidgetBase):
                     widget=self.window_frame,
                     items=None,
                     parent=self)
+        self.updating = False
 
     def set_window_style(self):
         background_color = self.stage_model.get_node_attr_value(
@@ -881,15 +892,22 @@ class Button(QtWidgets.QPushButton):
 
         # filter out widget nodes
         filtered_nodes = []
-        widget_descendants = []
+        dont_run = []
         for path in descendants:
             widget_type = get_widget_type(path, self.stage_model)
             if widget_type:
                 des = self.stage_model.comp_layer.descendants(path,
                                                               ordered=True)
-                widget_descendants += des
-            if not widget_type and path not in widget_descendants:
-                filtered_nodes.append(path)
+                dont_run += des
+            if not widget_type and path not in dont_run:
+                enabled = self.stage_model.get_node_enabled(path)
+                anc_enabled = self.stage_model.get_node_ancestor_enabled(path)
+                if enabled and anc_enabled:
+                    filtered_nodes.append(path)
+                else:
+                    des = self.stage_model.comp_layer.descendants(path,
+                                                                  ordered=True)
+                    dont_run += [path] + des
 
         node_paths = [exec_path] + filtered_nodes
         if user_dir.user_prefs.get(RECOMP_PREF, True):

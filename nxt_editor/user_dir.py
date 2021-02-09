@@ -68,6 +68,9 @@ class USER_PREF():
     TREE_INDENT = 'layer_tree_indent'
     FIND_REP_NODE_PATTERNS = 'find_replace_nodes_patterns'
     FIND_REP_ATTRS = 'find_replace_attrs'
+    FPS = 'fps'
+    LOD = 'lod'
+    ANIMATION = 'animation'
 
 
 class EDITOR_CACHE():

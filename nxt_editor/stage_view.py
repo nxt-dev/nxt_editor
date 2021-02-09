@@ -12,10 +12,11 @@ from Qt import QtCore
 # Interal
 import nxt_editor
 from nxt import nxt_node, tokens
-from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
+from nxt_editor.node_graphics_item import (NodeGraphicsItem, NodeGraphicsPlug,
+                                           _pyside_version)
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.commands import *
-
+from .user_dir import USER_PREF, user_prefs
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -38,6 +39,18 @@ class StageView(QtWidgets.QGraphicsView):
     def __init__(self, model, parent=None):
         super(StageView, self).__init__(parent=parent)
         self.main_window = parent
+        self._do_anim_pref = user_prefs.get(USER_PREF.ANIMATION, True)
+        if _pyside_version[1] < 11:
+            self._do_anim_pref = False
+        self.do_animations = self._do_anim_pref
+        self.once_sec_timer = QtCore.QTimer(self)
+        self.once_sec_timer.timeout.connect(self.calculate_fps)
+        self.frames = 0
+        self.fps = 0
+        self.once_sec_timer.setInterval(1000)
+        if user_prefs.get(USER_PREF.FPS, True):
+            self.once_sec_timer.start()
+        self._animating = []
         # EXEC ACTIONS
         self.exec_actions = parent.execute_actions
         self.addActions(self.exec_actions.actions())
@@ -64,9 +77,11 @@ class StageView(QtWidgets.QGraphicsView):
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.horizontalScrollBar().setValue(0)
         self.verticalScrollBar().setValue(0)
-
+        self.setOptimizationFlag(self.DontSavePainterState, enabled=True)
+        self.setOptimizationFlag(self.DontAdjustForAntialiasing, enabled=True)
         # scene
-        self.setScene(QtWidgets.QGraphicsScene())
+        self._scene = QtWidgets.QGraphicsScene()
+        self.setScene(self._scene)
         # TODO Currently setting scene rect and never changing it. We hope for expanding graphs in the future.
         self.scene().setSceneRect(QtCore.QRect(-5000, -5000, 10000, 10000))
         # rubber band
@@ -132,22 +147,37 @@ class StageView(QtWidgets.QGraphicsView):
         # filepath HUD
         self.filepath_label = HUDItem(text=None)
         self.filepath_label.setFont(QtGui.QFont("Roboto Mono", 8))
-        self.filepath_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        self.filepath_label.setAlignment(QtCore.Qt.AlignLeft |
+                                         QtCore.Qt.AlignTop)
         self.update_filepath()
         self.hud_layout.addWidget(self.filepath_label, 0, 0)
 
         # resolved HUD
-        self.resolved_label = HUDItem(text='resolved',
-                                      fade_time=1000,
-                                      start_color=QtGui.QColor(255, 255, 255, 255),
-                                      end_color=QtGui.QColor(255, 255, 255, 100))
+        self.resolved_label = HUDItem(text='resolved', fade_time=1000)
         self.resolved_label.setFont(QtGui.QFont("Roboto", 12, weight=75))
-        self.resolved_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignTop)
+        self.resolved_label.setAlignment(QtCore.Qt.AlignRight |
+                                         QtCore.Qt.AlignTop)
         self.hud_layout.addWidget(self.resolved_label, 0, 3)
+
+        self.fps_label = HUDItem(text='resolved', fade_time=0)
+        self.fps_label.setFont(QtGui.QFont("Roboto", 12, weight=75))
+        self.fps_label.setAlignment(QtCore.Qt.AlignRight |
+                                    QtCore.Qt.AlignBottom)
+        if user_prefs.get(USER_PREF.FPS, True):
+            self.hud_layout.addWidget(self.fps_label, 1, 3)
 
         self.SEL_ADD_MODIFIERS = QtCore.Qt.ShiftModifier | QtCore.Qt.ControlModifier
         self.SEL_TOGGLE_MODIFIERS = QtCore.Qt.KeyboardModifiers(QtCore.Qt.ShiftModifier)
         self.SEL_RMV_MODIFIERS = QtCore.Qt.KeyboardModifiers(QtCore.Qt.ControlModifier)
+
+    def calculate_fps(self):
+        self.fps = (self.frames + self.fps) * .5
+        self.fps_label.setText(str(round(self.fps)))
+        self.frames = 0
+
+    def drawForeground(self, painter, rect):
+        super(StageView, self).drawForeground(painter, rect)
+        self.frames += 1
 
     def focusInEvent(self, event):
         super(StageView, self).focusInEvent(event)
@@ -294,7 +324,10 @@ class StageView(QtWidgets.QGraphicsView):
         else:
             node_paths = self.model.get_descendants(nxt_path.WORLD,
                                                     include_implied=True)
+        og_do_anims = self.do_animations
+        self.do_animations = False
         self.handle_nodes_changed(node_paths)
+        self.do_animations = og_do_anims
 
     def draw_node(self, node_path):
         graphic = self.get_node_graphic(node_path)
@@ -707,9 +740,6 @@ class StageView(QtWidgets.QGraphicsView):
             # start panning action
             self.panning = True
             self._previous_mouse_pos = None
-            for node in self._node_graphics.values():
-                coord_cache = QtWidgets.QGraphicsItem.ItemCoordinateCache
-                node.setCacheMode(coord_cache)
             event.accept()
             return
 
@@ -918,9 +948,6 @@ class StageView(QtWidgets.QGraphicsView):
         if self.panning and event.button() == QtCore.Qt.MiddleButton:
             self._previous_mouse_pos = None
             self.panning = False
-            for node in self._node_graphics.values():
-                pretty_mode = QtWidgets.QGraphicsItem.DeviceCoordinateCache
-                node.setCacheMode(pretty_mode)
             self._current_pan_distance = 0.0
             event.accept()
             return
@@ -944,39 +971,28 @@ class StageView(QtWidgets.QGraphicsView):
                     item.collapse_node()
 
     def wheelEvent(self, event):
-        num_degrees = event.delta() / 8.
-        num_steps = num_degrees / 15.
-        self._num_scheduled_scalings += num_steps
-        if self._num_scheduled_scalings * num_steps < 0.:
-            self._num_scheduled_scalings = num_steps
-        anim = QtCore.QTimeLine(duration=150, parent=self)
-        anim.setUpdateInterval(20)
-        anim.valueChanged.connect(self.scaling_time)
-        anim.finished.connect(self.anim_finished)
         self._view_pos = event.pos()
         self._scene_pos = self.mapToScene(self._view_pos)
-        anim.start()
+
+        try:
+            new_scale = event.delta() * .001 + 1.0
+        except AttributeError:
+            new_scale = 1.1
+
+        if 0 < new_scale < 1:
+            if self.scale_factor > self._scale_minimum:
+                self.scale(new_scale, new_scale)
+                self._center_view()
+            else:
+                self.scale(1, 1)
+        elif new_scale > 1:
+            if self.scale_factor < self._scale_maximum:
+                self.scale(new_scale, new_scale)
+                self._center_view()
+            else:
+                self.scale(1, 1)
         event.accept()
         return
-
-    def scaling_time(self, f):
-        zoom_pref_key = user_dir.USER_PREF.ZOOM_MULT
-        pref_mult = user_dir.user_prefs.get(zoom_pref_key, 1.0)
-        mult = 150 / pref_mult
-        factor = 1.0 + self._num_scheduled_scalings / mult
-        if 0 < factor < 1:
-            if self.scale_factor > self._scale_minimum:
-                self.scale(factor, factor)
-                self._center_view()
-
-            else:
-                self.scale(1, 1)
-        elif factor > 1:
-            if self.scale_factor < self._scale_maximum:
-                self.scale(factor, factor)
-                self._center_view()
-            else:
-                self.scale(1, 1)
 
     def _center_view(self):
         view_center = self.mapToScene(self.viewport().rect().center())
@@ -1134,6 +1150,7 @@ class StageView(QtWidgets.QGraphicsView):
     def handle_nodes_changed(self, node_paths):
         updated_paths = []
         roots_hit = set()
+        new_nodes = []
         for path in node_paths:
             if path == nxt_path.WORLD:
                 # never draw world node.
@@ -1216,6 +1233,10 @@ class StageView(QtWidgets.QGraphicsView):
             node_item.setPos(pos[0], pos[1])
 
     def handle_collapse_changed(self, node_paths):
+        while self._animating:
+            QtWidgets.QApplication.processEvents()
+        og_do_anims = self.do_animations
+        self.do_animations = self._do_anim_pref
         comp_layer = self.model.comp_layer
         roots_hit = set()
         for path in node_paths:
@@ -1231,7 +1252,8 @@ class StageView(QtWidgets.QGraphicsView):
                                                    include_implied=True)
                 for child_path in children:
                     self.remove_node_graphic(child_path)
-                roots_hit.add(nxt_path.get_root_path(path))
+                if children:
+                    roots_hit.add(nxt_path.get_root_path(path))
             else:
                 descendants = self.model.get_descendants(path,
                                                          include_implied=True)
@@ -1241,6 +1263,7 @@ class StageView(QtWidgets.QGraphicsView):
             if not root_graphic:
                 continue
             root_graphic.arrange_descendants()
+        self.do_animations = og_do_anims
 
     def remove_node_graphic(self, node_path):
         if node_path not in self._node_graphics:
@@ -1249,13 +1272,12 @@ class StageView(QtWidgets.QGraphicsView):
         if not graphic:
             return
         self.remove_node_connection_graphics(node_path)
-        self.scene().removeItem(graphic)
-        # because node graphics are parented to one another, removing parent
-        # implicitly removes descendants.
-        for key in list(self._node_graphics.keys()):
-            if nxt_path.is_ancestor(key, node_path):
-                self._node_graphics.pop(key)
-                self.remove_node_connection_graphics(key)
+
+        def handle_del():
+            self.scene().removeItem(graphic)
+
+        graphic.out_anim_group.finished.connect(handle_del)
+        graphic.anim_out()
 
     def get_node_graphic(self, name):
         return self._node_graphics.get(name, None)

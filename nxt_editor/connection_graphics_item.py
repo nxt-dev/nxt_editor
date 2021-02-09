@@ -10,6 +10,7 @@ from Qt import QtCore
 from . import colors
 from nxt import nxt_path, nxt_node
 import nxt_editor
+from nxt_editor.node_graphics_item import MIN_LOD
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -98,9 +99,19 @@ class AttrConnectionGraphic(QtWidgets.QGraphicsLineItem):
         self.update()
 
     def paint(self, painter, option, widget):
-        painter.setRenderHints(QtGui.QPainter.Antialiasing |
-                               QtGui.QPainter.SmoothPixmapTransform)
-        pen = QtGui.QPen(self.color, self.thickness, self.pen_style)
+        lod = QtWidgets.QStyleOptionGraphicsItem.levelOfDetailFromTransform(
+            painter.worldTransform())
+        if lod > MIN_LOD:
+            painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                                   QtGui.QPainter.SmoothPixmapTransform)
+            thick_mult = 1
+            pen_style = self.pen_style
+        else:
+            painter.setRenderHints(False)
+            thick_mult = 3
+            pen_style = QtCore.Qt.PenStyle.SolidLine
+        pen = QtGui.QPen(self.color, self.thickness * thick_mult,
+                         self.pen_style)
         # if self.tgt_path in self.model.selection:
         #    pen.setColor(colors.SELECTED)
         # elif self.is_hovered:

@@ -78,6 +78,7 @@ try:
     from nxt_editor import qresources
 except ImportError:
     make_resources()
+    from nxt_editor import qresources
 
 
 def _new_qapp():
