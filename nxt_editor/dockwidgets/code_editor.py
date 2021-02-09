@@ -1303,9 +1303,8 @@ class OverlayWidget(QtWidgets.QWidget):
         # Draw center message text
         msg_offset = font_metrics.boundingRect(self.click_msg).width()
         msg_offset += painter.font().pointSize()
-        pos = (self.rect().center().x() - (msg_offset*.5),
-               self.rect().center().y())
-        painter.drawText(*pos, self.click_msg)
+        painter.drawText(self.rect().center().x() - (msg_offset*.5),
+                         self.rect().center().y(), self.click_msg)
         painter.setCompositionMode(QtGui.QPainter.CompositionMode_Darken)
         path = QtGui.QPainterPath()
         path.addRoundedRect(QtCore.QRectF(self.rect()), 9, 9)

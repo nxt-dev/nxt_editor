@@ -1,7 +1,10 @@
 # Built-in
 import logging
 import ast
-import collections.abc
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 
 # External
 from Qt import QtWidgets
