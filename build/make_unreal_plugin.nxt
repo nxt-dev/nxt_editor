@@ -52,7 +52,7 @@
                 "os.remove(leftover_init)",
                 "try:",
                 "    shutil.rmtree(leftover_pycache)",
-                "except FileNotFoundError:",
+                "except:",
                 "    pass"
             ]
         }
