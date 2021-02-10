@@ -1075,8 +1075,11 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.view_actions.implicit_action)
         self.view_menu.addAction(self.view_actions.grid_action)
-        self.view_menu.addAction(self.view_actions.tooltip_action)
-        self.view_menu.addAction(self.layer_actions.lay_manger_table_action)
+        self.view_opt_menu = self.view_menu.addMenu('Options')
+        self.view_opt_menu.setTearOffEnabled(True)
+        self.view_opt_menu.addAction(self.view_actions.tooltip_action)
+        self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
+        self.view_opt_menu.addAction(self.ce_actions.overlay_message_action)
 
         # graph menu
         self.graph_menu = self.addMenu('Graph')

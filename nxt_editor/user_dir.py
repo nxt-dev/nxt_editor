@@ -71,6 +71,7 @@ class USER_PREF():
     FPS = 'fps'
     LOD = 'lod'
     ANIMATION = 'animation'
+    SHOW_DBL_CLICK_MSG = 'show_double_click_message'
 
 
 class EDITOR_CACHE():
