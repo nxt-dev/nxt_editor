@@ -1767,12 +1767,30 @@ class CodeEditorActions(NxtActionContainer):
         self.run_line_global_action.setAutoRepeat(False)
         self.run_line_global_action.setShortcutContext(context)
         self.run_line_global_action.setShortcut('Ctrl+Shift+Return')
+        self.run_line_global_action.setShortcutContext(context)
+
+        self.overlay_message_action = NxtAction('Show Double Click Message',
+                                                parent=self)
+        self.overlay_message_action.setAutoRepeat(False)
+        self.overlay_message_action.setCheckable(True)
+        state = user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_DBL_CLICK_MSG,
+                                        True)
+        self.overlay_message_action.setChecked(state)
+
+        def toggle_dbl_click_msg():
+            old = self.overlay_message_action.isChecked()
+            new = not old
+            user_dir.user_prefs[user_dir.USER_PREF.SHOW_DBL_CLICK_MSG] = new
+            self.main_window.code_editor.overlay_widget.update()
+
+        self.overlay_message_action.toggled.connect(toggle_dbl_click_msg)
 
         self.action_display_order = [self.copy_resolved_action,
                                      self.localize_code_action,
                                      self.revert_code_action,
                                      self.font_bigger, self.font_smaller,
                                      self.font_size_revert,
+                                     self.overlay_message_action,
                                      self.new_line, self.indent_line,
                                      self.unindent_line,
                                      self.run_line_global_action,
