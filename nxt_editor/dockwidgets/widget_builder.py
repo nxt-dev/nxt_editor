@@ -100,9 +100,19 @@ class WidgetBuilder(DockWidgetBase):
         self.scroll_layout.setSpacing(4)
         self.scroll_layout.setAlignment(QtCore.Qt.AlignTop)
         self.scroll_widget.setLayout(self.scroll_layout)
+        # Context menu
+        self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self.context_menu)
 
         # update
         self.update_window()
+
+    def context_menu(self):
+        menu = QtWidgets.QMenu(self)
+        refresh_action = menu.addAction('Refresh')
+        refresh_action.triggered.connect(self.update_window)
+        menu.addAction(self.main_window.execute_actions.wt_recomp_action)
+        menu.popup(QtGui.QCursor.pos())
 
     def show(self):
         super(WidgetBuilder, self).show()
