@@ -1633,7 +1633,7 @@ class StageModel(QtCore.QObject):
         layer = layer or self.comp_layer
         ancestors = layer.ancestors(node_path)
         for ancestor in ancestors:
-            if not get_node_enabled(ancestor):
+            if not self.get_node_enabled(ancestor, layer=layer):
                 return False
         return True
 
