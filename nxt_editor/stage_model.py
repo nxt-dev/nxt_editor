@@ -1320,6 +1320,8 @@ class StageModel(QtCore.QObject):
         """
         layer = layer or self.comp_layer
         node = layer.lookup(node_path)
+        if not node:
+            return
         source_layer = self.stage.get_node_source_layer(node)
         return source_layer
 
