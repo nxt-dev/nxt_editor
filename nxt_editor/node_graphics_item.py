@@ -1151,11 +1151,12 @@ class ErrorItem(QtWidgets.QGraphicsTextItem):
         return QtCore.QRectF(-10, -10, 10, 10)
 
     def paint(self, painter, option, widget):
-        painter.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.TextAntialiasing)
+        painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                               QtGui.QPainter.TextAntialiasing)
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(colors.ERROR)
         painter.drawEllipse(0, 0, 20, 20)
         painter.setPen(QtCore.Qt.black)
         painter.setFont(self.font())
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOut)
-        painter.drawText(QtCore.QRectF(0.6, 0.1, 20, 20), QtCore.Qt.AlignCenter, self.text)
+        painter.drawText(QtCore.QRectF(0.6, 0.1, 20, 20), QtCore.Qt.AlignCenter,
+                         self.text)
