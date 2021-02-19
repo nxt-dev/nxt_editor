@@ -1778,8 +1778,7 @@ class CodeEditorActions(NxtActionContainer):
         self.overlay_message_action.setChecked(state)
 
         def toggle_dbl_click_msg():
-            old = self.overlay_message_action.isChecked()
-            new = not old
+            new = self.overlay_message_action.isChecked()
             user_dir.user_prefs[user_dir.USER_PREF.SHOW_DBL_CLICK_MSG] = new
             self.main_window.code_editor.overlay_widget.update()
 
