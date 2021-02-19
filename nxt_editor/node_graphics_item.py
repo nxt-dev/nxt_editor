@@ -335,6 +335,10 @@ class NodeGraphicsItem(graphic_type):
         painter.setPen(QtCore.Qt.NoPen)
         bg = painter.background()
         bgm = painter.backgroundMode()
+        if self.error_item:
+            self.scene().removeItem(self.error_item)
+            self.error_item.deleteLater()
+        self.error_item = None
         if self.is_real:
             painter.setBackgroundMode(QtCore.Qt.OpaqueMode)
         else:
@@ -471,11 +475,6 @@ class NodeGraphicsItem(graphic_type):
                 error_item.setParentItem(self)
                 error_item.setZValue(50)
                 self.error_item = error_item
-            else:
-                if self.error_item:
-                    self.scene().removeItem(self.error_item)
-                    self.error_item.deleteLater()
-                self.error_item = None
 
         # draw collapse state arrow
         for arrow in self.collapse_arrows:

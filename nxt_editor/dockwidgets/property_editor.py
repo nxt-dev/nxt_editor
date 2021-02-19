@@ -958,7 +958,7 @@ class PropertyEditor(DockWidgetBase):
         cur_inst_path = self.stage_model.get_node_instance_path(self.node_path,
                                                                 comp_layer,
                                                                 expand=False)
-        if cur_inst_path:
+        if cur_inst_path is not None:
             self.stage_model.revert_node_instance(self.node_path)
         self.instance_field.blockSignals(False)
 

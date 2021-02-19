@@ -261,6 +261,16 @@ class MainWindow(QtWidgets.QMainWindow):
         # Should this be a signal? Like Startup done, now you can refresh?
         self.splash_screen.finish(self)
         self.in_startup = False
+        t = QtCore.QTimer()
+        t.setInterval(256)
+
+        def failure_check():
+            if self.view:
+                self.view.failure_check()
+            t.stop()
+        t.timeout.connect(failure_check)
+        t.start()
+
         app = QtWidgets.QApplication.instance()
         app.aboutToQuit.connect(self.shutdown_rpc_server)
 
