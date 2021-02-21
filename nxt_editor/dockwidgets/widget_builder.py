@@ -864,8 +864,11 @@ class Button(QtWidgets.QPushButton):
                 attr_name=self.INPUT_LIST_ATTR,
                 layer=None,
                 data_state=DATA_STATE.CACHED)
-        items = ast.literal_eval(input_value) if input_value else []
-
+        if (not isinstance(input_value, str) and
+                isinstance(input_value, Iterable)):
+            items = input_value
+        else:
+            items = []
         # selector dialog
         screen = QtWidgets.QApplication.desktop().screenNumber(
             QtWidgets.QApplication.desktop().cursor().pos())
