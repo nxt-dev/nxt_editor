@@ -1320,6 +1320,8 @@ class StageModel(QtCore.QObject):
         """
         layer = layer or self.comp_layer
         node = layer.lookup(node_path)
+        if not node:
+            return
         source_layer = self.stage.get_node_source_layer(node)
         return source_layer
 
@@ -1519,6 +1521,10 @@ class StageModel(QtCore.QObject):
         if expanded_inst_path in ancestors:
             logger.error('Can not instance an ancestor!')
             return
+        dependants = self.comp_layer.get_node_dirties(node_path)
+        if expanded_inst_path in dependants:
+            logger.error('Can not instance a dependant node!')
+            return
         cmd = SetNodeInstance(node_path=node_path,
                               instance_path=instance_path, model=self,
                               layer_path=layer_path)
@@ -1631,7 +1637,7 @@ class StageModel(QtCore.QObject):
         layer = layer or self.comp_layer
         ancestors = layer.ancestors(node_path)
         for ancestor in ancestors:
-            if not get_node_enabled(ancestor):
+            if not self.get_node_enabled(ancestor, layer=layer):
                 return False
         return True
 

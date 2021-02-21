@@ -11,7 +11,7 @@ from Qt import QtCore
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
-from nxt_editor import colors
+from nxt_editor import colors, user_dir
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS
@@ -1301,10 +1301,12 @@ class OverlayWidget(QtWidgets.QWidget):
         painter.drawText(self.rect().right() - offset,
                          painter.font().pointSize() * 1.5, self.data_state)
         # Draw center message text
-        msg_offset = font_metrics.boundingRect(self.click_msg).width()
-        msg_offset += painter.font().pointSize()
-        painter.drawText(self.rect().center().x() - (msg_offset*.5),
-                         self.rect().center().y(), self.click_msg)
+        show_msg = self._parent.ce_actions.overlay_message_action.isChecked()
+        if show_msg:
+            msg_offset = font_metrics.boundingRect(self.click_msg).width()
+            msg_offset += painter.font().pointSize()
+            painter.drawText(self.rect().center().x() - (msg_offset*.5),
+                             self.rect().center().y(), self.click_msg)
         painter.setCompositionMode(QtGui.QPainter.CompositionMode_Darken)
         path = QtGui.QPainterPath()
         path.addRoundedRect(QtCore.QRectF(self.rect()), 9, 9)
