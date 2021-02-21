@@ -15,6 +15,7 @@ from nxt import nxt_node, tokens
 from nxt_editor.node_graphics_item import (NodeGraphicsItem, NodeGraphicsPlug,
                                            _pyside_version)
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
+from nxt_editor.dialogs import NxtWarningDialog
 from nxt_editor.commands import *
 from .user_dir import USER_PREF, user_prefs
 
@@ -128,6 +129,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.data_state_changed.connect(self.update_resolved)
         self.model.layer_color_changed.connect(self.update_view)
         self.model.comp_layer_changed.connect(self.update_view)
+        self.model.comp_layer_changed.connect(self.failure_check)
         self.model.nodes_changed.connect(self.handle_nodes_changed)
         self.model.attrs_changed.connect(self.handle_attrs_changed)
         self.model.node_moved.connect(self.handle_node_move)
@@ -221,6 +223,14 @@ class StageView(QtWidgets.QGraphicsView):
     def implicit_connections(self):
         if self.model:
             return self.model.implicit_connections
+
+    def failure_check(self, *args):
+        if self.model.comp_layer.failure and not self.main_window.in_startup:
+            info = ('There was a critical error when building the comp.\n'
+                    'Please check your output window for more details as to\n'
+                    'what nodes failed and possibly why.')
+            NxtWarningDialog.show_message('Bad Comp!', info,
+                                          details=self.model.comp_layer.failure)
 
     def update_view(self, dirty=()):
         """Clears and re-draws graphics items. If the dirty list is empty all

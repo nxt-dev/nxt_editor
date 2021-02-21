@@ -434,8 +434,9 @@ class KeySequenceEdit(QtWidgets.QLineEdit):
                 key = modifier_key_map[key]
                 keySequence = QtGui.QKeySequence(key)
                 text = keySequence.toString()
-
-            self.setText(text.encode())
+            if not isinstance(text, str):
+                text = text.decode()
+            self.setText(text)
             return
         else:
             if event_modifiers & QtCore.Qt.ShiftModifier:

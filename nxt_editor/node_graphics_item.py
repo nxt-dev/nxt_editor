@@ -335,6 +335,10 @@ class NodeGraphicsItem(graphic_type):
         painter.setPen(QtCore.Qt.NoPen)
         bg = painter.background()
         bgm = painter.backgroundMode()
+        if self.error_item:
+            self.scene().removeItem(self.error_item)
+            self.error_item.deleteLater()
+        self.error_item = None
         if self.is_real:
             painter.setBackgroundMode(QtCore.Qt.OpaqueMode)
         else:
@@ -471,11 +475,6 @@ class NodeGraphicsItem(graphic_type):
                 error_item.setParentItem(self)
                 error_item.setZValue(50)
                 self.error_item = error_item
-            else:
-                if self.error_item:
-                    self.scene().removeItem(self.error_item)
-                    self.error_item.deleteLater()
-                self.error_item = None
 
         # draw collapse state arrow
         for arrow in self.collapse_arrows:
@@ -1151,11 +1150,12 @@ class ErrorItem(QtWidgets.QGraphicsTextItem):
         return QtCore.QRectF(-10, -10, 10, 10)
 
     def paint(self, painter, option, widget):
-        painter.setRenderHints(QtGui.QPainter.Antialiasing | QtGui.QPainter.TextAntialiasing)
+        painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                               QtGui.QPainter.TextAntialiasing)
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(colors.ERROR)
         painter.drawEllipse(0, 0, 20, 20)
         painter.setPen(QtCore.Qt.black)
         painter.setFont(self.font())
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOut)
-        painter.drawText(QtCore.QRectF(0.6, 0.1, 20, 20), QtCore.Qt.AlignCenter, self.text)
+        painter.drawText(QtCore.QRectF(0.6, 0.1, 20, 20), QtCore.Qt.AlignCenter,
+                         self.text)
