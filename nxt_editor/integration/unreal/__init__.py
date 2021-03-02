@@ -28,7 +28,7 @@ def launch_nxt_in_ue():
         __NXT_WINDOW.show()
         __NXT_WINDOW.raise_()
     else:
-        __NXT_WINDOW = nxt_editor.show_new_editor()
+        __NXT_WINDOW = nxt_editor.show_new_editor(start_rpc=False)
 
     __NXT_WINDOW.close_signal.connect(existing.exit)
     atexit.register(__NXT_WINDOW.close)
