@@ -288,7 +288,9 @@ class NodeGraphicsItem(graphic_type):
                                    QtGui.QPainter.TextAntialiasing |
                                    QtGui.QPainter.SmoothPixmapTransform)
         else:
-            painter.setRenderHints(False)
+            painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                                   QtGui.QPainter.TextAntialiasing |
+                                   QtGui.QPainter.SmoothPixmapTransform, False)
         self.draw_title(painter, lod)
         self.draw_attributes(painter, lod)
         self.draw_border(painter, lod)
@@ -971,7 +973,9 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
                                    QtGui.QPainter.TextAntialiasing |
                                    QtGui.QPainter.SmoothPixmapTransform)
         else:
-            painter.setRenderHints(False)
+            painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                                   QtGui.QPainter.TextAntialiasing |
+                                   QtGui.QPainter.SmoothPixmapTransform, False)
         if self.is_hovered:
             painter.setPen(QtGui.QPen(QtCore.Qt.white, self.hover_width, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
         else:
