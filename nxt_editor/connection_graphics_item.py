@@ -107,7 +107,8 @@ class AttrConnectionGraphic(QtWidgets.QGraphicsLineItem):
             thick_mult = 1
             pen_style = self.pen_style
         else:
-            painter.setRenderHints(False)
+            painter.setRenderHints(QtGui.QPainter.Antialiasing |
+                                   QtGui.QPainter.SmoothPixmapTransform, False)
             thick_mult = 3
             pen_style = QtCore.Qt.PenStyle.SolidLine
         pen = QtGui.QPen(self.color, self.thickness * thick_mult,

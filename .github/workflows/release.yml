@@ -1,0 +1,14 @@
+name: Release
+
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+    branches: [release]
+
+jobs:
+  test-and-deploy:
+    secrets: inherit
+    uses: nxt-dev/nxt/.github/workflows/release.yml@release
+    with:
+      QT_DEPENDENCIES: true
