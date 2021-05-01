@@ -1,6 +1,7 @@
 # Built-in
 import textwrap
 import sys
+import logging
 from functools import partial
 
 # External
@@ -18,7 +19,7 @@ from nxt_editor import user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
-from nxt_editor import colors
+from nxt_editor import colors, LOGGER_NAME
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
@@ -26,6 +27,8 @@ from nxt import tokens
 
 # Fixme: Should this be a pref?
 HISTORICAL_MAX_CHARS = 50
+
+logger = logging.getLogger(LOGGER_NAME)
 
 
 class PropertyEditor(DockWidgetBase):
@@ -1250,7 +1253,11 @@ class PropertyModel(QtCore.QAbstractTableModel):
             if self.state:
                 if sys.version_info[0] > 2 and isinstance(self.state, str):
                     self.state = bytes(self.state, 'utf-8')
-                self.horizontal_header.restoreState(self.state)
+                try:
+                    self.horizontal_header.restoreState(self.state)
+                except TypeError:
+                    logger.error('Corrupted property editor pref!')
+                    self.state = ''
             self.view.resizeColumnToContents(COLUMNS.nxt_type)
 
     def get_data(self):

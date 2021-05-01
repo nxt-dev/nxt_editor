@@ -1258,11 +1258,11 @@ class StageView(QtWidgets.QGraphicsView):
                 graphic.update_collapse()
             collapsed = self.model.get_node_collapse(path, comp_layer)
             if collapsed:
-                children = self.model.get_children(path,
-                                                   include_implied=True)
-                for child_path in children:
+                descendants = self.model.get_descendants(path,
+                                                         include_implied=True)
+                for child_path in descendants:
                     self.remove_node_graphic(child_path)
-                if children:
+                if descendants:
                     roots_hit.add(nxt_path.get_root_path(path))
             else:
                 descendants = self.model.get_descendants(path,

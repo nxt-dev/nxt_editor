@@ -80,7 +80,11 @@ def make_or_find_nxt_menu():
     return nxt_menu
 
 def refresh_nxt_menu():
-    nxt_menu = make_or_find_nxt_menu()
+    try:
+        nxt_menu = make_or_find_nxt_menu()
+    except ValueError:
+        # If the plugin is loaded in unreal headless, the menu won't exist.
+        return
     if is_nxt_available():
         nxt_menu.add_menu_entry("nxt-section", make_open_editor_entry())
         nxt_menu.add_menu_entry("nxt-section", make_update_entry())

@@ -111,8 +111,7 @@ class AttrConnectionGraphic(QtWidgets.QGraphicsLineItem):
                                    QtGui.QPainter.SmoothPixmapTransform, False)
             thick_mult = 3
             pen_style = QtCore.Qt.PenStyle.SolidLine
-        pen = QtGui.QPen(self.color, self.thickness * thick_mult,
-                         self.pen_style)
+        pen = QtGui.QPen(self.color, self.thickness * thick_mult, pen_style)
         # if self.tgt_path in self.model.selection:
         #    pen.setColor(colors.SELECTED)
         # elif self.is_hovered:
