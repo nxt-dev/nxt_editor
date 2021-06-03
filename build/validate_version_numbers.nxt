@@ -162,7 +162,7 @@
                 "for rel_cat, rel_dict in version_data.items():",
                 "    actual = rel_dict['actual']",
                 "    release = rel_dict['version']",
-                "    print release",
+                "    print(release)",
                 "    rel_type = rel_dict['rel_type']",
                 "    if rel_type is None:",
                 "        continue",
