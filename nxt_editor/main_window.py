@@ -516,13 +516,11 @@ class MainWindow(QtWidgets.QMainWindow):
         try:
             new_stage = self.nxt.load_file(potential_path)
         except IOError as e:
-            # Log error if no file could be loaded and set a blank stage
-            new_stage = None
-            logger.exception("Nxt failed to open file from path, see log.")
+            NxtWarningDialog.show_message("Failed to Open", str(e))
         self.set_waiting_cursor(False)
         if new_stage:
             self.new_tab(initial_stage=new_stage, update=not self.in_startup)
-        user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = potential_path
+            user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = potential_path
 
     def save_open_tab(self):
         """Save the file that corresponds to the currently selected tab."""
