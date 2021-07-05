@@ -200,13 +200,13 @@ class OutputLog(DockWidgetBase):
         # Rich Output
         self.rich_output_textedit = OutputTextBrowser(self)
         self.log_filter_button = LogFilterButton()
-        self.clear_button = QtWidgets.QPushButton('Clear Log')
-        self.clear_button.pressed.connect(self.rich_output_textedit.clear)
+        self.clear_rich_button = QtWidgets.QPushButton('Clear Log')
+        self.clear_rich_button.pressed.connect(self.rich_output_textedit.clear)
 
         self.buttons_layout = QtWidgets.QHBoxLayout()
         self.buttons_layout.addWidget(self.log_filter_button)
         self.buttons_layout.addStretch(stretch=1)
-        self.buttons_layout.addWidget(self.clear_button)
+        self.buttons_layout.addWidget(self.clear_rich_button)
 
         self.rich_output_layout = QtWidgets.QVBoxLayout()
         self.rich_output_layout.setContentsMargins(0, 0, 0, 0)
@@ -224,6 +224,9 @@ class OutputLog(DockWidgetBase):
         self.python_layout = QtWidgets.QHBoxLayout()
         self.python_layout.addWidget(QtWidgets.QLabel("Python: "))
         self.python_layout.addWidget(self.python_edit, stretch=1)
+        self.clear_raw_button = QtWidgets.QPushButton('Clear Log')
+        self.clear_raw_button.pressed.connect(self.raw_output_textedit.clear)
+        self.python_layout.addWidget(self.clear_raw_button)
 
         self.raw_output_layout = QtWidgets.QVBoxLayout()
         self.raw_output_layout.setContentsMargins(0, 0, 0, 0)
@@ -423,19 +426,22 @@ class OutputLog(DockWidgetBase):
 class OutputTextEdit(QtWidgets.QTextEdit):
     def __init__(self, parent):
         super(OutputTextEdit, self).__init__(parent=parent)
+        self._parent = parent
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setReadOnly(True)
         self.setFont(QtGui.QFont('Roboto Mono', 10))
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
-        menu.addAction('Clear All', self.clear)
+        menu.addAction('Clear', self.clear)
+        menu.addAction(self._parent.parent().app_actions.clear_logs_action)
         menu.exec_(event.globalPos())
 
 
 class OutputTextBrowser(QtWidgets.QTextBrowser):
     def __init__(self, parent):
         super(OutputTextBrowser, self).__init__(parent=parent)
+        self._parent = parent
         self.anchorClicked.connect(self.parent().link_clicked)
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setOpenLinks(False)
@@ -443,7 +449,8 @@ class OutputTextBrowser(QtWidgets.QTextBrowser):
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
-        menu.addAction('Clear All', self.clear)
+        menu.addAction('Clear', self.clear)
+        menu.addAction(self._parent.parent().app_actions.clear_logs_action)
         menu.exec_(event.globalPos())
 
 

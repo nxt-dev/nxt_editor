@@ -375,6 +375,19 @@ class AppActions(NxtActionContainer):
         self.find_and_open_action.setShortcutContext(context)
         self.available_without_model.append(self.find_and_open_action)
 
+        def clear_logs():
+            rich = self.main_window.output_log.rich_output_textedit
+            raw = self.main_window.output_log.raw_output_textedit
+            rich.clear()
+            raw.clear()
+
+        self.clear_logs_action = NxtAction(text='Clear All Logs',
+                                           parent=self)
+        self.clear_logs_action.setWhatsThis('Clear all the text from all of the output logs (raw and rich).')
+        self.clear_logs_action.triggered.connect(clear_logs)
+        self.clear_logs_action.setShortcutContext(context)
+        self.available_without_model.append(self.clear_logs_action)
+
         self.action_display_order = [self.find_node_action,
                                      self.new_graph_action,
                                      self.open_file_action, self.undo_action,
@@ -387,6 +400,7 @@ class AppActions(NxtActionContainer):
                                      self.output_log_action,
                                      self.hotkey_editor_action,
                                      self.workflow_tools_action,
+                                     self.clear_logs_action,
                                      self.close_action]
 
 
