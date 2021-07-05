@@ -1777,6 +1777,17 @@ class CodeEditorActions(NxtActionContainer):
                                         True)
         self.overlay_message_action.setChecked(state)
 
+        self.show_data_state_action = NxtAction('Code Editor Data State Overlay',
+                                                parent=self)
+        self.show_data_state_action.setWhatsThis('When on this pref will enable a simple HUD on the top right of '
+                                                 'the code editor. The HUD will update to display the current data '
+                                                 'state (raw, resolved, cached).')
+        self.show_data_state_action.setAutoRepeat(False)
+        self.show_data_state_action.setCheckable(True)
+        state = user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_CE_DATA_STATE,
+                                        True)
+        self.show_data_state_action.setChecked(state)
+
         def toggle_dbl_click_msg():
             new = self.overlay_message_action.isChecked()
             user_dir.user_prefs[user_dir.USER_PREF.SHOW_DBL_CLICK_MSG] = new
@@ -1790,6 +1801,7 @@ class CodeEditorActions(NxtActionContainer):
                                      self.font_bigger, self.font_smaller,
                                      self.font_size_revert,
                                      self.overlay_message_action,
+                                     self.show_data_state_action,
                                      self.new_line, self.indent_line,
                                      self.unindent_line,
                                      self.run_line_global_action,
