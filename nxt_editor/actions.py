@@ -375,6 +375,19 @@ class AppActions(NxtActionContainer):
         self.find_and_open_action.setShortcutContext(context)
         self.available_without_model.append(self.find_and_open_action)
 
+        def clear_logs():
+            rich = self.main_window.output_log.rich_output_textedit
+            raw = self.main_window.output_log.raw_output_textedit
+            rich.clear()
+            raw.clear()
+
+        self.clear_logs_action = NxtAction(text='Clear All Logs',
+                                           parent=self)
+        self.clear_logs_action.setWhatsThis('Clear all the text from all of the output logs (raw and rich).')
+        self.clear_logs_action.triggered.connect(clear_logs)
+        self.clear_logs_action.setShortcutContext(context)
+        self.available_without_model.append(self.clear_logs_action)
+
         self.action_display_order = [self.find_node_action,
                                      self.new_graph_action,
                                      self.open_file_action, self.undo_action,
@@ -387,6 +400,7 @@ class AppActions(NxtActionContainer):
                                      self.output_log_action,
                                      self.hotkey_editor_action,
                                      self.workflow_tools_action,
+                                     self.clear_logs_action,
                                      self.close_action]
 
 
@@ -1777,6 +1791,17 @@ class CodeEditorActions(NxtActionContainer):
                                         True)
         self.overlay_message_action.setChecked(state)
 
+        self.show_data_state_action = NxtAction('Code Editor Data State Overlay',
+                                                parent=self)
+        self.show_data_state_action.setWhatsThis('When on this pref will enable a simple HUD on the top right of '
+                                                 'the code editor. The HUD will update to display the current data '
+                                                 'state (raw, resolved, cached).')
+        self.show_data_state_action.setAutoRepeat(False)
+        self.show_data_state_action.setCheckable(True)
+        state = user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_CE_DATA_STATE,
+                                        True)
+        self.show_data_state_action.setChecked(state)
+
         def toggle_dbl_click_msg():
             new = self.overlay_message_action.isChecked()
             user_dir.user_prefs[user_dir.USER_PREF.SHOW_DBL_CLICK_MSG] = new
@@ -1790,6 +1815,7 @@ class CodeEditorActions(NxtActionContainer):
                                      self.font_bigger, self.font_smaller,
                                      self.font_size_revert,
                                      self.overlay_message_action,
+                                     self.show_data_state_action,
                                      self.new_line, self.indent_line,
                                      self.unindent_line,
                                      self.run_line_global_action,
