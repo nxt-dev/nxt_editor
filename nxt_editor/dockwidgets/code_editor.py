@@ -1295,11 +1295,13 @@ class OverlayWidget(QtWidgets.QWidget):
         model = code_editor.stage_model
         self.data_state = code_editor.actual_display_state
         painter.setPen(QtCore.Qt.white)
-        # Draw top right data state text
-        offset = font_metrics.boundingRect(self.data_state).width()
-        offset += painter.font().pointSize() * 1.5
-        painter.drawText(self.rect().right() - offset,
-                         painter.font().pointSize() * 1.5, self.data_state)
+        # Draw top right data state text to HUD
+        show_data_state = self._parent.ce_actions.show_data_state_action.isChecked()
+        if show_data_state:
+            offset = font_metrics.boundingRect(self.data_state).width()
+            offset += painter.font().pointSize() * 1.5
+            painter.drawText(self.rect().right() - offset,
+                             painter.font().pointSize() * 1.5, self.data_state)
         # Draw center message text
         show_msg = self._parent.ce_actions.overlay_message_action.isChecked()
         if show_msg:
