@@ -25,7 +25,7 @@ from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
 from nxt.stage import (determine_nxt_type, INTERNAL_ATTRS,
                        get_historical_opinions)
-from nxt.runtime import GraphError, InvalidNodeError
+from nxt.runtime import ExitGraph, GraphError, InvalidNodeError
 from nxt_editor.dialogs import NxtConfirmDialog, NxtWarningDialog
 from nxt.remote import nxt_socket
 
@@ -3504,6 +3504,9 @@ class ExecuteNodeThread(QtCore.QThread):
                     self.raised_exception = err
                 else:
                     self.raised_exception = BuildStop
+                return
+            except ExitGraph:
+                self.raised_exception = BuildStop
                 return
         if self.stage_model._build_should_stop:
             self.raised_exception = BuildStop
