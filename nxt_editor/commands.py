@@ -1672,7 +1672,7 @@ class SetLayerLock(NxtCommand):
             layer.lock = self.old_lock
         else:
             layer.set_locked_over(self.old_lock)
-        self.remove_effected_layer(self.model.top_layer.real_path)
+        self.undo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_lock_changed.emit(self.layer_path)
 
     @processing
@@ -1684,7 +1684,7 @@ class SetLayerLock(NxtCommand):
         else:
             self.old_lock = layer.get_locked(fallback_to_local=False)
             layer.set_locked_over(self.lock)
-        self.add_effected_layer(self.model.top_layer.real_path)
+        self.redo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_lock_changed.emit(self.layer_path)
         self.setText("Set {} lock to {}".format(layer.filepath, self.lock))
 
