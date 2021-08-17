@@ -730,15 +730,6 @@ class StageView(QtWidgets.QGraphicsView):
             not_intractable = self.model.get_node_locked(item_path)
             if not_intractable:
                 self._clicked_something_locked = True
-                # selection = self.scene().selectedItems()
-                # keep = []
-                # for i in selection:
-                #     _path = self.get_sel_path_for_graphic(i)
-                #     if _path and not self.model.get_node_locked(_path):
-                #         keep += [i]
-                # self.scene().selection
-
-
             # item interaction
             curr_sel = self.model.is_selected(item_path)
             mods = event.modifiers()
@@ -923,7 +914,7 @@ class StageView(QtWidgets.QGraphicsView):
                 if type(items_released_on[1]) is NodeGraphicsPlug:
                     dropped_plug = items_released_on[1]
                     dropped_node_path = dropped_plug.parentItem().node_path
-                    locked = dropped_plug.parentItem().locked
+                    locked = self.model.get_node_locked(dropped_node_path)
                     dropped_attr_name = dropped_plug.attr_name_represented
                     exec_attr_name = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
                     if (dropped_attr_name not in nxt_node.INTERNAL_ATTRS.ALL

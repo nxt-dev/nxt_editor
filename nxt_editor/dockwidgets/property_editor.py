@@ -1099,13 +1099,9 @@ class PropertyEditor(DockWidgetBase):
                                                                 INTERNAL_ATTRS.EXECUTE_IN,
                                                                 self.stage_model.comp_layer)
         tgt_path = self.stage_model.target_layer.real_path
-        if not self.locked:
-            if src_path == self.node_path and layer == tgt_path:
-                self.localize_exec_path_action.setEnabled(False)
-                self.revert_exec_path_action.setEnabled(True)
-            else:
-                self.localize_exec_path_action.setEnabled(True)
-                self.revert_exec_path_action.setEnabled(False)
+        exec_is_path_local = (src_path == self.node_path) and (layer == tgt_path)
+        self.localize_exec_path_action.setEnabled(not exec_is_path_local and not self.locked)
+        self.revert_exec_path_action.setEnabled(exec_is_path_local and not self.locked)
         link_to = HistoricalContextMenu.LINKS.SOURCE
         historical_menu = HistoricalContextMenu(self, self.node_path,
                                                 INTERNAL_ATTRS.EXECUTE_IN,
@@ -1488,7 +1484,6 @@ class PropertyModel(QtCore.QAbstractTableModel):
 class AttrsTableView(QtWidgets.QTableView):
     def __init__(self, parent=None):
         super(AttrsTableView, self).__init__(parent=parent)
-        # self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
         self.setItemDelegateForColumn(COLUMNS.source, self.node_path_delegate)
         self.mouse_pressed = False
@@ -1498,8 +1493,6 @@ class AttrsTableView(QtWidgets.QTableView):
         self.installEventFilter(self)
 
     def mousePressEvent(self, event):
-        # if self._parent.stage_model.get_node_locked(self._parent.node_path):
-        #     return
         super(AttrsTableView, self).mousePressEvent(event)
         self.mouse_pressed = self.indexAt(event.pos())
         self.startDrag(event)
