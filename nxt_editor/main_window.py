@@ -460,6 +460,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # create model
         model = StageModel(stage=stage)
         model.processing.connect(self.set_waiting_cursor)
+        model.request_ding.connect(self.ding)
         model.layer_alias_changed.connect(partial(self.update_tab_title, model))
         # create view
         view = StageView(model=model, parent=self)
@@ -478,6 +479,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.update_grid_action()
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
+
+    def ding(self):
+        QtWidgets.QApplication.instance().beep()
 
     def center_view(self):
         target_graph_view = self.get_current_view()
