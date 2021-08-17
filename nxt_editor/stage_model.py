@@ -1984,6 +1984,10 @@ class StageModel(QtCore.QObject):
         if source_node_path == nxt_path.WORLD:
             logger.error("Cannot set node exec in to the world")
             return
+        if source_node_path in self.get_exec_order(node_path):
+            logger.error('Cannot connect exec in from {} (would cycle)'.format(source_node_path),
+                         links=[source_node_path])
+            return
         layer_path = self.get_layer_path(layer, fallback=LAYERS.TARGET)
         node_ns = nxt_path.str_path_to_node_namespace(node_path)
         if len(node_ns) > 1:
