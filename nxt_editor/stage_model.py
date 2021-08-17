@@ -77,12 +77,13 @@ class StageModel(QtCore.QObject):
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
+    request_ding = QtCore.Signal()
 
     def __init__(self, stage):
         super(StageModel, self).__init__()
         self.stage = stage
         self.clipboard = QtWidgets.QApplication.clipboard()
-        self.undo_stack = QtWidgets.QUndoStack(self)
+        self.undo_stack = NxtUndoStack(self)
         self.effected_layers = UnsavedLayerSet()
 
         # execution
@@ -3187,6 +3188,23 @@ class StageModel(QtCore.QObject):
     @staticmethod
     def process_events():
         QtCore.QCoreApplication.processEvents()
+
+
+class NxtUndoStack(QtWidgets.QUndoStack):
+
+    def push(self, command):
+        """Simple overload of push method, checks that the target layer of the given command's model is *not* locked.
+        If the command does not have a model attr nothing is checked.
+
+        :param command: Command to push to undo stack
+        :type command: QUndoCommand
+        :return: None
+        """
+        model = getattr(command, 'model', None)  # type: StageModel
+        if model and model.target_layer.get_locked():
+            logger.error('The target layer is locked!')
+            return
+        super(NxtUndoStack, self).push(command)
 
 
 class UnsavedLayerSet(set):
