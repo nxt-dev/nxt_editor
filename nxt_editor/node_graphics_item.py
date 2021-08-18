@@ -694,8 +694,6 @@ class NodeGraphicsItem(graphic_type):
     def hoverEnterEvent(self, event):
         """Override of QtWidgets.QGraphicsItem hoverEnterEvent."""
         self.is_hovered = True
-        if self.locked:
-            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WhatsThisCursor)
         if self.view.view_actions.tooltip_action.isChecked():
             self.setToolTip(self.get_node_tool_tip())
         else:
@@ -704,7 +702,6 @@ class NodeGraphicsItem(graphic_type):
 
     def hoverLeaveEvent(self, event):
         """Override of QtWidgets.QGraphicsItem hoverLeaveEvent."""
-        QtWidgets.QApplication.restoreOverrideCursor()
         self.is_hovered = False
         self.update()
         super(NodeGraphicsItem, self).hoverLeaveEvent(event)

@@ -813,8 +813,14 @@ class StageView(QtWidgets.QGraphicsView):
             self._previous_mouse_pos = event.pos()
             event.accept()
             return
-
         super(StageView, self).mouseMoveEvent(event)
+        item = self.itemAt(event.pos())
+        app = QtWidgets.QApplication
+        if item and hasattr(item, 'locked') and item.locked:
+            if not app.overrideCursor():
+                app.setOverrideCursor(QtCore.Qt.ForbiddenCursor)
+        else:
+            app.restoreOverrideCursor()
 
     def mouseReleaseEvent(self, event):
         was_just_zooming = self.zooming
