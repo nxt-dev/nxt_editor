@@ -59,6 +59,7 @@ class StageModel(QtCore.QObject):
     layer_mute_changed = QtCore.Signal(tuple)  # Layer paths whose mute changed
     layer_solo_changed = QtCore.Signal(tuple)  # Layer paths whose solo changed
     layer_alias_changed = QtCore.Signal(str)  # Layer path whose alias changed
+    layer_lock_changed = QtCore.Signal(str)  # Layer path whose locked changed
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
     layer_saved = QtCore.Signal(str)  # Layer path that was just saved
@@ -76,12 +77,13 @@ class StageModel(QtCore.QObject):
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
+    request_ding = QtCore.Signal()
 
     def __init__(self, stage):
         super(StageModel, self).__init__()
         self.stage = stage
         self.clipboard = QtWidgets.QApplication.clipboard()
-        self.undo_stack = QtWidgets.QUndoStack(self)
+        self.undo_stack = NxtUndoStack(self)
         self.effected_layers = UnsavedLayerSet()
 
         # execution
@@ -576,6 +578,34 @@ class StageModel(QtCore.QObject):
             return layer_color
         return color
 
+    def get_layer_locked(self, layer_path):
+        layer = self.lookup_layer(layer_path)
+        return layer.get_locked()
+
+    def set_layer_locked(self, layer_path, lock=None):
+        """Sets the layer lock for the given layer. If lock is set to None
+        (default) it will not be serialized and the graph default lock for
+        this layer's index will be used.
+
+        :param layer_path: layer real path
+        :type layer_path: str
+        :param lock: lock state
+        :type lock: bool or None
+        """
+        layer = self.lookup_layer(layer_path)
+        if not layer:
+            logger.error('Cannot set lock for invalid layer: {}'.format(layer))
+            return
+        if layer is self.top_layer:
+            cur_lock = layer.get_color(local=True)
+        else:
+            cur_lock = layer.get_locked()
+        if cur_lock == lock:
+            logger.error('{} lock is already {}'.format(layer, lock))
+            return
+        cmd = SetLayerLock(lock, layer_path, self)
+        self.undo_stack.push(cmd)
+
     def get_layer(self, layer_alias):
         """Gets a layer via its alias.
         :param layer_alias:
@@ -627,6 +657,20 @@ class StageModel(QtCore.QObject):
     @staticmethod
     def get_is_layer_soloed(layer):
         return layer.get_soloed()
+
+    def get_node_locked(self, node_path, local=False, layer_opinion=True):
+        # TODO: Make it so nodes can be locked locally
+        local_lock = False
+        if local_lock is not None and all((local, not layer_opinion)):
+            return local_lock
+        node = self.comp_layer.lookup(node_path)
+        if not node:
+            return False
+        src_layer = self.get_node_source_layer(node_path)
+        locked = src_layer.get_locked()
+        if locked is None:
+            return local_lock
+        return locked
 
     def is_top_node(self, node_path):
         parent_path = nxt_path.get_parent_path(node_path)
@@ -3144,6 +3188,24 @@ class StageModel(QtCore.QObject):
     @staticmethod
     def process_events():
         QtCore.QCoreApplication.processEvents()
+
+
+class NxtUndoStack(QtWidgets.QUndoStack):
+
+    def push(self, command):
+        """Simple overload of push method, checks that the target layer of the given command's model is *not* locked.
+        If the command does not have a model attr nothing is checked.
+
+        :param command: Command to push to undo stack
+        :type command: QUndoCommand
+        :return: None
+        """
+        model = getattr(command, 'model', None)  # type: StageModel
+        if model and model.target_layer.get_locked():
+            logger.warning('The target layer is locked!')
+            model.request_ding.emit()
+            return
+        super(NxtUndoStack, self).push(command)
 
 
 class UnsavedLayerSet(set):
