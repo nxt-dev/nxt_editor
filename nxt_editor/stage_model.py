@@ -3202,7 +3202,7 @@ class NxtUndoStack(QtWidgets.QUndoStack):
         """
         model = getattr(command, 'model', None)  # type: StageModel
         if model and model.target_layer.get_locked():
-            logger.error('The target layer is locked!')
+            logger.warning('The target layer is locked!')
             model.request_ding.emit()
             return
         super(NxtUndoStack, self).push(command)
