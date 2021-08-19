@@ -480,8 +480,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
 
-    def ding(self):
-        QtWidgets.QApplication.instance().beep()
+    @staticmethod
+    def ding():
+        if user_dir.user_prefs.get(user_dir.USER_PREF.DING, True):
+            QtWidgets.QApplication.instance().beep()
 
     def center_view(self):
         target_graph_view = self.get_current_view()
@@ -1015,13 +1017,13 @@ class MenuBar(QtWidgets.QMenuBar):
     def __init__(self, parent=None):
         super(MenuBar, self).__init__(parent=parent)
         self.main_window = parent
-        self.app_actions = parent.app_actions
-        self.exec_actions = parent.execute_actions
-        self.node_actions = parent.node_actions
-        self.ce_actions = parent.code_editor_actions
-        self.display_actions = parent.display_actions
-        self.view_actions = parent.view_actions
-        self.layer_actions = parent.layer_actions
+        self.app_actions = parent.app_actions  # type: actions.AppActions
+        self.exec_actions = parent.execute_actions  # type: actions.ExecuteActions
+        self.node_actions = parent.node_actions  # type: actions.NodeActions
+        self.ce_actions = parent.code_editor_actions  # type: actions.CodeEditorActions
+        self.display_actions = parent.display_actions  # type: actions.DisplayActions
+        self.view_actions = parent.view_actions  # type: actions.StageViewActions
+        self.layer_actions = parent.layer_actions  # type: actions.LayerActions
         # File Menu
         self.file_menu = self.addMenu('File')
         self.file_menu.setTearOffEnabled(True)
@@ -1145,6 +1147,11 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addSeparator()
         self.remote_menu.addAction(self.exec_actions.startup_rpc_action)
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
+        self.options_menu = self.addMenu('Options')
+        self.options_menu.addAction(self.app_actions.toggle_ding_action)
+        self.options_view_sub = self.options_menu.addMenu('View')
+        self.options_view_sub.setTearOffEnabled(True)
+        self.options_view_sub.addActions(self.view_opt_menu.actions())
         # Help Menu
         self.help_menu = self.addMenu('Help')
         self.help_menu.setTearOffEnabled(True)
