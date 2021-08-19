@@ -124,8 +124,6 @@ class LayerTreeView(QtWidgets.QTreeView):
             return
         layer = clicked_idx.internalPointer()
         layer_path = self.model().stage_model.get_layer_path(layer)
-        if self.model().stage_model.get_layer_locked(layer_path):
-            return
         self.model().stage_model.set_target_layer(layer_path)
 
     def on_item_dbl_clicked(self, clicked_idx):
