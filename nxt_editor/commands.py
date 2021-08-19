@@ -1664,6 +1664,7 @@ class SetLayerLock(NxtCommand):
         self.old_lock = None
         self.model = model
         self.stage = model.stage
+        self.prev_target_layer_path = None
 
     @processing
     def undo(self):
@@ -1674,18 +1675,24 @@ class SetLayerLock(NxtCommand):
             layer.set_locked_over(self.old_lock)
         self.undo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_lock_changed.emit(self.layer_path)
+        if self.prev_target_layer_path:
+            prev_tgt = self.model.lookup_layer(self.prev_target_layer_path)
+            if prev_tgt != self.model.target_layer:
+                self.model._set_target_layer(prev_tgt)
 
     @processing
     def redo(self):
         layer = self.model.lookup_layer(self.layer_path)
-        if layer is self.model.top_layer:
-            self.old_lock = layer.get_locked(local=True)
-            layer.lock = self.lock
-        else:
-            self.old_lock = layer.get_locked(fallback_to_local=False)
-            layer.set_locked_over(self.lock)
+        self.prev_target_layer_path = self.model.get_layer_path(self.model.target_layer, LAYERS.TARGET)
+        self.old_lock = layer.get_locked(fallback_to_local=False)
+        layer.set_locked_over(self.lock)
         self.redo_effected_layer(self.model.top_layer.real_path)
         self.model.layer_lock_changed.emit(self.layer_path)
+        move_tgt = layer == self.model.target_layer
+        if move_tgt:
+            self.model._set_target_layer(self.model.top_layer)
+            logger.warning('You locked your target layer, setting target layer to TOP layer.')
+            self.model.request_ding.emit()
         self.setText("Set {} lock to {}".format(layer.filepath, self.lock))
 
 

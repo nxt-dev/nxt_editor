@@ -528,7 +528,7 @@ class PropertyEditor(DockWidgetBase):
 
     def handle_locking(self, *args):
         # TODO: Make it a user pref to lock the property editor when node is locked?
-        # self.locked = self.stage_model.get_node_locked(self.node_path)
+        # self.locked = self.stage_model.target_layer.get_locked()
         if self.locked:
             self.table_view.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         else:
