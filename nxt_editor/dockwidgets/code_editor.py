@@ -251,7 +251,8 @@ class CodeEditor(DockWidgetBase):
         self.update_background()
 
     def handle_lock_changed(self, *args):
-        self.locked = self.stage_model.get_node_locked(self.node_path)
+        # TODO: Make it a user pref to lock the code editor when node is locked?
+        # self.locked = self.stage_model.get_node_locked(self.node_path)
         self.name_label.setReadOnly(self.locked)
         # Enable/Disable
         self.accept_button.setEnabled(not self.locked)

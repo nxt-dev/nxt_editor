@@ -297,13 +297,6 @@ class NodeGraphicsItem(graphic_type):
         self.draw_title(painter, lod)
         self.draw_attributes(painter, lod)
         self.draw_border(painter, lod)
-        if self.locked:
-            self.setFlags(QtWidgets.QGraphicsItem.ItemSendsScenePositionChanges)
-        else:
-            self.setFlags(QtWidgets.QGraphicsItem.ItemIsMovable |
-                          QtWidgets.QGraphicsItem.ItemIsFocusable |
-                          QtWidgets.QGraphicsItem.ItemIsSelectable |
-                          QtWidgets.QGraphicsItem.ItemSendsScenePositionChanges)
 
     def closest_grid_point(self, position):
         snapped_pos = self.model.snap_pos_to_grid((position.x(), position.y()))
@@ -1066,9 +1059,6 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
         # break attribute connections
         if event.modifiers() == QtCore.Qt.AltModifier:
             raise NotImplementedError("Alt to clear attribute is broken.")
-        if self.parentItem().locked:
-            event.accept()
-            return
         if self.attr_name_represented:
             node_path = self.parentItem().node_path
             path = nxt_path.make_attr_path(node_path, self.attr_name_represented)
