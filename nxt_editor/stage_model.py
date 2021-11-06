@@ -509,11 +509,19 @@ class StageModel(QtCore.QObject):
     def target_layer(self):
         return self._target_layer
 
+    def _set_target_layer(self, layer):
+        self._target_layer = layer
+        self.target_layer_changed.emit(self.target_layer)
+
     def set_target_layer(self, layer_path):
         layer = self.lookup_layer(layer_path)
-        if layer:
-            self._target_layer = layer
-            self.target_layer_changed.emit(self.target_layer)
+        if not layer:
+            return
+        if layer.get_locked():
+            logger.warning('"{}" is a locked layer!'.format(layer.alias))
+            self.request_ding.emit()
+            return
+        self._set_target_layer(layer)
 
     def set_layer_alias(self, alias, layer):
         layer_path = self.get_layer_path(layer, fallback=LAYERS.TARGET)
@@ -597,7 +605,9 @@ class StageModel(QtCore.QObject):
             logger.error('Cannot set lock for invalid layer: {}'.format(layer))
             return
         if layer is self.top_layer:
-            cur_lock = layer.get_color(local=True)
+            logger.warning('Cannot lock top layer!')
+            self.request_ding.emit()
+            return
         else:
             cur_lock = layer.get_locked()
         if cur_lock == lock:

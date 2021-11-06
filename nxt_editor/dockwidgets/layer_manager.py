@@ -125,6 +125,8 @@ class LayerTreeView(QtWidgets.QTreeView):
         layer = clicked_idx.internalPointer()
         layer_path = self.model().stage_model.get_layer_path(layer)
         if self.model().stage_model.get_layer_locked(layer_path):
+            logger.warning('The layer "{}" is locked!'.format(layer.alias))
+            self.model().stage_model.request_ding.emit()
             return
         self.model().stage_model.set_target_layer(layer_path)
 

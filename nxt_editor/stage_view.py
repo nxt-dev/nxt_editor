@@ -750,8 +750,6 @@ class StageView(QtWidgets.QGraphicsView):
             elif mods == self.SEL_RMV_MODIFIERS:
                 self.model.remove_from_selection([item_path])
                 return  # block immediate node movement
-            if not_intractable:
-                return
 
         # middle and right button events
         elif event.button() == QtCore.Qt.MiddleButton:
@@ -850,8 +848,7 @@ class StageView(QtWidgets.QGraphicsView):
             node_paths = []
             for item in self.scene().items(selection_area_rect):
                 if isinstance(item, NodeGraphicsItem):
-                    if not self.model.get_node_locked(item.node_path):
-                        node_paths.append(item.node_path)
+                    node_paths.append(item.node_path)
             selected_paths = node_paths
             if selected_paths:
                 # add items to selection
@@ -898,7 +895,7 @@ class StageView(QtWidgets.QGraphicsView):
                         self.model.clear_selection()
                     return
                 # could be end of moving nodes around the scene.
-                elif not self._clicked_something_locked:
+                else:
                     node_positions = {}
                     for item in self.scene().selectedItems():
                         if isinstance(item, NodeGraphicsItem):
@@ -990,8 +987,6 @@ class StageView(QtWidgets.QGraphicsView):
             item = self.itemAt(event.pos())
             # TODO this is strictly a nodegraphicsitem's job, move there.
             if item and isinstance(item, NodeGraphicsItem):
-                if self.model.get_node_locked(item.node_path):
-                    return
                 if modifiers == QtCore.Qt.ControlModifier:
                     item.rename_node()
                 elif modifiers == QtCore.Qt.ShiftModifier:
