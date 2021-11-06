@@ -1171,8 +1171,6 @@ class MenuBar(QtWidgets.QMenuBar):
         # Secret Menu
         self.secret_menu = self.help_menu.addMenu('Developer Options')
         self.secret_menu.setTearOffEnabled(True)
-        test_graph_action = self.secret_menu.addAction('Build test nodes')
-        test_graph_action.triggered.connect(self.build_test_graph)
         test_log_action = self.secret_menu.addAction('test logging')
         test_log_action.triggered.connect(self.__test_all_logging)
         print_action = self.secret_menu.addAction('test print')
@@ -1310,25 +1308,6 @@ class MenuBar(QtWidgets.QMenuBar):
             logger.info('Cleared UI icon cache, please restart nxt.')
         from . import make_resources
         make_resources()
-
-    def build_test_graph(self):
-        target_model = self.parent().model
-        x = 0
-        y = 0
-        previous_node_path = None
-        for i in xrange(0, 10):
-            new_node_path = target_model.add_node(name='test_node')
-            x += 300
-            if i == 5:
-                y += 250
-                x = 0
-            target_model.set_nodes_pos({new_node_path: [x, y]})
-            if previous_node_path:
-                target_model.set_node_exec_in(new_node_path, previous_node_path)
-            previous_node_path = new_node_path
-            for _ in xrange(0, 4):
-                target_model.add_node_attr(new_node_path)
-            target_model.frame_items.emit((new_node_path,))
 
     def __test_print(self):
         """prints a simple message for output log debug"""
