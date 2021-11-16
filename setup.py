@@ -1,11 +1,11 @@
 import setuptools
 import json
 import os
-
+import io
 this_dir = os.path.dirname(os.path.realpath(__file__))
 module_dir = os.path.join(this_dir, 'nxt_editor')
 
-with open(os.path.join(this_dir, "README.md"), "r") as fp:
+with io.open(os.path.join(this_dir, "README.md"), "r", encoding="utf-8") as fp:
     long_description = fp.read()
 
 desc = ("A general purpose code compositor designed for rigging, "
@@ -29,7 +29,7 @@ setuptools.setup(
     url="https://github.com/nxt-dev/nxt_editor",
     packages=setuptools.find_packages(),
     python_requires='>=2.7, <3.8',
-    install_requires=['nxt-core',
+    install_requires=['nxt-core<1.0,>=0.13',
                       'qt.py==1.1',
                       'pyside2==5.11.1'
                       ],

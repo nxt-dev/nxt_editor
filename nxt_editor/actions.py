@@ -388,6 +388,22 @@ class AppActions(NxtActionContainer):
         self.clear_logs_action.setShortcutContext(context)
         self.available_without_model.append(self.clear_logs_action)
 
+        # Toggle error ding sound
+        def toggle_ding():
+            pref_key = user_dir.USER_PREF.DING
+            ding_state = self.toggle_ding_action.isChecked()
+            user_dir.user_prefs[pref_key] = ding_state
+
+        self.toggle_ding_action = NxtAction('Error sound', parent=self)
+        self.toggle_ding_action.setWhatsThis('When enabled a "ding" sound will be played when NXT is given bad input '
+                                             'or encounters and error')
+        self.toggle_ding_action.setCheckable(True)
+        _ding_state = user_dir.user_prefs.get(user_dir.USER_PREF.DING, True)
+        self.toggle_ding_action.setChecked(_ding_state)
+        self.toggle_ding_action.triggered.connect(toggle_ding)
+        self.toggle_ding_action.setShortcutContext(context)
+        self.available_without_model.append(self.toggle_ding_action)
+
         self.action_display_order = [self.find_node_action,
                                      self.new_graph_action,
                                      self.open_file_action, self.undo_action,
@@ -400,6 +416,7 @@ class AppActions(NxtActionContainer):
                                      self.output_log_action,
                                      self.hotkey_editor_action,
                                      self.workflow_tools_action,
+                                     self.toggle_ding_action,
                                      self.clear_logs_action,
                                      self.close_action]
 
