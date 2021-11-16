@@ -1,11 +1,11 @@
 import setuptools
 import json
 import os
-
+import io
 this_dir = os.path.dirname(os.path.realpath(__file__))
 module_dir = os.path.join(this_dir, 'nxt_editor')
 
-with open(os.path.join(this_dir, "README.md"), "r", encoding="utf-8") as fp:
+with io.open(os.path.join(this_dir, "README.md"), "r", encoding="utf-8") as fp:
     long_description = fp.read()
 
 desc = ("A general purpose code compositor designed for rigging, "
