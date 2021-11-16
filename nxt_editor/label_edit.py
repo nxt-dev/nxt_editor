@@ -11,12 +11,21 @@ class LabelEdit(QtWidgets.QLabel):
     def __init__(self, *args, **kwargs):
         super(LabelEdit, self).__init__(*args, **kwargs)
         self.doubleClicked.connect(self.edit_text)
+        self._read_only = False
+
+    def setReadOnly(self, state):
+        """Named this way to mimic Qt"""
+        self._read_only = state
 
     def mouseDoubleClickEvent(self, event):
+        if self._read_only:
+            return
         if event.button() == QtCore.Qt.LeftButton:
             self.doubleClicked.emit()
 
     def edit_text(self):
+        if self._read_only:
+            return
         # get current name
         name = self.text()
 

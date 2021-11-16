@@ -23,8 +23,6 @@ before_install:
 
 install:
   - cd ..
-  - git clone https://github.com/nxt-dev/nxt.git
-  - pip install ./nxt
   - pip install ./nxt_editor
   - pip install importlib-metadata==3.4
   - pip install twine

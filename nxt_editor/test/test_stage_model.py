@@ -75,3 +75,24 @@ class NodeInstanceAttributes(unittest.TestCase):
         self.assertEqual(child_expected_local, child_locals)
         self.assertEqual(child_expected_inherit, child_inherit)
         self.assertEqual(child_expected_inst, child_inst)
+
+
+class ExecOrderCycle(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        os.chdir(os.path.dirname(__file__))
+        cls.stage = Session().load_file(filepath="StageInstanceTest.nxt")
+        cls.model = stage_model.StageModel(cls.stage)
+        cls.comp_layer = cls.model.comp_layer
+
+    def test_local_node_attrs(self):
+        node_path1 = '/inst_source4'
+        node_path2 = '/inst_target4'
+        print("Testing that {} has no exec in set".format(node_path1))
+        node1_exec_in = self.model.get_node_exec_in(node_path1)
+        self.assertIsNone(node1_exec_in)
+        print("Testing that {} can't have its exec in set to {}".format(node_path1, node_path2))
+        self.model.set_node_exec_in(node_path1, node_path2)
+        node1_exec_in = self.model.get_node_exec_in(node_path1)
+        self.assertIsNone(node1_exec_in)

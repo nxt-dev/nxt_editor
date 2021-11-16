@@ -460,6 +460,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # create model
         model = StageModel(stage=stage)
         model.processing.connect(self.set_waiting_cursor)
+        model.request_ding.connect(self.ding)
         model.layer_alias_changed.connect(partial(self.update_tab_title, model))
         # create view
         view = StageView(model=model, parent=self)
@@ -478,6 +479,11 @@ class MainWindow(QtWidgets.QMainWindow):
             self.update_grid_action()
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
+
+    @staticmethod
+    def ding():
+        if user_dir.user_prefs.get(user_dir.USER_PREF.DING, True):
+            QtWidgets.QApplication.instance().beep()
 
     def center_view(self):
         target_graph_view = self.get_current_view()
@@ -1011,13 +1017,13 @@ class MenuBar(QtWidgets.QMenuBar):
     def __init__(self, parent=None):
         super(MenuBar, self).__init__(parent=parent)
         self.main_window = parent
-        self.app_actions = parent.app_actions
-        self.exec_actions = parent.execute_actions
-        self.node_actions = parent.node_actions
-        self.ce_actions = parent.code_editor_actions
-        self.display_actions = parent.display_actions
-        self.view_actions = parent.view_actions
-        self.layer_actions = parent.layer_actions
+        self.app_actions = parent.app_actions  # type: actions.AppActions
+        self.exec_actions = parent.execute_actions  # type: actions.ExecuteActions
+        self.node_actions = parent.node_actions  # type: actions.NodeActions
+        self.ce_actions = parent.code_editor_actions  # type: actions.CodeEditorActions
+        self.display_actions = parent.display_actions  # type: actions.DisplayActions
+        self.view_actions = parent.view_actions  # type: actions.StageViewActions
+        self.layer_actions = parent.layer_actions  # type: actions.LayerActions
         # File Menu
         self.file_menu = self.addMenu('File')
         self.file_menu.setTearOffEnabled(True)
@@ -1141,6 +1147,11 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addSeparator()
         self.remote_menu.addAction(self.exec_actions.startup_rpc_action)
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
+        self.options_menu = self.addMenu('Options')
+        self.options_menu.addAction(self.app_actions.toggle_ding_action)
+        self.options_view_sub = self.options_menu.addMenu('View')
+        self.options_view_sub.setTearOffEnabled(True)
+        self.options_view_sub.addActions(self.view_opt_menu.actions())
         # Help Menu
         self.help_menu = self.addMenu('Help')
         self.help_menu.setTearOffEnabled(True)
@@ -1160,8 +1171,6 @@ class MenuBar(QtWidgets.QMenuBar):
         # Secret Menu
         self.secret_menu = self.help_menu.addMenu('Developer Options')
         self.secret_menu.setTearOffEnabled(True)
-        test_graph_action = self.secret_menu.addAction('Build test nodes')
-        test_graph_action.triggered.connect(self.build_test_graph)
         test_log_action = self.secret_menu.addAction('test logging')
         test_log_action.triggered.connect(self.__test_all_logging)
         print_action = self.secret_menu.addAction('test print')
@@ -1299,25 +1308,6 @@ class MenuBar(QtWidgets.QMenuBar):
             logger.info('Cleared UI icon cache, please restart nxt.')
         from . import make_resources
         make_resources()
-
-    def build_test_graph(self):
-        target_model = self.parent().model
-        x = 0
-        y = 0
-        previous_node_path = None
-        for i in xrange(0, 10):
-            new_node_path = target_model.add_node(name='test_node')
-            x += 300
-            if i == 5:
-                y += 250
-                x = 0
-            target_model.set_nodes_pos({new_node_path: [x, y]})
-            if previous_node_path:
-                target_model.set_node_exec_in(new_node_path, previous_node_path)
-            previous_node_path = new_node_path
-            for _ in xrange(0, 4):
-                target_model.add_node_attr(new_node_path)
-            target_model.frame_items.emit((new_node_path,))
 
     def __test_print(self):
         """prints a simple message for output log debug"""

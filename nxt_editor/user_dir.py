@@ -73,6 +73,7 @@ class USER_PREF():
     ANIMATION = 'animation'
     SHOW_DBL_CLICK_MSG = 'show_double_click_message'
     SHOW_CE_DATA_STATE = 'show_code_editor_data_state'
+    DING = 'ding'
 
 
 class EDITOR_CACHE():
