@@ -1227,7 +1227,7 @@ class MenuBar(QtWidgets.QMenuBar):
             return
         widget = action.data()
         tab_index = self.main_window.open_files_tab_widget.indexOf(widget)
-        if tab_index is not -1:
+        if tab_index != -1:
             self.main_window.open_files_tab_widget.setCurrentIndex(tab_index)
             return
         if action.isChecked():
