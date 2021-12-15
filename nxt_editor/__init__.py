@@ -107,6 +107,9 @@ def launch_editor(paths=None, start_rpc=True):
         app = _new_qapp()
     instance = show_new_editor(paths, start_rpc)
     app.setActiveWindow(instance)
+    idle_detector = QtCore.QTimer()
+    idle_detector.timeout.connect(instance.startup_done.emit)
+    idle_detector.start()
     if not existing:
         app.exec_()
     return instance

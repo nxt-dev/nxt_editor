@@ -1372,8 +1372,23 @@ class StageViewActions(NxtActionContainer):
         tt_state = user_dir.user_prefs.get(user_dir.USER_PREF.NODE_TOOLTIPS,
                                            True)
         self.tooltip_action.setChecked(tt_state)
+
+        # Toggle node tooltips
+        def toggle_frame_all_on_new():
+            pref_key = user_dir.USER_PREF.FRAME_ALL_ON_NEW
+            frame_all_on_new_state = self.frame_all_on_new_action.isChecked()
+            user_dir.user_prefs[pref_key] = frame_all_on_new_state
+
+        self.frame_all_on_new_action = NxtAction('Frame all nodes on open', parent=self)
+        self.frame_all_on_new_action.setAutoRepeat(False)
+        self.frame_all_on_new_action.setCheckable(True)
+        state = user_dir.user_prefs.get(user_dir.USER_PREF.FRAME_ALL_ON_NEW, False)
+        self.frame_all_on_new_action.setChecked(state)
+        self.frame_all_on_new_action.toggled.connect(toggle_frame_all_on_new)
+
         self.action_display_order = [self.tooltip_action,
                                      self.frame_all_action,
+                                     self.frame_all_on_new_action,
                                      self.frame_selection_action,
                                      self.hide_attrs_action,
                                      self.disp_local_attrs_action,

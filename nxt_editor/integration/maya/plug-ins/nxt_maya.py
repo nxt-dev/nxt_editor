@@ -146,6 +146,9 @@ class NxtUiCmd(om.MPxCommand):
         nxt_win.close_signal.connect(remove_callback)
         nxt_win.show()
         __NXT_INSTANCE__ = nxt_win
+        idle_detector = QtCore.QTimer()
+        idle_detector.timeout.connect(nxt_win.startup_done.emit)
+        idle_detector.start()
 
 
 # PLUGIN BOILERPLATE #

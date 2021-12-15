@@ -76,6 +76,9 @@ class Blender(NxtIntegration):
         nxt_win.show()
         atexit.register(nxt_win.close)
         self.instance = nxt_win
+        idle_detector = QtCore.QTimer()
+        idle_detector.timeout.connect(nxt_win.startup_done.emit)
+        idle_detector.start()
         return self
 
     def quit_nxt(self):
