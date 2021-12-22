@@ -29,7 +29,7 @@ setuptools.setup(
     url="https://github.com/nxt-dev/nxt_editor",
     packages=setuptools.find_packages(),
     python_requires='>=2.7, <3.10',
-    install_requires=['nxt-core<1.0,>=0.13',
+    install_requires=['nxt-core<1.0,>=0.14',
                       'qt.py==1.1',
                       'pyside2>=5.11,<=5.16'
                       ],
