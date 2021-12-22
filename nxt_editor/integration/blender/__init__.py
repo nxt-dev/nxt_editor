@@ -20,10 +20,13 @@ class Blender(NxtIntegration):
     def __init__(self):
         super(Blender, self).__init__(name='blender')
         b_major, b_minor, b_patch = bpy.app.version
-        if b_major != 2 or b_minor < 80:
+        if b_major == 2 and b_minor < 80:
             raise RuntimeError('Blender version is not compatible with this '
                                'version of nxt.')
-        addons_dir = bpy.utils.user_resource('SCRIPTS', 'addons')
+        if b_major == 2:
+            addons_dir = bpy.utils.user_resource('SCRIPTS', 'addons')
+        else:
+            addons_dir = os.path.join(bpy.utils.user_resource('SCRIPTS'), '/addons')
         self.addons_dir = addons_dir.replace(os.sep, '/')
         self.instance = None
         self.nxt_qapp = QtWidgets.QApplication.instance()

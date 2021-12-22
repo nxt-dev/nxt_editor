@@ -25,8 +25,8 @@ nxt_package_name = 'nxt-editor'
 
 bl_info = {
     "name": "NXT Blender",
-    "blender": (2, 80, 0),
-    "version": (0, 2, 0),
+    "blender": (3, 0, 0),
+    "version": (0, 3, 0),
     "location": "NXT > Open Editor",
     "wiki_url": "https://nxt-dev.github.io/",
     "tracker_url": "https://github.com/nxt-dev/nxt_editor/issues",
@@ -37,6 +37,12 @@ bl_info = {
                    "early, save often.)",
     "warning": "This addon requires installation of dependencies."
 }
+
+b_major, b_minor, b_patch = bpy.app.version
+if b_major == 2:
+    bl_info["blender"] = (2, 80, 0)
+elif b_major != 3:
+    raise RuntimeError('Unsupported major Blender version: {}'.format(b_major))
 
 
 class BLENDER_PLUGIN_VERSION(object):
@@ -111,7 +117,7 @@ class TOPBAR_MT_nxt(bpy.types.Menu):
 
 class NxtInstallDependencies(bpy.types.Operator):
     bl_idname = 'nxt.nxt_install_dependencies'
-    bl_label = "Install NXT dependencies"
+    bl_label = "Install NXT dependencies (Blender requires elevated permissions)"
     bl_description = ("Downloads and installs the required python packages "
                       "for NXT. Internet connection is required. "
                       "Blender may have to be started with elevated "
@@ -126,19 +132,22 @@ class NxtInstallDependencies(bpy.types.Operator):
         return not nxt_installed
 
     def execute(self, context):
-        success = False
         environ_copy = dict(os.environ)
         environ_copy["PYTHONNOUSERSITE"] = "1"
         pkg = 'nxt-editor'
+        if b_major == 2:
+            exe = bpy.app.binary_path_python
+        else:
+            exe = sys.executable
         try:
-            subprocess.run([sys.executable, "-m", "pip", "install", pkg],
+            subprocess.run([exe, "-m", "pip", "install", pkg],
                            check=True, env=environ_copy)
         except subprocess.CalledProcessError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
-        if not success:
-            self.report({"INFO"}, 'Please restart Blender to '
-                                  'finish installing NXT.')
+        msg = 'Please restart Blender to finish installing NXT.'
+        self.report({"INFO"}, msg)
+        show_message(msg, "Installed dependencies!")
         return {"FINISHED"}
 
 
@@ -225,6 +234,14 @@ def show_dependency_warning():
             layout.label(text=line)
     bpy.context.window_manager.popup_menu(draw, title='NXT Warning!',
                                           icon="ERROR")
+
+
+def show_message(message, title, icon='INFO'):
+
+    def draw(self, *args):
+        self.layout.label(text=message)
+
+    bpy.context.window_manager.popup_menu(draw, title=title, icon=icon)
 
 
 nxt_operators = (TOPBAR_MT_nxt, OpenNxtEditor, NxtUpdateDependencies,
