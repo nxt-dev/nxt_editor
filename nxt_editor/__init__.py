@@ -82,11 +82,16 @@ except ImportError:
 
 
 def _new_qapp():
-    app = QtWidgets.QApplication
+    app = QtWidgets.QApplication.instance()
+    create_new = False
+    if not app:
+        app = QtWidgets.QApplication
+        app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+        create_new = True
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-    app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
-    app = app(sys.argv)
+    if create_new:
+        app = app(sys.argv)
     style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
     style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
     stream = QtCore.QTextStream(style_file)
