@@ -1,6 +1,10 @@
 # Installation
 **This is an experimental version of nxt_blender. Save early, save often.**  
 This is a Blender addon for nxt. Note that it will access the internet to install.  
+_In some of our testing we found that we needed to install Python on 
+the system inorder for Blender to be able to open the NXT editor. If you 
+get strange import errors when you try to import `nxt_editor`, try 
+installing Python (same version as Blender's) on your machine._
 
 ### By hand (if you're familiar with pip)
 1. Locate the path to blenders Python interpreter

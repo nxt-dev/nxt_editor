@@ -3,11 +3,23 @@ import sys
 import subprocess
 import importlib
 
+import bpy
+
+b_major, b_minor, b_patch = bpy.app.version
+
 
 class NxtIntegration(object):
 
     def __init__(self, name):
         self.name = name
+
+    @staticmethod
+    def show_message(message, title, icon='INFO'):
+
+        def draw(self, *args):
+            self.layout.label(text=message)
+
+        bpy.context.window_manager.popup_menu(draw, title=title, icon=icon)
 
     @classmethod
     def setup(cls):
@@ -49,11 +61,18 @@ class NxtIntegration(object):
             global_name = module_name
         environ_copy = dict(os.environ)
         environ_copy["PYTHONNOUSERSITE"] = "1"
-        subprocess.run([sys.executable, "-m", "pip", "install",
-                        package_name], check=True, env=environ_copy)
-
+        pkg = 'nxt-editor'
+        if b_major == 2:
+            exe = bpy.app.binary_path_python
+        else:
+            exe = sys.executable
+        subprocess.run([exe, "-m", "pip", "install", pkg],
+                       check=True, env=environ_copy)
         success = self._safe_import_package(package_name=package_name,
                                             global_name=global_name)
+        NxtIntegration.show_message('NXT package Installed! '
+                                    'You may need to restart Blender.',
+                                    'Success!')
         return success
 
     @staticmethod
@@ -66,9 +85,14 @@ class NxtIntegration(object):
         """
         environ_copy = dict(os.environ)
         environ_copy["PYTHONNOUSERSITE"] = "1"
-        subprocess.run([sys.executable, "-m", "pip", "install", "-U",
+        if b_major == 2:
+            exe = bpy.app.binary_path_python
+        else:
+            exe = sys.executable
+        subprocess.run([exe, "-m", "pip", "install", "-U",
                         package_name], check=True, env=environ_copy)
-        print('Please restart your DCC or Python interpreter')
+        NxtIntegration.show_message('NXT package updated! '
+                                    'Please restart Blender.', 'Success!')
 
     def check_for_nxt_core(self, install=False):
         has_core = self._safe_import_package('nxt')
@@ -79,7 +103,8 @@ class NxtIntegration(object):
         success = self._install_and_import_package('nxt',
                                                    package_name='nxt-core')
         if not success:
-            print('Failed to import and/or install nxt-core')
+            NxtIntegration.show_message('Failed to import and/or install '
+                                        'nxt-editor.', 'Failed!')
         return success
 
     def check_for_nxt_editor(self, install=False):
@@ -91,7 +116,8 @@ class NxtIntegration(object):
         success = self._install_and_import_package('nxt_editor',
                                                    package_name='nxt-editor')
         if not success:
-            print('Failed to import and/or install nxt-editor')
+            NxtIntegration.show_message('Failed to import and/or install '
+                                        'nxt-editor.', 'Failed!')
         return success
 
     def update(self):
@@ -111,7 +137,11 @@ class NxtIntegration(object):
         """
         environ_copy = dict(os.environ)
         environ_copy["PYTHONNOUSERSITE"] = "1"
-        subprocess.run([sys.executable, "-m", "pip", "uninstall",
+        if b_major == 2:
+            exe = bpy.app.binary_path_python
+        else:
+            exe = sys.executable
+        subprocess.run([exe, "-m", "pip", "uninstall",
                         package_name, '-y'], check=True, env=environ_copy)
 
     def uninstall(self):
@@ -119,6 +149,8 @@ class NxtIntegration(object):
             self._uninstall_package('nxt-core')
         if self.check_for_nxt_editor():
             self._uninstall_package('nxt-editor')
+        NxtIntegration.show_message('NXT was uninstalled, sorry '
+                                    'to see you go.', 'Uninstalled!')
         # print('Please restart your DCC or Python interpreter')
 
     def launch_nxt(self):
