@@ -56,7 +56,7 @@ class Blender(NxtIntegration):
             self = __NXT_INTEGRATION__
         if self.instance:
             self.instance.show()
-            return
+            return self
         if not self.nxt_qapp:
             self.nxt_qapp = nxt_editor._new_qapp()
             nxt_win = nxt_editor.show_new_editor(start_rpc=False)
@@ -76,9 +76,6 @@ class Blender(NxtIntegration):
         nxt_win.show()
         atexit.register(nxt_win.close)
         self.instance = nxt_win
-        idle_detector = QtCore.QTimer()
-        idle_detector.timeout.connect(nxt_win.startup_done.emit)
-        idle_detector.start()
         return self
 
     def quit_nxt(self):

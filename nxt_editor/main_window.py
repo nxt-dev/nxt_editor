@@ -344,6 +344,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.WindowDeactivate:
             self._held_keys = []
             self.zoom_keys_down = False
+        if QtCore.QEvent.spontaneous(event):
+            frame_pref = user_dir.USER_PREF.FRAME_ALL_ON_NEW
+            if user_dir.user_prefs.get(frame_pref, False):
+                self.view_actions.frame_all_action.trigger()
+
         return super(MainWindow, self).event(event)
 
     def resizeEvent(self, event):
