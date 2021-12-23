@@ -274,8 +274,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         app = QtWidgets.QApplication.instance()
         app.aboutToQuit.connect(self.shutdown_rpc_server)
-        if user_dir.user_prefs.get(user_dir.USER_PREF.FRAME_ALL_ON_NEW, False):
-            self.startup_done.connect(self.view_actions.frame_all_action.trigger)
 
     # RPC
     def startup_rpc_server(self, join=True):
@@ -344,10 +342,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.WindowDeactivate:
             self._held_keys = []
             self.zoom_keys_down = False
-        if QtCore.QEvent.spontaneous(event):
-            frame_pref = user_dir.USER_PREF.FRAME_ALL_ON_NEW
-            if user_dir.user_prefs.get(frame_pref, False):
-                self.view_actions.frame_all_action.trigger()
 
         return super(MainWindow, self).event(event)
 
