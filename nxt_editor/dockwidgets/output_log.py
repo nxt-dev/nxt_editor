@@ -334,7 +334,9 @@ class OutputLog(DockWidgetBase):
                 curr_rt_layer.cache_layer.was_during_node_exec(msg_time)):
             return
         if self.log_filter_button.is_level_enabled(nxt_log.NODEOUT):
-            self.write_rich_output(val)
+            # Intentionally breaking html syntax here. Printing type(object)
+            # was being interpreted as html. <class 'type'>
+            self.write_rich_output(val.replace('<', '&lt;'))
 
     def _write_raw_output(self, val):
         """Write text to the raw output textedit. Dose NOT write to the rich
