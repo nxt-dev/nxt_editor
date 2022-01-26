@@ -334,7 +334,7 @@ class OutputLog(DockWidgetBase):
                 curr_rt_layer.cache_layer.was_during_node_exec(msg_time)):
             return
         if self.log_filter_button.is_level_enabled(nxt_log.NODEOUT):
-            self.write_rich_output(val)
+            self.write_rich_output(val.replace('<', '&lt;'), raw=True)
 
     def _write_raw_output(self, val):
         """Write text to the raw output textedit. Dose NOT write to the rich
@@ -353,7 +353,7 @@ class OutputLog(DockWidgetBase):
         else:
             self.raw_output_textedit.verticalScrollBar().setValue(cur)
 
-    def write_rich_output(self, val, level=None):
+    def write_rich_output(self, val, level=None, raw=False):
         """Neighbor to write_raw_output. Use of write as naming is specific,
         no newlines created from thin air, must come form input.
 
