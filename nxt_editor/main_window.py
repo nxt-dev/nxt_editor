@@ -46,6 +46,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     """The main window of the nxt UI. Includes the menu bar, tool bar, and dock widgets."""
 
+    startup_done = QtCore.Signal()
     tab_changed = QtCore.Signal()
     close_signal = QtCore.Signal()
     new_log_signal = QtCore.Signal(logging.LogRecord)
@@ -341,7 +342,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.WindowDeactivate:
             self._held_keys = []
             self.zoom_keys_down = False
+
         return super(MainWindow, self).event(event)
+
+    def resizeEvent(self, event):
+        super(MainWindow, self).resizeEvent(event)
+
 
     @staticmethod
     def set_waiting_cursor(state=True):
@@ -479,6 +485,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.update_grid_action()
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
+        if not self.in_startup and user_dir.user_prefs.get(user_dir.USER_PREF.FRAME_ALL_ON_NEW, False):
+            self.view_actions.frame_all_action.trigger()
 
     @staticmethod
     def ding():
@@ -1092,6 +1100,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_opt_menu = self.view_menu.addMenu('Options')
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
+        self.view_opt_menu.addAction(self.view_actions.frame_all_on_new_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
         self.view_opt_menu.addAction(self.ce_actions.overlay_message_action)
 

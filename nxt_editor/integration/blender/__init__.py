@@ -59,7 +59,7 @@ class Blender(NxtIntegration):
             self = __NXT_INTEGRATION__
         if self.instance:
             self.instance.show()
-            return
+            return self
         if not self.nxt_qapp:
             self.nxt_qapp = nxt_editor._new_qapp()
             nxt_win = nxt_editor.show_new_editor(start_rpc=False)
