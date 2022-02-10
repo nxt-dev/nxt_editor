@@ -2103,7 +2103,7 @@ class StageModel(QtCore.QObject):
             node_paths = self.selection
         if not node_paths:
             return
-        layer_path = self.get_layer_path(layer, fallback=LAYERS.TARGET)
+        layer_path = self.get_layer_path(layer, fallback=LAYERS.TOP)
         on = []
         off = []
         for node_path in node_paths:
