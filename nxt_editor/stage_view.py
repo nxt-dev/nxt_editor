@@ -137,7 +137,6 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.node_moved.connect(self.handle_node_move)
         self.model.selection_changed.connect(self.on_model_selection_changed)
         self.model.frame_items.connect(self.frame_nodes)
-        self.model.build_idx_changed.connect(self.on_build_idx_changed)
         self.model.collapse_changed.connect(self.handle_collapse_changed)
 
         # initialize the view
@@ -1126,21 +1125,6 @@ class StageView(QtWidgets.QGraphicsView):
         # if isinstance(graphic, AttrConnectionGraphic):
         #     return graphic.tgt_path
         return None
-
-    def on_build_idx_changed(self, build_idx):
-        prev_graphic = self.get_node_graphic(self.prev_build_focus_path)
-        if prev_graphic is not None:
-            prev_graphic.update_build_focus()
-        focus_path = self.model.get_build_focus()
-        if not focus_path:
-            self.prev_build_focus_path = None
-            return
-        graphic = self.get_node_graphic(focus_path)
-        if not graphic:
-            self.prev_build_focus_path = None
-            return
-        self.prev_build_focus_path = focus_path
-        graphic.update_build_focus()
 
     def on_model_selection_changed(self, new_selection):
         if not new_selection:
