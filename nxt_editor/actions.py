@@ -160,7 +160,26 @@ class NxtActionContainer(QtWidgets.QWidget):
 
 
 class BoolUserPrefAction(NxtAction):
+    """NxtAction that saves state between sessions via preference key."""
     def __init__(self, text, pref_key, default=False, parent=None):
+        """NxtAction that saves state between sessions via preference key
+
+        Note that default checked state is set during initialization, before
+        signals have been hooked up. Meaning any later-connected function is not
+        automatically called to "kick start" the application state. Either
+        build that into the start of the UI, or call your action once manually
+        to kick start.
+
+        :param text: Action description.
+        :type text: str
+        :param pref_key: Preference key to save at
+        :type pref_key: str
+        :param default: Deafult value, loads default state from user pref, only
+        falling back to this default when no save exists, defaults to False
+        :type default: bool, optional
+        :param parent: Action parent, defaults to None
+        :type parent: QObject, optional
+        """
         super(BoolUserPrefAction, self).__init__(text, parent)
         self.setCheckable(True)
         self.pref_key = pref_key
@@ -1167,13 +1186,13 @@ class StageViewActions(NxtActionContainer):
             state = self.grid_action.isChecked()
             self.main_window.view.toggle_grid(state)
 
-        self.grid_action = NxtAction(text='Toggle Grid',
-                                     parent=self)
+        self.grid_action = BoolUserPrefAction('Toggle Grid',
+                                              user_dir.USER_PREF.SHOW_GRID,
+                                              default=True,
+                                              parent=self)
         self.grid_action.setShortcut('Ctrl+;')
         self.grid_action.setToolTip('Show / Hide the Grid')
         self.grid_action.setWhatsThis('Shows or hides the grid for all tabs.')
-        self.grid_action.setCheckable(True)
-        self.grid_action.setChecked(True)
         self.grid_action.triggered.connect(toggle_grid)
         grid_icon = QtGui.QIcon()
         grid_icn_on = QtGui.QPixmap(':icons/icons/grid_pressed.png')

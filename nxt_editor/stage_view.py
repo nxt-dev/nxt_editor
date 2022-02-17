@@ -121,7 +121,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.prev_build_focus_path = None
 
         # local attributes
-        self.show_grid = True
+        self.show_grid = user_prefs[USER_PREF.SHOW_GRID]
         # connection attribute used when drawing connections
         self.potential_connection = None
 
@@ -297,7 +297,6 @@ class StageView(QtWidgets.QGraphicsView):
             self.show_grid = not self.show_grid
         else:
             self.show_grid = state
-        self.model.show_grid = self.show_grid
         self.update()
 
     def frame_all(self):
