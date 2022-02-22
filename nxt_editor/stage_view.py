@@ -121,7 +121,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.prev_build_focus_path = None
 
         # local attributes
-        self.show_grid = user_prefs[USER_PREF.SHOW_GRID]
+        self.show_grid = user_prefs.get(USER_PREF.SHOW_GRID, True)
         # connection attribute used when drawing connections
         self.potential_connection = None
 

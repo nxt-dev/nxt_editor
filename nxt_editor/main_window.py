@@ -702,7 +702,9 @@ class MainWindow(QtWidgets.QMainWindow):
             logger.debug("Successfully set up new tab.")
             self.last_focused_tab = tab_index
             self.update_implicit_action()
-            view.toggle_grid(user_dir.user_prefs[user_dir.USER_PREF.SHOW_GRID])
+            view.toggle_grid(
+                user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_GRID, True)
+            )
             model.destroy_cmd_port.connect(self.update_cmd_port_action)
         else:
             logger.critical("Failed to set up new tab.")
