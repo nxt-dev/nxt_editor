@@ -19,7 +19,7 @@ from nxt.constants import API_VERSION, is_standalone
 from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
 import nxt_editor
-from nxt_editor import DIRECTIONS, StringSignaler
+from nxt_editor import DIRECTIONS, StringSignaler, user_dir
 from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
@@ -73,7 +73,8 @@ class StageModel(QtCore.QObject):
     node_name_changed = QtCore.Signal(str, str)  # old node path, new node path
     node_parent_changed = QtCore.Signal(str, str)  # old node path, new node path
     starts_changed = QtCore.Signal(tuple)  # new start point paths
-    breaks_changed = QtCore.Signal(tuple) # new break point paths
+    breaks_changed = QtCore.Signal(tuple)  # new break point paths
+    skips_changed = QtCore.Signal(tuple)  # new skip point paths
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
@@ -2180,6 +2181,84 @@ class StageModel(QtCore.QObject):
         user_dir.breakpoints[layer_path] = layer_breaks
         self.breaks_changed.emit(layer_breaks)
 
+    def toggle_skippoints(self, node_paths=None, layer_path=None):
+        if not node_paths:
+            node_paths = self.selection
+        if not node_paths:
+            return
+        if not layer_path:
+            layer_path = self.top_layer.real_path
+        on = []
+        off = []
+        for node_path in node_paths:
+            current_state = self.is_node_skippoint(node_path, layer_path)
+            node_val = not current_state
+            if node_val:
+                on += [node_path]
+            else:
+                off += [node_path]
+        node_count = len(node_paths)
+        if node_count > 1:
+            msg = ('Set skippoint for {} and '
+                   '{} other(s)'.format(node_paths[0], node_count - 1))
+        else:
+            msg = 'Set skippoint for {}'.format(node_paths[0])
+        self.undo_stack.beginMacro(msg)
+        if on:
+            self.set_skippoints(on, True, layer_path)
+        if off:
+            self.set_skippoints(off, False, layer_path)
+        self.undo_stack.endMacro()
+
+    def set_skippoints(self, node_paths, to_skip, layer_path=None):
+        if not layer_path:
+            layer_path = self.top_layer.real_path
+        cmd = SetNodesAreSkipPoints(node_paths, to_skip, layer_path, self)
+        self.undo_stack.push(cmd)
+
+    def is_node_skippoint(self, node_path, layer_path=None):
+        if not layer_path:
+            layer_path = self.top_layer.real_path
+        layer_skips = user_dir.skippoints.get(layer_path, tuple())
+        return node_path in layer_skips
+
+    def _add_skippoint(self, node_path, layer_path):
+        if not (node_path and layer_path):
+            raise ValueError("Must provide node and layer path.")
+        node_path = str(node_path)
+        layer_path = str(layer_path)
+        layer_skips = user_dir.skippoints.get(layer_path, [])
+        if node_path in layer_skips:
+            # no need to re-write existing data to pref
+            return
+        layer_skips.append(node_path)
+        user_dir.skippoints[layer_path] = layer_skips
+        if layer_path == self.top_layer.real_path:
+            self.skips_changed.emit([])
+
+    def _remove_skippoint(self, node_path, layer_path):
+        if not (node_path and layer_path):
+            raise ValueError("Must provide node and layer path.")
+        node_path = str(node_path)
+        layer_path = str(layer_path)
+        layer_skips = user_dir.skippoints.get(layer_path, [])
+        if not layer_skips:
+            return
+        try:
+            layer_skips.remove(node_path)
+        except ValueError:
+            # Can return without the below save in this case. If the node
+            # path is not present, it's already "removed"
+            return
+        user_dir.skippoints[layer_path] = layer_skips
+        if layer_path == self.top_layer.real_path:
+            self.skips_changed.emit([])
+
+    def _clear_skippoints(self, layer_path):
+        user_dir.skippoints.pop(layer_path)
+        if layer_path == self.top_layer.real_path:
+            self.skips_changed.emit([])
+
     def get_is_node_start(self, node_path, layer=None):
         """Gets the start node state of a given node.
         :param node_path: String node path
@@ -3032,6 +3111,7 @@ class StageModel(QtCore.QObject):
         stop = len(self.current_build_order)
 
         breaks = user_dir.breakpoints.get(self.top_layer.real_path, [])[:]
+        skips = user_dir.skippoints.get(self.top_layer.real_path, [])[:]
         first_path = self.current_build_order[start]
         skip_pref_key = user_dir.USER_PREF.SKIP_INITIAL_BREAK
         skip_first_break = user_dir.user_prefs.get(skip_pref_key, True)
@@ -3045,6 +3125,14 @@ class StageModel(QtCore.QObject):
         self._set_build_paused(False)
         for i in range(start, stop):
             node_path = self.current_build_order[i]
+            # Skips before breaks, that's the current flow.
+            # This assumption is in 2 places, here and in
+            # NodeExecutionPlug, where it draws skips instead of breaks
+            if node_path in skips:
+                self.last_built_idx = i
+                skip_msg = "Skippoint triggers skip of {}".format(node_path)
+                logger.execinfo(skip_msg, links=[node_path])
+                continue
             if node_path in breaks:
                 break_msg = " !! Breakpoint hit at: {}".format(node_path)
                 logger.execinfo(break_msg, links=[node_path])

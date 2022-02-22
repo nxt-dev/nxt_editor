@@ -91,8 +91,8 @@ class NodeGraphicsItem(graphic_type):
         self.user_attr_names = []
         self._attribute_draw_details = OrderedDict()
         self._attr_plug_graphics = {}
-        self.exec_out_plug = None
-        self.exec_in_plug = None
+        self.exec_out_plug = NodeExecutionPlug(self.model, self.node_path, is_input=False, parent=self)
+        self.exec_in_plug = NodeExecutionPlug(self.model, self.node_path, is_input=True, parent=self)
         self.is_hovered = False
         self.collapse_state = False
         self.collapse_arrows = []
@@ -389,59 +389,9 @@ class NodeGraphicsItem(graphic_type):
         # draw exec plugs
         exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
         exec_in_pos = self.get_attr_in_pos(exec_attr, scene=False)
-        exec_radius = self.EXEC_PLUG_RADIUS
-        if nxt_path.get_parent_path(self.node_path) == nxt_path.WORLD:
-            if self.is_start:
-                color = self.start_color
-            elif self.is_break:
-                color = QtCore.Qt.red
-            else:
-                color = QtCore.Qt.white
-            if not self.exec_in_plug:
-                is_break = self.is_break
-                if self.is_start:
-                    is_break = False
-                self.exec_in_plug = NodeGraphicsPlug(pos=exec_in_pos,
-                                                     radius=exec_radius,
-                                                     color=color,
-                                                     is_exec=True,
-                                                     is_input=True,
-                                                     is_break=is_break,
-                                                     is_start=self.is_start)
-                self.exec_in_plug.setParentItem(self)
-            else:
-                self.exec_in_plug.color = QtGui.QColor(color)
-                self.exec_in_plug.is_break = self.is_break
-                self.exec_in_plug.is_start = self.is_start
-                self.exec_in_plug.setPos(exec_in_pos)
-                self.exec_in_plug.update()
-
-            out_pos = self.get_attr_out_pos(exec_attr, scene=False)
-            if not self.exec_out_plug:
-                self.exec_out_plug = NodeGraphicsPlug(pos=out_pos,
-                                                      radius=exec_radius,
-                                                      color=QtCore.Qt.white,
-                                                      is_exec=True,
-                                                      is_input=False)
-                self.exec_out_plug.setParentItem(self)
-            else:
-                self.exec_out_plug.setPos(out_pos)
-        else:
-            if not self.exec_in_plug and self.is_break:
-                self.exec_in_plug = NodeGraphicsPlug(pos=exec_in_pos,
-                                                     radius=exec_radius,
-                                                     color=QtCore.Qt.red,
-                                                     is_exec=True,
-                                                     is_input=True,
-                                                     is_break=self.is_break)
-                self.exec_in_plug.setParentItem(self)
-            elif self.exec_in_plug and not self.is_break:
-                self.scene().removeItem(self.exec_in_plug)
-                self.exec_in_plug = None
-
-            if self.exec_out_plug:
-                self.scene().removeItem(self.exec_out_plug)
-                self.exec_out_plug = None
+        out_pos = self.get_attr_out_pos(exec_attr, scene=False)
+        self.exec_out_plug.setPos(out_pos)
+        self.exec_in_plug.setPos(exec_in_pos)
         if lod > MIN_LOD:
             # draw attr dots
             offset = -6
@@ -545,17 +495,16 @@ class NodeGraphicsItem(graphic_type):
                 in_pos = self.get_attr_in_pos(attr_name, scene=False)
                 if current_in_plug:
                     current_in_plug.show()
-                    current_in_plug.setPos(in_pos)
                     current_in_plug.color = target_color
                     current_in_plug.update()
                 else:
-                    current_in_plug = NodeGraphicsPlug(pos=in_pos,
-                                                       radius=self.ATTR_PLUG_RADIUS,
+                    current_in_plug = NodeGraphicsPlug(radius=self.ATTR_PLUG_RADIUS,
                                                        color=target_color,
                                                        attr_name_represented=attr_name,
-                                                       is_input=True)
+                                                       is_input=True,
+                                                       parent=self)
                     attr_plug_graphics['in_plug'] = current_in_plug
-                    current_in_plug.setParentItem(self)
+                current_in_plug.setPos(in_pos)
             elif current_in_plug:
                 current_in_plug.hide()
 
@@ -564,17 +513,16 @@ class NodeGraphicsItem(graphic_type):
                 out_pos = self.get_attr_out_pos(attr_name, scene=False)
                 if current_out_plug:
                     current_out_plug.show()
-                    current_out_plug.setPos(out_pos)
                     current_out_plug.color = target_color
                     current_out_plug.update()
                 else:
-                    out_plug = NodeGraphicsPlug(pos=out_pos,
-                                                radius=self.ATTR_PLUG_RADIUS,
-                                                color=target_color,
-                                                attr_name_represented=attr_name,
-                                                is_input=False)
-                    attr_plug_graphics['out_plug'] = out_plug
-                    out_plug.setParentItem(self)
+                    current_out_plug = NodeGraphicsPlug(radius=self.ATTR_PLUG_RADIUS,
+                                                        color=target_color,
+                                                        attr_name_represented=attr_name,
+                                                        is_input=False,
+                                                        parent=self)
+                    attr_plug_graphics['out_plug'] = current_out_plug
+                current_out_plug.setPos(out_pos)
             elif current_out_plug:
                 current_out_plug.hide()
 
@@ -948,14 +896,12 @@ class NodeGraphicsItem(graphic_type):
 
 class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
 
-    """Graphics item for attribute and execution plugs on the NodeGraphicsItem."""
+    """Graphics item for user attribute plugs on the NodeGraphicsItem."""
 
-    def __init__(self, pos=QtCore.QPointF(), radius=3, hover_width=0.5, color=QtGui.QColor(255, 255, 255, 255),
-                 attr_name_represented='', is_exec=False, is_input=False,
-                 is_break=False, is_start=False, start_idx=-1):
-        super(NodeGraphicsPlug, self).__init__()
+    def __init__(self, radius=3, hover_width=0.5, color=QtGui.QColor(255, 255, 255, 255),
+                 attr_name_represented='', is_input=False, parent=None):
+        super(NodeGraphicsPlug, self).__init__(parent=parent)
         self.setAcceptHoverEvents(True)
-        self.setPos(pos)
         # TODO benchmark this cache setting to see if it helps or hurts performance
         self.setCacheMode(QtWidgets.QGraphicsItem.DeviceCoordinateCache)
 
@@ -963,12 +909,7 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
         self.hover_width = hover_width
         self.color = QtGui.QColor(color)
         self.attr_name_represented = attr_name_represented
-        self.is_exec = is_exec
-        if is_exec:
-            self.attr_name_represented = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
         self.is_input = is_input
-        self.is_break = is_break
-        self.is_start = is_start
 
         self.is_hovered = False
 
@@ -982,8 +923,7 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
                             (self.radius + offset) * 2,
                             (self.radius + offset) * 2)
 
-    def paint(self, painter, option, widget):
-        """Override of QtWidgets.QGraphicsItem paint. Handles all visuals of the Plug."""
+    def _apply_lod_to_painter(self, painter):
         lod = QtWidgets.QStyleOptionGraphicsItem.levelOfDetailFromTransform(
             painter.worldTransform())
         if lod > MIN_LOD:
@@ -994,38 +934,16 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
             painter.setRenderHints(QtGui.QPainter.Antialiasing |
                                    QtGui.QPainter.TextAntialiasing |
                                    QtGui.QPainter.SmoothPixmapTransform, False)
+
+    def paint(self, painter, option, widget):
+        """Override of QtWidgets.QGraphicsItem paint. Handles all visuals of the Plug."""
+        self._apply_lod_to_painter(painter)
         if self.is_hovered:
             painter.setPen(QtGui.QPen(QtCore.Qt.white, self.hover_width, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
         else:
             painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(self.color)
-
-        if self.is_start:
-            self.radius = 18
-            # create triangle
-            polygon = QtGui.QPolygonF()
-            step_angle = 120
-            for i in [0, 1, 2, 3]:
-                step = step_angle * i
-                x = self.radius * 1.2 * math.cos(math.radians(step))
-                y = self.radius * 1.2 * math.sin(math.radians(step))
-                polygon.append(QtCore.QPointF(x, y))
-
-            # center
-            rect = polygon.boundingRect()
-            width = self.radius * 2.4
-            offset = rect.width() - width
-            polygon.translate(offset, 0)
-            # draw
-            pen = QtGui.QPen(self.color, self.hover_width * 8)
-            painter.setPen(pen)
-            painter.setBrush(QtCore.Qt.green)
-            painter.drawPolygon(polygon)
-
-        elif self.is_break:
-            painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
-        else:
-            painter.drawEllipse(QtCore.QPointF(0, 0), self.radius, self.radius)
+        painter.drawEllipse(QtCore.QPointF(0, 0), self.radius, self.radius)
 
     def itemChange(self, change, value):
         """Override of QtWidgets.QGraphicsItem itemChange."""
@@ -1080,6 +998,92 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
         # parent_name = self.parentItem().node_path
         # print(parent_name + 'plug mouse press')
         super(NodeGraphicsPlug, self).mouseReleaseEvent(event)
+
+
+class NodeExecutionPlug(NodeGraphicsPlug):
+    def __init__(self, model, node_path, is_input, parent=None):
+        super(NodeExecutionPlug, self).__init__(
+            radius=NodeGraphicsItem.EXEC_PLUG_RADIUS,
+            color=QtCore.Qt.white,
+            attr_name_represented=nxt_node.INTERNAL_ATTRS.EXECUTE_IN,
+            is_input=is_input,
+            parent=parent
+        )
+        self.node_path = node_path
+        self.model = model
+
+        self.is_root = None
+        self.is_break = None
+        self.is_start = None
+        self.start_color = None
+        self.is_skip = None
+        self.model.starts_changed.connect(self._refresh_is_start)
+        self.model.breaks_changed.connect(self._refresh_is_break)
+        self.model.skips_changed.connect(self._refresh_is_skip)
+        self._refresh_from_model()
+
+    def _refresh_is_start(self):
+        self.is_start = self.model.get_is_node_start(self.node_path, self.model.comp_layer)
+        if self.is_start:
+            self.start_color = self.model.get_node_attr_color(
+                self.node_path, INTERNAL_ATTRS.START_POINT, self.model.comp_layer)
+        self.update()
+
+    def _refresh_is_break(self):
+        self.is_break = self.model.get_is_node_breakpoint(self.node_path, self.model.comp_layer)
+        self.update()
+
+    def _refresh_is_skip(self):
+        self.is_skip = self.model.is_node_skippoint(self.node_path, self.model.comp_layer.real_path)
+        self.update()
+
+    def _refresh_from_model(self):
+        self.is_root = nxt_path.get_path_depth(self.node_path) == 1
+        self._refresh_is_break()
+        self._refresh_is_start()
+        self._refresh_is_skip()
+
+    def paint(self, painter, option, widget):
+        """Override of QtWidgets.QGraphicsItem paint. Handles all visuals of the Plug."""
+        special_input = any([self.is_break, self.is_start, self.is_skip])
+        # If an output, or an non-special input.
+        if (not self.is_input) or (not special_input):
+            if self.is_root:
+                super(NodeExecutionPlug, self).paint(painter, option, widget)
+            # For non-root non-specials, no drawing.
+            return
+        self._apply_lod_to_painter(painter)
+        if self.is_start:
+            self.radius = 18
+            # draw
+            pen = QtGui.QPen(QtGui.QColor(self.start_color), self.hover_width * 8)
+            painter.setPen(pen)
+            painter.setBrush(QtCore.Qt.green)
+            self._drawTriangle(painter, QtCore.QPointF(self.radius * -0.6, 0), self.radius)
+        elif self.is_skip:
+            painter.setBrush(QtCore.Qt.blue)
+            painter.setPen(QtCore.Qt.NoPen)
+            self.radius = 9
+            first_x = -10
+            self._drawTriangle(painter, QtCore.QPointF(first_x, 0), self.radius)
+            second_x = 2
+            self._drawTriangle(painter, QtCore.QPointF(second_x, 0), self.radius)
+        elif self.is_break:
+            painter.setBrush(QtCore.Qt.red)
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
+
+    def _drawTriangle(self, painter, offset, side_length):
+        # create triangle
+        polygon = QtGui.QPolygonF()
+        step_angle = 120
+        for i in [0, 1, 2, 3]:
+            step = step_angle * i
+            x = side_length * 1.2 * math.cos(math.radians(step))
+            y = side_length * 1.2 * math.sin(math.radians(step))
+            polygon.append(QtCore.QPointF(x, y))
+        polygon.translate(offset)
+        painter.drawPolygon(polygon)
 
 
 class CollapseArrow(QtWidgets.QGraphicsItem):

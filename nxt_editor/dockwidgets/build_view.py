@@ -320,7 +320,11 @@ class BuildTable(QtWidgets.QTableView):
         self.break_delegate = LetterCheckboxDelegeate('B')
         self.setItemDelegateForColumn(BuildModel.BREAK_COLUMN,
                                       self.break_delegate)
+        self.skip_delegate = LetterCheckboxDelegeate('S')
+        self.setItemDelegateForColumn(BuildModel.SKIP_COLUMN,
+                                      self.skip_delegate)
         self.clicked.connect(self.on_row_clicked)
+        # TODO context menu and shift-click for +descendents.
 
     def on_row_clicked(self, clicked_idx):
         """When a row in the table is clicked, select and frame.
@@ -359,19 +363,21 @@ class BuildModel(QtCore.QAbstractTableModel):
     """A model of a series of nodes that reflects execution information
     including break status, start status, and which node is next to be run.
     """
-    BREAK_COLUMN = 0
-    START_COLUMN = 1
-    PATH_COLUMN = 2
-    NEXT_RUN_COLUMN = 3
+    SKIP_COLUMN = 0
+    BREAK_COLUMN = 1
+    START_COLUMN = 2
+    PATH_COLUMN = 3
+    NEXT_RUN_COLUMN = 4
 
     def __init__(self, stage_model):
         super(BuildModel, self).__init__()
         """self._nodes is the execute order this build model with reflect
         answers about.
         """
-        self.headers = ['Break', 'Start', 'Path', 'Next']
+        self.headers = ['Skip', 'Break', 'Start', 'Path', 'Next']
         self.stage_model = stage_model
         self._nodes = []
+        self.stage_model.skips_changed.connect(self.on_skips_changed)
         self.stage_model.breaks_changed.connect(self.on_breaks_changed)
         self.stage_model.build_idx_changed.connect(self.on_build_idx_changed)
 
@@ -388,6 +394,11 @@ class BuildModel(QtCore.QAbstractTableModel):
         self.beginResetModel()
         self._nodes = val
         self.endResetModel()
+
+    def on_skips_changed(self, new_skips):
+        last_row = len(self.nodes) - 1
+        self.dataChanged.emit(self.index(0, self.SKIP_COLUMN),
+                              self.index(last_row, self.SKIP_COLUMN))
 
     def on_breaks_changed(self, new_breaks):
         last_row = len(self.nodes) - 1
@@ -412,7 +423,7 @@ class BuildModel(QtCore.QAbstractTableModel):
         return len(self.nodes)
 
     def columnCount(self, index):
-        return 4
+        return len(self.headers)
 
     def data(self, index, role=None):
         row = index.row()
@@ -428,16 +439,21 @@ class BuildModel(QtCore.QAbstractTableModel):
             next_run = True
         is_start = self.stage_model.get_is_node_start(idx_path)
         is_break = self.stage_model.get_is_node_breakpoint(idx_path)
+        is_skip = self.stage_model.is_node_skippoint(idx_path)
         if role == QtCore.Qt.CheckStateRole:
             if column == self.START_COLUMN:
                 return QtCore.Qt.Checked if is_start else QtCore.Qt.Unchecked
             if column == self.BREAK_COLUMN:
                 return QtCore.Qt.Checked if is_break else QtCore.Qt.Unchecked
+            if column == self.SKIP_COLUMN:
+                return QtCore.Qt.Checked if is_skip else QtCore.Qt.Unchecked
             if column == self.NEXT_RUN_COLUMN:
                 return QtCore.Qt.Checked if next_run else QtCore.Qt.Unchecked
         if role == QtCore.Qt.BackgroundRole:
             if column == self.BREAK_COLUMN and is_break:
                 return QtGui.QBrush(QtCore.Qt.red)
+            if column == self.SKIP_COLUMN and is_skip:
+                return QtGui.QBrush(QtCore.Qt.blue)
             if column == self.START_COLUMN and is_start:
                 return QtGui.QBrush(QtCore.Qt.green)
             if column == self.PATH_COLUMN and next_run:
@@ -448,11 +464,15 @@ class BuildModel(QtCore.QAbstractTableModel):
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
         column = index.column()
-        if column != self.BREAK_COLUMN:
-            return False
         if role != QtCore.Qt.CheckStateRole:
             return False
         path = self.nodes[index.row()]
-        current_break = self.stage_model.get_is_node_breakpoint(path)
-        self.stage_model.set_breakpoints([path], not current_break)
-        return True
+        if column == self.BREAK_COLUMN:
+            current_break = self.stage_model.get_is_node_breakpoint(path)
+            self.stage_model.set_breakpoints([path], not current_break)
+            return True
+        if column == self.SKIP_COLUMN:
+            current_skip = self.stage_model.is_node_skippoint(path)
+            self.stage_model.set_skippoints([path], not current_skip)
+            return True
+        return False

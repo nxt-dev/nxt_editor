@@ -1285,6 +1285,45 @@ class SetNodeExecuteSources(SetNodeAttributeValue):
         self.setText("Set {} exec input to {}".format(self.node_path, val))
 
 
+class SetNodesAreSkipPoints(QUndoCommand):
+
+    """Set nodes as skip points"""
+
+    def __init__(self, node_paths, to_skip, layer_path, model):
+        super(SetNodesAreSkipPoints, self).__init__()
+        self.node_paths = node_paths
+        self.to_skip = to_skip
+        self.model = model
+        self.layer_path = layer_path
+
+    @processing
+    def redo(self):
+        if self.to_skip:
+            func = self.model._add_skippoint
+        else:
+            func = self.model._remove_skippoint
+        for node_path in self.node_paths:
+            func(node_path, self.layer_path)
+        self.model.nodes_changed.emit(tuple(self.node_paths))
+        if len(self.node_paths) == 1:
+            path_str = self.node_paths[0]
+        else:
+            "Multiple nodes"
+        if self.to_skip:
+            self.setText("Add skippoint to {}".format(path_str))
+        else:
+            self.setText("Remove skippoint from {}".format(path_str))
+
+    @processing
+    def undo(self):
+        if not self.to_skip:
+            func = self.model._add_skippoint
+        else:
+            func = self.model._remove_skippoint
+        for node_path in self.node_paths:
+            func(node_path, self.layer_path)
+
+
 class SetNodeBreakPoint(QUndoCommand):
 
     """Set node as a break point"""

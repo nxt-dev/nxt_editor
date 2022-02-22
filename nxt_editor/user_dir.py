@@ -28,6 +28,7 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 USER_PREFS_PATH = os.path.join(PREF_DIR, 'prefs.json')
 EDITOR_CACHE_PATH = os.path.join(PREF_DIR, 'editor_cache')
 BREAKPOINT_FILE = os.path.join(PREF_DIR, 'breakpoints')
+SKIPPOINT_FILE = os.path.join(PREF_DIR, 'skippoints')
 HOTKEYS_PREF = os.path.join(PREF_DIR, 'hotkeys.json')
 MAX_RECENT_FILES = 10
 
@@ -319,6 +320,7 @@ class MultiFilePref(object):
 user_prefs = JsonPref(USER_PREFS_PATH)
 hotkeys = JsonPref(HOTKEYS_PREF)
 breakpoints = JsonPref(BREAKPOINT_FILE)
+skippoints = JsonPref(SKIPPOINT_FILE)
 editor_cache = PicklePref(EDITOR_CACHE_PATH)
 editor_cache.set_handler(USER_PREF.LAST_OPEN, LastOpenedHandler)
 # TODO as a session starts(or ends?), let's create a symlink to

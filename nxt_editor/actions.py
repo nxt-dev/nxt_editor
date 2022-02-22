@@ -1585,6 +1585,14 @@ class ExecuteActions(NxtActionContainer):
         self.run_build_action.setWhatsThis('Runs build specified by the '
                                            'current value of build view.')
 
+        self.toggle_skip_action = NxtAction(text='Toggle Skippoint',
+                                            parent=self)
+        self.toggle_skip_action.setWhatsThis('Toggle skippoint on the selected'
+                                             'node(s)')
+        self.toggle_skip_action.setAutoRepeat(False)
+        self.toggle_skip_action.setShortcut('X')
+        self.toggle_skip_action.triggered.connect(lambda: self.main_window.model.toggle_skippoints())
+
         def stop():
             self.main_window.model.stop_build()
         self.stop_exec_action = NxtAction(text='Stop Execution', parent=self)

@@ -914,7 +914,7 @@ class StageView(QtWidgets.QGraphicsView):
             items_released_on = self.items(event.pos())
             # using the 1 index item here because the 0 index thing will always be the connection
             if len(items_released_on) > 1:
-                if type(items_released_on[1]) is NodeGraphicsPlug:
+                if isinstance(items_released_on[1], NodeGraphicsPlug):
                     dropped_plug = items_released_on[1]
                     dropped_node_path = dropped_plug.parentItem().node_path
                     locked = self.model.get_node_locked(dropped_node_path)
