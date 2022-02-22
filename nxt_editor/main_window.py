@@ -559,7 +559,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.set_waiting_cursor(False)
 
     def save_layer_as(self, layer=None, open_in_new_tab=True):
-        """Returns True if save was successful.
+        """Prompt the user to select a save location for a layer.
+
+        If no layer is specified the target layer is used.
+
+        :param layer: path to prompt for, defaults to target layer.
+        :type layer: nxt_layer.SpecLayer, optional
+        :param open_in_new_tab: If True, open the layer in a new tab after save
+        :type start: str, optional
+        :return: True if save was successful, false otherwise.
+        :rtype: bool
         """
         if not layer:
             layer = self.model.target_layer
