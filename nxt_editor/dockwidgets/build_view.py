@@ -353,7 +353,7 @@ class BuildTable(QtWidgets.QTableView):
 
     def on_build_idx_changed(self, build_idx):
         if self.model().stage_model.can_build_run():
-            model_index = self.model().index(build_idx + 1, 0)
+            model_index = self.model().index(build_idx, 0)
         else:
             model_index = self.model().index(0, 0)
         self.scrollTo(model_index, self.ScrollHint.PositionAtCenter)
@@ -434,7 +434,7 @@ class BuildModel(QtCore.QAbstractTableModel):
                 return idx_path
         next_run = False
         if self.stage_model.is_build_setup():
-            next_run = row == self.stage_model.last_built_idx + 1
+            next_run = row == self.stage_model.last_built_idx
         elif row == 0:
             next_run = True
         is_start = self.stage_model.get_is_node_start(idx_path)

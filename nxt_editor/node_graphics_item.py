@@ -98,6 +98,9 @@ class NodeGraphicsItem(graphic_type):
         self.collapse_arrows = []
         self.node_enabled = None
         self.node_instance = None
+
+        self.model.build_idx_changed.connect(self.update_build_focus)
+        self.model.executing_changed.connect(self.update_build_focus)
         # draw node
         self.update_from_model()
 
@@ -648,13 +651,11 @@ class NodeGraphicsItem(graphic_type):
         super(NodeGraphicsItem, self).hoverLeaveEvent(event)
 
     def update_build_focus(self):
-        if not self.model.can_build_run():
+        if not self.model.executing:
             self.is_build_focus = False
             self.update()
             return
-        idx = self.model.last_built_idx + 1
-        build_focus = self.model.current_build_order[idx]
-        self.is_build_focus = build_focus == self.node_path
+        self.is_build_focus = self.node_path == self.model.current_build_order[self.model.last_built_idx]
         self.update()
 
     def update_from_model(self):

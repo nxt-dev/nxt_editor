@@ -476,7 +476,6 @@ class MainWindow(QtWidgets.QMainWindow):
             model.target_layer_changed.connect(self.update_target_color)
             model.comp_layer_changed.connect(self.update_target_color)
             self.update_target_color()
-            self.update_grid_action()
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
 
@@ -708,7 +707,7 @@ class MainWindow(QtWidgets.QMainWindow):
             logger.debug("Successfully set up new tab.")
             self.last_focused_tab = tab_index
             self.update_implicit_action()
-            self.update_grid_action()
+            view.toggle_grid(user_dir.user_prefs[user_dir.USER_PREF.SHOW_GRID])
             model.destroy_cmd_port.connect(self.update_cmd_port_action)
         else:
             logger.critical("Failed to set up new tab.")
@@ -746,11 +745,6 @@ class MainWindow(QtWidgets.QMainWindow):
             state = False
         self.execute_actions.enable_cmd_port_action.setChecked(state)
         self.execute_actions.enable_cmd_port_action.blockSignals(False)
-
-    def update_grid_action(self):
-        self.view_actions.grid_action.blockSignals(True)
-        self.view_actions.grid_action.setChecked(self.model.show_grid)
-        self.view_actions.grid_action.blockSignals(False)
 
     def update_implicit_action(self):
         self.view_actions.implicit_action.blockSignals(True)

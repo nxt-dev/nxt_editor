@@ -50,7 +50,6 @@ class StageModel(QtCore.QObject):
     build_paused_changed = QtCore.Signal(bool)
     processing = QtCore.Signal(bool)
     data_state_changed = QtCore.Signal(bool)
-    show_grid_changed = QtCore.Signal(bool)
     implicit_connections_changed = QtCore.Signal(bool)
     layer_color_changed = QtCore.Signal(object)
     comp_layer_changed = QtCore.Signal(object)
@@ -104,7 +103,6 @@ class StageModel(QtCore.QObject):
         self.refresh_exec_framing_from_pref()
         # model states
         self._data_state = DATA_STATE.RESOLVED
-        self._show_grid = True
         self._implicit_connections = True
         # graph layers
         self._comp_layer = stage.build_stage()
@@ -443,15 +441,6 @@ class StageModel(QtCore.QObject):
     def data_state(self, value):
         self._data_state = value
         self.data_state_changed.emit(value)
-
-    @property
-    def show_grid(self):
-        return self._show_grid
-
-    @show_grid.setter
-    def show_grid(self, value):
-        self._show_grid = value
-        self.show_grid_changed.emit(value)
 
     @property
     def implicit_connections(self):
