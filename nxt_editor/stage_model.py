@@ -2374,6 +2374,9 @@ class StageModel(QtCore.QObject):
             layer = self.comp_layer
         if self.node_exists(node_path, layer=layer):
             return False
+        if node_path == nxt_path.WORLD:
+            # If we're in a graph, the world node is always at least implied.
+            return True
         parent_path = nxt_path.get_parent_path(node_path)
         children = self.get_children(parent_path, layer=layer,
                                      include_implied=True)
