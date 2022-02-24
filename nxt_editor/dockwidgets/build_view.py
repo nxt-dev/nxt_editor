@@ -10,6 +10,7 @@ from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
 from nxt_editor.dockwidgets.layer_manager import LetterCheckboxDelegeate
 import nxt_editor
+from nxt_editor import colors
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -453,9 +454,9 @@ class BuildModel(QtCore.QAbstractTableModel):
             if column == self.BREAK_COLUMN and is_break:
                 return QtGui.QBrush(QtCore.Qt.red)
             if column == self.SKIP_COLUMN and is_skip:
-                return QtGui.QBrush(QtCore.Qt.blue)
+                return colors.SKIP_COLOR
             if column == self.START_COLUMN and is_start:
-                return QtGui.QBrush(QtCore.Qt.green)
+                return colors.START_COLOR
             if column == self.PATH_COLUMN and next_run:
                 return QtGui.QBrush(QtCore.Qt.red)
         if role == QtCore.Qt.ForegroundRole:

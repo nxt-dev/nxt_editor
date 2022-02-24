@@ -597,10 +597,10 @@ class NodeGraphicsItem(graphic_type):
         # Internal Attrs
         # Exec
         draw_details = {}
-        in_pos = QtCore.QPointF(0, self.title_bounding_rect.height()/3)
+        in_pos = QtCore.QPointF(0, self.title_bounding_rect.height()/2)
         draw_details['in_pos'] = in_pos
         out_pos = QtCore.QPointF(self.max_width,
-                                 self.title_bounding_rect.height()/3)
+                                 self.title_bounding_rect.height()/2)
         draw_details['out_pos'] = out_pos
         draw_details['plug_color'] = QtGui.QColor(QtCore.Qt.white)
         exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
@@ -1054,28 +1054,28 @@ class NodeExecutionPlug(NodeGraphicsPlug):
             # For non-root non-specials, no drawing.
             return
         self._apply_lod_to_painter(painter)
-        if self.is_start:
-            self.radius = 18
-            # draw
-            pen = QtGui.QPen(QtGui.QColor(self.start_color), self.hover_width * 8)
-            painter.setPen(pen)
-            painter.setBrush(QtCore.Qt.green)
-            self._drawTriangle(painter, QtCore.QPointF(self.radius * -0.6, 0), self.radius)
-        elif self.is_skip:
-            painter.setBrush(QtCore.Qt.blue)
+        shape_border_pen = QtGui.QPen(colors.GRAPH_BG_COLOR, self.hover_width * 2)
+        if self.is_start:  # A green triangle, with a border of layer color
+            self.radius = 13
+            painter.setBrush(QtGui.QColor(self.start_color))
+            painter.setPen(shape_border_pen)
+            painter.drawPolygon(self._buildTriangle(QtCore.QPointF(self.radius * -0.6, 0), self.radius))
+            painter.setBrush(colors.START_COLOR)
             painter.setPen(QtCore.Qt.NoPen)
+            painter.drawPolygon(self._buildTriangle(QtCore.QPointF(self.radius * -0.6, 0), self.radius * .7))
+        elif self.is_skip:  # A short wide rect, a minus
             self.radius = 9
-            first_x = -10
-            self._drawTriangle(painter, QtCore.QPointF(first_x, 0), self.radius)
-            second_x = 2
-            self._drawTriangle(painter, QtCore.QPointF(second_x, 0), self.radius)
-        elif self.is_break:
+            painter.setBrush(colors.SKIP_COLOR)
+            painter.setPen(shape_border_pen)
+            skip_rect = QtCore.QRect(self.radius * -1, self.radius * -.6, self.radius * 2, self.radius)
+            painter.drawRoundedRect(skip_rect, 4, 4)
+        elif self.is_break:  # A red square
+            self.radius = 8
             painter.setBrush(QtCore.Qt.red)
-            painter.setPen(QtCore.Qt.NoPen)
+            painter.setPen(shape_border_pen)
             painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
 
-    def _drawTriangle(self, painter, offset, side_length):
-        # create triangle
+    def _buildTriangle(self, offset, side_length):
         polygon = QtGui.QPolygonF()
         step_angle = 120
         for i in [0, 1, 2, 3]:
@@ -1084,7 +1084,7 @@ class NodeExecutionPlug(NodeGraphicsPlug):
             y = side_length * 1.2 * math.sin(math.radians(step))
             polygon.append(QtCore.QPointF(x, y))
         polygon.translate(offset)
-        painter.drawPolygon(polygon)
+        return polygon
 
 
 class CollapseArrow(QtWidgets.QGraphicsItem):

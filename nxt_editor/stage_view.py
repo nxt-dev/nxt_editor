@@ -17,6 +17,7 @@ from nxt_editor.node_graphics_item import (NodeGraphicsItem, NodeGraphicsPlug,
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.dialogs import NxtWarningDialog
 from nxt_editor.commands import *
+from nxt_editor import colors
 from .user_dir import USER_PREF, user_prefs
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -594,8 +595,7 @@ class StageView(QtWidgets.QGraphicsView):
         super(StageView, self).drawBackground(painter, rect)
 
         rect = self.sceneRect()
-        color = QtGui.QColor(35, 35, 35)
-        painter.fillRect(rect, QtGui.QBrush(color))
+        painter.fillRect(rect, QtGui.QBrush(colors.GRAPH_BG_COLOR))
 
         left = int(rect.left()) - (int(rect.left()) % self.draw_grid_size)
         top = int(rect.top()) - (int(rect.top()) % self.draw_grid_size)
