@@ -1002,6 +1002,10 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
 
 
 class NodeExecutionPlug(NodeGraphicsPlug):
+    """Node Graphics Plug for the plugs in the execution position.
+
+    Handles drawing of exec plugs, as well as start, break, and skip points.
+    """
     def __init__(self, model, node_path, is_input, parent=None):
         super(NodeExecutionPlug, self).__init__(
             radius=NodeGraphicsItem.EXEC_PLUG_RADIUS,

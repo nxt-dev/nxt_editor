@@ -2171,6 +2171,13 @@ class StageModel(QtCore.QObject):
         self.breaks_changed.emit(layer_breaks)
 
     def toggle_skippoints(self, node_paths, layer_path=None):
+        """Reverse the skip status of all given node paths.
+
+        :param node_paths: Node paths to toggle.
+        :type node_paths: iterable
+        :param layer_path: Layer to set skips on, defaults to top layer.
+        :type layer_path: str, optional
+        """
         if not layer_path:
             layer_path = self.top_layer.real_path
         on = []
@@ -2196,6 +2203,14 @@ class StageModel(QtCore.QObject):
         self.undo_stack.endMacro()
 
     def toggle_descendant_skips(self, node_paths, layer_path=None):
+        """Reverse the skip point status of each node given, applying the same
+        status to all descendant nodes.
+
+        :param node_paths: Root node(s) to change skip status of.
+        :type node_paths: iterable
+        :param layer_path: Layer to set skips on, defaults to top layer.
+        :type layer_path: str, optional
+        """
         node_count = len(node_paths)
         if node_count > 1:
             msg = ('Set skippoint for {} and '
@@ -2210,18 +2225,44 @@ class StageModel(QtCore.QObject):
         self.undo_stack.endMacro()
 
     def set_skippoints(self, node_paths, to_skip, layer_path=None):
+        """Set the skip status of given nodes.
+
+        :param node_paths: Nodes to set skip status of.
+        :type node_paths: iterable
+        :param to_skip: Whether to set nodes to skip or not.
+        :type to_skip: bool
+        :param layer_path: Layer to set skips on, defaults to top layer.
+        :type layer_path: str, optional
+        """
         if not layer_path:
             layer_path = self.top_layer.real_path
         cmd = SetNodesAreSkipPoints(node_paths, to_skip, layer_path, self)
         self.undo_stack.push(cmd)
 
     def is_node_skippoint(self, node_path, layer_path=None):
+        """Returns True/False based on whether a node is currently a skippoint.
+
+        :param node_path: Node to check.
+        :type node_path: str
+        :param layer_path: Layer path to check within, defaults to top layer.
+        :type layer_path: str, optional
+        :return: Whether given node is a skip.
+        :rtype: bool
+        """
         if not layer_path:
             layer_path = self.top_layer.real_path
         layer_skips = user_dir.skippoints.get(layer_path, tuple())
         return node_path in layer_skips
 
     def _add_skippoint(self, node_path, layer_path):
+        """Internal(not undo-able) method to make a node a skip point.
+
+        :param node_path: Node to make a skip point.
+        :type node_path: str
+        :param layer_path: Layer to set skip for.
+        :type layer_path: str
+        :raises ValueError: If inputs are not complete.
+        """
         if not (node_path and layer_path):
             raise ValueError("Must provide node and layer path.")
         node_path = str(node_path)
@@ -2236,6 +2277,14 @@ class StageModel(QtCore.QObject):
             self.skips_changed.emit([])
 
     def _remove_skippoint(self, node_path, layer_path):
+        """Internal(not undo-able) method to make a node not a skip point.
+
+        :param node_path: Node to remove as a skip point.
+        :type node_path: str
+        :param layer_path: Layer to set skip for.
+        :type layer_path: str
+        :raises ValueError: If inputs are not complete.
+        """
         if not (node_path and layer_path):
             raise ValueError("Must provide node and layer path.")
         node_path = str(node_path)
@@ -2250,11 +2299,6 @@ class StageModel(QtCore.QObject):
             # path is not present, it's already "removed"
             return
         user_dir.skippoints[layer_path] = layer_skips
-        if layer_path == self.top_layer.real_path:
-            self.skips_changed.emit([])
-
-    def _clear_skippoints(self, layer_path):
-        user_dir.skippoints.pop(layer_path)
         if layer_path == self.top_layer.real_path:
             self.skips_changed.emit([])
 
