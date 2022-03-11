@@ -2195,6 +2195,20 @@ class StageModel(QtCore.QObject):
             self.set_skippoints(off, False, layer_path)
         self.undo_stack.endMacro()
 
+    def toggle_descendant_skips(self, node_paths, layer_path=None):
+        node_count = len(node_paths)
+        if node_count > 1:
+            msg = ('Set skippoint for {} and '
+                   '{} other(s)'.format(node_paths[0], node_count - 1))
+        else:
+            msg = 'Set skippoint for {}'.format(node_paths[0])
+        self.undo_stack.beginMacro(msg)
+        for node_path in node_paths:
+            to_skip = not self.is_node_skippoint(node_path)
+            descendants = self.get_descendants(node_path)
+            self.set_skippoints(descendants + [node_path], to_skip, layer_path)
+        self.undo_stack.endMacro()
+
     def set_skippoints(self, node_paths, to_skip, layer_path=None):
         if not layer_path:
             layer_path = self.top_layer.real_path

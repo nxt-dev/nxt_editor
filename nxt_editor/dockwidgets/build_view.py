@@ -473,7 +473,10 @@ class BuildModel(QtCore.QAbstractTableModel):
             self.stage_model.set_breakpoints([path], not current_break)
             return True
         if column == self.SKIP_COLUMN:
-            current_skip = self.stage_model.is_node_skippoint(path)
-            self.stage_model.set_skippoints([path], not current_skip)
+            modifiers = QtWidgets.QApplication.keyboardModifiers()
+            if modifiers == QtCore.Qt.ShiftModifier:
+                self.stage_model.toggle_descendant_skips([path])
+            else:
+                self.stage_model.toggle_skippoints([path])
             return True
         return False
