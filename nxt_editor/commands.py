@@ -1308,7 +1308,7 @@ class SetNodesAreSkipPoints(QUndoCommand):
         if len(self.node_paths) == 1:
             path_str = self.node_paths[0]
         else:
-            "Multiple nodes"
+            path_str = "Multiple nodes"
         if self.to_skip:
             self.setText("Add skippoint to {}".format(path_str))
         else:

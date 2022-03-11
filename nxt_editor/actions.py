@@ -1610,7 +1610,49 @@ class ExecuteActions(NxtActionContainer):
                                              'node(s)')
         self.toggle_skip_action.setAutoRepeat(False)
         self.toggle_skip_action.setShortcut('X')
-        self.toggle_skip_action.triggered.connect(lambda: self.main_window.model.toggle_skippoints())
+
+        def toggle_skip():
+            node_paths = self.toggle_skip_action.data()
+            self.toggle_skip_action.setData(None)
+            if not node_paths:
+                node_paths = self.main_window.model.get_selected_nodes()
+            if not node_paths:
+                logger.info("No nodes to toggle skip on.")
+                return
+            layer = self.main_window.model.top_layer.real_path
+            self.main_window.model.toggle_skippoints(node_paths, layer)
+        self.toggle_skip_action.triggered.connect(toggle_skip)
+
+        self.set_descendent_skips = NxtAction('Toggle Skip with Descendants',
+                                              parent=self)
+        self.set_descendent_skips.setWhatsThis('Toggles skip of the selected '
+                                               'node(s), applying the '
+                                               'skip state to all descendents')
+        self.set_descendent_skips.setAutoRepeat(False)
+        self.set_descendent_skips.setShortcut('Shift+X')
+
+        def toggle_descendant_skips():
+            node_paths = self.set_descendent_skips.data()
+            self.set_descendent_skips.setData(None)
+            if not node_paths:
+                node_paths = self.main_window.model.get_selected_nodes()
+            if not node_paths:
+                logger.info("No nodes to toggle skip on.")
+                return
+            node_count = len(node_paths)
+            if node_count > 1:
+                msg = ('Set skippoint for {} and '
+                       '{} other(s)'.format(node_paths[0], node_count - 1))
+            else:
+                msg = 'Set skippoint for {}'.format(node_paths[0])
+            model = self.main_window.model
+            model.undo_stack.beginMacro(msg)
+            for node_path in node_paths:
+                to_skip = not model.is_node_skippoint(node_path)
+                descendants = model.get_descendants(node_path)
+                model.set_skippoints(descendants + [node_path], to_skip)
+            model.undo_stack.endMacro()
+        self.set_descendent_skips.triggered.connect(toggle_descendant_skips)
 
         def stop():
             self.main_window.model.stop_build()

@@ -2170,11 +2170,7 @@ class StageModel(QtCore.QObject):
         user_dir.breakpoints[layer_path] = layer_breaks
         self.breaks_changed.emit(layer_breaks)
 
-    def toggle_skippoints(self, node_paths=None, layer_path=None):
-        if not node_paths:
-            node_paths = self.selection
-        if not node_paths:
-            return
+    def toggle_skippoints(self, node_paths, layer_path=None):
         if not layer_path:
             layer_path = self.top_layer.real_path
         on = []
