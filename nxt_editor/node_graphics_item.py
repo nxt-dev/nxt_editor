@@ -597,10 +597,10 @@ class NodeGraphicsItem(graphic_type):
         # Internal Attrs
         # Exec
         draw_details = {}
-        in_pos = QtCore.QPointF(0, self.title_bounding_rect.height()/2)
+        in_pos = QtCore.QPointF(0, self.title_bounding_rect.height()*0.5)
         draw_details['in_pos'] = in_pos
         out_pos = QtCore.QPointF(self.max_width,
-                                 self.title_bounding_rect.height()/2)
+                                 self.title_bounding_rect.height()*0.5)
         draw_details['out_pos'] = out_pos
         draw_details['plug_color'] = QtGui.QColor(QtCore.Qt.white)
         exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
@@ -1075,7 +1075,7 @@ class NodeExecutionPlug(NodeGraphicsPlug):
             painter.drawRoundedRect(skip_rect, 4, 4)
         elif self.is_break:  # A red square
             self.radius = 8
-            painter.setBrush(QtCore.Qt.red)
+            painter.setBrush(colors.BREAK_COLOR)
             painter.setPen(shape_border_pen)
             painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
 

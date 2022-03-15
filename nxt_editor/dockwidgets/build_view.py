@@ -1,6 +1,7 @@
 # Builtin
 import logging
 import time
+from turtle import color
 
 # External
 from Qt import QtWidgets, QtGui, QtCore
@@ -452,7 +453,7 @@ class BuildModel(QtCore.QAbstractTableModel):
                 return QtCore.Qt.Checked if next_run else QtCore.Qt.Unchecked
         if role == QtCore.Qt.BackgroundRole:
             if column == self.BREAK_COLUMN and is_break:
-                return QtGui.QBrush(QtCore.Qt.red)
+                return colors.BREAK_COLOR
             if column == self.SKIP_COLUMN and is_skip:
                 return colors.SKIP_COLOR
             if column == self.START_COLUMN and is_start:

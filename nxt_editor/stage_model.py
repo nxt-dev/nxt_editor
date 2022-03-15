@@ -2297,6 +2297,8 @@ class StageModel(QtCore.QObject):
         except ValueError:
             # Can return without the below save in this case. If the node
             # path is not present, it's already "removed"
+            if layer_path == self.top_layer.real_path:
+                self.skips_changed.emit([])
             return
         user_dir.skippoints[layer_path] = layer_skips
         if layer_path == self.top_layer.real_path:
