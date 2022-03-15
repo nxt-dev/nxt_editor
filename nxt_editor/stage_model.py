@@ -2251,7 +2251,7 @@ class StageModel(QtCore.QObject):
         """
         if not layer_path:
             layer_path = self.top_layer.real_path
-        layer_skips = user_dir.skippoints.get(layer_path, tuple())
+        layer_skips = user_dir.skippoints.get(layer_path, [])
         return node_path in layer_skips
 
     def _add_skippoint(self, node_path, layer_path):
