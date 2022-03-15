@@ -655,7 +655,7 @@ class NodeGraphicsItem(graphic_type):
             self.is_build_focus = False
             self.update()
             return
-        self.is_build_focus = self.node_path == self.model.current_build_order[self.model.last_built_idx]
+        self.is_build_focus = self.node_path == self.model.get_build_focus()
         self.update()
 
     def update_from_model(self):

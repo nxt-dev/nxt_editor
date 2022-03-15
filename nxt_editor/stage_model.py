@@ -3084,14 +3084,14 @@ class StageModel(QtCore.QObject):
         self._set_build_paused(True, focus=False)
 
     def get_build_focus(self):
-        """Build "focus" is the next-up node that will run when stepped.
+        """Build "focus" is the currently running node.
 
-        :return: next node path that will run when stepped/resumed.
+        :return: node path currently running, if running.
         :rtype: str
         """
         if not self.can_build_run():
             return ''
-        return self.current_build_order[self.last_built_idx + 1]
+        return self.current_build_order[self.last_built_idx]
 
     @property
     def last_built_idx(self):
