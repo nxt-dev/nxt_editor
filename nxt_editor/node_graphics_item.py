@@ -1054,6 +1054,7 @@ class NodeExecutionPlug(NodeGraphicsPlug):
         # If an output, or an non-special input.
         if (not self.is_input) or (not special_input):
             if self.is_root:
+                self.radius = NodeGraphicsItem.EXEC_PLUG_RADIUS
                 super(NodeExecutionPlug, self).paint(painter, option, widget)
             # For non-root non-specials, no drawing.
             return

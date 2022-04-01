@@ -2093,7 +2093,12 @@ class StageModel(QtCore.QObject):
             node_paths = self.selection
         if not node_paths:
             return
-        layer_path = self.get_layer_path(layer, fallback=LAYERS.TOP)
+        layer_path = self.get_layer_path(layer,
+                                         fallback=self.top_layer.real_path)
+        if not layer_path:
+            logger.warning('Please save your graph to use breaks.')
+            self.request_ding.emit()
+            return
         on = []
         off = []
         for node_path in node_paths:
@@ -2180,6 +2185,10 @@ class StageModel(QtCore.QObject):
         """
         if not layer_path:
             layer_path = self.top_layer.real_path
+        if not layer_path:
+            logger.warning('Please save your graph to use skips.')
+            self.request_ding.emit()
+            return
         on = []
         off = []
         for node_path in node_paths:
@@ -2211,6 +2220,12 @@ class StageModel(QtCore.QObject):
         :param layer_path: Layer to set skips on, defaults to top layer.
         :type layer_path: str, optional
         """
+        if not layer_path:
+            layer_path = self.top_layer.real_path
+        if not layer_path:
+            logger.warning('Please save your graph to use skips.')
+            self.request_ding.emit()
+            return
         node_count = len(node_paths)
         if node_count > 1:
             msg = ('Set skippoint for {} and '
@@ -2236,6 +2251,10 @@ class StageModel(QtCore.QObject):
         """
         if not layer_path:
             layer_path = self.top_layer.real_path
+        if not layer_path:
+            logger.warning('Please save your graph to use skips.')
+            self.request_ding.emit()
+            return
         cmd = SetNodesAreSkipPoints(node_paths, to_skip, layer_path, self)
         self.undo_stack.push(cmd)
 
