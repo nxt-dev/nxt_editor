@@ -1604,6 +1604,44 @@ class ExecuteActions(NxtActionContainer):
         self.run_build_action.setWhatsThis('Runs build specified by the '
                                            'current value of build view.')
 
+        self.toggle_skip_action = NxtAction(text='Toggle Skippoint',
+                                            parent=self)
+        self.toggle_skip_action.setWhatsThis('Toggle skippoint on the selected'
+                                             'node(s)')
+        self.toggle_skip_action.setAutoRepeat(False)
+        self.toggle_skip_action.setShortcut('X')
+
+        def toggle_skip():
+            node_paths = self.toggle_skip_action.data()
+            self.toggle_skip_action.setData(None)
+            if not node_paths:
+                node_paths = self.main_window.model.get_selected_nodes()
+            if not node_paths:
+                logger.info("No nodes to toggle skip on.")
+                return
+            layer = self.main_window.model.top_layer.real_path
+            self.main_window.model.toggle_skippoints(node_paths, layer)
+        self.toggle_skip_action.triggered.connect(toggle_skip)
+
+        self.set_descendent_skips = NxtAction('Toggle Skip with Descendants',
+                                              parent=self)
+        self.set_descendent_skips.setWhatsThis('Toggles skip of the selected '
+                                               'node(s), applying the '
+                                               'skip state to all descendents')
+        self.set_descendent_skips.setAutoRepeat(False)
+        self.set_descendent_skips.setShortcut('Shift+X')
+
+        def toggle_descendant_skips():
+            node_paths = self.set_descendent_skips.data()
+            self.set_descendent_skips.setData(None)
+            if not node_paths:
+                node_paths = self.main_window.model.get_selected_nodes()
+            if not node_paths:
+                logger.info("No nodes to toggle skip on.")
+                return
+            self.main_window.model.toggle_descendant_skips(node_paths)
+        self.set_descendent_skips.triggered.connect(toggle_descendant_skips)
+
         def stop():
             self.main_window.model.stop_build()
         self.stop_exec_action = NxtAction(text='Stop Execution', parent=self)

@@ -17,6 +17,11 @@ ATTR_COLORS = {
     'dict': QColor('#984dab'),
 }
 
+GRAPH_BG_COLOR = QColor(35, 35, 35)
+START_COLOR = QColor("#1bd40b")
+SKIP_COLOR = QColor("#f0880a")
+BREAK_COLOR = QColor(255, 0, 0)
+
 LAYER_COLORS = [
     QColor('#991C24'),  # dark red
     QColor('#C91781'),  # fuschia
