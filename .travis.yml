@@ -27,9 +27,9 @@ install:
   - pip install importlib-metadata==3.4
   - pip install ./nxt_editor
   - pip install twine
-  - sudo apt-get install -y libxkbcommon-x11-0
+  - sudo apt-get install libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev
+  - sudo apt-get install libxkbcommon-x11-dev
   - sudo apt-get install -y libgl1-mesa-dev
-  - sudo apt-get install -y libxcb-xinerama0
 
 script:
   - |
