@@ -6,12 +6,6 @@ branches:
 python:
   - "3.7"
 
-services:
-    - xvfb
-
-env:
-    - QT_CI_PACKAGES=qt.qt5.5132.gcc_64,qt.qt5.5132.qtwebengine PATH="$TRAVIS_BUILD_DIR/Qt/5.13.2/gcc_64/bin:${PATH}"
-
 before_install:
   - |
     if [ "$TRAVIS_BRANCH" = "dev" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
@@ -27,9 +21,6 @@ install:
   - pip install importlib-metadata==3.4
   - pip install ./nxt_editor
   - pip install twine
-  - sudo apt-get install libxcb-randr0-dev libxcb-xtest0-dev libxcb-xinerama0-dev libxcb-shape0-dev libxcb-xkb-dev
-  - sudo apt-get install libxkbcommon-x11-dev
-  - sudo apt-get install -y libgl1-mesa-dev
 
 script:
   - |
