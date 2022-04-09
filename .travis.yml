@@ -16,12 +16,17 @@ before_install:
     fi
 
 install:
+  - export QT_DEBUG_PLUGINS=1
   - cd ..
   - git clone https://github.com/nxt-dev/nxt.git
   - pip install importlib-metadata==3.4
   - pip install ./nxt_editor
   - pip install twine
-  - sudo apt-get install -qq libegl1-mesa
+  - sudo apt install libxcb-image0
+  - sudo apt install libxcb-keysyms1
+  - sudo apt install libxcb-render-util0
+  - sudo apt install libxcb-xkb1
+  - sudo apt install libxkbcommon-x11-0
 
 script:
   - |
