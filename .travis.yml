@@ -21,6 +21,7 @@ install:
   - pip install importlib-metadata==3.4
   - pip install ./nxt_editor
   - pip install twine
+  - sudo apt-get install -qq libegl1-mesa
 
 script:
   - |
