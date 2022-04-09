@@ -38,7 +38,8 @@ class StringSignaler(QtCore.QObject):
 def make_resources(qrc_path=None, result_path=None):
     import PySide2
     pyside_dir = os.path.dirname(PySide2.__file__)
-    full_rcc_path = os.path.join(pyside_dir, 'pyside2-rcc')
+    full_pyside2rcc_path = os.path.join(pyside_dir, 'pyside2-rcc')
+    full_rcc_path = os.path.join(pyside_dir, 'rcc')
     this_dir = os.path.dirname(os.path.realpath(__file__))
     if not qrc_path:
         qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
@@ -59,12 +60,18 @@ def make_resources(qrc_path=None, result_path=None):
         return
 
     try:
-        subprocess.check_call([full_rcc_path] + args)
+        subprocess.check_call([full_pyside2rcc_path] + args)
     except:
         pass
     else:
         return
-
+    try:
+        subprocess.check_call([full_rcc_path, '-g', 'python', qrc_path,
+                               '-o', result_path], cwd=pyside_dir)
+    except:
+        pass
+    else:
+        return
     try:
         subprocess.check_call(['rcc', '-g', 'python', qrc_path,
                                '-o', result_path], cwd=pyside_dir)
