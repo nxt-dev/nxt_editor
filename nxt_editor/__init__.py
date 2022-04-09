@@ -67,7 +67,7 @@ def make_resources(qrc_path=None, result_path=None):
 
     try:
         subprocess.check_call(['rcc', '-g', 'python', qrc_path,
-                               '-o', result_path])
+                               '-o', result_path], cwd=pyside_dir)
     except:
         raise Exception("Failed to generate UI resources using pyside2 rcc!"
                         " Reinstalling pyside2 may fix the problem. If you "
