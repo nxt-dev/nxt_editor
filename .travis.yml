@@ -29,6 +29,7 @@ install:
   - pip install twine
   - sudo apt-get install -y libxkbcommon-x11-0
   - sudo apt-get install -y libgl1-mesa-dev
+  - sudo apt-get install -y libxcb-xinerama0
 
 script:
   - |
