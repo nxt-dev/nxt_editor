@@ -66,10 +66,13 @@ def make_resources(qrc_path=None, result_path=None):
         return
 
     try:
-        subprocess.check_call(['rcc', '-g', 'python', qrc_path, result_path])
+        subprocess.check_call(['rcc', '-g', 'python', qrc_path,
+                               '-o', result_path])
     except:
-        raise Exception("Cannot find pyside2 rcc to generate UI resources."
-                        " Reinstalling pyside2 may fix the problem.")
+        raise Exception("Failed to generate UI resources using pyside2 rcc!"
+                        " Reinstalling pyside2 may fix the problem. If you "
+                        "know how to use rcc please build from: \"{}\" and "
+                        "output to \"{}\"".format(qrc_path, result_path))
     else:
         return
 
