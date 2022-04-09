@@ -119,7 +119,7 @@ class NxtIntegration(object):
             self._uninstall_package('nxt-core')
         if self.check_for_nxt_editor():
             self._uninstall_package('nxt-editor')
-        # print('Please restart your DCC or Python interpreter')
+        print('Please restart your DCC or Python interpreter')
 
     def launch_nxt(self):
         raise NotImplementedError('Your DCC needs it own nxt launch method.')

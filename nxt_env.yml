@@ -2,8 +2,8 @@ name: nxt_editor
 channels:
   - conda-forge
 dependencies:
-  - python=3.7
+  - python=3.9
   - qt.py=1.1
-  - pyside2=5.11.1
+  - pyside2=5.13.2
   - twine
   - requests

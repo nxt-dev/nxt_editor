@@ -160,7 +160,26 @@ class NxtActionContainer(QtWidgets.QWidget):
 
 
 class BoolUserPrefAction(NxtAction):
+    """NxtAction that saves state between sessions via preference key."""
     def __init__(self, text, pref_key, default=False, parent=None):
+        """NxtAction that saves state between sessions via preference key
+
+        Note that default checked state is set during initialization, before
+        signals have been hooked up. Meaning any later-connected function is not
+        automatically called to "kick start" the application state. Either
+        build that into the start of the UI, or call your action once manually
+        to kick start.
+
+        :param text: Action description.
+        :type text: str
+        :param pref_key: Preference key to save at
+        :type pref_key: str
+        :param default: Deafult value, loads default state from user pref, only
+        falling back to this default when no save exists, defaults to False
+        :type default: bool, optional
+        :param parent: Action parent, defaults to None
+        :type parent: QObject, optional
+        """
         super(BoolUserPrefAction, self).__init__(text, parent)
         self.setCheckable(True)
         self.pref_key = pref_key
@@ -1167,13 +1186,13 @@ class StageViewActions(NxtActionContainer):
             state = self.grid_action.isChecked()
             self.main_window.view.toggle_grid(state)
 
-        self.grid_action = NxtAction(text='Toggle Grid',
-                                     parent=self)
+        self.grid_action = BoolUserPrefAction('Toggle Grid',
+                                              user_dir.USER_PREF.SHOW_GRID,
+                                              default=True,
+                                              parent=self)
         self.grid_action.setShortcut('Ctrl+;')
         self.grid_action.setToolTip('Show / Hide the Grid')
         self.grid_action.setWhatsThis('Shows or hides the grid for all tabs.')
-        self.grid_action.setCheckable(True)
-        self.grid_action.setChecked(True)
         self.grid_action.triggered.connect(toggle_grid)
         grid_icon = QtGui.QIcon()
         grid_icn_on = QtGui.QPixmap(':icons/icons/grid_pressed.png')
@@ -1584,6 +1603,44 @@ class ExecuteActions(NxtActionContainer):
         self.run_build_action = NxtAction('Run Build', parent=self)
         self.run_build_action.setWhatsThis('Runs build specified by the '
                                            'current value of build view.')
+
+        self.toggle_skip_action = NxtAction(text='Toggle Skippoint',
+                                            parent=self)
+        self.toggle_skip_action.setWhatsThis('Toggle skippoint on the selected'
+                                             'node(s)')
+        self.toggle_skip_action.setAutoRepeat(False)
+        self.toggle_skip_action.setShortcut('X')
+
+        def toggle_skip():
+            node_paths = self.toggle_skip_action.data()
+            self.toggle_skip_action.setData(None)
+            if not node_paths:
+                node_paths = self.main_window.model.get_selected_nodes()
+            if not node_paths:
+                logger.info("No nodes to toggle skip on.")
+                return
+            layer = self.main_window.model.top_layer.real_path
+            self.main_window.model.toggle_skippoints(node_paths, layer)
+        self.toggle_skip_action.triggered.connect(toggle_skip)
+
+        self.set_descendent_skips = NxtAction('Toggle Skip with Descendants',
+                                              parent=self)
+        self.set_descendent_skips.setWhatsThis('Toggles skip of the selected '
+                                               'node(s), applying the '
+                                               'skip state to all descendents')
+        self.set_descendent_skips.setAutoRepeat(False)
+        self.set_descendent_skips.setShortcut('Shift+X')
+
+        def toggle_descendant_skips():
+            node_paths = self.set_descendent_skips.data()
+            self.set_descendent_skips.setData(None)
+            if not node_paths:
+                node_paths = self.main_window.model.get_selected_nodes()
+            if not node_paths:
+                logger.info("No nodes to toggle skip on.")
+                return
+            self.main_window.model.toggle_descendant_skips(node_paths)
+        self.set_descendent_skips.triggered.connect(toggle_descendant_skips)
 
         def stop():
             self.main_window.model.stop_build()
