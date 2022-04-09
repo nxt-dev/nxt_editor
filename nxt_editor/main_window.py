@@ -476,7 +476,6 @@ class MainWindow(QtWidgets.QMainWindow):
             model.target_layer_changed.connect(self.update_target_color)
             model.comp_layer_changed.connect(self.update_target_color)
             self.update_target_color()
-            self.update_grid_action()
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
 
@@ -532,16 +531,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """Save the file that corresponds to the currently selected tab."""
         self.nxt.save_file(self.get_current_tab_file_path())
 
-    def save_open_tab_as(self):
-        raise NotImplementedError
-        """Open a QtWidgets.QFileDialog to allow user to select where to save the open tab. Then save."""
-        # Todo: start us in last directory - not C:
-        save_path = QtWidgets.QFileDialog.getSaveFileName(filter="nxt files (*.json *.nxt)", dir="C:")[0]
-        current_tab_path = self.get_current_tab_file_path()
-        self.nxt.save_file(current_tab_path, save_path)
-        new_name = self.open_files[self.open_files_tab_widget.currentIndex()]['stage']._name
-        self.open_files_tab_widget.setTabText(self.open_files_tab_widget.currentIndex(), new_name)
-
     def save_all_layers(self):
         if not self.model:
             return
@@ -554,22 +543,35 @@ class MainWindow(QtWidgets.QMainWindow):
         if not layer:
             return
         if not layer.real_path:
-            self.save_layer_as(layer, open_in_new_tab=False)
+            layer_saved = self.save_layer_as(layer, open_in_new_tab=False)
         else:
             self.set_waiting_cursor(True)
             self.nxt.save_layer(layer)
+            layer_saved = True
             user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = layer.real_path
         self.view.update_filepath()
-        try:
-            self.model.effected_layers.remove(layer.real_path)
-        except KeyError:  # Layer may not have been changed
-            pass
+        if layer_saved:
+            try:
+                self.model.effected_layers.remove(layer.real_path)
+            except KeyError:  # Layer may not have been changed
+                pass
         self.model.layer_saved.emit(layer.real_path)
         self.set_waiting_cursor(False)
 
     def save_layer_as(self, layer=None, open_in_new_tab=True):
+        """Prompt the user to select a save location for a layer.
+
+        If no layer is specified the target layer is used.
+
+        :param layer: path to prompt for, defaults to target layer.
+        :type layer: nxt_layer.SpecLayer, optional
+        :param open_in_new_tab: If True, open the layer in a new tab after save
+        :type start: str, optional
+        :return: True if save was successful, false otherwise.
+        :rtype: bool
+        """
         if not layer:
-            layer = self.model.display_layer
+            layer = self.model.target_layer
         old_real_path = layer.real_path
         old_path = layer.filepath
         if not old_real_path:
@@ -581,7 +583,7 @@ class MainWindow(QtWidgets.QMainWindow):
         save_path = NxtFileDialog.system_file_dialog(base_dir, 'save',
                                                      caption=caption)
         if not save_path:
-            return
+            return False
         self.set_waiting_cursor(True)
         self.nxt.save_layer(layer, filepath=save_path)
         user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = layer.real_path
@@ -595,6 +597,7 @@ class MainWindow(QtWidgets.QMainWindow):
         tab_idx = self.open_files_tab_widget.currentIndex()
         self.on_tab_change(tab_idx)
         self.set_waiting_cursor(False)
+        return True
 
     def open_source(self, layer):
         if not layer:
@@ -708,7 +711,9 @@ class MainWindow(QtWidgets.QMainWindow):
             logger.debug("Successfully set up new tab.")
             self.last_focused_tab = tab_index
             self.update_implicit_action()
-            self.update_grid_action()
+            view.toggle_grid(
+                user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_GRID, True)
+            )
             model.destroy_cmd_port.connect(self.update_cmd_port_action)
         else:
             logger.critical("Failed to set up new tab.")
@@ -746,11 +751,6 @@ class MainWindow(QtWidgets.QMainWindow):
             state = False
         self.execute_actions.enable_cmd_port_action.setChecked(state)
         self.execute_actions.enable_cmd_port_action.blockSignals(False)
-
-    def update_grid_action(self):
-        self.view_actions.grid_action.blockSignals(True)
-        self.view_actions.grid_action.setChecked(self.model.show_grid)
-        self.view_actions.grid_action.blockSignals(False)
 
     def update_implicit_action(self):
         self.view_actions.implicit_action.blockSignals(True)
@@ -1227,7 +1227,7 @@ class MenuBar(QtWidgets.QMenuBar):
             return
         widget = action.data()
         tab_index = self.main_window.open_files_tab_widget.indexOf(widget)
-        if tab_index is not -1:
+        if tab_index != -1:
             self.main_window.open_files_tab_widget.setCurrentIndex(tab_index)
             return
         if action.isChecked():

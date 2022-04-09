@@ -38,7 +38,8 @@ class StringSignaler(QtCore.QObject):
 def make_resources(qrc_path=None, result_path=None):
     import PySide2
     pyside_dir = os.path.dirname(PySide2.__file__)
-    full_rcc_path = os.path.join(pyside_dir, 'pyside2-rcc')
+    full_pyside2rcc_path = os.path.join(pyside_dir, 'pyside2-rcc')
+    full_rcc_path = os.path.join(pyside_dir, 'rcc')
     this_dir = os.path.dirname(os.path.realpath(__file__))
     if not qrc_path:
         qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
@@ -59,17 +60,26 @@ def make_resources(qrc_path=None, result_path=None):
         return
 
     try:
-        subprocess.check_call([full_rcc_path] + args)
+        subprocess.check_call([full_pyside2rcc_path] + args)
     except:
         pass
     else:
         return
-
     try:
-        subprocess.check_call(['rcc', '-g', 'python', qrc_path, result_path])
+        subprocess.check_call([full_rcc_path, '-g', 'python', qrc_path,
+                               '-o', result_path], cwd=pyside_dir)
     except:
-        raise Exception("Cannot find pyside2 rcc to generate UI resources."
-                        " Reinstalling pyside2 may fix the problem.")
+        pass
+    else:
+        return
+    try:
+        subprocess.check_call(['rcc', '-g', 'python', qrc_path,
+                               '-o', result_path], cwd=pyside_dir)
+    except:
+        raise Exception("Failed to generate UI resources using pyside2 rcc!"
+                        " Reinstalling pyside2 may fix the problem. If you "
+                        "know how to use rcc please build from: \"{}\" and "
+                        "output to \"{}\"".format(qrc_path, result_path))
     else:
         return
 
@@ -82,11 +92,16 @@ except ImportError:
 
 
 def _new_qapp():
-    app = QtWidgets.QApplication
+    app = QtWidgets.QApplication.instance()
+    create_new = False
+    if not app:
+        app = QtWidgets.QApplication
+        app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
+        create_new = True
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-    app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling, True)
     app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
-    app = app(sys.argv)
+    if create_new:
+        app = app(sys.argv)
     style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
     style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
     stream = QtCore.QTextStream(style_file)

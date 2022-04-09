@@ -6,16 +6,10 @@ branches:
 python:
   - "3.7"
 
-services:
-    - xvfb
-
-env:
-    - QT_CI_PACKAGES=qt.qt5.5132.gcc_64,qt.qt5.5132.qtwebengine PATH="$TRAVIS_BUILD_DIR/Qt/5.13.2/gcc_64/bin:${PATH}"
-
 before_install:
   - |
     if [ "$TRAVIS_BRANCH" = "dev" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
-        echo "Push to dev, not running tests until PR"
+        echo "Push to dev, not running until push to release"
         exit 0
     else
       echo "Doing the build"
@@ -24,20 +18,13 @@ before_install:
 install:
   - cd ..
   - git clone https://github.com/nxt-dev/nxt.git
-  - pip install ./nxt_editor
   - pip install importlib-metadata==3.4
-  - pip install twine
-  - sudo apt-get install -y libxkbcommon-x11-0
-  - sudo apt-get install -y libgl1-mesa-dev
+  - pip install ./nxt_editor
 
 script:
   - |
-    if [ "$TRAVIS_BRANCH" = "release" ] && [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
-          python -m nxt.cli test
-          exit $?
-    fi
-  - |
     if [ "$TRAVIS_BRANCH" = "release" ] && [ "$TRAVIS_EVENT_TYPE" = "push" ]; then
+          pip install twine
           python -m nxt.cli exec nxt_editor/build/packaging.nxt -s /make_and_upload
           exit $?
     fi
