@@ -22,7 +22,6 @@ install:
   - pip install importlib-metadata==3.4
   - pip install ./nxt_editor
   - pip install twine
-  - sudo apt install libxkbcommon-x11-0
 
 script:
   - |
