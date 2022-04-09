@@ -22,15 +22,12 @@ install:
   - pip install importlib-metadata==3.4
   - pip install ./nxt_editor
   - pip install twine
-  - sudo apt install libxcb-image0
-  - sudo apt install libxcb-keysyms1
-  - sudo apt install libxcb-render-util0
-  - sudo apt install libxcb-xkb1
   - sudo apt install libxkbcommon-x11-0
 
 script:
   - |
     if [ "$TRAVIS_BRANCH" = "release" ] && [ "$TRAVIS_EVENT_TYPE" = "pull_request" ]; then
+          ldd /opt/XnView/lib/platforms/libqxcb.so  | grep "not found"
           python -m nxt.cli test
           exit $?
     fi
