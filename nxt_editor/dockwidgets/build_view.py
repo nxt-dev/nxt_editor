@@ -1,7 +1,6 @@
 # Builtin
 import logging
 import time
-from turtle import color
 
 # External
 from Qt import QtWidgets, QtGui, QtCore
