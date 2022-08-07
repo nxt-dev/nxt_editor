@@ -883,7 +883,14 @@ class Button(QtWidgets.QPushButton):
             attr_name=self.ITEM_LIST_PATH_ATTR,
             layer=None)
 
-        target_node, target_attr = list_path_attr.split('.')
+        try:
+            target_node, target_attr = list_path_attr.split('.')
+        except ValueError:
+            logger.error('You must enter a /valid/node/path.attr in "{}.{}",'
+                         'Invalid: {}'
+                         ''.format(node_path, self.ITEM_LIST_PATH_ATTR,
+                                   list_path_attr))
+            return
         self.stage_model.set_node_attr_value(
             node_path=target_node,
             attr_name=target_attr,
