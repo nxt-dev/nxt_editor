@@ -376,7 +376,8 @@ class SetNodeAttributeData(NxtCommand):
                                                       layer=layer, create=False,
                                                       comp_layer=comp,
                                                       **self.prev_data)
-                if self.attr_name == INTERNAL_ATTRS.INSTANCE_PATH:
+                if self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
+                                      INTERNAL_ATTRS.ENABLED):
                     dirties += result
         if self.attr_name in INTERNAL_ATTRS.ALL:
             dirties += comp.get_node_dirties(self.node_path)
@@ -389,7 +390,8 @@ class SetNodeAttributeData(NxtCommand):
         else:
             if (self.remove_attr or self.created_node_paths or
                     self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
-                                       INTERNAL_ATTRS.PARENT_PATH)):
+                                       INTERNAL_ATTRS.PARENT_PATH,
+                                       INTERNAL_ATTRS.ENABLED)):
                 self.model.nodes_changed.emit(dirties)
             else:
                 self.model.attrs_changed.emit(changed_attrs)
@@ -401,7 +403,7 @@ class SetNodeAttributeData(NxtCommand):
 
     @processing
     def redo(self):
-        start = time.time()
+        # start = time.time()
         created_node = False
         self.prev_selection = self.model.selection
         layer = self.model.lookup_layer(self.layer_path)
@@ -446,16 +448,20 @@ class SetNodeAttributeData(NxtCommand):
                                                              create=True,
                                                              comp_layer=comp,
                                                              **self.data)
-            if self.attr_name == INTERNAL_ATTRS.INSTANCE_PATH:
+            if self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
+                                  INTERNAL_ATTRS.ENABLED):
                 dirties += self.return_value
         if self.attr_name in INTERNAL_ATTRS.ALL:
+            # TODO: Some functions already calculated the dirty nodes,
+            #  do we really need to do it again here?
             dirties += comp.get_node_dirties(self.node_path)
         if self.recomp:
             self.model.update_comp_layer(rebuild=self.recomp)
         else:
             if (self.remove_attr or self.created_node_paths or
                     self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
-                                       INTERNAL_ATTRS.PARENT_PATH)):
+                                       INTERNAL_ATTRS.PARENT_PATH,
+                                       INTERNAL_ATTRS.ENABLED)):
                 self.model.nodes_changed.emit(dirties)
             else:
                 changed_attrs = ()
