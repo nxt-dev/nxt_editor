@@ -25,7 +25,7 @@ nxt_package_name = 'nxt-editor'
 
 bl_info = {
     "name": "NXT Blender",
-    "blender": (3, 0, 0),
+    "blender": (3, 4, 0),
     "version": (0, 3, 0),
     "location": "NXT > Open Editor",
     "wiki_url": "https://nxt-dev.github.io/",
