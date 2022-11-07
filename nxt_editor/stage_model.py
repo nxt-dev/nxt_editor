@@ -207,8 +207,7 @@ class StageModel(QtCore.QObject):
         if node_paths in (None, [], ()):
             node_paths = self.get_selected_nodes()
         self._set_attr_display_state(node_paths, state)
-        # Fixme: Should only redraw the nodes in the selection list
-        self.comp_layer_changed.emit(self.comp_layer)
+        self.nodes_changed.emit(node_paths)
 
     def get_attr_display_state(self, node_path):
         """Gets the attribute display state for a given node path if there is
