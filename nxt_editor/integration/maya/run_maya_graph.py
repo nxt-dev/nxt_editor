@@ -45,6 +45,7 @@ if __name__ == "__main__":
         if args.parameters:
             if isinstance(args.parameters, str):
                 parameters = eval(args.parameters)
-        # print(parameters)
+        # execute the graph
         execute_graph(args.graph_path, parameters=parameters)
+        # uninitialize maya standalone
         standalone.uninitialize()
