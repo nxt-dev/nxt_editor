@@ -22,7 +22,8 @@ parser.add_argument(
     "--parameters",
     help="""The parameters you want to pass to the graph. Parameters are a string representing a 
     dictionary.e.g. {'path/to/node.attr':'value'}""",
-)
+),
+parser.add_argument("-s", "--start_node", help="The path to the nxt nofe inI the graph you want to run.")
 
 # Read arguments from command line
 args = parser.parse_args()
@@ -41,11 +42,17 @@ if __name__ == "__main__":
 
         # make sure you can evaluate the parameters as a dict since it's passed as a string
         parameters = {}
+        #  make sure you can evaluate the start node
+        start_node =  None
         # if there are parameters passed. We make sure they get passed to the graph
         if args.parameters:
             if isinstance(args.parameters, str):
                 parameters = eval(args.parameters)
+        if args.start_node:
+            if isinstance(args.start_node, str):
+                start_node = args.start_node
+                
         # execute the graph
-        execute_graph(args.graph_path, parameters=parameters)
+        execute_graph(args.graph_path, parameters=parameters, start=start_node)
         # uninitialize maya standalone
         standalone.uninitialize()
