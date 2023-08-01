@@ -6,7 +6,7 @@
 #
 # Shell Example:
 # open a shell. Navigate to your bin/mayapy.exe file in your installation of
-# maya. The run: mayapy.exe path/to/this/run_maya_graph.py -g path/to/nxt_graph/you_want_to_run.nxt
+# maya. Then run: mayapy.exe path/to/this/run_maya_graph.py -g path/to/nxt_graph/you_want_to_run.nxt
 #
 
 # command line arguments
