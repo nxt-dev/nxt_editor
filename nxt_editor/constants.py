@@ -20,6 +20,11 @@ class EDITOR_VERSION(object):
     VERSION = VERSION_STR
 
 
+class FONTS(object):
+    DEFAULT_FAMILY = 'RobotoMono-Regular'
+    DEFAULT_SIZE = 10
+
+
 _pref_dir_name = str(EDITOR_VERSION.MAJOR)
 PREF_DIR = os.path.join(USER_DIR, 'prefs', _pref_dir_name)
 

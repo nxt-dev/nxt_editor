@@ -80,7 +80,8 @@ class CodeEditor(DockWidgetBase):
                                              pixmap_hover=':icons/icons/pencil_hover.png',
                                              pixmap_pressed=':icons/icons/pencil.png',
                                              size=16,
-                                             parent=self.details_frame)
+                                             parent=self.details_frame,
+                                             resize_signal=self.main_window.font_size_changed)
         self.name_edit_button.pressed.connect(self.name_label.edit_text)
         self.name_layout.addWidget(self.name_edit_button, 0, QtCore.Qt.AlignLeft)
 
@@ -128,13 +129,13 @@ class CodeEditor(DockWidgetBase):
         self.code_layout.addLayout(self.buttons_layout)
 
         # copy resolved code button
-        self.copy_resolved_button = PixmapButton(pixmap=':icons/icons/copy_resolved_12.png',
-                                                 pixmap_hover=':icons/icons/copy_resolved_hover_12.png',
-                                                 pixmap_pressed=':icons/icons/copy_resolved_hover_12.png',
-                                                 size=12,
-                                                 parent=self.code_frame)
-        self.copy_resolved_button.setFixedWidth(12)
-        self.copy_resolved_button.setFixedHeight(12)
+        self.copy_resolved_button = PixmapButton(
+            pixmap=':icons/icons/copy_resolved_12.png',
+            pixmap_hover=':icons/icons/copy_resolved_hover_12.png',
+            pixmap_pressed=':icons/icons/copy_resolved_hover_12.png',
+            size=12,
+            parent=self.code_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.copy_resolved_button.setToolTip('Copy Resolved')
         self.copy_resolved_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.copy_resolved_button.clicked.connect(self.copy_resolved)
@@ -143,17 +144,17 @@ class CodeEditor(DockWidgetBase):
         # TODO: Add copy cached button?
 
         # display format characters
-        self.format_button = PixmapButton(pixmap=':icons/icons/paragraph_off_12.png',
-                                          pixmap_hover=':icons/icons/paragraph_off_hover_12.png',
-                                          pixmap_pressed=':icons/icons/paragraph_on_hover_12.png',
-                                          pixmap_checked=':icons/icons/paragraph_on_12.png',
-                                          pixmap_checked_hover=':icons/icons/paragraph_on_hover_12.png',
-                                          pixmap_checked_pressed=':icons/icons/paragraph_off_hover_12.png',
-                                          checkable=True,
-                                          size=12,
-                                          parent=self.code_frame)
-        self.format_button.setFixedWidth(12)
-        self.format_button.setFixedHeight(12)
+        self.format_button = PixmapButton(
+            pixmap=':icons/icons/paragraph_off_12.png',
+            pixmap_hover=':icons/icons/paragraph_off_hover_12.png',
+            pixmap_pressed=':icons/icons/paragraph_on_hover_12.png',
+            pixmap_checked=':icons/icons/paragraph_on_12.png',
+            pixmap_checked_hover=':icons/icons/paragraph_on_hover_12.png',
+            pixmap_checked_pressed=':icons/icons/paragraph_off_hover_12.png',
+            checkable=True,
+            size=12,
+            parent=self.code_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.format_button.setToolTip('Show Non-Printing Characters')
         self.format_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.format_button.toggled.connect(lambda: self.edit_format_characters(not self.editor.format_characters_on))
@@ -168,7 +169,8 @@ class CodeEditor(DockWidgetBase):
                                           pixmap_hover=':icons/icons/accept_hover.png',
                                           pixmap_pressed=':icons/icons/accept_pressed.png',
                                           size=12,
-                                          parent=self.code_frame)
+                                          parent=self.code_frame,
+                                          resize_signal=self.main_window.font_size_changed)
         self.accept_button.setToolTip('Accept Edit')
         self.accept_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.accept_button.clicked.connect(self.accept_edit)
@@ -180,7 +182,8 @@ class CodeEditor(DockWidgetBase):
                                           pixmap_hover=':icons/icons/cancel_hover.png',
                                           pixmap_pressed=':icons/icons/cancel_pressed.png',
                                           size=12,
-                                          parent=self.code_frame)
+                                          parent=self.code_frame,
+                                          resize_signal=self.main_window.font_size_changed)
         self.cancel_button.setToolTip('Cancel Edit')
         self.cancel_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.cancel_button.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -189,11 +192,13 @@ class CodeEditor(DockWidgetBase):
                                       QtCore.Qt.AlignRight)
 
         # remove code button
-        self.revert_code_button = PixmapButton(pixmap=':icons/icons/delete.png',
-                                               pixmap_hover=':icons/icons/delete_hover.png',
-                                               pixmap_pressed=':icons/icons/delete_pressed.png',
-                                               size=12,
-                                               parent=self.code_frame)
+        self.revert_code_button = PixmapButton(
+            pixmap=':icons/icons/delete.png',
+            pixmap_hover=':icons/icons/delete_hover.png',
+            pixmap_pressed=':icons/icons/delete_pressed.png',
+            size=12,
+            parent=self.code_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.revert_code_button.setToolTip('Remove Compute')
         self.revert_code_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.revert_code_button.clicked.connect(self.revert_code)
