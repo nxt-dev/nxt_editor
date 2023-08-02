@@ -138,7 +138,6 @@ class PropertyEditor(DockWidgetBase):
         self.properties_layout.addLayout(self.name_layout)
 
         self.name_label = LabelEdit(parent=self)
-        self.name_label.setFont(QtGui.QFont("Roboto", 14))
         self.name_label.nameChangeRequested.connect(self.edit_name)
         self.name_layout.addWidget(self.name_label, 0, QtCore.Qt.AlignLeft)
 
@@ -146,7 +145,8 @@ class PropertyEditor(DockWidgetBase):
                                              pixmap_hover=':icons/icons/pencil_hover.png',
                                              pixmap_pressed=':icons/icons/pencil.png',
                                              size=16,
-                                             parent=self)
+                                             parent=self,
+                                             resize_signal=self.main_window.font_size_changed)
         self.name_edit_button.pressed.connect(self.name_label.edit_text)
         self.name_layout.addWidget(self.name_edit_button, 0, QtCore.Qt.AlignLeft)
 
@@ -165,7 +165,6 @@ class PropertyEditor(DockWidgetBase):
         self.path_field = QtWidgets.QLineEdit(parent=self)
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.path_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #323232')
-        self.path_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.path_field.setReadOnly(True)
         self.details_layout.addWidget(self.path_field, 0, 1)
@@ -179,7 +178,6 @@ class PropertyEditor(DockWidgetBase):
 
         self.instance_field = LineEdit(parent=self)
         self.instance_field.focus_changed.connect(self.focus_instance_field)
-        self.instance_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.instance_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.instance_field.editingFinished.connect(self.edit_instance)
         self.instance_layout.addWidget(self.instance_field, 0, 0)
@@ -192,11 +190,13 @@ class PropertyEditor(DockWidgetBase):
         self.instance_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.instance_field.customContextMenuRequested.connect(self.instance_context_menu)
 
-        self.locate_instance_button = PixmapButton(pixmap=':icons/icons/locate_off.png',
-                                                   pixmap_hover=':icons/icons/locate_on_hover.png',
-                                                   pixmap_pressed=':icons/icons/locate_on_pressed.png',
-                                                   size=16,
-                                                   parent=self.properties_frame)
+        self.locate_instance_button = PixmapButton(
+            pixmap=':icons/icons/locate_off.png',
+            pixmap_hover=':icons/icons/locate_on_hover.png',
+            pixmap_pressed=':icons/icons/locate_on_pressed.png',
+            size=16,
+            parent=self.properties_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.locate_instance_button.setToolTip('Locate Instance')
         self.locate_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.locate_instance_button.setFixedWidth(17)
@@ -205,11 +205,13 @@ class PropertyEditor(DockWidgetBase):
         self.instance_layout.addWidget(self.locate_instance_button, 0, 1)
         self.instance_opinions = OpinionDots(self, 'Instance Opinions')
         self.instance_layout.addWidget(self.instance_opinions, 0, 2)
-        self.revert_instance_button = PixmapButton(pixmap=':icons/icons/delete.png',
-                                                   pixmap_hover=':icons/icons/delete_hover.png',
-                                                   pixmap_pressed=':icons/icons/delete_pressed.png',
-                                                   size=12,
-                                                   parent=self.properties_frame)
+        self.revert_instance_button = PixmapButton(
+            pixmap=':icons/icons/delete.png',
+            pixmap_hover=':icons/icons/delete_hover.png',
+            pixmap_pressed=':icons/icons/delete_pressed.png',
+            size=12,
+            parent=self.properties_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.revert_instance_button.setToolTip('Revert Instance')
         self.revert_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.revert_instance_button.set_action(self.revert_inst_path_action)
@@ -224,7 +226,6 @@ class PropertyEditor(DockWidgetBase):
 
         self.execute_field = LineEdit(parent=self)
         self.execute_field.setStyleSheet(line_edit_style_factory('white'))
-        self.execute_field.setFont(QtGui.QFont("Roboto Mono", 8))
         self.execute_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.execute_field.editingFinished.connect(self.edit_exec_source)
         self.execute_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -238,11 +239,13 @@ class PropertyEditor(DockWidgetBase):
         self.execute_field.setCompleter(self.execute_field_completer)
         self.execute_opinions = OpinionDots(self, 'Execute Opinions')
         self.execute_layout.addWidget(self.execute_opinions, 0, 1)
-        self.revert_exec_source_button = PixmapButton(pixmap=':icons/icons/delete.png',
-                                                      pixmap_hover=':icons/icons/delete_hover.png',
-                                                      pixmap_pressed=':icons/icons/delete_pressed.png',
-                                                      size=12,
-                                                      parent=self.properties_frame)
+        self.revert_exec_source_button = PixmapButton(
+            pixmap=':icons/icons/delete.png',
+            pixmap_hover=':icons/icons/delete_hover.png',
+            pixmap_pressed=':icons/icons/delete_pressed.png',
+            size=12,
+            parent=self.properties_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.revert_exec_source_button.setToolTip('Revert Execute Source')
         self.revert_exec_source_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.revert_exec_source_button.set_action(self.revert_exec_path_action)
@@ -275,7 +278,8 @@ class PropertyEditor(DockWidgetBase):
             pixmap_hover=':icons/icons/delete_hover.png',
             pixmap_pressed=':icons/icons/delete_pressed.png',
             size=12,
-            parent=self.properties_frame)
+            parent=self.properties_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.revert_child_order_button.setToolTip('Revert Child Order')
         self.revert_child_order_button.setStyleSheet(
             'QToolTip {color: white; border: 1px solid #3E3E3E}')
@@ -284,14 +288,12 @@ class PropertyEditor(DockWidgetBase):
 
         # position
         self.position_label = QtWidgets.QLabel('Position', parent=self)
-        self.position_label.setMaximumWidth(80)
         self.details_layout.addWidget(self.position_label, 4, 0)
 
         self.position_layout = QtWidgets.QHBoxLayout()
         self.details_layout.addLayout(self.position_layout, 4, 1)
 
         self.positionX_field = NodePositionSpinbox(parent=self)
-        self.positionX_field.setFixedWidth(80)
         self.positionX_field.setAlignment(QtCore.Qt.AlignRight)
         self.positionX_field.setSingleStep(1)
         self.positionX_field.setMaximum(10000)
@@ -301,15 +303,17 @@ class PropertyEditor(DockWidgetBase):
         self.position_layout.addWidget(self.positionX_field, 0, QtCore.Qt.AlignLeft)
 
         self.positionY_field = NodePositionSpinbox(parent=self)
-        self.positionY_field.setFixedWidth(80)
         self.positionY_field.setAlignment(QtCore.Qt.AlignRight)
         self.positionY_field.setSingleStep(1)
         self.positionY_field.setMaximum(10000)
         self.positionY_field.setMinimum(-10000)
         self.positionY_field.stepChanged.connect(self.edit_position)
         self.positionY_field.editingFinished.connect(self.edit_position)
-        self.position_layout.addWidget(self.positionY_field, 0, QtCore.Qt.AlignLeft)
-
+        self.position_layout.addWidget(self.positionY_field, 0,
+                                       QtCore.Qt.AlignLeft)
+        spacer = QtWidgets.QSpacerItem(10, 0, QtWidgets.QSizePolicy.Expanding,
+                                       QtWidgets.QSizePolicy.Fixed)
+        self.position_layout.addItem(spacer)
         self.enabled_checkbox_label = QtWidgets.QLabel('Enabled: ',
                                                        parent=self)
         self.position_layout.addWidget(self.enabled_checkbox_label, 0,
@@ -323,10 +327,11 @@ class PropertyEditor(DockWidgetBase):
                                        QtCore.Qt.AlignLeft)
         icn = ':icons/icons/'
         self.revert_enabled_button = PixmapButton(pixmap=icn + 'delete.png',
-                                                  pixmap_hover=icn+'delete_hover.png',
-                                                  pixmap_pressed=icn+'delete_pressed.png',
+                                                  pixmap_hover=icn + 'delete_hover.png',
+                                                  pixmap_pressed=icn + 'delete_pressed.png',
                                                   size=12,
-                                                  parent=self.properties_frame)
+                                                  parent=self.properties_frame,
+                                                  resize_signal=self.main_window.font_size_changed)
         self.revert_enabled_button.setToolTip('Revert Enabled State')
         self.revert_enabled_button.setStyleSheet('QToolTip {color: white; '
                                           'order: 1px solid #3E3E3E'
@@ -334,9 +339,6 @@ class PropertyEditor(DockWidgetBase):
         self.revert_enabled_button.clicked.connect(self.revert_node_enabled)
         self.position_layout.addWidget(self.revert_enabled_button, 0,
                                        QtCore.Qt.AlignLeft)
-
-        self.position_layout.addStretch()
-
         # comment
         self.comment_label = QtWidgets.QLabel('Comment')
         self.details_layout.addWidget(self.comment_label, 5, 0)
@@ -353,11 +355,13 @@ class PropertyEditor(DockWidgetBase):
         self.comment_layout.addWidget(self.comment_field, 0, 0)
         self.comment_opinions = OpinionDots(self, 'Comment Opinions', vertical=True)
         self.comment_layout.addWidget(self.comment_opinions, 0, 1)
-        self.revert_comment_button = PixmapButton(pixmap=':icons/icons/delete.png',
-                                                  pixmap_hover=':icons/icons/delete_hover.png',
-                                                  pixmap_pressed=':icons/icons/delete_pressed.png',
-                                                  size=12,
-                                                  parent=self.properties_frame)
+        self.revert_comment_button = PixmapButton(
+            pixmap=':icons/icons/delete.png',
+            pixmap_hover=':icons/icons/delete_hover.png',
+            pixmap_pressed=':icons/icons/delete_pressed.png',
+            size=12,
+            parent=self.properties_frame,
+            resize_signal=self.main_window.font_size_changed)
         self.revert_comment_button.setToolTip('Revert Comment')
         self.revert_comment_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
         self.revert_comment_button.clicked.connect(self.remove_comment)
@@ -370,48 +374,6 @@ class PropertyEditor(DockWidgetBase):
         ##################
         # attributes table
         ##################
-        style = '''
-                QTableView {
-                    outline: none;
-                    border-radius: 11px;
-                    border: 1px solid transparent;
-                    font-family: "Roboto Mono";
-                    font-size: 12px
-                }
-
-                QTableView::item {
-                    padding: 3px;
-                }
-
-                QTableView::item:selected:hover {
-                    color: #148CD2;
-                }
-
-                QTableView:item:selected {
-                    background-color: #113343;
-                    color: white;
-                }
-
-                QHeaderView {
-                    border-radius: 8px;
-                    border: 0px solid transparent;
-                }
-
-                QHeaderView::section::horizontal::first {
-                    border-top-left-radius: 6px;
-                }
-
-                QHeaderView::section::horizontal::last {
-                    border-top-right-radius: 6px;
-                }
-
-                QToolTip {
-                    font-family: Roboto Mono;
-                    color: white;
-                    border: 1px solid #3E3E3E
-                }
-                '''
-
         self.attributes_widget = QtWidgets.QWidget(self)
         self.attributes_widget.setStyleSheet('background-color: #232323')
         self.properties_layout.addWidget(self.attributes_widget, 1)
@@ -425,10 +387,9 @@ class PropertyEditor(DockWidgetBase):
         self.table_view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.table_view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked)
         self.table_view.setSortingEnabled(True)
-        self.table_view.setStyleSheet(style)
-        self.table_view.verticalHeader().setMinimumSectionSize(12)
         self.table_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.table_view.customContextMenuRequested.connect(self.custom_context_menu)
+        self.table_view.customContextMenuRequested.connect(
+            self.custom_context_menu)
         self.attributes_layout.addWidget(self.table_view, 1)
 
         self.attributes_layout.addStretch()
@@ -454,7 +415,8 @@ class PropertyEditor(DockWidgetBase):
         self.proxy_model.setSourceModel(self.model)
 
         self.table_view.setModel(self.proxy_model)
-        self.table_view.selectionModel().selectionChanged.connect(self.set_selection)
+        self.table_view.selectionModel().selectionChanged.connect(
+            self.set_selection)
 
         # add remove row
         self.property_options_layout = QtWidgets.QHBoxLayout()
@@ -469,8 +431,8 @@ class PropertyEditor(DockWidgetBase):
                                             pixmap_hover=':icons/icons/plus_hover.png',
                                             pixmap_pressed=':icons/icons/plus_hover.png',
                                             size=10,
-                                            parent=self.properties_frame)
-        self.add_attr_button.setFixedWidth(10)
+                                            parent=self.properties_frame,
+                                            resize_signal=self.main_window.font_size_changed)
         self.add_attr_button.set_action(self.add_attr_action)
         self.property_options_layout.addWidget(self.add_attr_button)
         # Remove attr button
@@ -478,8 +440,8 @@ class PropertyEditor(DockWidgetBase):
                                                pixmap_hover=':icons/icons/minus_hover.png',
                                                pixmap_pressed=':icons/icons/minus_hover.png',
                                                size=10,
-                                               parent=self.properties_frame)
-        self.remove_attr_button.setFixedWidth(10)
+                                               parent=self.properties_frame,
+                                               resize_signal=self.main_window.font_size_changed)
         self.remove_attr_button.set_action(self.remove_attr_action)
         self.property_options_layout.addWidget(self.remove_attr_button)
 
@@ -1485,6 +1447,47 @@ class PropertyModel(QtCore.QAbstractTableModel):
 class AttrsTableView(QtWidgets.QTableView):
     def __init__(self, parent=None):
         super(AttrsTableView, self).__init__(parent=parent)
+        style = '''
+                        QTableView {
+                            outline: none;
+                            border-radius: 11px;
+                            border: 1px solid transparent;
+                        }
+
+                        QTableView::item {
+                            padding: 3px;
+                        }
+
+                        QTableView::item:selected:hover {
+                            color: #148CD2;
+                        }
+
+                        QTableView:item:selected {
+                            background-color: #113343;
+                            color: white;
+                        }
+
+                        QHeaderView {
+                            border-radius: 8px;
+                            border: 0px solid transparent;
+                        }
+
+                        QHeaderView::section::horizontal::first {
+                            border-top-left-radius: 6px;
+                        }
+
+                        QHeaderView::section::horizontal::last {
+                            border-top-right-radius: 6px;
+                        }
+
+                        QToolTip {
+                            font-family: Roboto Mono;
+                            color: white;
+                            border: 1px solid #3E3E3E
+                        }
+                        '''
+        self.setStyleSheet(style)
+        self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
         self.setItemDelegateForColumn(COLUMNS.source, self.node_path_delegate)
         self.mouse_pressed = False

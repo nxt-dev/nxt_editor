@@ -442,7 +442,9 @@ class NodeGraphicsItem(graphic_type):
             # draw error
             if self.error_list:
                 pos = QtCore.QPointF(self.max_width-45, self.title_rect_height/4)
-                error_item = ErrorItem(font=QtGui.QFont('Roboto', 16, 75),
+                font_size = user_prefs.get(USER_PREF.FONT_SIZE, 16)
+                error_item = ErrorItem(font=QtGui.QFont('Roboto',
+                                                        font_size, 75),
                                        pos=pos, text='!')
                 error_item.setParentItem(self)
                 error_item.setZValue(50)

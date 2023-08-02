@@ -423,7 +423,29 @@ class AppActions(NxtActionContainer):
         self.toggle_ding_action.setShortcutContext(context)
         self.available_without_model.append(self.toggle_ding_action)
 
-        self.action_display_order = [self.find_node_action,
+        # Font size actions
+        self.increase_font_size_action = NxtAction(text='Increase Font '
+                                                        'Size', parent=self)
+        self.increase_font_size_action.setShortcut('Ctrl+=')
+        self.increase_font_size_action.setShortcutContext(context)
+        self.increase_font_size_action.setAutoRepeat(False)
+        #  Decrease font size action
+        self.decrease_font_size_action = NxtAction(text='Decrease Font Size',
+                                                   parent=self)
+        self.decrease_font_size_action.setShortcut('Ctrl+-')
+        self.decrease_font_size_action.setShortcutContext(context)
+        self.decrease_font_size_action.setAutoRepeat(False)
+        # Reset font size action
+        self.reset_font_size_action = NxtAction(text='Reset Font Size',
+                                                parent=self)
+        self.reset_font_size_action.setShortcut('Ctrl+0')
+        self.reset_font_size_action.setShortcutContext(context)
+        self.reset_font_size_action.setAutoRepeat(False)
+
+        self.action_display_order = [self.increase_font_size_action,
+                                     self.decrease_font_size_action,
+                                     self.reset_font_size_action,
+                                     self.find_node_action,
                                      self.new_graph_action,
                                      self.open_file_action, self.undo_action,
                                      self.redo_action,

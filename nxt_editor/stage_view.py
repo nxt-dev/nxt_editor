@@ -150,7 +150,6 @@ class StageView(QtWidgets.QGraphicsView):
 
         # filepath HUD
         self.filepath_label = HUDItem(text=None)
-        self.filepath_label.setFont(QtGui.QFont("Roboto Mono", 8))
         self.filepath_label.setAlignment(QtCore.Qt.AlignLeft |
                                          QtCore.Qt.AlignTop)
         self.update_filepath()
@@ -158,13 +157,11 @@ class StageView(QtWidgets.QGraphicsView):
 
         # resolved HUD
         self.resolved_label = HUDItem(text='resolved', fade_time=1000)
-        self.resolved_label.setFont(QtGui.QFont("Roboto", 12, weight=75))
         self.resolved_label.setAlignment(QtCore.Qt.AlignRight |
                                          QtCore.Qt.AlignTop)
         self.hud_layout.addWidget(self.resolved_label, 0, 3)
 
-        self.fps_label = HUDItem(text='resolved', fade_time=0)
-        self.fps_label.setFont(QtGui.QFont("Roboto", 12, weight=75))
+        self.fps_label = HUDItem(text='fps', fade_time=0)
         self.fps_label.setAlignment(QtCore.Qt.AlignRight |
                                     QtCore.Qt.AlignBottom)
         if user_prefs.get(USER_PREF.FPS, True):

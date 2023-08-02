@@ -76,6 +76,7 @@ class USER_PREF():
     SHOW_CE_DATA_STATE = 'show_code_editor_data_state'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
+    FONT_SIZE = 'font_size'
 
 
 class EDITOR_CACHE():
