@@ -18,7 +18,7 @@ from Qt import QtCore
 import nxt_editor
 from nxt_editor import user_dir
 from nxt.session import Session
-from nxt_editor.constants import EDITOR_VERSION
+from nxt_editor.constants import EDITOR_VERSION, FONTS
 from nxt_editor.stage_view import StageView
 from nxt_editor.stage_model import StageModel
 from nxt_editor.dockwidgets import (DockWidgetBase, CodeEditor, PropertyEditor,
@@ -49,6 +49,7 @@ class MainWindow(QtWidgets.QMainWindow):
     tab_changed = QtCore.Signal()
     close_signal = QtCore.Signal()
     new_log_signal = QtCore.Signal(logging.LogRecord)
+    font_size_changed = QtCore.Signal(int)
 
     def __init__(self, filepath=None, parent=None, start_rpc=True):
         """Create NXT window.
@@ -156,13 +157,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # CODE EDITOR ACTIONS
         self.code_editor_actions = actions.CodeEditorActions(self)
         # TOOL BARS
-        self.authoring_toolbar = NodeAuthoringToolBar(self)
+        self.authoring_toolbar = NodeAuthoringToolBar(self,
+                                                      self.font_size_changed)
         self.addToolBar(self.authoring_toolbar)
-        self.execute_toolbar = ExecuteToolBar(self)
+        self.execute_toolbar = ExecuteToolBar(self, self.font_size_changed)
         self.addToolBar(self.execute_toolbar)
-        self.display_toolbar = DisplayToolBar(self)
+        self.display_toolbar = DisplayToolBar(self, self.font_size_changed)
         self.addToolBar(self.display_toolbar)
-        self.align_distribute_toolbar = AlignDistributeToolBar(self)
+        self.align_distribute_toolbar = AlignDistributeToolBar(self,
+                                                               self.font_size_changed)
         self.addToolBar(self.align_distribute_toolbar)
         # TABS WIDGET
         self.open_files_tab_widget = OpenFilesTabWidget(parent=self)
@@ -258,6 +261,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rpc_log_tail = None
         if start_rpc:
             self.startup_rpc_server(join=False)
+        self.splash_screen.showMessage('Restoring \nfont \nsize...',
+                                       QtCore.Qt.AlignCenter,
+                                       QtCore.Qt.white)
+        self.restore_font_size()
         # Should this be a signal? Like Startup done, now you can refresh?
         self.splash_screen.finish(self)
         self.in_startup = False
@@ -349,6 +356,59 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
         else:
             QtWidgets.QApplication.restoreOverrideCursor()
+
+    def increase_font_size(self):
+        self._change_font_size(1)
+
+    def decrease_font_size(self):
+        self._change_font_size(-1)
+
+    def _change_font_size(self, delta, absolute=False, save=True):
+        app = QtWidgets.QApplication.instance()
+        if absolute:
+            font_size = delta
+        else:
+            font_size = app.font().pointSize() + delta
+            self.font_size_changed.emit(delta)
+        if save:
+            user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
+        font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
+        app.setFont(font)
+
+        widgets_with_fonts = ["QMenuBar", "QTabWidget", "QMenu", "QTableView",
+                              "QLineEdit", "QComboBox", "QLabel",
+                              "QPushButton", "QTextEdit", "QWidget",
+                              "QListWidget", "QTabelWidget", "QTreeWidget",
+                              "QSpinBox", "QDoubleSpinBox", "QCheckBox"]
+        for widget in widgets_with_fonts:
+            app.setFont(font, widget)
+
+        new_cb_stylesheet = '''
+QCheckBox::indicator {
+    margin-left: 4px;
+    width: %spx;
+    height: %spx;
+}
+                    ''' % (font_size * 1.5, font_size * 1.5)
+        # List all checkboxes and update their style sheet.
+        for widget in QtWidgets.QApplication.allWidgets():
+            if isinstance(widget, QtWidgets.QCheckBox):
+                widget.setStyleSheet(new_cb_stylesheet)
+
+    def restore_font_size(self):
+        user_pref_size = user_dir.user_prefs.get(user_dir.USER_PREF.FONT_SIZE,
+                                                 FONTS.DEFAULT_SIZE)
+        if user_pref_size > FONTS.DEFAULT_SIZE:
+            self.font_size_changed.emit(user_pref_size - FONTS.DEFAULT_SIZE)
+        elif user_pref_size < FONTS.DEFAULT_SIZE:
+            self.font_size_changed.emit(FONTS.DEFAULT_SIZE - user_pref_size)
+        self._change_font_size(user_pref_size, absolute=True, save=False)
+
+    def reset_font_size(self):
+        self._change_font_size(FONTS.DEFAULT_SIZE, absolute=True, save=False)
+        user_dir.user_prefs.pop(user_dir.USER_PREF.FONT_SIZE)
+        self.font_size_changed.emit(0)
+
 
     @staticmethod
     def create_remote_context(place_holder_text='',
@@ -904,16 +964,41 @@ class MainWindow(QtWidgets.QMainWindow):
 
 class ToolBar(QtWidgets.QToolBar):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, resize_signal=None):
         super(ToolBar, self).__init__(parent=parent)
-        self.setFixedHeight(32)
-        self.setIconSize(QtCore.QSize(19, 19))
+        # self.setFixedHeight(32)
+        self.default_size = 19
+        self.size = self.default_size
+        self.setIconSize(QtCore.QSize(self.default_size, self.default_size))
+        if resize_signal:
+            resize_signal.connect(self.font_size_changed)
+
+    def font_size_changed(self, delta):
+
+        if delta == 0:
+            self.size = self.default_size
+        else:
+            self.size = self.size + delta
+        for action in self.actions():
+            icon = action.icon()
+            if icon.isNull():
+                continue
+            pixmap = icon.pixmap(self.size)
+            new_pixmap = pixmap.scaled(QtCore.QSize(self.size, self.size),
+                                       QtCore.Qt.IgnoreAspectRatio,
+                                       QtCore.Qt.SmoothTransformation)
+
+            action.setIcon(QtGui.QIcon(new_pixmap))
+
+        self.setIconSize(QtCore.QSize(self.size, self.size))
+        self.update()
 
 
 class NodeAuthoringToolBar(ToolBar):
 
-    def __init__(self, parent=None):
-        super(NodeAuthoringToolBar, self).__init__(parent=parent)
+    def __init__(self, parent=None, resize_signal=None):
+        super(NodeAuthoringToolBar, self).__init__(parent=parent,
+                                                   resize_signal=resize_signal)
         self.setObjectName('Node Authoring')
         self.main_window = parent
         self.node_actions = self.main_window.node_actions
@@ -955,8 +1040,9 @@ class NodeAuthoringToolBar(ToolBar):
 
 class AlignDistributeToolBar(ToolBar):
 
-    def __init__(self, parent=None):
-        super(AlignDistributeToolBar, self).__init__(parent=parent)
+    def __init__(self, parent=None, resize_signal=None):
+        super(AlignDistributeToolBar, self).__init__(parent=parent,
+                                                     resize_signal=resize_signal)
         self.setObjectName('Alignment Tools')
         self.main_window = parent
         # ACTIONS
@@ -965,8 +1051,9 @@ class AlignDistributeToolBar(ToolBar):
 
 class ExecuteToolBar(ToolBar):
 
-    def __init__(self, parent=None):
-        super(ExecuteToolBar, self).__init__(parent=parent)
+    def __init__(self, parent=None, resize_signal=None):
+        super(ExecuteToolBar, self).__init__(parent=parent,
+                                             resize_signal=resize_signal)
         self.setObjectName('Execute Tools')
         self.main_window = parent
         self.exec_actions = self.main_window.execute_actions
@@ -987,8 +1074,9 @@ class ExecuteToolBar(ToolBar):
 
 class DisplayToolBar(ToolBar):
 
-    def __init__(self, parent=None):
-        super(DisplayToolBar, self).__init__(parent=parent)
+    def __init__(self, parent=None, resize_signal=None):
+        super(DisplayToolBar, self).__init__(parent=parent,
+                                             resize_signal=resize_signal)
         self.setObjectName('Display Tools')
         self.main_window = parent
         self.view_actions = self.main_window.view_actions
@@ -1094,6 +1182,15 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
         self.view_opt_menu.addAction(self.ce_actions.overlay_message_action)
+        self.view_opt_menu.addAction(self.app_actions.increase_font_size_action)
+        self.view_opt_menu.addAction(self.app_actions.decrease_font_size_action)
+        self.view_opt_menu.addAction(self.app_actions.reset_font_size_action)
+        self.app_actions.increase_font_size_action.triggered.connect(
+            self.main_window.increase_font_size)
+        self.app_actions.decrease_font_size_action.triggered.connect(
+            self.main_window.decrease_font_size)
+        self.app_actions.reset_font_size_action.triggered.connect(
+            self.main_window.reset_font_size)
 
         # graph menu
         self.graph_menu = self.addMenu('Graph')
