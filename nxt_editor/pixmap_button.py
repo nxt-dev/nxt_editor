@@ -8,7 +8,7 @@ class PixmapButton(QtWidgets.QAbstractButton):
     """https://stackoverflow.com/questions/2711033/how-code-a-image-button-in-pyqt"""
     def __init__(self, pixmap, pixmap_hover, pixmap_pressed, pixmap_checked=None,
                  pixmap_checked_hover=None, pixmap_checked_pressed=None, size=32, checkable=False,
-                 parent=None):
+                 parent=None, resize_signal=None):
         super(PixmapButton, self).__init__(parent=parent)
         self.pixmap = pixmap
         self.pixmap_hover = pixmap_hover
@@ -17,6 +17,7 @@ class PixmapButton(QtWidgets.QAbstractButton):
         self.pixmap_checked_hover = pixmap_checked_hover
         self.pixmap_checked_pressed = pixmap_checked_pressed
         self.size = size
+        self.default_size = size
 
         if checkable:
             self.setCheckable(checkable)
@@ -25,6 +26,16 @@ class PixmapButton(QtWidgets.QAbstractButton):
         self.released.connect(self.update)
 
         self.action = None
+        if resize_signal:
+            resize_signal.connect(self.font_size_changed)
+
+    def font_size_changed(self, delta):
+        if delta == 0:
+            self.size = self.default_size
+        else:
+            self.size = self.size + delta
+        self.setIconSize(QtCore.QSize(self.size, self.size))
+        self.update()
 
     def set_action(self, action):
         self.action = action
