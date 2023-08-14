@@ -11,6 +11,44 @@
 
 # command line arguments
 import argparse
+import json
+import os
+
+
+# define the function for the dictionary argument
+def dict_or_string(value={}):
+    """This will ensure the data being passed to the argparse for parameters
+    is always a dictionary. We expect a json string, a dictionary, or a path to
+    a json file
+
+    :param value: The parameters you want to pass to the graph, defaults to {}
+    :type value: dict | str, optional
+    :raises TypeError: Error if it's not a str that is json or dict
+    :return: Return the dictionary of the data being passed as str or dict
+    :rtype: dict
+    """
+    # check see if it's a dictionary.
+    if isinstance(value, dict):
+        return value
+    try:
+        # Try parsing as a dictionary
+        parsed_dict = json.loads(value)
+        if isinstance(parsed_dict, dict):
+            return parsed_dict
+    except ValueError:
+        pass
+    # Check if value string is a valid parameters file
+    if os.path.isfile(value):
+        try:
+            # open the filepath and load the json file
+            with open(value, "r") as fp:
+                return json.load(fp)
+        except json.JSONDecodeError:
+            pass
+    raise TypeError(
+        "Passed value must be of type dict, string of a dict, or filepath to parameters file!"
+    )
+
 
 # Initialize parser
 parser = argparse.ArgumentParser(description="This is a cli for running the standalone maya")
@@ -24,6 +62,7 @@ parser.add_argument(
     "--parameters",
     help="""The parameters you want to pass to the graph. Parameters are a string representing a 
     dictionary.e.g. {'path/to/node.attr':'value'}""",
+    type=dict_or_string,
 ),
 parser.add_argument(
     "-s", "--start_node", help="The path to the nxt node init the graph you want to run."
@@ -45,12 +84,9 @@ if __name__ == "__main__":
 
     # make sure you can evaluate the parameters as a dict since it's passed as a string
     parameters = {}
+
     #  make sure you can evaluate the start node
     start_node = None
-    # if there are parameters passed. We make sure they get passed to the graph
-    if args.parameters:
-        if isinstance(args.parameters, str):
-            parameters = eval(args.parameters)
     if args.start_node:
         if isinstance(args.start_node, str):
             start_node = args.start_node
