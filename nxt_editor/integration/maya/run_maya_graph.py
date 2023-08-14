@@ -16,7 +16,9 @@ import argparse
 parser = argparse.ArgumentParser(description="This is a cli for running the standalone maya")
 
 # Adding optional argument
-parser.add_argument("-g", "--graph_path", help="The path to the nxt graph you want to run.")
+parser.add_argument(
+    "-g", "--graph_path", help="The path to the nxt graph you want to run.", required=True
+)
 parser.add_argument(
     "-p",
     "--parameters",
@@ -24,7 +26,7 @@ parser.add_argument(
     dictionary.e.g. {'path/to/node.attr':'value'}""",
 ),
 parser.add_argument(
-    "-s", "--start_node", help="The path to the nxt nofe inI the graph you want to run."
+    "-s", "--start_node", help="The path to the nxt node init the graph you want to run."
 )
 
 # Read arguments from command line
@@ -32,29 +34,28 @@ args = parser.parse_args()
 
 
 if __name__ == "__main__":
-    if args.graph_path:
-        # import maya standalone
-        from maya import standalone
+    # import maya standalone
+    from maya import standalone
 
-        # initialize maya standalone
-        standalone.initialize()
+    # initialize maya standalone
+    standalone.initialize()
 
-        # in maya import the execute graph for nxt
-        from nxt import execute_graph
+    # in maya import the execute graph for nxt
+    from nxt import execute_graph
 
-        # make sure you can evaluate the parameters as a dict since it's passed as a string
-        parameters = {}
-        #  make sure you can evaluate the start node
-        start_node = None
-        # if there are parameters passed. We make sure they get passed to the graph
-        if args.parameters:
-            if isinstance(args.parameters, str):
-                parameters = eval(args.parameters)
-        if args.start_node:
-            if isinstance(args.start_node, str):
-                start_node = args.start_node
+    # make sure you can evaluate the parameters as a dict since it's passed as a string
+    parameters = {}
+    #  make sure you can evaluate the start node
+    start_node = None
+    # if there are parameters passed. We make sure they get passed to the graph
+    if args.parameters:
+        if isinstance(args.parameters, str):
+            parameters = eval(args.parameters)
+    if args.start_node:
+        if isinstance(args.start_node, str):
+            start_node = args.start_node
 
-        # execute the graph
-        execute_graph(args.graph_path, parameters=parameters, start=start_node)
-        # uninitialize maya standalone
-        standalone.uninitialize()
+    # execute the graph
+    execute_graph(args.graph_path, parameters=parameters, start=start_node)
+    # uninitialize maya standalone
+    standalone.uninitialize()
