@@ -82,9 +82,6 @@ if __name__ == "__main__":
     # in maya import the execute graph for nxt
     from nxt import execute_graph
 
-    # make sure you can evaluate the parameters as a dict since it's passed as a string
-    parameters = {}
-
     #  make sure you can evaluate the start node
     start_node = None
     if args.start_node:
@@ -92,6 +89,6 @@ if __name__ == "__main__":
             start_node = args.start_node
 
     # execute the graph
-    execute_graph(args.graph_path, parameters=parameters, start=start_node)
+    execute_graph(args.graph_path, parameters=args.parameters, start=start_node)
     # uninitialize maya standalone
     standalone.uninitialize()
