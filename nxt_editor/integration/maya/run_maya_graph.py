@@ -1,7 +1,7 @@
 #!/usr/bin/python
 #
-# Open or reference "sub_graphs" graph in Maya or Standalone and pass an nxt
-# graph, mayapy.exe path and parameters in the "_maya_sub_graph" node, and
+# Open or reference 'sub_graphs' graph in Maya or Standalone and pass an nxt
+# graph, mayapy.exe path and parameters in the '_maya_sub_graph' node, and
 # this will run that graph in maya standalone
 #
 # Shell Example:
