@@ -5,7 +5,8 @@ import json
 # Internal
 from nxt.constants import USER_DIR
 
-version_file = os.path.join(os.path.dirname(__file__), 'version.json')
+EDITOR_DIR = os.path.dirname(__file__)
+version_file = os.path.join(EDITOR_DIR, 'version.json')
 
 
 class EDITOR_VERSION(object):
