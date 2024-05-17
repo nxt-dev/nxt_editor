@@ -1353,7 +1353,7 @@ class MenuBar(QtWidgets.QMenuBar):
         try:
             log_dir = nxt_log.LOG_DIR
         except AttributeError:
-            # Guess the log dif if nxt core is old.
+            # Guess the log dir if nxt core is old.
             log_dir = os.path.join(tempfile.gettempdir(), 'nxt_logs')
         QtGui.QDesktopServices.openUrl(
             QtCore.QUrl.fromLocalFile(log_dir)
