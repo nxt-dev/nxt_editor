@@ -1,7 +1,7 @@
 <div align="center">
 
-![Release Status](https://github.com/nxt-dev/nxt_editor_test/actions/workflows/release.yml/badge.svg?branch=release)
-![Dev Status](https://github.com/nxt-dev/nxt_editor_test/actions/workflows/unittests.yml/badge.svg?branch=dev)
+![Release Status](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml/badge.svg?branch=release)
+![Dev Status](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)
 # NXT Editor
 
 </div>
