@@ -546,9 +546,9 @@ class PropertyEditor(DockWidgetBase):
                 order = QtCore.Qt.DescendingOrder
             col = self.user_sort_pref['column']
             if self.model.rowCount(self):
-                self.model.horizontal_header.blockSignals(True)
-                self.model.horizontal_header.setSortIndicator(col, order)
-                self.model.horizontal_header.blockSignals(False)
+                self.table_view.horizontalHeader().blockSignals(True)
+                self.table_view.horizontalHeader().setSortIndicator(col, order)
+                self.table_view.horizontalHeader().blockSignals(False)
 
         self.node_name = nxt_path.node_name_from_node_path(self.node_path)
         if not self.node_name:
@@ -1553,10 +1553,7 @@ class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
         inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(option.backgroundBrush)
-        attr_name = index.sibling(index.row(), COLUMNS.name).data()
-        model = index.model().sourceModel()
-        color = model.node_attr_draw_details[attr_name]['color']
-        color = QtGui.QColor(color)
+        color = index.data(role=QtCore.Qt.ForegroundRole)
         painter.setPen(color)
         if option.state & QtWidgets.QStyle.State_MouseOver:
             if self.parent.mouse_pressed == index.column():

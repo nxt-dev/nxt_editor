@@ -8,6 +8,7 @@ from collections import OrderedDict
 import webbrowser
 from functools import partial
 import time
+import tempfile
 
 # External
 from Qt import QtWidgets
@@ -1252,6 +1253,8 @@ class MenuBar(QtWidgets.QMenuBar):
         # Help Menu
         self.help_menu = self.addMenu('Help')
         self.help_menu.setTearOffEnabled(True)
+        logs_dir_action = self.help_menu.addAction('Open Logs Dir')
+        logs_dir_action.triggered.connect(self.open_logs_dir)
         prefs_dir_action = self.help_menu.addAction('Open Prefs Dir')
         prefs_dir_action.triggered.connect(self.open_prefs_dir)
         config_dir_action = self.help_menu.addAction('Open Plugins Dir')
@@ -1335,29 +1338,26 @@ class MenuBar(QtWidgets.QMenuBar):
 
     @staticmethod
     def open_prefs_dir():
-        d = user_dir.PREF_DIR
-        if 'darwin' in sys.platform:
-            os.system('open {}'.format(d))
-        elif 'win' in sys.platform:
-            os.startfile(d)
-        else:
-            try:
-                os.system('xdg-open {}'.format(d))
-            except:
-                logger.exception('Failed to open user dir')
+        QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl.fromLocalFile(user_dir.PREF_DIR)
+        )
 
     @staticmethod
     def open_plugins_dir():
-        d = USER_PLUGIN_DIR
-        if 'darwin' in sys.platform:
-            os.system('open {}'.format(d))
-        elif 'win' in sys.platform:
-            os.startfile(d)
-        else:
-            try:
-                os.system('xdg-open {}'.format(d))
-            except:
-                logger.exception('Failed to open user config dir')
+        QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl.fromLocalFile(USER_PLUGIN_DIR)
+        )
+
+    @staticmethod
+    def open_logs_dir():
+        try:
+            log_dir = nxt_log.LOG_DIR
+        except AttributeError:
+            # Guess the log dir if nxt core is old.
+            log_dir = os.path.join(tempfile.gettempdir(), 'nxt_logs')
+        QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl.fromLocalFile(log_dir)
+        )
 
     def about_message(self):
         text = ('nxt {} \n'

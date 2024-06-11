@@ -1,4 +1,11 @@
+<div align="center">
+
+![Release Status](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml/badge.svg?branch=release)
+![Dev Status](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)
 # NXT Editor
+
+</div>
+
 
 **nxt** (**/ɛn·ɛks·ti/**) is a general purpose code compositor designed for rigging, scene assembly, and automation. (node execution tree)  
 [Installation/Usage](#installationusage) | [Docs](https://nxt-dev.github.io/) | [Contributing](CONTRIBUTING.md) | [Licensing](LICENSE)

@@ -1281,7 +1281,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.remove_node_connection_graphics(node_path)
 
         def handle_del():
-            self.scene().removeItem(graphic)
+            if graphic.scene():
+                self.scene().removeItem(graphic)
 
         graphic.out_anim_group.finished.connect(handle_del)
         graphic.anim_out()
