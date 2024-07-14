@@ -10,6 +10,7 @@ import os
 
 import json
 import logging
+import shutil
 import sys
 
 if sys.version_info[0] == 2:
@@ -209,10 +210,10 @@ class PicklePref(PrefFile):
             return
         try:
             with open(self.path, 'r+b') as fp:
-                if sys.version_info[0] == 2:
-                    contents = pickle.load(fp)
-                else:
-                    contents = pickle.load(fp, encoding='bytes')
+                contents = pickle.load(fp, encoding='bytes')
+        except ModuleNotFoundError as e:
+            if 'PySide2' in e.msg:
+                shutil.move(self.path, self.path + '.backup')
         except pickle.UnpicklingError:
             broken_files.setdefault(self.path, 0)
             times_hit = broken_files[self.path]

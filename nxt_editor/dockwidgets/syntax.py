@@ -117,7 +117,7 @@ class PythonHighlighter(QSyntaxHighlighter):
         # Do other syntax formatting
         for rule in self.rules:
             expression, nth, formatting = rule
-            index = expression.indexIn(text, 0)
+            index = expression.match(text).capturedStart()
             # This is here because you can't do nested logic in regex
             nested = 0
             if rule in self.special_rules:
@@ -151,17 +151,19 @@ class PythonHighlighter(QSyntaxHighlighter):
             add = 0
         # Otherwise, look for the delimiter on this line
         else:
-            start = delimiter.indexIn(text)
+            match = delimiter.match(text)
+            start = match.capturedStart()
             # Move past this match
-            add = delimiter.matchedLength()
+            add = match.capturedLength()
 
         # As long as there's a delimiter match on this line...
         while start >= 0:
+            match = delimiter.match(text)
             # Look for the ending delimiter
-            end = delimiter.indexIn(text, start + add)
+            end = match.capturedStart() + (start + add)
             # Ending delimiter on this line?
             if end >= add:
-                length = end - start + add + delimiter.matchedLength()
+                length = end - start + add + match.capturedLength()
                 self.setCurrentBlockState(0)
             # No; multi-line string
             else:
@@ -170,7 +172,7 @@ class PythonHighlighter(QSyntaxHighlighter):
             # Apply formatting
             self.setFormat(start, length, style)
             # Look for the next match
-            start = delimiter.indexIn(text, start + length)
+            start = match.capturedStart() + (start + length)
 
         # Return True if still inside a multi-line string, False otherwise
         if self.currentBlockState() == in_state:

@@ -9,7 +9,7 @@ from collections import OrderedDict
 from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
-from PySide2 import __version_info__ as qt_version
+from PySide6 import __version_info__ as qt_version
 
 # Internal
 import nxt_editor
@@ -262,13 +262,13 @@ class NodeGraphicsItem(graphic_type):
     def itemChange(self, change, value):
         """Override of QtWidgets.QGraphicsItem itemChange."""
         # keep connections drawing to node as it moves
-        if change is self.ItemScenePositionHasChanged:
+        if change is QtWidgets.QGraphicsItem.ItemPositionChange:
             graphics = self.view.get_node_connection_graphics(self.node_path)
             for connection in graphics:
                 connection.rebuild_line()
         # TODO: Take into account the positions of every selected node and snap them all to a grid as soon as
         #  the user preses shift. This will avoid the weird wavy snapping effect we have right now
-        if change == self.ItemPositionChange and self.scene():
+        if change == QtWidgets.QGraphicsItem.ItemPositionChange and self.scene():
             ml = QtWidgets.QApplication.mouseButtons() == QtCore.Qt.LeftButton
             shift = QtWidgets.QApplication.keyboardModifiers() == QtCore.Qt.ShiftModifier
             force_snap = self.view.alignment_actions.snap_action.isChecked()

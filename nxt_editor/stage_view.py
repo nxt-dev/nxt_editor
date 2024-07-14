@@ -8,6 +8,7 @@ from functools import partial
 from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
+from Qt import QtCompat
 
 # Interal
 import nxt_editor
@@ -79,8 +80,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.horizontalScrollBar().setValue(0)
         self.verticalScrollBar().setValue(0)
-        self.setOptimizationFlag(self.DontSavePainterState, enabled=True)
-        self.setOptimizationFlag(self.DontAdjustForAntialiasing, enabled=True)
+        self.setOptimizationFlag(QtWidgets.QGraphicsView.DontSavePainterState, enabled=True)
+        self.setOptimizationFlag(QtWidgets.QGraphicsView.DontAdjustForAntialiasing, enabled=True)
         # scene
         self._scene = QtWidgets.QGraphicsScene()
         self.setScene(self._scene)
@@ -700,7 +701,7 @@ class StageView(QtWidgets.QGraphicsView):
             self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
             event.accept()
-        if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MidButton:
+        if event.buttons() == QtCore.Qt.LeftButton | QtCompat.QtCore.Qt.MidButton:
             self.zooming = True
             self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
@@ -747,7 +748,7 @@ class StageView(QtWidgets.QGraphicsView):
                 return  # block immediate node movement
 
         # middle and right button events
-        elif event.button() == QtCore.Qt.MiddleButton:
+        elif event.button() == QtCompat.QtCore.Qt.MidButton:
             # start panning action
             self.panning = True
             self._previous_mouse_pos = None
@@ -825,11 +826,11 @@ class StageView(QtWidgets.QGraphicsView):
             event.accept()
 
         if self.zooming:
-            if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MidButton:
+            if event.buttons() == QtCore.Qt.LeftButton | QtCompat.QtCore.Qt.MidButton:
                 self.zooming = False
             elif event.buttons() == QtCore.Qt.LeftButton:
                 self.zooming = False
-            elif event.buttons() == QtCore.Qt.MidButton:
+            elif event.buttons() == QtCompat.QtCore.Qt.MidButton:
                 self.zooming = False
         if (self._rubber_band_origin is not None and
            event.button() is QtCore.Qt.LeftButton):
@@ -967,7 +968,7 @@ class StageView(QtWidgets.QGraphicsView):
             self.block_context_menu = False
             self.contextMenuEvent(event)
         # complete panning action
-        if self.panning and event.button() == QtCore.Qt.MiddleButton:
+        if self.panning and event.button() == QtCompat.QtCore.Qt.MidButton:
             self._previous_mouse_pos = None
             self.panning = False
             self._current_pan_distance = 0.0
@@ -993,11 +994,11 @@ class StageView(QtWidgets.QGraphicsView):
                     item.collapse_node()
 
     def wheelEvent(self, event):
-        self._view_pos = event.pos()
+        self._view_pos = event.position().toPoint()
         self._scene_pos = self.mapToScene(self._view_pos)
 
         try:
-            new_scale = event.delta() * .001 + 1.0
+            new_scale = event.angleDelta().y() * .001 + 1.0
         except AttributeError:
             new_scale = 1.1
 

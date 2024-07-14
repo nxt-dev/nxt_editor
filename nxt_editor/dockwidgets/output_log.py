@@ -205,7 +205,7 @@ class OutputLog(DockWidgetBase):
 
         self.buttons_layout = QtWidgets.QHBoxLayout()
         self.buttons_layout.addWidget(self.log_filter_button)
-        self.buttons_layout.addStretch(stretch=1)
+        self.buttons_layout.addStretch(1)
         self.buttons_layout.addWidget(self.clear_rich_button)
 
         self.rich_output_layout = QtWidgets.QVBoxLayout()

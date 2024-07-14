@@ -100,7 +100,7 @@ class LayerTreeView(QtWidgets.QTreeView):
         header = self.header()
         header.setStretchLastSection(False)
         header.setDefaultSectionSize(LayerTreeView.SIZE)
-        header.setSectionResizeMode(header.Fixed)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         if header.count():
             header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
             self.hideColumn(LayerModel.TARGET_COLUMN)
