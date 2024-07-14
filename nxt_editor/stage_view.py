@@ -701,7 +701,7 @@ class StageView(QtWidgets.QGraphicsView):
             self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
             event.accept()
-        if event.buttons() == QtCore.Qt.LeftButton | QtCompat.QtCore.Qt.MidButton:
+        if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton:
             self.zooming = True
             self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
@@ -748,7 +748,7 @@ class StageView(QtWidgets.QGraphicsView):
                 return  # block immediate node movement
 
         # middle and right button events
-        elif event.button() == QtCompat.QtCore.Qt.MidButton:
+        elif event.button() == QtCore.Qt.MiddleButton:
             # start panning action
             self.panning = True
             self._previous_mouse_pos = None
@@ -826,11 +826,11 @@ class StageView(QtWidgets.QGraphicsView):
             event.accept()
 
         if self.zooming:
-            if event.buttons() == QtCore.Qt.LeftButton | QtCompat.QtCore.Qt.MidButton:
+            if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton:
                 self.zooming = False
             elif event.buttons() == QtCore.Qt.LeftButton:
                 self.zooming = False
-            elif event.buttons() == QtCompat.QtCore.Qt.MidButton:
+            elif event.buttons() == QtCore.Qt.MiddleButton:
                 self.zooming = False
         if (self._rubber_band_origin is not None and
            event.button() is QtCore.Qt.LeftButton):
@@ -968,7 +968,7 @@ class StageView(QtWidgets.QGraphicsView):
             self.block_context_menu = False
             self.contextMenuEvent(event)
         # complete panning action
-        if self.panning and event.button() == QtCompat.QtCore.Qt.MidButton:
+        if self.panning and event.button() == QtCore.Qt.MiddleButton:
             self._previous_mouse_pos = None
             self.panning = False
             self._current_pan_distance = 0.0

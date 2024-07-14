@@ -117,7 +117,8 @@ class PythonHighlighter(QSyntaxHighlighter):
         # Do other syntax formatting
         for rule in self.rules:
             expression, nth, formatting = rule
-            index = expression.match(text).capturedStart()
+            match = expression.match(text)
+            index = match.capturedStart()
             # This is here because you can't do nested logic in regex
             nested = 0
             if rule in self.special_rules:
@@ -126,10 +127,10 @@ class PythonHighlighter(QSyntaxHighlighter):
 
             while index >= 0:
                 # We actually want the index of the nth match
-                index = expression.pos(nth)
-                length = len(expression.cap(nth))
+                index = match.capturedStart(nth)
+                length = len(match.captured(nth))
                 self.setFormat(index, length + nested, formatting)
-                index = expression.indexIn(text, index + length)
+                index = match.capturedStart(text)
 
         self.setCurrentBlockState(0)
 
