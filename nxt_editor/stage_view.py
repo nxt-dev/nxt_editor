@@ -13,8 +13,7 @@ from Qt import QtCompat
 # Interal
 import nxt_editor
 from nxt import nxt_node, tokens
-from nxt_editor.node_graphics_item import (NodeGraphicsItem, NodeGraphicsPlug,
-                                           _pyside_version)
+from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.dialogs import NxtWarningDialog
 from nxt_editor.commands import *
@@ -43,8 +42,6 @@ class StageView(QtWidgets.QGraphicsView):
         super(StageView, self).__init__(parent=parent)
         self.main_window = parent
         self._do_anim_pref = user_prefs.get(USER_PREF.ANIMATION, True)
-        if _pyside_version[1] < 11:
-            self._do_anim_pref = False
         self.do_animations = self._do_anim_pref
         self.once_sec_timer = QtCore.QTimer(self)
         self.once_sec_timer.timeout.connect(self.calculate_fps)
