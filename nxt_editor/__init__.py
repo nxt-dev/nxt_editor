@@ -36,10 +36,7 @@ class StringSignaler(QtCore.QObject):
 
 
 def make_resources(qrc_path=None, result_path=None):
-    import PySide6
     import subprocess
-    pyside_dir = os.path.dirname(PySide6.__file__)
-    full_rcc_path = os.path.join(pyside_dir, 'rcc')
     this_dir = os.path.dirname(os.path.realpath(__file__))
     if not qrc_path:
         qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
@@ -48,26 +45,11 @@ def make_resources(qrc_path=None, result_path=None):
     msg = 'First launch nxt resource generation from {} to {}'
     logger.info(msg.format(qrc_path, result_path))
 
-    args = [qrc_path, '-o', result_path]
+    args = [qrc_path, '-o', result_path, '-g', 'python']
     try:
-        subprocess.check_call(['rcc'] + args)
+        subprocess.call(['pyside6-rcc'] + args)
     except:
-        pass
-    else:
-        return
-
-    try:
-        subprocess.check_call([full_rcc_path, '-g', 'python', qrc_path,
-                               '-o', result_path], cwd=pyside_dir)
-    except:
-        pass
-    else:
-        return
-    try:
-        subprocess.check_call(['rcc', '-g', 'python', qrc_path,
-                               '-o', result_path], cwd=pyside_dir)
-    except:
-        raise Exception("Failed to generate UI resources using pyside2 rcc!"
+        raise Exception("Failed to generate UI resources using PySide rcc!"
                         " Reinstalling PySide6 may fix the problem. If you "
                         "know how to use rcc please build from: \"{}\" and "
                         "output to \"{}\"".format(qrc_path, result_path))
