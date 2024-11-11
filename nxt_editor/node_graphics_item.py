@@ -452,7 +452,8 @@ class NodeGraphicsItem(graphic_type):
 
         # draw collapse state arrow
         for arrow in self.collapse_arrows:
-            self.scene().removeItem(arrow)
+            if arrow.scene():
+                self.scene().removeItem(arrow)
         if lod > MIN_LOD:
             self.collapse_arrows = []
             # TODO calculation needed arrows should be done outside drawing

@@ -19,7 +19,7 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 class LayerManager(DockWidgetBase):
     """Interactive tree view of the layers in the open graph.
     """
-    def __init__(self, title='Layer Manger', parent=None):
+    def __init__(self, title='Layer Manager', parent=None):
         super(LayerManager, self).__init__(title=title,
                                            parent=parent,
                                            minimum_width=100)

@@ -51,11 +51,16 @@ def dict_or_string(value={}):
 
 
 # Initialize parser
-parser = argparse.ArgumentParser(description="This is a cli for running the standalone maya")
+parser = argparse.ArgumentParser(
+    description="This is a cli for running the standalone maya"
+)
 
 # Adding optional argument
 parser.add_argument(
-    "-g", "--graph_path", help="The path to the nxt graph you want to run.", required=True
+    "-g",
+    "--graph_path",
+    help="The path to the nxt graph you want to run.",
+    required=True,
 )
 parser.add_argument(
     "-p",
@@ -65,7 +70,9 @@ parser.add_argument(
     type=dict_or_string,
 ),
 parser.add_argument(
-    "-s", "--start_node", help="The path to the nxt node init the graph you want to run."
+    "-s",
+    "--start_node",
+    help="The path to the nxt node init the graph you want to run.",
 )
 
 # Read arguments from command line

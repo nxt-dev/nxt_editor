@@ -334,7 +334,7 @@ class CodeEditor(DockWidgetBase):
             self.setEnabled(True)
             if self.editing_active:
                 return
-            if not self.stage_model.comp_layer.node_exists(self.node_path):
+            if not self.stage_model.node_exists(self.node_path):
                 self.editor.clear()
                 return
             self.update_code_is_local()
