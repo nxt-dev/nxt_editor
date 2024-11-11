@@ -297,7 +297,7 @@ class NxtWarningDialog(QtWidgets.QDialog):
         self.save_details_button.released.connect(self.on_save_details)
 
         self.detail_buttons_layout = QtWidgets.QHBoxLayout()
-        self.detail_buttons_layout.addStretch(streth=1)
+        self.detail_buttons_layout.addStretch(1)
         self.detail_buttons_layout.addWidget(self.save_details_button)
         self.detail_buttons_layout.addWidget(self.copy_details_button)
 
@@ -314,7 +314,7 @@ class NxtWarningDialog(QtWidgets.QDialog):
         self.top_right_layout = QtWidgets.QVBoxLayout()
         self.top_right_layout.addWidget(self.text_label)
         self.top_right_layout.addWidget(self.info_label)
-        self.top_right_layout.addStretch(streth=1)
+        self.top_right_layout.addStretch(1)
         self.top_right_layout.addLayout(self.buttons_layout)
         self.top_layout = QtWidgets.QHBoxLayout()
         self.top_layout.addWidget(self.icon)

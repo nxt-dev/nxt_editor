@@ -12,7 +12,7 @@ try:
     QtCore.QStringListModel
 except AttributeError:
     del QtCore
-    from PySide2 import QtCore
+    from PySide6 import QtCore
 
 # Internal
 from nxt_editor import user_dir

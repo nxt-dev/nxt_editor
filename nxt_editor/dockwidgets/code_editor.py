@@ -1271,7 +1271,7 @@ class NumberBar(QtWidgets.QWidget):
 
     def get_width(self):
         count = self.editor.blockCount()
-        width = self.fontMetrics().width(str(count)) + 10
+        width = self.fontMetrics().horizontalAdvance(str(count)) + 10
         return width
 
     def update_width(self):

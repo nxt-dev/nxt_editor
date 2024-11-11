@@ -71,7 +71,7 @@ class PixmapButton(QtWidgets.QAbstractButton):
                 pix = self.pixmap_pressed
 
         painter = QtGui.QPainter(self)
-        painter.drawPixmap(event.rect(), pix)
+        painter.drawPixmap(event.rect(), QtGui.QPixmap(pix))
         del painter
 
     def enterEvent(self, event):

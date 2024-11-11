@@ -36,10 +36,7 @@ class StringSignaler(QtCore.QObject):
 
 
 def make_resources(qrc_path=None, result_path=None):
-    import PySide2
-    pyside_dir = os.path.dirname(PySide2.__file__)
-    full_pyside2rcc_path = os.path.join(pyside_dir, 'pyside2-rcc')
-    full_rcc_path = os.path.join(pyside_dir, 'rcc')
+    import subprocess
     this_dir = os.path.dirname(os.path.realpath(__file__))
     if not qrc_path:
         qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
@@ -47,37 +44,13 @@ def make_resources(qrc_path=None, result_path=None):
         result_path = os.path.join(this_dir, 'qresources.py')
     msg = 'First launch nxt resource generation from {} to {}'
     logger.info(msg.format(qrc_path, result_path))
-    import subprocess
-    ver = ['-py2']
-    if sys.version_info[0] == 3:
-        ver += ['-py3']
-    args = [qrc_path] + ver + ['-o', result_path]
-    try:
-        subprocess.check_call(['pyside2-rcc'] + args)
-    except:
-        pass
-    else:
-        return
 
+    args = [qrc_path, '-o', result_path, '-g', 'python']
     try:
-        subprocess.check_call([full_pyside2rcc_path] + args)
+        subprocess.call(['pyside6-rcc'] + args)
     except:
-        pass
-    else:
-        return
-    try:
-        subprocess.check_call([full_rcc_path, '-g', 'python', qrc_path,
-                               '-o', result_path], cwd=pyside_dir)
-    except:
-        pass
-    else:
-        return
-    try:
-        subprocess.check_call(['rcc', '-g', 'python', qrc_path,
-                               '-o', result_path], cwd=pyside_dir)
-    except:
-        raise Exception("Failed to generate UI resources using pyside2 rcc!"
-                        " Reinstalling pyside2 may fix the problem. If you "
+        raise Exception("Failed to generate UI resources using PySide rcc!"
+                        " Reinstalling PySide6 may fix the problem. If you "
                         "know how to use rcc please build from: \"{}\" and "
                         "output to \"{}\"".format(qrc_path, result_path))
     else:
@@ -129,9 +102,12 @@ def launch_editor(paths=None, start_rpc=True):
 
 def show_new_editor(paths=None, start_rpc=True):
     path = None
-    if paths is not None:
+    if paths and isinstance(paths, list):
         path = paths[0]
         paths.pop(0)
+    elif isinstance(paths, str):
+        path = paths
+        paths = []
     else:
         paths = []
     # Deferred import since main window relies on us

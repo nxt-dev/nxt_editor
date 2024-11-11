@@ -22,7 +22,7 @@ class EDITOR_VERSION(object):
 
 
 class FONTS(object):
-    DEFAULT_FAMILY = 'RobotoMono-Regular'
+    DEFAULT_FAMILY = 'Roboto Mono'
     DEFAULT_SIZE = 10
 
 
