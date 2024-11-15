@@ -161,7 +161,7 @@ class PythonHighlighter(QSyntaxHighlighter):
         while start >= 0:
             match = delimiter.match(text)
             # Look for the ending delimiter
-            end = match.capturedStart() + (start + add)
+            end = match.capturedStart() - (start + add)
             # Ending delimiter on this line?
             if end >= add:
                 length = end - start + add + match.capturedLength()
