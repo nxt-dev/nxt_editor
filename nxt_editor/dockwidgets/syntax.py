@@ -155,7 +155,7 @@ class PythonHighlighter(QSyntaxHighlighter):
             match = delimiter.match(text)
             start = match.capturedStart()
             # Move past this match
-            add = match.capturedLength()
+            add = match.capturedLength() + 1
 
         # As long as there's a delimiter match on this line...
         while start >= 0:
@@ -173,7 +173,10 @@ class PythonHighlighter(QSyntaxHighlighter):
             # Apply formatting
             self.setFormat(start, length, style)
             # Look for the next match
-            start = match.capturedStart() + (start + length)
+            match = delimiter.match(text, start + length)
+            if not match.hasMatch():
+                break
+            start = match.capturedStart()
 
         # Return True if still inside a multi-line string, False otherwise
         if self.currentBlockState() == in_state:
