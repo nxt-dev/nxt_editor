@@ -778,7 +778,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         return QtWidgets.QPlainTextEdit.focusOutEvent(self, event)
 
     def wheelEvent(self, event):
-        delta = event.delta()
+        delta = event.angleDelta().y() / 8
         if event.modifiers() == QtCore.Qt.ControlModifier:
             if delta > 0:
                 self.set_font_size(delta=0.5)
@@ -1271,7 +1271,7 @@ class NumberBar(QtWidgets.QWidget):
 
     def get_width(self):
         count = self.editor.blockCount()
-        width = self.fontMetrics().width(str(count)) + 10
+        width = self.fontMetrics().horizontalAdvance(str(count)) + 10
         return width
 
     def update_width(self):

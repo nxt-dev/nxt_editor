@@ -52,7 +52,7 @@ class MainWindow(QtWidgets.QMainWindow):
     new_log_signal = QtCore.Signal(logging.LogRecord)
     font_size_changed = QtCore.Signal(int)
 
-    def __init__(self, filepath=None, parent=None, start_rpc=True):
+    def __init__(self, filepath=None, parent=None, start_rpc=False):
         """Create NXT window.
 
         :param parent: parent to attach this UI to.

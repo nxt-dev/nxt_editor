@@ -8,12 +8,12 @@ from functools import partial
 from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
+from Qt import QtCompat
 
 # Interal
 import nxt_editor
 from nxt import nxt_node, tokens
-from nxt_editor.node_graphics_item import (NodeGraphicsItem, NodeGraphicsPlug,
-                                           _pyside_version)
+from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.dialogs import NxtWarningDialog
 from nxt_editor.commands import *
@@ -42,8 +42,6 @@ class StageView(QtWidgets.QGraphicsView):
         super(StageView, self).__init__(parent=parent)
         self.main_window = parent
         self._do_anim_pref = user_prefs.get(USER_PREF.ANIMATION, True)
-        if _pyside_version[1] < 11:
-            self._do_anim_pref = False
         self.do_animations = self._do_anim_pref
         self.once_sec_timer = QtCore.QTimer(self)
         self.once_sec_timer.timeout.connect(self.calculate_fps)
@@ -79,8 +77,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.horizontalScrollBar().setValue(0)
         self.verticalScrollBar().setValue(0)
-        self.setOptimizationFlag(self.DontSavePainterState, enabled=True)
-        self.setOptimizationFlag(self.DontAdjustForAntialiasing, enabled=True)
+        self.setOptimizationFlag(QtWidgets.QGraphicsView.DontSavePainterState, enabled=True)
+        self.setOptimizationFlag(QtWidgets.QGraphicsView.DontAdjustForAntialiasing, enabled=True)
         # scene
         self._scene = QtWidgets.QGraphicsScene()
         self.setScene(self._scene)
@@ -700,7 +698,7 @@ class StageView(QtWidgets.QGraphicsView):
             self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
             event.accept()
-        if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MidButton:
+        if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton:
             self.zooming = True
             self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
@@ -825,11 +823,11 @@ class StageView(QtWidgets.QGraphicsView):
             event.accept()
 
         if self.zooming:
-            if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MidButton:
+            if event.buttons() == QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton:
                 self.zooming = False
             elif event.buttons() == QtCore.Qt.LeftButton:
                 self.zooming = False
-            elif event.buttons() == QtCore.Qt.MidButton:
+            elif event.buttons() == QtCore.Qt.MiddleButton:
                 self.zooming = False
         if (self._rubber_band_origin is not None and
            event.button() is QtCore.Qt.LeftButton):
@@ -993,11 +991,11 @@ class StageView(QtWidgets.QGraphicsView):
                     item.collapse_node()
 
     def wheelEvent(self, event):
-        self._view_pos = event.pos()
+        self._view_pos = event.position().toPoint()
         self._scene_pos = self.mapToScene(self._view_pos)
 
         try:
-            new_scale = event.delta() * .001 + 1.0
+            new_scale = event.angleDelta().y() * .001 + 1.0
         except AttributeError:
             new_scale = 1.1
 
