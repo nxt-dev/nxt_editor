@@ -85,14 +85,9 @@ Conda is best installed via [miniconda](https://docs.conda.io/en/latest/minicond
       ```
 
 ## Dependencies
-- Python 2.7
+- Python 3.9
     - [Qt.py](https://github.com/mottosso/Qt.py)
-    - [PySide2](https://wiki.qt.io/Qt_for_Python) 5.6 (Python 2)
-    - `pip install -e <path to nxt core clone>`
-
-- Python 3.7
-    - [Qt.py](https://github.com/mottosso/Qt.py)
-    - [PySide2](https://wiki.qt.io/Qt_for_Python) 5.11.1 (Python 3)
+    - [PySide6](https://doc.qt.io/qtforpython-6/gettingstarted.html)  
     - `pip install -e <path to nxt core clone>`
 
 ## Changelog syntax

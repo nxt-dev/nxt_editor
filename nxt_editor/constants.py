@@ -26,7 +26,9 @@ class FONTS(object):
     DEFAULT_SIZE = 10
 
 
-_pref_dir_name = str(EDITOR_VERSION.MAJOR)
-PREF_DIR = os.path.join(USER_DIR, 'prefs', _pref_dir_name)
+PREF_DIR_INT = EDITOR_VERSION.MAJOR
+PREF_DIR_NAME = 'prefs'
+_pref_dir_num = str(PREF_DIR_INT)
+PREF_DIR = os.path.join(USER_DIR, PREF_DIR_NAME, _pref_dir_num)
 
 NXT_WEBSITE = 'https://nxt-dev.github.io/'
