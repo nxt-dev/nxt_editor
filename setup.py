@@ -19,7 +19,7 @@ ed_minor = ed_v_data['MINOR']
 ed_patch = ed_v_data['PATCH']
 editor_version = '{}.{}.{}'.format(ed_major, ed_minor, ed_patch)
 setuptools.setup(
-    name="nxt-editor",
+    name="nxt_editor",
     version=editor_version,
     author="The nxt contributors",
     author_email="dev@opennxt.dev",
