@@ -8,15 +8,14 @@ Each described installation is self contained, and produces a working nxt.
 ## Pip Installation
 From a Python 3 environment run the following command:  
 `pip install nxt-editor`  
-**Python Dependancies**  
+**Python Dependencies**  
 - [nxt-core](https://github.com/nxt-dev/nxt)   
 - [Qt.py](https://github.com/mottosso/Qt.py)  
 - [PySide6](https://doc.qt.io/qtforpython-6/gettingstarted.html)  
 
 
 ## Blender (2.8 and newer) Installation
-1. Download Blender addon (nxt_blender.zip)
-2. Extract and follow `README.md` inside  
+See the [latest release of nxt-blender](https://github.com/nxt-dev/nxt-blender/releases/latest).
 
 ### Blender update
 - Automatically: NXT > Update NXT
