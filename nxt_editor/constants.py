@@ -1,7 +1,8 @@
 # Builtin
 import os
 import json
-
+# External
+from Qt import QtGui
 # Internal
 from nxt.constants import USER_DIR
 
@@ -22,8 +23,18 @@ class EDITOR_VERSION(object):
 
 
 class FONTS(object):
-    DEFAULT_FAMILY = 'Roboto Mono'
     DEFAULT_SIZE = 10
+    # Load fonts once
+    _font_db = QtGui.QFontDatabase()
+    _roboto_id = _font_db.addApplicationFont(":/fonts/fonts/Roboto/Roboto-Regular.ttf")
+    _mono_id = _font_db.addApplicationFont(":/fonts/fonts/RobotoMono/RobotoMono-Regular.ttf")
+
+    # Get actual family names from font DB
+    ROBOTO_FAMILY = _font_db.applicationFontFamilies(_roboto_id)[0] if _roboto_id != -1 else "Sans Serif"
+    ROBOTO_MONO_FAMILY = _font_db.applicationFontFamilies(_mono_id)[0] if _mono_id != -1 else "Monospace"
+
+    DEFAULT_FAMILY = ROBOTO_FAMILY
+    CODE_EDITOR_FAMILY = ROBOTO_MONO_FAMILY
 
 
 PREF_DIR_INT = EDITOR_VERSION.MAJOR
