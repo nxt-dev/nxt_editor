@@ -12,6 +12,6 @@ on:
 jobs:
   test-python:
     secrets: inherit
-    uses: nxt-dev/nxt/.github/workflows/unittests.yml@dev
+    uses: nxt-dev/nxt/.github/workflows/unittests.yml@issues/gha_test_fix
     with:
       QT_DEPENDENCIES: true
