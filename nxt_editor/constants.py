@@ -2,7 +2,7 @@
 import os
 import json
 # External
-from Qt import QtGui
+from Qt import QtGui, QtWidgets
 # Internal
 from nxt.constants import USER_DIR
 
@@ -22,21 +22,47 @@ class EDITOR_VERSION(object):
     VERSION = VERSION_STR
 
 
-class FONTS(object):
-    DEFAULT_SIZE = 10
-    # Load fonts once
-    _font_db = QtGui.QFontDatabase()
-    _roboto_id = _font_db.addApplicationFont(":/fonts/fonts/Roboto/Roboto-Regular.ttf")
-    _mono_id = _font_db.addApplicationFont(":/fonts/fonts/RobotoMono/RobotoMono-Regular.ttf")
+class _FontManager:
+    def __init__(self):
+        self._initialized = False
+        self._font_db = QtGui.QFontDatabase()
+        self.DEFAULT_SIZE = 10
+        self._default_family = "Sans Serif"
+        self._code_family = "Monospace"
 
-    # Get actual family names from font DB
-    ROBOTO_FAMILY = _font_db.applicationFontFamilies(_roboto_id)[0] if _roboto_id != -1 else "Sans Serif"
-    ROBOTO_MONO_FAMILY = _font_db.applicationFontFamilies(_mono_id)[0] if _mono_id != -1 else "Monospace"
+    def initialize(self):
+        if self._initialized:
+            return
+        if not QtWidgets.QApplication.instance():
+            return
+        roboto_id = self._font_db.addApplicationFont(":/fonts/fonts/Roboto/Roboto-Regular.ttf")
+        mono_id = self._font_db.addApplicationFont(":/fonts/fonts/RobotoMono/RobotoMono-Regular.ttf")
 
-    DEFAULT_FAMILY = ROBOTO_FAMILY
-    CODE_EDITOR_FAMILY = ROBOTO_MONO_FAMILY
+        if roboto_id != -1:
+            self._default_family = self._font_db.applicationFontFamilies(roboto_id)[0]
+        if mono_id != -1:
+            self._code_family = self._font_db.applicationFontFamilies(mono_id)[0]
+
+        self._initialized = True
+
+    @property
+    def DEFAULT_FAMILY(self):
+        self.initialize()
+        return self._default_family
+
+    @property
+    def MONOSPACE(self):
+        self.initialize()
+        return self._code_family
+
+    def default_font(self, size=None):
+        return QtGui.QFont(self.DEFAULT_FAMILY, size or self.DEFAULT_SIZE)
+
+    def monospace_font(self, size=None):
+        return QtGui.QFont(self.MONOSPACE, size or self.DEFAULT_SIZE)
 
 
+FONTS = _FontManager()
 PREF_DIR_INT = EDITOR_VERSION.MAJOR
 PREF_DIR_NAME = 'prefs'
 _pref_dir_num = str(PREF_DIR_INT)
