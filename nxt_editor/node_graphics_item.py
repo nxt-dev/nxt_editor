@@ -13,6 +13,7 @@ from Qt import QtCore
 import nxt_editor
 from nxt import nxt_path, nxt_node
 from nxt.nxt_layer import LAYERS
+from nxt_editor.constants import FONTS
 from . import colors
 from nxt.stage import INTERNAL_ATTRS
 from .label_edit import NameEditDialog
@@ -57,8 +58,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.setAcceptHoverEvents(True)
 
         # draw settings
-        self.title_font = QtGui.QFont("Roboto Mono", 14)
-        self.attr_font = QtGui.QFont("Roboto Mono", 9)
+        self.title_font = QtGui.QFont(FONTS.MONOSPACE, 14)
+        self.attr_font = QtGui.QFont(FONTS.MONOSPACE, 9)
         self.title_rect_height = 39
         self.attr_rect_height = 26
         self.attr_rect_opacity = 0.9
