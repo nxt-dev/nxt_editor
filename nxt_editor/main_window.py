@@ -122,11 +122,7 @@ class MainWindow(QtWidgets.QMainWindow):
         style_file.open(QtCore.QFile.ReadOnly)
         self.stylesheet = str(style_file.readAll())
         self.setStyleSheet(self.stylesheet)
-
-        # fonts
-        font_db = QtGui.QFontDatabase()
-        font_db.addApplicationFont(":fonts/fonts/RobotoMono/RobotoMono-Regular.ttf")
-        font_db.addApplicationFont(":fonts/fonts/Roboto/Roboto-Regular.ttf")
+        self.setFont(FONTS.default_font())
 
         # nxt object in charge of loaded graphs
         self.nxt = Session()
@@ -365,24 +361,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self._change_font_size(-1)
 
     def _change_font_size(self, delta, absolute=False, save=True):
-        app = QtWidgets.QApplication.instance()
         if absolute:
             font_size = delta
         else:
-            font_size = app.font().pointSize() + delta
+            font_size = self.font().pointSize() + delta
             self.font_size_changed.emit(delta)
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
-        font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
-        app.setFont(font)
-
-        widgets_with_fonts = ["QMenuBar", "QTabWidget", "QMenu", "QTableView",
-                              "QLineEdit", "QComboBox", "QLabel",
-                              "QPushButton", "QTextEdit", "QWidget",
-                              "QListWidget", "QTabelWidget", "QTreeWidget",
-                              "QSpinBox", "QDoubleSpinBox", "QCheckBox"]
-        for widget in widgets_with_fonts:
-            app.setFont(font, widget)
+        main_font = self.font()
+        main_font.setPointSize(font_size)
+        self.setFont(main_font)
+        self.setUpdatesEnabled(False)
+        for widget in self.findChildren(QtWidgets.QWidget):
+            update_font = widget.font()
+            update_font.setPointSize(font_size)
+            widget.setFont(update_font)
+        self.setUpdatesEnabled(True)
+        QtWidgets.QApplication.processEvents()
 
         new_cb_stylesheet = '''
 QCheckBox::indicator {
