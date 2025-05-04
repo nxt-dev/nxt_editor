@@ -13,6 +13,7 @@ from Qt import QtCompat
 # Interal
 import nxt_editor
 from nxt import nxt_node, tokens
+from nxt_editor.constants import FONTS
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.dialogs import NxtWarningDialog
@@ -265,14 +266,14 @@ class StageView(QtWidgets.QGraphicsView):
         light_color.setHsv(color_obj.hsvHue(), color_obj.hsvSaturation() * 0.3, color_obj.value())
         style = '''
                 QToolTip {
-                    font-family: Roboto Mono;
+                    font-family: %s;
                     background-color: %s
                 }
 
                 QRubberBand {
                     selection-background-color: %s
                 }
-                ''' % (light_color.name(), layer_color)
+                ''' % (FONTS.DEFAULT_FAMILY, light_color.name(), layer_color)
         self.setStyleSheet(style)
 
     def clear(self):
