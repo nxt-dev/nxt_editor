@@ -142,6 +142,7 @@
         },
         "/CreateRelease/UploadBlenderAddon": {
             "instance": "/GitUpload",
+            "enabled": false,
             "attrs": {
                 "asset_path": {
                     "type": "raw",
