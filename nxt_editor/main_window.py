@@ -122,7 +122,7 @@ class MainWindow(QtWidgets.QMainWindow):
         style_file.open(QtCore.QFile.ReadOnly)
         self.stylesheet = str(style_file.readAll())
         self.setStyleSheet(self.stylesheet)
-        self.setFont(QtGui.QFont(FONTS.DEFAULT_FAMILY, FONTS.DEFAULT_SIZE))
+        self.setFont(FONTS.default_font())
 
         # nxt object in charge of loaded graphs
         self.nxt = Session()

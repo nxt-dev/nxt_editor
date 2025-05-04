@@ -87,7 +87,7 @@ class CodeEditor(DockWidgetBase):
         self.name_layout.addWidget(self.name_edit_button, 0, QtCore.Qt.AlignLeft)
 
         self.path_label = QtWidgets.QLabel(parent=self.details_frame)
-        self.path_label.setFont(QtGui.QFont(FONTS.CODE_EDITOR_FAMILY, 8))
+        self.path_label.setFont(QtGui.QFont(FONTS.MONOSPACE, 8))
         self.path_label.setStyleSheet('color: grey')
         self.details_layout.addWidget(self.path_label)
 
@@ -601,9 +601,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.setFocusPolicy(QtCore.Qt.ClickFocus)
 
         # font settings
-        self.font_family = FONTS.CODE_EDITOR_FAMILY
         self.font_size = FONTS.DEFAULT_SIZE
-        self.setFont(QtGui.QFont(self.font_family, self.font_size))
+        self.setFont(FONTS.monospace_font(self.font_size))
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
 
         # display settings
@@ -1312,7 +1311,7 @@ class OverlayWidget(QtWidgets.QWidget):
     def paintEvent(self, event):
         painter = QtGui.QPainter()
         painter.begin(self)
-        painter.setFont(QtGui.QFont(FONTS.CODE_EDITOR_FAMILY, 14))
+        painter.setFont(QtGui.QFont(FONTS.MONOSPACE, 14))
         font_metrics = QtGui.QFontMetrics(painter.font())
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         # actual_display_state
