@@ -22,6 +22,6 @@ See the [latest release of nxt-blender](https://github.com/nxt-dev/nxt-blender/r
 - By Hand: `/path/to/python.exe -m pip install -U nxt-editor`
 
 
-## Maya(2019-2025) Installation/Update
+## Maya(2025 or newer) Installation/Update
 1. Download Maya module(nxt_maya.zip)
 2. Extract and follow `README.md` inside  
