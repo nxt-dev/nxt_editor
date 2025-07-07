@@ -1355,20 +1355,18 @@ class MenuBar(QtWidgets.QMenuBar):
         )
 
     def about_message(self):
-        text = ('nxt {} \n'
-                'graph v{}\n'
-                'api v{}\n'
-                'editor v{}\n'
-                'Copyright (c) 2015-2020 '
-                'The nxt Authors').format(self.main_window.host_app,
-                                          GRAPH_VERSION.VERSION_STR,
-                                          API_VERSION.VERSION_STR,
-                                          EDITOR_VERSION.VERSION_STR)
+        import datetime, Qt
+        text = (f'nxt {self.main_window.host_app} \n'
+                f'graph v{GRAPH_VERSION.VERSION_STR}\n'
+                f'api v{API_VERSION.VERSION_STR}\n'
+                f'editor v{EDITOR_VERSION.VERSION_STR}\n'
+                f'Qt: {Qt.__binding__} {Qt.__qt_version__}\n'
+                f'Copyright (c) 2015-{datetime.datetime.now().year} '
+                f'The nxt Authors')
         message_box = QtWidgets.QMessageBox()
-        message_box.setWindowTitle('About nxt '
-                                   '({})'.format(EDITOR_VERSION.VERSION_STR))
+        message_box.setWindowTitle(f'About nxt ({EDITOR_VERSION.VERSION_STR})')
         message_box.setText(text)
-        message_box.setStandardButtons(message_box.Close)
+        message_box.setStandardButtons(message_box.StandardButton.Close)
         message_box.setIcon(message_box.Icon.Information)
         message_box.exec_()
 
