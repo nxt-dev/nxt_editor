@@ -196,7 +196,7 @@ class SearchResultsTree(QtWidgets.QTreeView):
         super(SearchResultsTree, self).setModel(model)
         header = self.header()
         header.setStretchLastSection(False)
-        header.setSectionResizeMode(header.ResizeToContents)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
         if self.model():
             self.model().modelReset.connect(self.expandAll)
 

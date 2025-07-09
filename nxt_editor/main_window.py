@@ -8,6 +8,7 @@ from collections import OrderedDict
 import webbrowser
 from functools import partial
 import time
+import tempfile
 
 # External
 from Qt import QtWidgets
@@ -51,7 +52,7 @@ class MainWindow(QtWidgets.QMainWindow):
     new_log_signal = QtCore.Signal(logging.LogRecord)
     font_size_changed = QtCore.Signal(int)
 
-    def __init__(self, filepath=None, parent=None, start_rpc=True):
+    def __init__(self, filepath=None, parent=None, start_rpc=False):
         """Create NXT window.
 
         :param parent: parent to attach this UI to.
@@ -121,11 +122,7 @@ class MainWindow(QtWidgets.QMainWindow):
         style_file.open(QtCore.QFile.ReadOnly)
         self.stylesheet = str(style_file.readAll())
         self.setStyleSheet(self.stylesheet)
-
-        # fonts
-        font_db = QtGui.QFontDatabase()
-        font_db.addApplicationFont(":fonts/fonts/RobotoMono/RobotoMono-Regular.ttf")
-        font_db.addApplicationFont(":fonts/fonts/Roboto/Roboto-Regular.ttf")
+        self.setFont(FONTS.default_font())
 
         # nxt object in charge of loaded graphs
         self.nxt = Session()
@@ -364,24 +361,23 @@ class MainWindow(QtWidgets.QMainWindow):
         self._change_font_size(-1)
 
     def _change_font_size(self, delta, absolute=False, save=True):
-        app = QtWidgets.QApplication.instance()
         if absolute:
             font_size = delta
         else:
-            font_size = app.font().pointSize() + delta
+            font_size = self.font().pointSize() + delta
             self.font_size_changed.emit(delta)
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
-        font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
-        app.setFont(font)
-
-        widgets_with_fonts = ["QMenuBar", "QTabWidget", "QMenu", "QTableView",
-                              "QLineEdit", "QComboBox", "QLabel",
-                              "QPushButton", "QTextEdit", "QWidget",
-                              "QListWidget", "QTabelWidget", "QTreeWidget",
-                              "QSpinBox", "QDoubleSpinBox", "QCheckBox"]
-        for widget in widgets_with_fonts:
-            app.setFont(font, widget)
+        main_font = self.font()
+        main_font.setPointSize(font_size)
+        self.setFont(main_font)
+        self.setUpdatesEnabled(False)
+        for widget in self.findChildren(QtWidgets.QWidget):
+            update_font = widget.font()
+            update_font.setPointSize(font_size)
+            widget.setFont(update_font)
+        self.setUpdatesEnabled(True)
+        QtWidgets.QApplication.processEvents()
 
         new_cb_stylesheet = '''
 QCheckBox::indicator {
@@ -1252,6 +1248,8 @@ class MenuBar(QtWidgets.QMenuBar):
         # Help Menu
         self.help_menu = self.addMenu('Help')
         self.help_menu.setTearOffEnabled(True)
+        logs_dir_action = self.help_menu.addAction('Open Logs Dir')
+        logs_dir_action.triggered.connect(self.open_logs_dir)
         prefs_dir_action = self.help_menu.addAction('Open Prefs Dir')
         prefs_dir_action.triggered.connect(self.open_prefs_dir)
         config_dir_action = self.help_menu.addAction('Open Plugins Dir')
@@ -1335,45 +1333,40 @@ class MenuBar(QtWidgets.QMenuBar):
 
     @staticmethod
     def open_prefs_dir():
-        d = user_dir.PREF_DIR
-        if 'darwin' in sys.platform:
-            os.system('open {}'.format(d))
-        elif 'win' in sys.platform:
-            os.startfile(d)
-        else:
-            try:
-                os.system('xdg-open {}'.format(d))
-            except:
-                logger.exception('Failed to open user dir')
+        QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl.fromLocalFile(user_dir.PREF_DIR)
+        )
 
     @staticmethod
     def open_plugins_dir():
-        d = USER_PLUGIN_DIR
-        if 'darwin' in sys.platform:
-            os.system('open {}'.format(d))
-        elif 'win' in sys.platform:
-            os.startfile(d)
-        else:
-            try:
-                os.system('xdg-open {}'.format(d))
-            except:
-                logger.exception('Failed to open user config dir')
+        QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl.fromLocalFile(USER_PLUGIN_DIR)
+        )
+
+    @staticmethod
+    def open_logs_dir():
+        try:
+            log_dir = nxt_log.LOG_DIR
+        except AttributeError:
+            # Guess the log dir if nxt core is old.
+            log_dir = os.path.join(tempfile.gettempdir(), 'nxt_logs')
+        QtGui.QDesktopServices.openUrl(
+            QtCore.QUrl.fromLocalFile(log_dir)
+        )
 
     def about_message(self):
-        text = ('nxt {} \n'
-                'graph v{}\n'
-                'api v{}\n'
-                'editor v{}\n'
-                'Copyright (c) 2015-2020 '
-                'The nxt Authors').format(self.main_window.host_app,
-                                          GRAPH_VERSION.VERSION_STR,
-                                          API_VERSION.VERSION_STR,
-                                          EDITOR_VERSION.VERSION_STR)
+        import datetime, Qt
+        text = (f'nxt {self.main_window.host_app} \n'
+                f'graph v{GRAPH_VERSION.VERSION_STR}\n'
+                f'api v{API_VERSION.VERSION_STR}\n'
+                f'editor v{EDITOR_VERSION.VERSION_STR}\n'
+                f'Qt: {Qt.__binding__} {Qt.__qt_version__}\n'
+                f'Copyright (c) 2015-{datetime.datetime.now().year} '
+                f'The nxt Authors')
         message_box = QtWidgets.QMessageBox()
-        message_box.setWindowTitle('About nxt '
-                                   '({})'.format(EDITOR_VERSION.VERSION_STR))
+        message_box.setWindowTitle(f'About nxt ({EDITOR_VERSION.VERSION_STR})')
         message_box.setText(text)
-        message_box.setStandardButtons(message_box.Close)
+        message_box.setStandardButtons(message_box.StandardButton.Close)
         message_box.setIcon(message_box.Icon.Information)
         message_box.exec_()
 

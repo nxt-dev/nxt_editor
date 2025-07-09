@@ -10,6 +10,7 @@ import os
 
 import json
 import logging
+import shutil
 import sys
 
 if sys.version_info[0] == 2:
@@ -19,7 +20,7 @@ else:
 
 # Internal
 from nxt.constants import USER_DIR
-from nxt_editor.constants import PREF_DIR
+from nxt_editor.constants import PREF_DIR, PREF_DIR_INT, PREF_DIR_NAME
 import nxt_editor
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -31,7 +32,7 @@ BREAKPOINT_FILE = os.path.join(PREF_DIR, 'breakpoints')
 SKIPPOINT_FILE = os.path.join(PREF_DIR, 'skippoints')
 HOTKEYS_PREF = os.path.join(PREF_DIR, 'hotkeys.json')
 MAX_RECENT_FILES = 10
-
+JSON_PREFS = [USER_PREFS_PATH, BREAKPOINT_FILE, SKIPPOINT_FILE, HOTKEYS_PREF]
 broken_files = {}
 
 
@@ -47,7 +48,56 @@ def ensure_pref_dir_exists():
         raise Exception('Failed to generate user dir {}' + USER_DIR)
 
 
+def get_upgradable_prefs():
+    """
+    Identify preference files that can be safely upgraded
+    between major editor versions. Only existing preference files
+    from the nearest older version are copied; missing files are skipped
+    without warnings. Returns a list of prefs that can upgrade and the
+    versio number they're coming from.
+    :returns: (list, int)
+    """
+    upgradable_prefs = []
+    upgrade_prefs_from_version = -1
+    for pref_file in JSON_PREFS:
+        if os.path.isfile(pref_file):
+            break
+    else:  # Didn't find any json prefs in current version prefs
+        dir_num = PREF_DIR_INT - 1
+        while dir_num > -1:
+            old_pref_dir = os.path.join(USER_DIR, PREF_DIR_NAME, str(dir_num))
+            for pref_file in JSON_PREFS:
+                file_name = os.path.basename(pref_file)
+                old_pref_file = os.path.join(old_pref_dir, file_name)
+                if os.path.isfile(old_pref_file):
+                    # In the future if we change the structure of the json
+                    # prefs we'll need a way to convert them or skip
+                    upgradable_prefs.append(old_pref_file)
+            if upgradable_prefs:
+                upgrade_prefs_from_version = dir_num
+                break
+            dir_num -= 1
+    return upgradable_prefs, upgrade_prefs_from_version
+
+
+def upgrade_prefs(prefs_to_upgrade):
+    """
+    Copies old 'upgradeable' prefs to current pref dir, will eat and
+    exception raised by shutil.copy. In the future this function may do more
+    than simply copy.
+    :param prefs_to_upgrade: List of pref filepaths to upgrade
+    """
+    for pref_file in prefs_to_upgrade:
+        try:
+            shutil.copy(pref_file, PREF_DIR)
+        except Exception as e:
+            logger.error(e)
+            logger.error(f'Failed to copy old pref file: {pref_file}')
+
+
 ensure_pref_dir_exists()
+# Must check these before we setup the defaults at the bottom of this file
+UPGRADABLE_PREFS, UPGRADE_PREFS_FROM_VERSION = get_upgradable_prefs()
 
 
 class USER_PREF():
@@ -209,10 +259,10 @@ class PicklePref(PrefFile):
             return
         try:
             with open(self.path, 'r+b') as fp:
-                if sys.version_info[0] == 2:
-                    contents = pickle.load(fp)
-                else:
-                    contents = pickle.load(fp, encoding='bytes')
+                contents = pickle.load(fp, encoding='bytes')
+        except ModuleNotFoundError as e:
+            if 'PySide2' in e.msg:
+                shutil.move(self.path, self.path + '.backup')
         except pickle.UnpicklingError:
             broken_files.setdefault(self.path, 0)
             times_hit = broken_files[self.path]

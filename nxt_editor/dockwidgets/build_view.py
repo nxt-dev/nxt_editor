@@ -315,7 +315,7 @@ class BuildTable(QtWidgets.QTableView):
     """
     def __init__(self):
         super(BuildTable, self).__init__()
-        self.setSelectionMode(self.NoSelection)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.horizontalHeader().hide()
         self.verticalHeader().hide()
         self.break_delegate = LetterCheckboxDelegeate('B')
@@ -342,7 +342,7 @@ class BuildTable(QtWidgets.QTableView):
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
         header.setDefaultSectionSize(28)
-        header.setSectionResizeMode(header.Fixed)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         if header.count():
             column = BuildModel.PATH_COLUMN
             header.setSectionResizeMode(column, QtWidgets.QHeaderView.Stretch)

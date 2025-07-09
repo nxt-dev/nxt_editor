@@ -1,0 +1,17 @@
+name: Unittests
+
+on:
+  workflow_dispatch:
+    branches-ignore: [release]
+  workflow_call:
+  pull_request:
+    branches-ignore: [release]
+  push:
+    branches-ignore: [release]
+
+jobs:
+  test-python:
+    secrets: inherit
+    uses: nxt-dev/nxt/.github/workflows/unittests.yml@dev
+    with:
+      QT_DEPENDENCIES: true

@@ -7,7 +7,6 @@
     "references": [
         "make_unreal_plugin.nxt",
         "make_maya_plugin.nxt",
-        "make_blender_plugin.nxt",
         "../../nxt/build/release.nxt"
     ],
     "comp_overrides": {
@@ -143,6 +142,7 @@
         },
         "/CreateRelease/UploadBlenderAddon": {
             "instance": "/GitUpload",
+            "enabled": false,
             "attrs": {
                 "asset_path": {
                     "type": "raw",
@@ -201,7 +201,8 @@
             "execute_in": "/make_module_folder",
             "child_order": [
                 "zip_blender_addon"
-            ]
+            ],
+            "enabled": false
         },
         "/make_addon/zip_blender_addon": {
             "attrs": {

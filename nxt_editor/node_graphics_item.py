@@ -9,12 +9,11 @@ from collections import OrderedDict
 from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
-from PySide2 import __version_info__ as qt_version
-
 # Internal
 import nxt_editor
 from nxt import nxt_path, nxt_node
 from nxt.nxt_layer import LAYERS
+from nxt_editor.constants import FONTS
 from . import colors
 from nxt.stage import INTERNAL_ATTRS
 from .label_edit import NameEditDialog
@@ -25,16 +24,8 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 MIN_LOD = user_prefs.get(USER_PREF.LOD, .4)
 
-_pyside_version = qt_version
 
-
-if _pyside_version[1] < 11:
-    graphic_type = QtWidgets.QGraphicsItem
-else:
-    graphic_type = QtWidgets.QGraphicsObject
-
-
-class NodeGraphicsItem(graphic_type):
+class NodeGraphicsItem(QtWidgets.QGraphicsObject):
     """The graphics item used to represent nodes in the graph. Contains
     instances of NodeGraphicsPlug for each attribute on the associated node.
     Contains functionality for arranging children into stacks.
@@ -67,8 +58,8 @@ class NodeGraphicsItem(graphic_type):
         self.setAcceptHoverEvents(True)
 
         # draw settings
-        self.title_font = QtGui.QFont("Roboto Mono", 14)
-        self.attr_font = QtGui.QFont("Roboto Mono", 9)
+        self.title_font = QtGui.QFont(FONTS.MONOSPACE, 14)
+        self.attr_font = QtGui.QFont(FONTS.MONOSPACE, 9)
         self.title_rect_height = 39
         self.attr_rect_height = 26
         self.attr_rect_opacity = 0.9
@@ -262,13 +253,13 @@ class NodeGraphicsItem(graphic_type):
     def itemChange(self, change, value):
         """Override of QtWidgets.QGraphicsItem itemChange."""
         # keep connections drawing to node as it moves
-        if change is self.ItemScenePositionHasChanged:
+        if change is QtWidgets.QGraphicsItem.ItemPositionChange:
             graphics = self.view.get_node_connection_graphics(self.node_path)
             for connection in graphics:
                 connection.rebuild_line()
         # TODO: Take into account the positions of every selected node and snap them all to a grid as soon as
         #  the user preses shift. This will avoid the weird wavy snapping effect we have right now
-        if change == self.ItemPositionChange and self.scene():
+        if change == QtWidgets.QGraphicsItem.ItemPositionChange and self.scene():
             ml = QtWidgets.QApplication.mouseButtons() == QtCore.Qt.LeftButton
             shift = QtWidgets.QApplication.keyboardModifiers() == QtCore.Qt.ShiftModifier
             force_snap = self.view.alignment_actions.snap_action.isChecked()
@@ -452,7 +443,8 @@ class NodeGraphicsItem(graphic_type):
 
         # draw collapse state arrow
         for arrow in self.collapse_arrows:
-            self.scene().removeItem(arrow)
+            if arrow.scene():
+                self.scene().removeItem(arrow)
         if lod > MIN_LOD:
             self.collapse_arrows = []
             # TODO calculation needed arrows should be done outside drawing
