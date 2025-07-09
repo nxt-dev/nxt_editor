@@ -17,7 +17,7 @@ import os
 
 # define the function for the dictionary argument
 def dict_or_string(value={}):
-    """This will ensure the data being passed to the argparse for parameters
+    '''This will ensure the data being passed to the argparse for parameters
     is always a dictionary. We expect a json string, a dictionary, or a path to
     a json file
 
@@ -26,7 +26,7 @@ def dict_or_string(value={}):
     :raises TypeError: Error if it's not a str that is json or dict
     :return: Return the dictionary of the data being passed as str or dict
     :rtype: dict
-    """
+    '''
     # check see if it's a dictionary.
     if isinstance(value, dict):
         return value
@@ -41,38 +41,38 @@ def dict_or_string(value={}):
     if os.path.isfile(value):
         try:
             # open the filepath and load the json file
-            with open(value, "r") as fp:
+            with open(value, 'r') as fp:
                 return json.load(fp)
         except json.JSONDecodeError:
             pass
     raise TypeError(
-        "Passed value must be of type dict, string of a dict, or filepath to parameters file!"
+        'Passed value must be of type dict, string of a dict, or filepath to parameters file!'
     )
 
 
 # Initialize parser
-parser = argparse.ArgumentParser(description="This is a cli for running the standalone maya")
+parser = argparse.ArgumentParser(description='This is a cli for running the standalone maya')
 
 # Adding optional argument
 parser.add_argument(
-    "-g", "--graph_path", help="The path to the nxt graph you want to run.", required=True
+    '-g', '--graph_path', help='The path to the nxt graph you want to run.', required=True
 )
 parser.add_argument(
-    "-p",
-    "--parameters",
-    help="""The parameters you want to pass to the graph. Parameters are a string representing a 
-    dictionary.e.g. {'path/to/node.attr':'value'}""",
+    '-p',
+    '--parameters',
+    help='''The parameters you want to pass to the graph. Parameters are a string representing a 
+    dictionary.e.g. {'path/to/node.attr':'value'}''',
     type=dict_or_string,
 ),
 parser.add_argument(
-    "-s", "--start_node", help="The path to the nxt node init the graph you want to run."
+    '-s', '--start_node', help='The path to the nxt node init the graph you want to run.'
 )
 
 # Read arguments from command line
 args = parser.parse_args()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     # import maya standalone
     from maya import standalone
 

@@ -297,7 +297,7 @@ class NxtWarningDialog(QtWidgets.QDialog):
         self.save_details_button.released.connect(self.on_save_details)
 
         self.detail_buttons_layout = QtWidgets.QHBoxLayout()
-        self.detail_buttons_layout.addStretch(streth=1)
+        self.detail_buttons_layout.addStretch(1)
         self.detail_buttons_layout.addWidget(self.save_details_button)
         self.detail_buttons_layout.addWidget(self.copy_details_button)
 
@@ -314,7 +314,7 @@ class NxtWarningDialog(QtWidgets.QDialog):
         self.top_right_layout = QtWidgets.QVBoxLayout()
         self.top_right_layout.addWidget(self.text_label)
         self.top_right_layout.addWidget(self.info_label)
-        self.top_right_layout.addStretch(streth=1)
+        self.top_right_layout.addStretch(1)
         self.top_right_layout.addLayout(self.buttons_layout)
         self.top_layout = QtWidgets.QHBoxLayout()
         self.top_layout.addWidget(self.icon)
@@ -373,14 +373,16 @@ class NxtWarningDialog(QtWidgets.QDialog):
 
 
 class NxtConfirmDialog(QtWidgets.QMessageBox):
+    Ok = QtWidgets.QMessageBox.StandardButton.Ok
+    Cancel = QtWidgets.QMessageBox.StandardButton.Cancel
     def __init__(self, text='Title', info='Confirm something!',
                  button_text=None, icon=QtWidgets.QMessageBox.Icon.Question):
         """Simple message box used for user confirmation
         :param text: Title text
         :param info: Main info text
         :param button_text: Custom button text dict:
-        {QtWidgets.QMessageBox.Ok: 'Custom Ok Text',
-        QtWidgets.QMessageBox.Cancel: 'Custom Cancel Text'}
+        {QtWidgets.QMessageBox.StandardButton.Ok: 'Custom Ok Text',
+        QtWidgets.QMessageBox.StandardButton.Cancel: 'Custom Cancel Text'}
         """
         super(NxtConfirmDialog, self).__init__()
         self.setText(text)
@@ -389,6 +391,7 @@ class NxtConfirmDialog(QtWidgets.QMessageBox):
         self.setIcon(icon)
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         self.setStandardButtons(self.Ok | self.Cancel)
+        self.setWindowTitle(text)
         if button_text:
             self.setButtonText(self.Ok, button_text.get(self.Ok, 'Ok'))
             self.setButtonText(self.Cancel, button_text.get(self.Cancel,
@@ -406,6 +409,31 @@ class NxtConfirmDialog(QtWidgets.QMessageBox):
         if result == dialog.Ok:
             return True
         return False
+
+
+class UpgradePrefsDialogue(NxtConfirmDialog):
+    def __int__(self, title_text, info, button_text):
+        super(UpgradePrefsDialogue, self).__init__(text=title_text,
+                                                   info=info,
+                                                   button_text=button_text)
+
+    @classmethod
+    def confirm_upgrade_if_possible(cls):
+
+        if not user_dir.UPGRADABLE_PREFS:
+            return
+        from_version = user_dir.UPGRADE_PREFS_FROM_VERSION
+        title_text = f'Copy version {from_version} Preferences?'
+        button_text = {
+            NxtConfirmDialog.Ok: f'Copy v{from_version} prefs',
+            NxtConfirmDialog.Cancel: 'Use default preferences'
+        }
+        i = ('Would you like to copy preferences from an older version of NXT?'
+             '\nSome things like the window layout may not be preserved.')
+        do_upgrade = super().show_message(text=title_text, info=i,
+                                          button_text=button_text)
+        if do_upgrade:
+            user_dir.upgrade_prefs(user_dir.UPGRADABLE_PREFS)
 
 
 class UnsavedLayersDialogue(QtWidgets.QDialog):

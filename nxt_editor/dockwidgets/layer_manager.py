@@ -19,7 +19,7 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 class LayerManager(DockWidgetBase):
     """Interactive tree view of the layers in the open graph.
     """
-    def __init__(self, title='Layer Manger', parent=None):
+    def __init__(self, title='Layer Manager', parent=None):
         super(LayerManager, self).__init__(title=title,
                                            parent=parent,
                                            minimum_width=100)
@@ -100,7 +100,7 @@ class LayerTreeView(QtWidgets.QTreeView):
         header = self.header()
         header.setStretchLastSection(False)
         header.setDefaultSectionSize(LayerTreeView.SIZE)
-        header.setSectionResizeMode(header.Fixed)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Fixed)
         if header.count():
             header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
             self.hideColumn(LayerModel.TARGET_COLUMN)

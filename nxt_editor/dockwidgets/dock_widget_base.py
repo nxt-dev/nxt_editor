@@ -99,10 +99,14 @@ class DockWidgetBase(QDockWidget):
             (model.destroyed, self.on_stage_model_destroyed)
         ]
         for model_signal, my_func in self.model_signal_connections:
-            if connect:
-                model_signal.connect(my_func)
-            else:
-                model_signal.disconnect(my_func)
+            try:
+                if connect:
+                    model_signal.connect(my_func)
+                else:
+                    model_signal.disconnect(my_func)
+            except RuntimeError as e:
+                state = 'connect' if connect else 'disconnect'  # py 3.10 safe
+                logger.debug(f'Failed to {state} signal! {e}')
         self.model_signal_connections = []
 
     def on_stage_model_destroyed(self):

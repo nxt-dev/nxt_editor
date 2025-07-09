@@ -107,7 +107,7 @@ class NxtUiCmd(om.MPxCommand):
                 if __NXT_INSTANCE__:
                     __NXT_INSTANCE__.close()
                 return
-        nxt_win = nxt_editor.main_window.MainWindow()
+        nxt_win = nxt_editor.show_new_editor()
         if 'win32' in sys.platform:
             # gives nxt it's own entry on taskbar
             nxt_win.setWindowFlags(QtCore.Qt.Window)
