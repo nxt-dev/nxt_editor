@@ -536,9 +536,12 @@ class PythonConsoleLineEdit(QtWidgets.QLineEdit):
         self.returnPressed.connect(self.on_return)
 
     def on_return(self):
-        need_more = self.console.push(self.text())
-        if not need_more:
-            self.clear()
+        try:
+            need_more = self.console.push(self.text())
+            if not need_more:
+                self.clear()
+        except:
+            pass
 
 
 class QtLogStreamHandler(nxt_log.LogRecordStreamHandler):
