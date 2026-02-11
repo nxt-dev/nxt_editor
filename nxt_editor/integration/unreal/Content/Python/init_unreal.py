@@ -33,11 +33,18 @@ def uninstall_nxt_from_interpreter():
                            'uninstall', '-y', 'nxt-editor', 'nxt-core'])
     unreal.log_warning("Nxt menu will refresh next editor launch.")
 
+def launch_nxt_editor():
+    try:
+        from nxt_editor.integration.unreal import launch_nxt_in_ue
+        launch_nxt_in_ue()
+    except Exception as e:
+        unreal.log_error(f'nxt editor crashed: {e}')
+
 def make_open_editor_entry():
     entry = unreal.ToolMenuEntry(name='Open Editor',
                                  type=unreal.MultiBlockType.MENU_ENTRY)
     entry.set_label('Open Editor')
-    launch_command = "from nxt_editor.integration.unreal import launch_nxt_in_ue; launch_nxt_in_ue()"
+    launch_command = "import init_unreal; init_unreal.launch_nxt_editor()"
     entry.set_string_command(unreal.ToolMenuStringCommandType.PYTHON, 'Python',
                              string=launch_command)
     return entry
