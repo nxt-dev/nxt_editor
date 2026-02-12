@@ -2,6 +2,31 @@ import os
 import sys
 import unreal
 import subprocess
+from functools import wraps
+
+
+def fail_safe(func):
+    """Decorator to wrap functions with exception handling to prevent crashes."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            func_name = func.__name__
+            error_msg = f"Error in {func_name}: {type(e).__name__}: {e}"
+            unreal.log_error(error_msg)
+            # Also show a notification to the user
+            try:
+                unreal.EditorDialog.show_message(
+                    title=f"NXT Error: {func_name}",
+                    message=error_msg,
+                    message_type=unreal.AppMsgType.OK
+                )
+            except:
+                # If dialog fails, at least we logged the error
+                pass
+            return None
+    return wrapper
 
 
 def is_nxt_available():
@@ -19,32 +44,41 @@ def get_python_exc_path():
     real_prefix = os.path.realpath(sys.prefix)
     return os.path.join(real_prefix, exc_name)
 
+@fail_safe
 def install_nxt_to_interpreter():
-    subprocess.check_call([get_python_exc_path(), '-m', 'pip',
-                           'install', 'nxt-editor'])
-    unreal.log_warning("Please restart the editor for nxt menu options.")
+    try:
+        subprocess.check_call([get_python_exc_path(), '-m', 'pip',
+                               'install', 'nxt-editor'])
+        unreal.log_warning("Please restart the editor for nxt menu options.")
+    except Exception as e:
+        unreal.log_error(f"Failed to install nxt-editor package: {e}")
+    try:
+        refresh_nxt_menu()
+    except Exception as e:
+        unreal.log_error(f"Failed to refresh nxt menu after installation: {e}")
 
+@fail_safe
 def update_installed_nxt():
     subprocess.check_call([get_python_exc_path(), '-m', 'pip',
                            'install', '--upgrade', 'nxt-editor', 'nxt-core'])
 
+@fail_safe
 def uninstall_nxt_from_interpreter():
     subprocess.check_call([get_python_exc_path(), '-m', 'pip',
                            'uninstall', '-y', 'nxt-editor', 'nxt-core'])
     unreal.log_warning("Nxt menu will refresh next editor launch.")
 
+@fail_safe
 def launch_nxt_editor():
-    try:
-        from nxt_editor.integration.unreal import launch_nxt_in_ue
-        launch_nxt_in_ue()
-    except Exception as e:
-        unreal.log_error(f'nxt editor crashed: {e}')
+    """Safe wrapper for launching the nxt editor."""
+    from nxt_editor.integration.unreal import launch_nxt_in_ue
+    launch_nxt_in_ue()
 
 def make_open_editor_entry():
     entry = unreal.ToolMenuEntry(name='Open Editor',
                                  type=unreal.MultiBlockType.MENU_ENTRY)
     entry.set_label('Open Editor')
-    launch_command = "import init_unreal; init_unreal.launch_nxt_editor()"
+    launch_command = "launch_nxt_editor()"
     entry.set_string_command(unreal.ToolMenuStringCommandType.PYTHON, 'Python',
                              string=launch_command)
     return entry
