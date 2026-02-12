@@ -2,6 +2,7 @@ import os
 import sys
 import unreal
 import subprocess
+from pathlib import Path
 from functools import wraps
 
 
@@ -37,12 +38,23 @@ def is_nxt_available():
         return False
 
 def get_python_exc_path():
+    sys_exe = Path(sys.executable)
     exc_name = 'python'
+    platform = 'Mac'
     if sys.platform == 'win32':
         exc_name = 'python.exe'
-
+        platform = 'Win64'
+    # Check the python bundled with unreal first
+    py_exe = sys_exe.parent.parent / f'ThirdParty/Python3/{platform}/{exc_name}'
+    if py_exe.exists():
+        return str(py_exe)
+    # Fallback to guessing based on sys.prefix
     real_prefix = os.path.realpath(sys.prefix)
-    return os.path.join(real_prefix, exc_name)
+    py_exe = Path(real_prefix) / exc_name
+    if py_exe.exists():
+        return str(py_exe)
+    raise FileNotFoundError(f'Cannot find python executable for pip install. '
+                            f'Checked {py_exe} and {real_prefix} / {exc_name}')
 
 @fail_safe
 def install_nxt_to_interpreter():
