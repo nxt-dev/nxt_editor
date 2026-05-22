@@ -22,19 +22,35 @@ from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
 from nxt_editor.stage_view import StageView
 from nxt_editor.stage_model import StageModel
-from nxt_editor.dockwidgets import (DockWidgetBase, CodeEditor, PropertyEditor,
-                                    HotkeyEditor, LayerManager, OutputLog,
-                                    HistoryView, WidgetBuilder, BuildView,
-                                    FindRepDockWidget)
-from nxt_editor.dockwidgets.output_log import (FileTailingThread,
-                                               QtLogStreamHandler)
+from nxt_editor.dockwidgets import (
+    DockWidgetBase,
+    CodeEditor,
+    PropertyEditor,
+    HotkeyEditor,
+    LayerManager,
+    OutputLog,
+    HistoryView,
+    WidgetBuilder,
+    BuildView,
+    FindRepDockWidget,
+)
+from nxt_editor.dockwidgets.output_log import FileTailingThread, QtLogStreamHandler
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
 from nxt import nxt_log, nxt_io, nxt_layer
-from nxt_editor.dialogs import (NxtFileDialog, NxtWarningDialog,
-                                UnsavedLayersDialogue, UnsavedChangesMessage)
+from nxt_editor.dialogs import (
+    NxtFileDialog,
+    NxtWarningDialog,
+    UnsavedLayersDialogue,
+    UnsavedChangesMessage,
+)
 from nxt_editor import actions, LoggingSignaler
-from nxt.constants import (API_VERSION, GRAPH_VERSION, USER_PLUGIN_DIR,
-                           NXT_DCC_ENV_VAR, is_standalone)
+from nxt.constants import (
+    API_VERSION,
+    GRAPH_VERSION,
+    USER_PLUGIN_DIR,
+    NXT_DCC_ENV_VAR,
+    is_standalone,
+)
 from nxt.remote.client import NxtClient
 import nxt.remote.contexts
 from nxt_editor import qresources
@@ -44,7 +60,6 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
 class MainWindow(QtWidgets.QMainWindow):
-
     """The main window of the nxt UI. Includes the menu bar, tool bar, and dock widgets."""
 
     tab_changed = QtCore.Signal()
@@ -59,11 +74,12 @@ class MainWindow(QtWidgets.QMainWindow):
         :type parent: QtWidgets.QtWidgets.QWidget
         """
         self.in_startup = True
-        pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
+        pixmap = QtGui.QPixmap(":icons/icons/nxt.svg")
         self.splash_screen = QtWidgets.QSplashScreen(pixmap)
         self.splash_screen.show()
-        self.splash_screen.showMessage('Starting nxt...',
-                                       QtCore.Qt.AlignCenter, QtCore.Qt.white)
+        self.splash_screen.showMessage(
+            "Starting nxt...", QtCore.Qt.AlignCenter, QtCore.Qt.white
+        )
         QtWidgets.QApplication.processEvents()
         super(MainWindow, self).__init__(parent=parent)
         self.new_log_signal.connect(self.handle_remote_log)
@@ -74,38 +90,42 @@ class MainWindow(QtWidgets.QMainWindow):
         # bar will be updated for easy reference.
 
         # Used to hide the stderr from the user as it doesn't matter
-        f = open(nxt_io.generate_temp_file('NxtGitErr'))
+        f = open(nxt_io.generate_temp_file("NxtGitErr"))
         try:
-            git_out = subprocess.check_output(["git", "branch"],
-                                              stderr=f).decode("utf8")
-            cur = next(line for line in git_out.split("\n")
-                       if line.startswith("*"))
+            git_out = subprocess.check_output(["git", "branch"], stderr=f).decode(
+                "utf8"
+            )
+            cur = next(line for line in git_out.split("\n") if line.startswith("*"))
             current_branch = cur.strip("*").strip()
         except:  # Broad because Maya
             # Failed to run git branch, attempting fallback method
             try:
-                with open('../../.git/HEAD') as f:
+                with open("../../.git/HEAD") as f:
                     head = f.read()
-                _, __, current_branch = head.rpartition('/')
+                _, __, current_branch = head.rpartition("/")
             except:
                 # Could not determine git branch, must be pip package.
-                current_branch = ''
+                current_branch = ""
         finally:
             f.close()
         os.chdir(old_cwd)
         if is_standalone():
-            context = 'standalone'
+            context = "standalone"
         else:
-            context = os.environ.get(NXT_DCC_ENV_VAR) or ''
+            context = os.environ.get(NXT_DCC_ENV_VAR) or ""
         self.host_app = context
-        self.setWindowTitle("nxt {} - Editor v{} | Graph v{} | API v{} "
-                            "(Python {}) {}".format(self.host_app,
-                                                    EDITOR_VERSION.VERSION_STR,
-                                                    GRAPH_VERSION.VERSION_STR,
-                                                    API_VERSION.VERSION_STR,
-                                                    '.'.join([str(n) for n in sys.version_info[:3]]),
-                                                    current_branch))
-        self.setObjectName('Main Window')
+        self.setWindowTitle(
+            "nxt {} - Editor v{} | Graph v{} | API v{} "
+            "(Python {}) {}".format(
+                self.host_app,
+                EDITOR_VERSION.VERSION_STR,
+                GRAPH_VERSION.VERSION_STR,
+                API_VERSION.VERSION_STR,
+                ".".join([str(n) for n in sys.version_info[:3]]),
+                current_branch,
+            )
+        )
+        self.setObjectName("Main Window")
         self.zoom_keys = QtGui.QKeySequence(QtCore.Qt.Key_Alt)
         self.zoom_keys_down = False
         self._held_keys = []
@@ -118,7 +138,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowIcon(self.app_icon)
 
         # set style sheet
-        style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
+        style_file = QtCore.QFile(":styles/styles/dark/dark.qss")
         style_file.open(QtCore.QFile.ReadOnly)
         self.stylesheet = str(style_file.readAll())
         self.setStyleSheet(self.stylesheet)
@@ -134,8 +154,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # APPLICATION WIDE ACTIONS
         # TODO: All the actions should be connected to functions in nxt not
         #  view
-        self.splash_screen.showMessage('Setting up hotkeys...',
-                                       QtCore.Qt.AlignCenter, QtCore.Qt.white)
+        self.splash_screen.showMessage(
+            "Setting up hotkeys...", QtCore.Qt.AlignCenter, QtCore.Qt.white
+        )
         self.app_actions = actions.AppActions(self)
         self.addActions(self.app_actions.actions())
         # NODE ACTIONS
@@ -158,15 +179,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # CODE EDITOR ACTIONS
         self.code_editor_actions = actions.CodeEditorActions(self)
         # TOOL BARS
-        self.authoring_toolbar = NodeAuthoringToolBar(self,
-                                                      self.font_size_changed)
+        self.authoring_toolbar = NodeAuthoringToolBar(self, self.font_size_changed)
         self.addToolBar(self.authoring_toolbar)
         self.execute_toolbar = ExecuteToolBar(self, self.font_size_changed)
         self.addToolBar(self.execute_toolbar)
         self.display_toolbar = DisplayToolBar(self, self.font_size_changed)
         self.addToolBar(self.display_toolbar)
-        self.align_distribute_toolbar = AlignDistributeToolBar(self,
-                                                               self.font_size_changed)
+        self.align_distribute_toolbar = AlignDistributeToolBar(
+            self, self.font_size_changed
+        )
         self.addToolBar(self.align_distribute_toolbar)
         # TABS WIDGET
         self.open_files_tab_widget = OpenFilesTabWidget(parent=self)
@@ -175,8 +196,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # graph tabs
         self.open_files_tab_widget.currentChanged.connect(self.on_tab_change)
         self.setCentralWidget(self.open_files_tab_widget)
-        self.splash_screen.showMessage('Setting up dockwidgets...',
-                                       QtCore.Qt.AlignCenter, QtCore.Qt.white)
+        self.splash_screen.showMessage(
+            "Setting up dockwidgets...", QtCore.Qt.AlignCenter, QtCore.Qt.white
+        )
         # Dock Widgets
         # hotkey editor
         self.hotkey_editor = HotkeyEditor(parent=self)
@@ -216,18 +238,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.workflow_tools = WidgetBuilder(parent=self)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.workflow_tools)
 
-        self.setCorner(QtCore.Qt.BottomRightCorner,
-                       QtCore.Qt.RightDockWidgetArea)
-        self.setCorner(QtCore.Qt.BottomLeftCorner,
-                       QtCore.Qt.LeftDockWidgetArea)
-        self.setTabPosition(QtCore.Qt.AllDockWidgetAreas,
-                            QtWidgets.QTabWidget.North)
+        self.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
+        self.setCorner(QtCore.Qt.BottomLeftCorner, QtCore.Qt.LeftDockWidgetArea)
+        self.setTabPosition(QtCore.Qt.AllDockWidgetAreas, QtWidgets.QTabWidget.North)
 
         # status bar
         self.status_bar = QtWidgets.QStatusBar()
         self.status_bar.setSizeGripEnabled(False)
         self.status_bar.setContentsMargins(4, 4, 4, 4)
-        self.status_bar.setStyleSheet('color: lightGrey; background-color: #232323; border: 4px solid #3E3E3E')
+        self.status_bar.setStyleSheet(
+            "color: lightGrey; background-color: #232323; border: 4px solid #3E3E3E"
+        )
         self.setStatusBar(self.status_bar)
 
         self.log_button = QtWidgets.QPushButton("Show Log")
@@ -238,7 +259,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_bar.addPermanentWidget(self.log_button)
         self.refresh_log_button()
 
-        self.logger = logging.getLogger('nxt')
+        self.logger = logging.getLogger("nxt")
         self.logger.addHandler(StatusBarHandler(self.status_bar))
 
         self.state_last_hidden = None
@@ -246,7 +267,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # TODO determine and create sensible default position and size for the window, perhaps 80% of available screen?
         # print QDesktopWidget.availableGeometry(self)
         self.resize(1600, 800)
-        self.resizeDocks([self.property_editor, self.code_editor], [400, 300], QtCore.Qt.Vertical)
+        self.resizeDocks(
+            [self.property_editor, self.code_editor], [400, 300], QtCore.Qt.Vertical
+        )
 
         if filepath:
             self.load_file(filepath=filepath)
@@ -262,9 +285,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.rpc_log_tail = None
         if start_rpc:
             self.startup_rpc_server(join=False)
-        self.splash_screen.showMessage('Restoring \nfont \nsize...',
-                                       QtCore.Qt.AlignCenter,
-                                       QtCore.Qt.white)
+        self.splash_screen.showMessage(
+            "Restoring \nfont \nsize...", QtCore.Qt.AlignCenter, QtCore.Qt.white
+        )
         self.restore_font_size()
         # Should this be a signal? Like Startup done, now you can refresh?
         self.splash_screen.finish(self)
@@ -276,6 +299,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.view:
                 self.view.failure_check()
             t.stop()
+
         t.timeout.connect(failure_check)
         t.start()
 
@@ -289,15 +313,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if join:
             t.wait()
         else:
-            txt = 'Waiting on rpc server...'
+            txt = "Waiting on rpc server..."
             txt_len = len(txt)
             self.count = 0
 
             def tick():
-                self.splash_screen.showMessage(txt[:self.count % -txt_len],
-                                               QtCore.Qt.AlignCenter,
-                                               QtCore.Qt.white)
+                self.splash_screen.showMessage(
+                    txt[: self.count % -txt_len], QtCore.Qt.AlignCenter, QtCore.Qt.white
+                )
                 self.count += 1
+
             timer = QtCore.QTimer()
             timer.setInterval(100)
             timer.timeout.connect(tick)
@@ -323,7 +348,7 @@ class MainWindow(QtWidgets.QMainWindow):
         while not self.rpc_log_tail.isFinished():
             QtWidgets.QApplication.processEvents()
             if time.time() - wait_started > 5:
-                logger.error('Failed to stop rpc log tail!')
+                logger.error("Failed to stop rpc log tail!")
                 return
         self.rpc_log_tail = None
 
@@ -376,29 +401,46 @@ class MainWindow(QtWidgets.QMainWindow):
         font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
         app.setFont(font)
 
-        widgets_with_fonts = ["QMenuBar", "QTabWidget", "QMenu", "QTableView",
-                              "QLineEdit", "QComboBox", "QLabel",
-                              "QPushButton", "QTextEdit", "QWidget",
-                              "QListWidget", "QTabelWidget", "QTreeWidget",
-                              "QSpinBox", "QDoubleSpinBox", "QCheckBox"]
+        widgets_with_fonts = [
+            "QMenuBar",
+            "QTabWidget",
+            "QMenu",
+            "QTableView",
+            "QLineEdit",
+            "QComboBox",
+            "QLabel",
+            "QPushButton",
+            "QTextEdit",
+            "QWidget",
+            "QListWidget",
+            "QTabelWidget",
+            "QTreeWidget",
+            "QSpinBox",
+            "QDoubleSpinBox",
+            "QCheckBox",
+        ]
         for widget in widgets_with_fonts:
             app.setFont(font, widget)
 
-        new_cb_stylesheet = '''
+        new_cb_stylesheet = """
 QCheckBox::indicator {
     margin-left: 4px;
     width: %spx;
     height: %spx;
 }
-                    ''' % (font_size * 1.5, font_size * 1.5)
+                    """ % (
+            font_size * 1.5,
+            font_size * 1.5,
+        )
         # List all checkboxes and update their style sheet.
         for widget in QtWidgets.QApplication.allWidgets():
             if isinstance(widget, QtWidgets.QCheckBox):
                 widget.setStyleSheet(new_cb_stylesheet)
 
     def restore_font_size(self):
-        user_pref_size = user_dir.user_prefs.get(user_dir.USER_PREF.FONT_SIZE,
-                                                 FONTS.DEFAULT_SIZE)
+        user_pref_size = user_dir.user_prefs.get(
+            user_dir.USER_PREF.FONT_SIZE, FONTS.DEFAULT_SIZE
+        )
         if user_pref_size > FONTS.DEFAULT_SIZE:
             self.font_size_changed.emit(user_pref_size - FONTS.DEFAULT_SIZE)
         elif user_pref_size < FONTS.DEFAULT_SIZE:
@@ -410,21 +452,25 @@ QCheckBox::indicator {
         user_dir.user_prefs.pop(user_dir.USER_PREF.FONT_SIZE)
         self.font_size_changed.emit(0)
 
-
     @staticmethod
-    def create_remote_context(place_holder_text='',
-                              interpreter_exe=sys.executable,
-                              context_graph=None, exe_script_args=()):
+    def create_remote_context(
+        place_holder_text="",
+        interpreter_exe=sys.executable,
+        context_graph=None,
+        exe_script_args=(),
+    ):
         cur_context = nxt.remote.contexts.get_current_context_exe_name()
         pop_up = QtWidgets.QDialog()
         pop_up.setWindowTitle('Create context for "{}"'.format(cur_context))
         v_layout = QtWidgets.QVBoxLayout()
         pop_up.setLayout(v_layout)
         label = QtWidgets.QPlainTextEdit()
-        info = ('Create remote context for your host '
-                'Python interpreter/DCC\n'
-                'Type your desired name in the box below '
-                'and click create.'.format(cur_context))
+        info = (
+            "Create remote context for your host "
+            "Python interpreter/DCC\n"
+            "Type your desired name in the box below "
+            "and click create.".format(cur_context)
+        )
         label.setPlainText(info)
         label.setReadOnly(True)
         font_metric = QtGui.QFontMetrics(label.document().defaultFont())
@@ -436,23 +482,24 @@ QCheckBox::indicator {
         name = QtWidgets.QLineEdit()
         name.setPlaceholderText(str(place_holder_text))
         name.setText(str(place_holder_text))
-        create_button = QtWidgets.QPushButton('Create!')
+        create_button = QtWidgets.QPushButton("Create!")
         h_layout.addWidget(name)
         h_layout.addWidget(create_button)
 
         def do_create():
             try:
-                nxt.create_context(name.text(),
-                                   interpreter_exe=interpreter_exe,
-                                   context_graph=context_graph,
-                                   exe_script_args=exe_script_args)
+                nxt.create_context(
+                    name.text(),
+                    interpreter_exe=interpreter_exe,
+                    context_graph=context_graph,
+                    exe_script_args=exe_script_args,
+                )
                 pop_up.close()
             except (IOError, NameError) as e:
                 info = str(e)
-                msg = 'Failed to create context!'
+                msg = "Failed to create context!"
                 logger.error(info)
-                nxt_editor.dialogs.NxtWarningDialog.show_message(msg,
-                                                                 info=info)
+                nxt_editor.dialogs.NxtWarningDialog.show_message(msg, info=info)
 
         create_button.pressed.connect(do_create)
         pop_up.exec_()
@@ -484,12 +531,18 @@ QCheckBox::indicator {
         """
         hotkeys = OrderedDict()
         # Action container objects in the order we wish to display them
-        action_containers = [self.app_actions, self.alignment_actions,
-                             self.display_actions, self.view_actions,
-                             self.layer_actions, self.node_actions,
-                             self.property_manager_actions,
-                             self.node_comment_actions,
-                             self.execute_actions, self.code_editor_actions]
+        action_containers = [
+            self.app_actions,
+            self.alignment_actions,
+            self.display_actions,
+            self.view_actions,
+            self.layer_actions,
+            self.node_actions,
+            self.property_manager_actions,
+            self.node_comment_actions,
+            self.execute_actions,
+            self.code_editor_actions,
+        ]
         for container in action_containers:
             hotkeys[container.objectName()] = container.get_action_data()
         return hotkeys
@@ -527,8 +580,7 @@ QCheckBox::indicator {
         view = StageView(model=model, parent=self)
         # setup tab
         tab_index = self.open_files_tab_widget.count()
-        self.open_files[model.uid] = {'stage': stage, 'model': model,
-                                      'view': view}
+        self.open_files[model.uid] = {"stage": stage, "model": model, "view": view}
         self.open_files_tab_widget.addTab(view, stage._name)
         if update:
             self.open_files_tab_widget.setCurrentIndex(tab_index)
@@ -641,8 +693,7 @@ QCheckBox::indicator {
         else:
             base_dir = layer.real_path
         caption = 'Save "{}"'.format(layer.get_alias())
-        save_path = NxtFileDialog.system_file_dialog(base_dir, 'save',
-                                                     caption=caption)
+        save_path = NxtFileDialog.system_file_dialog(base_dir, "save", caption=caption)
         if not save_path:
             return False
         self.set_waiting_cursor(True)
@@ -684,28 +735,28 @@ QCheckBox::indicator {
         self.model.select_and_frame(start_nodes[idx])
 
     def align_left(self):
-        logger.info('align left')
+        logger.info("align left")
 
     def align_hcenter(self):
-        logger.info('align hcenter')
+        logger.info("align hcenter")
 
     def align_right(self):
-        logger.info('align right')
+        logger.info("align right")
 
     def align_top(self):
-        logger.info('align top')
+        logger.info("align top")
 
     def align_vcenter(self):
-        logger.info('align vcenter')
+        logger.info("align vcenter")
 
     def align_bottom(self):
-        logger.info('align bottom')
+        logger.info("align bottom")
 
     def distribute_horizontal(self):
-        logger.info('distribute horizontal')
+        logger.info("distribute horizontal")
 
     def distribute_vertical(self):
-        logger.info('distribute vertical')
+        logger.info("distribute vertical")
 
     def undo(self):
         current_view = self.get_current_view()
@@ -756,7 +807,7 @@ QCheckBox::indicator {
         uid = view.model.uid
         self.last_focused_start = 0
         if uid in self.open_files.keys():
-            model = self.open_files[uid]['model']
+            model = self.open_files[uid]["model"]
             layer_path = model.get_layer_path(model.top_layer)
             title = model.get_layer_alias(layer_path)
             self.open_files_tab_widget.setTabText(tab_index, title)
@@ -799,7 +850,7 @@ QCheckBox::indicator {
         widget = self.open_files_tab_widget.widget(idx)
         if widget:
             uid = widget.model.uid
-            return self.open_files[uid]['model']
+            return self.open_files[uid]["model"]
 
     def get_current_view(self):
         return self.open_files_tab_widget.currentWidget()
@@ -824,7 +875,9 @@ QCheckBox::indicator {
         color = self.model.get_layer_color(disp_layer)
 
         # update widgets
-        self.open_files_tab_widget.setStyleSheet('padding: 1; border: 1px solid %s' % color)
+        self.open_files_tab_widget.setStyleSheet(
+            "padding: 1; border: 1px solid %s" % color
+        )
         self.open_files_tab_widget.update()
         self.code_editor.update_border_color()
         self.property_editor.update_styles()
@@ -897,9 +950,9 @@ QCheckBox::indicator {
             return
         dirty_models = []
         for open_file_dict in self.open_files.values():
-            unsaved = open_file_dict['model'].get_unsaved_changes()
+            unsaved = open_file_dict["model"].get_unsaved_changes()
             if unsaved:
-                dirty_models += [open_file_dict['model']]
+                dirty_models += [open_file_dict["model"]]
         if dirty_models:
             resp = UnsavedLayersDialogue.save_before_exit(dirty_models, self)
             if resp == QtWidgets.QDialog.Rejected:
@@ -925,7 +978,7 @@ QCheckBox::indicator {
         # Save closing session
         closing_session = []
         for file_dict in self.open_files.values():
-            model = file_dict['model']
+            model = file_dict["model"]
             real_path = model.top_layer.real_path
             if not real_path:
                 continue
@@ -985,9 +1038,11 @@ class ToolBar(QtWidgets.QToolBar):
             if icon.isNull():
                 continue
             pixmap = icon.pixmap(self.size)
-            new_pixmap = pixmap.scaled(QtCore.QSize(self.size, self.size),
-                                       QtCore.Qt.IgnoreAspectRatio,
-                                       QtCore.Qt.SmoothTransformation)
+            new_pixmap = pixmap.scaled(
+                QtCore.QSize(self.size, self.size),
+                QtCore.Qt.IgnoreAspectRatio,
+                QtCore.Qt.SmoothTransformation,
+            )
 
             action.setIcon(QtGui.QIcon(new_pixmap))
 
@@ -998,9 +1053,10 @@ class ToolBar(QtWidgets.QToolBar):
 class NodeAuthoringToolBar(ToolBar):
 
     def __init__(self, parent=None, resize_signal=None):
-        super(NodeAuthoringToolBar, self).__init__(parent=parent,
-                                                   resize_signal=resize_signal)
-        self.setObjectName('Node Authoring')
+        super(NodeAuthoringToolBar, self).__init__(
+            parent=parent, resize_signal=resize_signal
+        )
+        self.setObjectName("Node Authoring")
         self.main_window = parent
         self.node_actions = self.main_window.node_actions
         self.main = QtWidgets.QWidget()
@@ -1042,9 +1098,10 @@ class NodeAuthoringToolBar(ToolBar):
 class AlignDistributeToolBar(ToolBar):
 
     def __init__(self, parent=None, resize_signal=None):
-        super(AlignDistributeToolBar, self).__init__(parent=parent,
-                                                     resize_signal=resize_signal)
-        self.setObjectName('Alignment Tools')
+        super(AlignDistributeToolBar, self).__init__(
+            parent=parent, resize_signal=resize_signal
+        )
+        self.setObjectName("Alignment Tools")
         self.main_window = parent
         # ACTIONS
         self.addActions(self.main_window.alignment_actions.actions())
@@ -1053,32 +1110,42 @@ class AlignDistributeToolBar(ToolBar):
 class ExecuteToolBar(ToolBar):
 
     def __init__(self, parent=None, resize_signal=None):
-        super(ExecuteToolBar, self).__init__(parent=parent,
-                                             resize_signal=resize_signal)
-        self.setObjectName('Execute Tools')
+        super(ExecuteToolBar, self).__init__(parent=parent, resize_signal=resize_signal)
+        self.setObjectName("Execute Tools")
         self.main_window = parent
         self.exec_actions = self.main_window.execute_actions
-        self.addActions([self.exec_actions.execute_graph_action,
-                         self.exec_actions.stop_exec_action,
-                         self.exec_actions.execute_selected_action,
-                         self.exec_actions.execute_from_action,
-                         self.exec_actions.execute_hierarchy_action])
+        self.addActions(
+            [
+                self.exec_actions.execute_graph_action,
+                self.exec_actions.stop_exec_action,
+                self.exec_actions.execute_selected_action,
+                self.exec_actions.execute_from_action,
+                self.exec_actions.execute_hierarchy_action,
+            ]
+        )
         self.addSeparator()
-        self.addActions([self.exec_actions.add_start_action,
-                         self.exec_actions.remove_start_action,
-                         self.exec_actions.find_start_action])
+        self.addActions(
+            [
+                self.exec_actions.add_start_action,
+                self.exec_actions.remove_start_action,
+                self.exec_actions.find_start_action,
+            ]
+        )
         self.addSeparator()
-        self.addActions([self.exec_actions.add_break_action,
-                         self.exec_actions.remove_break_action,
-                         self.exec_actions.clear_breaks_action])
+        self.addActions(
+            [
+                self.exec_actions.add_break_action,
+                self.exec_actions.remove_break_action,
+                self.exec_actions.clear_breaks_action,
+            ]
+        )
 
 
 class DisplayToolBar(ToolBar):
 
     def __init__(self, parent=None, resize_signal=None):
-        super(DisplayToolBar, self).__init__(parent=parent,
-                                             resize_signal=resize_signal)
-        self.setObjectName('Display Tools')
+        super(DisplayToolBar, self).__init__(parent=parent, resize_signal=resize_signal)
+        self.setObjectName("Display Tools")
         self.main_window = parent
         self.view_actions = self.main_window.view_actions
         self.display_actions = self.main_window.display_actions
@@ -1100,7 +1167,6 @@ class DisplayToolBar(ToolBar):
 
 
 class MenuBar(QtWidgets.QMenuBar):
-
     """Menu bar for nxt main window"""
 
     def __init__(self, parent=None):
@@ -1114,7 +1180,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_actions = parent.view_actions  # type: actions.StageViewActions
         self.layer_actions = parent.layer_actions  # type: actions.LayerActions
         # File Menu
-        self.file_menu = self.addMenu('File')
+        self.file_menu = self.addMenu("File")
         self.file_menu.setTearOffEnabled(True)
         # ACTIONS
         # Something of note:
@@ -1129,7 +1195,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.file_menu.addAction(self.main_window.app_actions.open_file_action)
 
         # Recent files
-        self.load_recent_menu = RecentFilesMenu(action_target=self.main_window.load_file)
+        self.load_recent_menu = RecentFilesMenu(
+            action_target=self.main_window.load_file
+        )
         self.file_menu.addMenu(self.load_recent_menu)
         self.file_menu.addAction(self.layer_actions.save_layer_action)
         self.file_menu.addAction(self.layer_actions.save_layer_as_action)
@@ -1142,10 +1210,14 @@ class MenuBar(QtWidgets.QMenuBar):
         self.file_menu.addAction(self.layer_actions.ref_layer_above_action)
         self.file_menu.addAction(self.layer_actions.ref_layer_below_action)
         self.file_menu.addSeparator()
-        self.builtins_menu = QtWidgets.QMenu('Reference Builtin Graph')
-        self.builtins_menu.aboutToShow.connect(partial(populate_builtins_menu,
-                                                       qmenu=self.builtins_menu,
-                                                       main_window=self.main_window))
+        self.builtins_menu = QtWidgets.QMenu("Reference Builtin Graph")
+        self.builtins_menu.aboutToShow.connect(
+            partial(
+                populate_builtins_menu,
+                qmenu=self.builtins_menu,
+                main_window=self.main_window,
+            )
+        )
         self.file_menu.addMenu(self.builtins_menu)
         # Close app
         self.file_menu.addSeparator()
@@ -1153,7 +1225,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.file_menu.addAction(self.main_window.app_actions.close_action)
 
         # Edit Menu
-        self.edit_menu = self.addMenu('Edit')
+        self.edit_menu = self.addMenu("Edit")
         self.edit_menu.setTearOffEnabled(True)
 
         self.edit_menu.addAction(self.main_window.app_actions.undo_action)
@@ -1167,7 +1239,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.edit_menu.addAction(self.node_actions.select_all_action)
 
         # view menu
-        self.view_menu = self.addMenu('View')
+        self.view_menu = self.addMenu("View")
         self.view_menu.setTearOffEnabled(True)
         self.view_menu.addAction(self.view_actions.frame_selection_action)
         self.view_menu.addAction(self.view_actions.frame_all_action)
@@ -1178,7 +1250,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.view_actions.implicit_action)
         self.view_menu.addAction(self.view_actions.grid_action)
-        self.view_opt_menu = self.view_menu.addMenu('Options')
+        self.view_opt_menu = self.view_menu.addMenu("Options")
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
@@ -1187,19 +1259,22 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_opt_menu.addAction(self.app_actions.decrease_font_size_action)
         self.view_opt_menu.addAction(self.app_actions.reset_font_size_action)
         self.app_actions.increase_font_size_action.triggered.connect(
-            self.main_window.increase_font_size)
+            self.main_window.increase_font_size
+        )
         self.app_actions.decrease_font_size_action.triggered.connect(
-            self.main_window.decrease_font_size)
+            self.main_window.decrease_font_size
+        )
         self.app_actions.reset_font_size_action.triggered.connect(
-            self.main_window.reset_font_size)
+            self.main_window.reset_font_size
+        )
 
         # graph menu
-        self.graph_menu = self.addMenu('Graph')
+        self.graph_menu = self.addMenu("Graph")
         self.graph_menu.setTearOffEnabled(True)
         self.graph_menu.addAction(self.node_actions.add_node_action)
 
         # execute menu
-        self.execute_menu = self.addMenu('Execute')
+        self.execute_menu = self.addMenu("Execute")
         self.execute_menu.setTearOffEnabled(True)
         self.execute_menu.addAction(self.exec_actions.execute_from_action)
         self.execute_menu.addAction(self.exec_actions.execute_selected_action)
@@ -1218,7 +1293,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.app_actions.workflow_tools_action.setData(parent.workflow_tools)
 
         # window menu
-        self.window_menu = self.addMenu('Window')
+        self.window_menu = self.addMenu("Window")
         self.window_menu.aboutToShow.connect(self.populate_window_menu)
         self.window_menu.triggered.connect(self.window_action_triggered)
         self.window_menu_actions = [
@@ -1229,13 +1304,12 @@ class MenuBar(QtWidgets.QMenuBar):
             self.app_actions.build_view_action,
             self.app_actions.output_log_action,
             self.app_actions.hotkey_editor_action,
-            self.app_actions.workflow_tools_action
+            self.app_actions.workflow_tools_action,
         ]
         self.populate_window_menu()
         # Remote Menu
-        self.remote_menu = self.addMenu('Remote')
-        remote_context_action = self.remote_menu.addAction('Create Remote '
-                                                           'Context')
+        self.remote_menu = self.addMenu("Remote")
+        remote_context_action = self.remote_menu.addAction("Create Remote " "Context")
         remote_context_func = self.main_window.create_remote_context
         remote_context_action.triggered.connect(remote_context_func)
         if not is_standalone():
@@ -1245,62 +1319,61 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addSeparator()
         self.remote_menu.addAction(self.exec_actions.startup_rpc_action)
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
-        self.options_menu = self.addMenu('Options')
+        self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
-        self.options_view_sub = self.options_menu.addMenu('View')
+        self.options_view_sub = self.options_menu.addMenu("View")
         self.options_view_sub.setTearOffEnabled(True)
         self.options_view_sub.addActions(self.view_opt_menu.actions())
         # Help Menu
-        self.help_menu = self.addMenu('Help')
+        self.help_menu = self.addMenu("Help")
         self.help_menu.setTearOffEnabled(True)
-        logs_dir_action = self.help_menu.addAction('Open Logs Dir')
+        logs_dir_action = self.help_menu.addAction("Open Logs Dir")
         logs_dir_action.triggered.connect(self.open_logs_dir)
-        prefs_dir_action = self.help_menu.addAction('Open Prefs Dir')
+        prefs_dir_action = self.help_menu.addAction("Open Prefs Dir")
         prefs_dir_action.triggered.connect(self.open_prefs_dir)
-        config_dir_action = self.help_menu.addAction('Open Plugins Dir')
+        config_dir_action = self.help_menu.addAction("Open Plugins Dir")
         config_dir_action.triggered.connect(self.open_plugins_dir)
         self.help_menu.addSeparator()
         self.help_menu.addAction(self.main_window.app_actions.docs_action)
-        github_action = self.help_menu.addAction('GitHub')
-        url = 'https://github.com/nxt-dev/nxt_editor'
+        github_action = self.help_menu.addAction("GitHub")
+        url = "https://github.com/nxt-dev/nxt_editor"
         github_action.triggered.connect(partial(webbrowser.open_new, url))
         self.help_menu.addSeparator()
-        del_resources = self.help_menu.addAction('Clear UI Icon Cache')
+        del_resources = self.help_menu.addAction("Clear UI Icon Cache")
         del_resources.triggered.connect(self.delete_resources_pyc)
         self.help_menu.addSeparator()
         # Secret Menu
-        self.secret_menu = self.help_menu.addMenu('Developer Options')
+        self.secret_menu = self.help_menu.addMenu("Developer Options")
         self.secret_menu.setTearOffEnabled(True)
-        test_log_action = self.secret_menu.addAction('test logging')
+        test_log_action = self.secret_menu.addAction("test logging")
         test_log_action.triggered.connect(self.__test_all_logging)
-        print_action = self.secret_menu.addAction('test print')
+        print_action = self.secret_menu.addAction("test print")
         print_action.triggered.connect(self.__test_print)
-        critical_action = self.secret_menu.addAction('test remove layer')
+        critical_action = self.secret_menu.addAction("test remove layer")
         critical_action.triggered.connect(self.__test_rm_layer)
-        uncaught_exception = self.secret_menu.addAction('uncaught exception')
+        uncaught_exception = self.secret_menu.addAction("uncaught exception")
         uncaught_exception.triggered.connect(self.__force_uncaught_exception)
-        compile_selection = self.secret_menu.addAction('compile selection')
+        compile_selection = self.secret_menu.addAction("compile selection")
         compile_selection.triggered.connect(self.__compile_node_code)
-        save_cache = self.secret_menu.addAction('save cached')
+        save_cache = self.secret_menu.addAction("save cached")
         save_cache.triggered.connect(self.__save_cache_layer)
-        load_cache = self.secret_menu.addAction('load cached')
+        load_cache = self.secret_menu.addAction("load cached")
         load_cache.triggered.connect(self.__load_cache_layer)
-        rpc_ping = self.secret_menu.addAction('rpc ping')
+        rpc_ping = self.secret_menu.addAction("rpc ping")
         rpc_ping.triggered.connect(self.__rpc_ping)
-        force_kill_rpc = self.secret_menu.addAction('force kill rpc')
+        force_kill_rpc = self.secret_menu.addAction("force kill rpc")
         force_kill_rpc.triggered.connect(self.__force_kill_rpc)
         # Debugger function
-        test_graph_action = self.secret_menu.addAction('Debugger')
+        test_graph_action = self.secret_menu.addAction("Debugger")
         test_graph_action.triggered.connect(self.__debug)
         # Force redraw
-        force_redraw_action = self.secret_menu.addAction(
-            'Force Redraw')
+        force_redraw_action = self.secret_menu.addAction("Force Redraw")
         force_redraw_action.triggered.connect(self.__force_redraw)
         # Force rebuild stage
-        force_build_stage_action = self.secret_menu.addAction('Force Update')
+        force_build_stage_action = self.secret_menu.addAction("Force Update")
         force_build_stage_action.triggered.connect(self.__force_build_stage)
         self.help_menu.addSeparator()
-        about_action = self.help_menu.addAction('About')
+        about_action = self.help_menu.addAction("About")
         about_action.triggered.connect(self.about_message)
 
     def eventFilter(self, widget, event):
@@ -1316,8 +1389,8 @@ class MenuBar(QtWidgets.QMenuBar):
             self.window_menu.addAction(action)
         self.window_menu.addSeparator()
         for file_dict in self.main_window.open_files.values():
-            widget = file_dict['view']
-            name = file_dict['model'].top_layer.get_alias()
+            widget = file_dict["view"]
+            name = file_dict["model"].top_layer.get_alias()
             new_action = self.window_menu.addAction(name)
             new_action.setData(widget)
 
@@ -1338,15 +1411,11 @@ class MenuBar(QtWidgets.QMenuBar):
 
     @staticmethod
     def open_prefs_dir():
-        QtGui.QDesktopServices.openUrl(
-            QtCore.QUrl.fromLocalFile(user_dir.PREF_DIR)
-        )
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(user_dir.PREF_DIR))
 
     @staticmethod
     def open_plugins_dir():
-        QtGui.QDesktopServices.openUrl(
-            QtCore.QUrl.fromLocalFile(USER_PLUGIN_DIR)
-        )
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(USER_PLUGIN_DIR))
 
     @staticmethod
     def open_logs_dir():
@@ -1354,24 +1423,27 @@ class MenuBar(QtWidgets.QMenuBar):
             log_dir = nxt_log.LOG_DIR
         except AttributeError:
             # Guess the log dir if nxt core is old.
-            log_dir = os.path.join(tempfile.gettempdir(), 'nxt_logs')
-        QtGui.QDesktopServices.openUrl(
-            QtCore.QUrl.fromLocalFile(log_dir)
-        )
+            log_dir = os.path.join(tempfile.gettempdir(), "nxt_logs")
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(log_dir))
 
     def about_message(self):
-        text = ('nxt {} \n'
-                'graph v{}\n'
-                'api v{}\n'
-                'editor v{}\n'
-                'Copyright (c) 2015-2020 '
-                'The nxt Authors').format(self.main_window.host_app,
-                                          GRAPH_VERSION.VERSION_STR,
-                                          API_VERSION.VERSION_STR,
-                                          EDITOR_VERSION.VERSION_STR)
+        text = (
+            "nxt {} \n"
+            "graph v{}\n"
+            "api v{}\n"
+            "editor v{}\n"
+            "Copyright (c) 2015-2020 "
+            "The nxt Authors"
+        ).format(
+            self.main_window.host_app,
+            GRAPH_VERSION.VERSION_STR,
+            API_VERSION.VERSION_STR,
+            EDITOR_VERSION.VERSION_STR,
+        )
         message_box = QtWidgets.QMessageBox()
-        message_box.setWindowTitle('About nxt '
-                                   '({})'.format(EDITOR_VERSION.VERSION_STR))
+        message_box.setWindowTitle(
+            "About nxt " "({})".format(EDITOR_VERSION.VERSION_STR)
+        )
         message_box.setText(text)
         message_box.setStandardButtons(message_box.Close)
         message_box.setIcon(message_box.Icon.Information)
@@ -1380,35 +1452,38 @@ class MenuBar(QtWidgets.QMenuBar):
     @staticmethod
     def delete_resources_pyc():
         ui_dir = os.path.dirname(__file__)
-        resources_file = os.path.join(ui_dir, 'qresources.py').replace(os.sep,
-                                                                      '/')
-        resources_file_c = os.path.join(ui_dir, 'qresources.pyc').replace(os.sep,
-                                                                          '/')
+        resources_file = os.path.join(ui_dir, "qresources.py").replace(os.sep, "/")
+        resources_file_c = os.path.join(ui_dir, "qresources.pyc").replace(os.sep, "/")
         success = False
         if os.path.isfile(resources_file):
             try:
                 os.remove(resources_file)
                 success = True
             except:
-                logger.exception('Failed to delete "{}" please do so '
-                                 'manually.'.format(resources_file))
+                logger.exception(
+                    'Failed to delete "{}" please do so '
+                    "manually.".format(resources_file)
+                )
         if os.path.isfile(resources_file_c):
             try:
                 os.remove(resources_file_c)
                 success = True
             except:
-                logger.exception('Failed to delete "{}" please do so '
-                                 'manually.'.format(resources_file_c))
+                logger.exception(
+                    'Failed to delete "{}" please do so '
+                    "manually.".format(resources_file_c)
+                )
                 success = False
 
         if success:
-            logger.info('Cleared UI icon cache, please restart nxt.')
+            logger.info("Cleared UI icon cache, please restart nxt.")
         from . import make_resources
+
         make_resources()
 
     def __test_print(self):
         """prints a simple message for output log debug"""
-        print('Test print please ignore')
+        print("Test print please ignore")
 
     def __test_all_logging(self):
         done = []
@@ -1418,8 +1493,10 @@ class MenuBar(QtWidgets.QMenuBar):
             if level_num in done:
                 continue
             done += [level_num]
-            logger.log(level_num, 'Testing logger level '
-                                  '{}'.format(logging.getLevelName(level_num)))
+            logger.log(
+                level_num,
+                "Testing logger level " "{}".format(logging.getLevelName(level_num)),
+            )
 
     def __test_rm_layer(self):
         nxt_object = self.parent().nxt
@@ -1449,15 +1526,16 @@ class MenuBar(QtWidgets.QMenuBar):
         rt_node = rt_layer.lookup(path)
         from runtime import GraphError, Console
         import nxt.stage as _stage
-        g = {'__stage__': self.main_window.model.stage,
-             'STAGE': rt_layer,
-             'w': _stage.w,
-             }
-        func = self.main_window.model.stage.get_node_code(rt_node,
-                                                                  rt_layer)
+
+        g = {
+            "__stage__": self.main_window.model.stage,
+            "STAGE": rt_layer,
+            "w": _stage.w,
+        }
+        func = self.main_window.model.stage.get_node_code(rt_node, rt_layer)
         console = Console(g, node_path=path)
-        g['func'] = func
-        g['self'] = rt_node
+        g["func"] = func
+        g["self"] = rt_node
         try:
             console.runcode(func)
         except GraphError:
@@ -1480,7 +1558,7 @@ class MenuBar(QtWidgets.QMenuBar):
         return
 
     def __load_cache_layer(self):
-        filt = 'nxt files (*.nxt)'
+        filt = "nxt files (*.nxt)"
         file_path = QtWidgets.QFileDialog.getOpenFileName(filter=filt)[0]
         if not file_path:
             return
@@ -1496,7 +1574,7 @@ class MenuBar(QtWidgets.QMenuBar):
         if not curr_rt:
             logger.info("No cache data to save")
             return
-        filt = 'nxt files (*.nxt)'
+        filt = "nxt files (*.nxt)"
         file_path = QtWidgets.QFileDialog.getSaveFileName(filter=filt)[0]
         if not file_path:
             return
@@ -1530,8 +1608,8 @@ class OpenFilesTabWidget(QtWidgets.QTabWidget):
         uid = self.widget(index).model.uid
         self.parent().nxt.unload_file(uid)
         tab_data = self.parent().open_files.pop(uid)
-        model = tab_data['model']
-        view = tab_data['view']
+        model = tab_data["model"]
+        view = tab_data["view"]
         view.deleteLater()
         model.deleteLater()
         self.removeTab(index)
@@ -1549,7 +1627,7 @@ class OpenFilesTabWidget(QtWidgets.QTabWidget):
 
 class RecentFilesMenu(QtWidgets.QMenu):
     def __init__(self, action_target=None):
-        super(RecentFilesMenu, self).__init__('Open Recent')
+        super(RecentFilesMenu, self).__init__("Open Recent")
         self.aboutToShow.connect(self.refresh_list)
         self.action_target = action_target
         self.triggered.connect(self.recent_selected)
@@ -1558,7 +1636,7 @@ class RecentFilesMenu(QtWidgets.QMenu):
         self.clear()
         recents = user_dir.editor_cache.get(user_dir.USER_PREF.RECENT_FILES, [])
         if not recents:
-            action = self.addAction('No recents found')
+            action = self.addAction("No recents found")
             action.setEnabled(False)
         for file_path in recents:
             self.addAction(str(file_path))
@@ -1570,7 +1648,7 @@ class RecentFilesMenu(QtWidgets.QMenu):
 class StatusBarHandler(logging.Handler):
     def __init__(self, output_log=None):
         logging.Handler.__init__(self, level=logging.DEBUG)
-        self.output_template = "{level} | {module}: \"{message}\""
+        self.output_template = '{level} | {module}: "{message}"'
         self.output_log = output_log
         self.signaller = LoggingSignaler()
         self.signaller.signal.connect(self.update)
@@ -1580,9 +1658,9 @@ class StatusBarHandler(logging.Handler):
         self.signaller.signal.emit(record)
 
     def update(self, record):
-        out_message = self.output_template.format(level=record.levelname,
-                                                  module=record.module,
-                                                  message=record.getMessage())
+        out_message = self.output_template.format(
+            level=record.levelname, module=record.module, message=record.getMessage()
+        )
         if self.output_log:
             self.output_log.showMessage(out_message)
 
@@ -1597,7 +1675,7 @@ class StartRPCThread(QtCore.QThread):
             self.main_window.model.processing.emit(True)
         # We setup the log file here so we're tailing it _before_ we start
         # the server up.
-        rpc_log = nxt_io.generate_temp_file(suffix='.nxtlog')
+        rpc_log = nxt_io.generate_temp_file(suffix=".nxtlog")
         # Setup rpc server log tail
         self.main_window.safe_stop_rpc_tailing()
         self.main_window.rpc_log_tail = FileTailingThread(rpc_log)
@@ -1605,13 +1683,17 @@ class StartRPCThread(QtCore.QThread):
         self.main_window.rpc_log_tail.start()
         sh = QtLogStreamHandler.get_handler(self.main_window.new_log_signal)
         try:
-            self.main_window.nxt._start_rpc_server(custom_stdout=True,
-                                                   rpc_log_filepath=rpc_log,
-                                                   socket_log=True,
-                                                   stream_handler=sh)
+            self.main_window.nxt._start_rpc_server(
+                custom_stdout=True,
+                rpc_log_filepath=rpc_log,
+                socket_log=True,
+                stream_handler=sh,
+            )
         except OSError:
-            logger.warning('Failed to start/connect to rpc server. Please try '
-                           'starting the rpc server via the UI')
+            logger.warning(
+                "Failed to start/connect to rpc server. Please try "
+                "starting the rpc server via the UI"
+            )
             if self.main_window.model:
                 self.main_window.model.processing.emit(False)
             return
@@ -1621,10 +1703,10 @@ class StartRPCThread(QtCore.QThread):
             try:
                 remote_rpc_log_file_path = proxy.get_log_location()
             except:
-                logger.warning('Failed to tail remote rpc server log!')
+                logger.warning("Failed to tail remote rpc server log!")
         if remote_rpc_log_file_path:
             self.main_window.rpc_log_tail.watch_path = remote_rpc_log_file_path
-            with open(remote_rpc_log_file_path, 'r') as fp:
+            with open(remote_rpc_log_file_path, "r") as fp:
                 text = fp.read()
                 end_pos = len(text)
             self.main_window.rpc_log_tail.last_read_pos = end_pos
@@ -1651,39 +1733,47 @@ def populate_builtins_menu(qmenu, main_window, layer=None):
         idx = layer.layer_idx() + 1
 
     for file_name in os.listdir(nxt_io.BUILTIN_GRAPHS_DIR):
-        if not file_name.endswith('.nxt'):
+        if not file_name.endswith(".nxt"):
             continue
         new_action = qmenu.addAction(file_name)
-        path = '${var}/{file_name}'.format(var=nxt_io.BUILTIN_GRAPHS_ENV_VAR,
-                                           file_name=file_name)
+        path = "${var}/{file_name}".format(
+            var=nxt_io.BUILTIN_GRAPHS_ENV_VAR, file_name=file_name
+        )
         if enable:
-            new_action.triggered.connect(partial(stage_model.reference_layer,
-                                                 path, idx))
+            new_action.triggered.connect(
+                partial(stage_model.reference_layer, path, idx)
+            )
         new_action.setEnabled(enable)
     return qmenu
 
 
 def nxt_execpthook(typ, value, tb):
-    if 'nxt' not in tb.tb_frame.f_code.co_filename:
+    # have to make sure tb is not None, because it will cause an infinite loop if it is
+    if not tb:
         return og_excepthook(typ, value, tb)
-    logger.error('NXT encountered an Uncaught exception!')
+    # have to make sure the exception is actually from nxt
+    if "nxt" not in tb.tb_frame.f_code.co_filename:
+        return og_excepthook(typ, value, tb)
+    logger.error("NXT encountered an Uncaught exception!")
     traceback.print_tb(tb)
-    message = ('Please copy the error details and send to an nxt '
-               'developer.\n'
-               'Save your work immediately.')
+    message = (
+        "Please copy the error details and send to an nxt "
+        "developer.\n"
+        "Save your work immediately."
+    )
     # TODO: Get the last few lines from the session log and put them here
-    details = ''.join(traceback.format_exception(typ, value, tb))
+    details = "".join(traceback.format_exception(typ, value, tb))
     logger.exception(details)
-    style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
+    style_file = QtCore.QFile(":styles/styles/dark/dark.qss")
     style_file.open(QtCore.QFile.ReadOnly)
     stylesheet = str(style_file.readAll())
-    dialog = NxtWarningDialog('Uncaught Exception!', message, details)
+    dialog = NxtWarningDialog("Uncaught Exception!", message, details)
     dialog.setStyleSheet(stylesheet)
     dialog.exec_()
 
 
 def catch_exceptions():
-    debugger_attached = 'pydevd' in sys.modules
+    debugger_attached = "pydevd" in sys.modules
     return not debugger_attached
 
 
