@@ -16,6 +16,7 @@ except AttributeError:
 
 # Internal
 from nxt_editor import user_dir
+from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
@@ -1481,11 +1482,11 @@ class AttrsTableView(QtWidgets.QTableView):
                         }
 
                         QToolTip {
-                            font-family: Roboto Mono;
+                            font-family: %s;
                             color: white;
                             border: 1px solid #3E3E3E
                         }
-                        '''
+                        ''' % (FONTS.MONOSPACE,)
         self.setStyleSheet(style)
         self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)

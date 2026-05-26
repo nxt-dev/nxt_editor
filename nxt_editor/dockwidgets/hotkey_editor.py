@@ -6,6 +6,7 @@ from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
 import nxt_editor
+from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor import colors, dialogs
 
@@ -28,14 +29,14 @@ TOOLTIP_INFO = ('<p style="font-size:12px;color:white;">'
                 'other shortcut.</p>')
 
 TOOLTIP_STYLE = '''QToolTip {
-                    font-family: Roboto Mono;
+                    font-family: %s;
                     background-color: #3E3E3E;
                     border: 1px solid #232323;
-                }'''
+                }''' % (FONTS.MONOSPACE,)
 
 TABLE_STYLE = '''QTableView {
-                    font-family: Roboto Mono;
-                }'''
+                    font-family: %s;
+                }''' % (FONTS.MONOSPACE,)
 
 
 class HotkeyEditor(DockWidgetBase):

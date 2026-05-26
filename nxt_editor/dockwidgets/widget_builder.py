@@ -1,6 +1,6 @@
 # Built-in
 import logging
-import ast
+from functools import partial
 try:
     from collections.abc import Iterable
 except ImportError:
@@ -814,12 +814,12 @@ class Button(QtWidgets.QPushButton):
                 action = QtWidgets.QAction(text, self)
                 if menu_data.get(self.SELECTOR_ITEM_ATTR) == 'True':
                     title = menu_data.get(self.SELECTOR_TITLE_ATTR)
-                    action.triggered.connect(lambda p=menu_item_path, t=title:
-                                             self.selection_widget(p, t))
+                    action.triggered.connect(partial(self.selection_widget,
+                                                     node_path, title))
                 else:
-                    action.triggered.connect(lambda p=menu_item_path,
-                                             a=self.ITEM_PATH_ATTR:
-                                             self.execute_node_path(p, a))
+                    action.triggered.connect(partial(self.execute_node_path,
+                                                     menu_item_path,
+                                                     self.ITEM_PATH_ATTR))
                 items.append(action)
 
         ContextMenu(stage_model=self.stage_model,
@@ -870,9 +870,9 @@ class Button(QtWidgets.QPushButton):
         else:
             items = []
         # selector dialog
-        screen = QtWidgets.QApplication.desktop().screenNumber(
-            QtWidgets.QApplication.desktop().cursor().pos())
-        center = QtWidgets.QApplication.desktop().screenGeometry(screen).center()
+        cursor_pos = QtGui.QCursor.pos()
+        screen = QtWidgets.QApplication.screenAt(cursor_pos)
+        center = screen.geometry().center() if screen else QtCore.QPoint(0, 0)
         dialog = SelectionDialog(title=title, items=items, pos=center, parent=self)
         dialog.exec_()
         if not dialog.result():
