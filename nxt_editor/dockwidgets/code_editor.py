@@ -16,6 +16,7 @@ from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
+from nxt_editor.constants import FONTS
 import nxt_editor
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -72,7 +73,7 @@ class CodeEditor(DockWidgetBase):
         self.details_layout.addLayout(self.name_layout)
 
         self.name_label = LabelEdit(parent=self.details_frame)
-        self.name_label.setFont(QtGui.QFont("Roboto", 14))
+        self.name_label.setFont(QtGui.QFont(FONTS.DEFAULT_FAMILY, 14))
         self.name_label.nameChangeRequested.connect(self.edit_name)
         self.name_layout.addWidget(self.name_label, 0, QtCore.Qt.AlignLeft)
 
@@ -86,7 +87,7 @@ class CodeEditor(DockWidgetBase):
         self.name_layout.addWidget(self.name_edit_button, 0, QtCore.Qt.AlignLeft)
 
         self.path_label = QtWidgets.QLabel(parent=self.details_frame)
-        self.path_label.setFont(QtGui.QFont("Roboto Mono", 8))
+        self.path_label.setFont(QtGui.QFont(FONTS.MONOSPACE, 8))
         self.path_label.setStyleSheet('color: grey')
         self.details_layout.addWidget(self.path_label)
 
@@ -600,9 +601,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.setFocusPolicy(QtCore.Qt.ClickFocus)
 
         # font settings
-        self.font_size = 10
-        self.font_family = 'Roboto Mono'
-        self.setFont(QtGui.QFont(self.font_family, self.font_size))
+        self.font_size = FONTS.DEFAULT_SIZE
+        self.setFont(FONTS.monospace_font(self.font_size))
         self.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
 
         # display settings
@@ -754,7 +754,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             self.font_size = 10
         else:
             self.font_size += delta
-        self.setFont(QtGui.QFont(self.font_family, self.font_size))
+        font = self.font()
+        font.setPointSize(self.font_size)
+        self.setFont(font)
 
     def update_previous_scroll_positions(self):
         self.prev_v_scroll_value = self.verticalScrollBar().value()
@@ -1217,7 +1219,6 @@ class NumberBar(QtWidgets.QWidget):
         self.editor = editor
         self.editor.blockCountChanged.connect(self.update_width)
         self.editor.updateRequest.connect(self.update_contents)
-        self.font = QtGui.QFont()
         self.color = QtGui.QColor(color)
         self.update_width()
 
@@ -1231,7 +1232,7 @@ class NumberBar(QtWidgets.QWidget):
             changed_lines = []
         # Iterate over all visible text blocks in the document.
         while block.isValid():
-            self.font.setBold(False)
+            self.font().setBold(False)
             block_number = block.blockNumber()
             block_top = self.editor.blockBoundingGeometry(block).translated(
                 self.editor.contentOffset()).top()
@@ -1241,7 +1242,7 @@ class NumberBar(QtWidgets.QWidget):
             # We want the line number for the selected line to be bold.
             painter.setPen(QtGui.QColor(colors.LIGHTER_TEXT))
             if block_number == self.editor.textCursor().blockNumber():
-                self.font.setBold(True)
+                self.font().setBold(True)
             else:
                 painter.setPen(colors.DEFAULT_TEXT)
             # Draw the line number right justified at the position of the line.
@@ -1252,7 +1253,7 @@ class NumberBar(QtWidgets.QWidget):
                 painter.fillRect(paint_rect, colors.UNSAVED)
                 painter.setPen(colors.LIGHTEST_TEXT)
                 changed_lines.remove(block_number)
-            painter.setFont(self.font)
+            painter.setFont(self.font())
             text_rect = paint_rect.marginsAdded(QtCore.QMargins(0, 0, -4, 0))
             painter.drawText(text_rect, QtCore.Qt.AlignRight,
                              str(block_number + 1))
@@ -1288,8 +1289,8 @@ class NumberBar(QtWidgets.QWidget):
 
         if rect.contains(self.editor.viewport().rect()):
             font_size = self.editor.currentCharFormat().font().pointSize()
-            self.font.setPointSize(font_size)
-            self.font.setStyle(QtGui.QFont.StyleNormal)
+            self.font().setPointSize(font_size)
+            self.font().setStyle(QtGui.QFont.StyleNormal)
             self.update_width()
 
 
@@ -1310,7 +1311,7 @@ class OverlayWidget(QtWidgets.QWidget):
     def paintEvent(self, event):
         painter = QtGui.QPainter()
         painter.begin(self)
-        painter.setFont(QtGui.QFont("Roboto", 14))
+        painter.setFont(QtGui.QFont(FONTS.MONOSPACE, 14))
         font_metrics = QtGui.QFontMetrics(painter.font())
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         # actual_display_state

@@ -12,6 +12,7 @@ from Qt import QtWidgets, QtGui, QtCore
 # Internal
 import nxt_editor
 from nxt_editor import user_dir
+from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_log
 from nxt_editor import LoggingSignaler, colors
@@ -99,7 +100,7 @@ class VisualLogHandler(logging.Handler):
             links = []
         if links:
             text = self.format_links(text, links)
-        msg = '<font face="Roboto Mono" color="white">{}</font>'.format(text)
+        msg = '<font face="{}" color="white">{}</font>'.format(FONTS.MONOSPACE, text)
         if multi:
             replacement = (msg, record.msg[1])
         else:
@@ -377,10 +378,10 @@ class OutputLog(DockWidgetBase):
             else:
                 text = val
             color = colors.LOGGING_COLORS.get(level, 'white')
-            html = '<font face="Roboto Mono" color="{}">'.format(color)
+            html = '<font face="{}" color="{}">'.format(FONTS.MONOSPACE, color)
             style = ("<style type='text/css'> "
-                     "pre {margin: 0; font-family: 'Roboto Mono';} "
-                     "</style>")
+                     "pre {margin: 0; font-family: '%s';} "
+                     "</style>" % (FONTS.DEFAULT_FAMILY,))
             text = style + ("<pre>{}</pre>".format(text))
             html += text + '</font>'
             self.rich_output_textedit.insertHtml(html)
@@ -431,7 +432,7 @@ class OutputTextEdit(QtWidgets.QTextEdit):
         self._parent = parent
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setReadOnly(True)
-        self.setFont(QtGui.QFont('Roboto Mono', 10))
+        self.setFont(QtGui.QFont(FONTS.MONOSPACE, 10))
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
@@ -447,7 +448,7 @@ class OutputTextBrowser(QtWidgets.QTextBrowser):
         self.anchorClicked.connect(self.parent().link_clicked)
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setOpenLinks(False)
-        self.setFont(QtGui.QFont('Roboto Mono', 10))
+        self.setFont(QtGui.QFont(FONTS.MONOSPACE, 10))
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()

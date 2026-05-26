@@ -15,7 +15,8 @@ class SearchLineEdit(QtWidgets.QLineEdit):
         model.setNameFilterDisables(False)
         completer.setModel(model)
         completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
-        completer.setCompletionMode(completer.UnfilteredPopupCompletion)
+        mode = completer.CompletionMode.UnfilteredPopupCompletion
+        completer.setCompletionMode(mode)
         completer.popup().setStyleSheet(parent.parent().stylesheet)
         self.returnPressed.connect(self.file_chosen.emit)
         self.setCompleter(completer)

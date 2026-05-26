@@ -142,11 +142,7 @@ class MainWindow(QtWidgets.QMainWindow):
         style_file.open(QtCore.QFile.ReadOnly)
         self.stylesheet = str(style_file.readAll())
         self.setStyleSheet(self.stylesheet)
-
-        # fonts
-        font_db = QtGui.QFontDatabase()
-        font_db.addApplicationFont(":fonts/fonts/RobotoMono/RobotoMono-Regular.ttf")
-        font_db.addApplicationFont(":fonts/fonts/Roboto/Roboto-Regular.ttf")
+        self.setFont(FONTS.default_font())
 
         # nxt object in charge of loaded graphs
         self.nxt = Session()
@@ -390,11 +386,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._change_font_size(-1)
 
     def _change_font_size(self, delta, absolute=False, save=True):
-        app = QtWidgets.QApplication.instance()
         if absolute:
             font_size = delta
         else:
-            font_size = app.font().pointSize() + delta
+            font_size = self.font().pointSize() + delta
             self.font_size_changed.emit(delta)
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
@@ -1445,7 +1440,7 @@ class MenuBar(QtWidgets.QMenuBar):
             "About nxt " "({})".format(EDITOR_VERSION.VERSION_STR)
         )
         message_box.setText(text)
-        message_box.setStandardButtons(message_box.Close)
+        message_box.setStandardButtons(message_box.StandardButton.Close)
         message_box.setIcon(message_box.Icon.Information)
         message_box.exec_()
 
