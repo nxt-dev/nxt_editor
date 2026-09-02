@@ -1227,6 +1227,21 @@ class StageViewActions(NxtActionContainer):
         grid_icon.addPixmap(grid_icn_off, QtGui.QIcon.Normal,
                             QtGui.QIcon.Off)
         self.grid_action.setIcon(grid_icon)
+        # TOGGLE MINI MAP
+
+        def toggle_mini_map():
+            state = self.mini_map_action.isChecked()
+            self.main_window.view.toggle_mini_map(state)
+
+        self.mini_map_action = BoolUserPrefAction(
+            'Toggle Mini Map', user_dir.USER_PREF.SHOW_MINI_MAP,
+            default=True, parent=self)
+        self.mini_map_action.setShortcut('Ctrl+M')
+        self.mini_map_action.setToolTip('Show / Hide the Mini Map')
+        self.mini_map_action.setWhatsThis('Shows or hides the mini map in '
+                                          'the bottom right of the graph '
+                                          'for all tabs.')
+        self.mini_map_action.triggered.connect(toggle_mini_map)
         # TOGGLE CONNECTION LINES
 
         def toggle_lines():
@@ -1420,7 +1435,8 @@ class StageViewActions(NxtActionContainer):
                                      self.disp_local_attrs_action,
                                      self.disp_inst_attrs_action,
                                      self.disp_all_attrs_action,
-                                     self.grid_action, self.implicit_action,
+                                     self.grid_action, self.mini_map_action,
+                                     self.implicit_action,
                                      self.pick_walk_up_action,
                                      self.pick_walk_down_action,
                                      self.pick_walk_left_action,
