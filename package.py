@@ -53,7 +53,7 @@ def commands():
         )
 
 
-build_command = (
-    'mkdir -p "$REZ_BUILD_INSTALL_PATH/python"; '
-    'cp -r {root}/nxt_editor "$REZ_BUILD_INSTALL_PATH/python/nxt_editor"'
-)
+# A script rather than a shell one liner, so the build behaves the same on
+# Windows as on the macOS and Linux runners.
+build_command = "python {root}/rez_build.py"
+
