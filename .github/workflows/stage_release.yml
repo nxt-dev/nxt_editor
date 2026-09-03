@@ -1,0 +1,12 @@
+name: Stage Release
+
+# Builds nxt_editor into the packages root without tagging or releasing, so a
+# change can be tried in a real environment before it goes out.
+on:
+  workflow_dispatch:
+    branches:
+      - 'sb_dev'
+
+jobs:
+  stage-release:
+    uses: squarebit-studios/sbgitworkflows/.github/workflows/stage_release.yml@main

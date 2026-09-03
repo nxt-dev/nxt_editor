@@ -8,6 +8,10 @@ on:
 
 jobs:
   test-and-deploy:
+    # Upstream's PyPI publish. This fork releases through rez instead, see
+    # rez_release.yml, so the job is pinned to the upstream repository and
+    # never publishes as Squarebit.
+    if: github.repository == 'nxt-dev/nxt_editor'
     secrets: inherit
     uses: nxt-dev/nxt/.github/workflows/release.yml@release
     with:
