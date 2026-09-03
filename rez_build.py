@@ -1,0 +1,59 @@
+"""Rez build step for nxt_editor.
+
+Copies the python package into the build or install path. This is a script
+rather than the shell one liner other packages use so that the same build
+works on Windows as well as the macOS and Linux runners, which means a
+developer can stage a build locally.
+"""
+import os
+import shutil
+import sys
+
+SOURCE = os.path.dirname(os.path.abspath(__file__))
+
+# Copied into <root>/python, which package.py puts on PYTHONPATH.
+PYTHON_DIRS = ["nxt_editor"]
+# nxt_editor ships no command line tools, so nothing lands at the root.
+ROOT_DIRS = []
+
+IGNORE = shutil.ignore_patterns(
+    "__pycache__", "*.pyc", "*.pyo", ".mypy_cache", ".pytest_cache"
+)
+
+
+def destination_root():
+    """Where this build should write.
+
+    rez sets REZ_BUILD_INSTALL when the build is being installed, in which
+    case it wants the files in REZ_BUILD_INSTALL_PATH rather than the
+    temporary build directory.
+    """
+    if os.environ.get("REZ_BUILD_INSTALL") == "1":
+        return os.environ["REZ_BUILD_INSTALL_PATH"]
+    return os.environ["REZ_BUILD_PATH"]
+
+
+def copy_tree(source, destination):
+    if os.path.isdir(destination):
+        shutil.rmtree(destination)
+    parent = os.path.dirname(destination)
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent)
+    shutil.copytree(source, destination, ignore=IGNORE)
+    print("  %s -> %s" % (os.path.basename(source), destination))
+
+
+def main():
+    root = destination_root()
+    print("building into %s" % root)
+    for name in PYTHON_DIRS:
+        copy_tree(os.path.join(SOURCE, name), os.path.join(root, "python", name))
+    for name in ROOT_DIRS:
+        source = os.path.join(SOURCE, name)
+        if os.path.isdir(source):
+            copy_tree(source, os.path.join(root, name))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

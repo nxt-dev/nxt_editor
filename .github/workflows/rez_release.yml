@@ -1,0 +1,15 @@
+name: Rez Release
+
+# Releases nxt_editor into the studio rez packages. Only sb_release publishes;
+# package.py pins release_branches to match, so a release from anywhere else
+# is refused by rez itself as well as by this trigger.
+on:
+  push:
+    branches:
+      - 'sb_release'
+
+jobs:
+  rez-release:
+    uses: squarebit-studios/sbgitworkflows/.github/workflows/rez_release.yml@main
+    with:
+      package-name: "nxt_editor"

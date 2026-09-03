@@ -394,6 +394,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
         font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
+        app = QtWidgets.QApplication.instance()
         app.setFont(font)
 
         widgets_with_fonts = [
@@ -821,6 +822,10 @@ QCheckBox::indicator {
             view.toggle_grid(
                 user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_GRID, True)
             )
+            view.toggle_mini_map(
+                user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_MINI_MAP,
+                                        True)
+            )
             model.destroy_cmd_port.connect(self.update_cmd_port_action)
         else:
             logger.critical("Failed to set up new tab.")
@@ -1245,6 +1250,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.view_actions.implicit_action)
         self.view_menu.addAction(self.view_actions.grid_action)
+        self.view_menu.addAction(self.view_actions.mini_map_action)
         self.view_opt_menu = self.view_menu.addMenu("Options")
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)

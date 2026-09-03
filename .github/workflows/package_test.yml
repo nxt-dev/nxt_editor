@@ -1,0 +1,17 @@
+name: Package test
+
+# Fails a pull request that has not bumped nxt_editor/version.json. package.py
+# reads its version from that file and rez tags the release from it, so an
+# unbumped version would collide with a package that already exists.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - 'sb_dev'
+      - 'sb_release'
+
+jobs:
+  test-package-version:
+    uses: squarebit-studios/sbgitworkflows/.github/workflows/package_version_test.yml@main
+    with:
+      version-file-path: "nxt_editor/version.json"
