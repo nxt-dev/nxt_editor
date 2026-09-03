@@ -4,9 +4,20 @@ name: Stage Release
 # change can be tried in a real environment before it goes out.
 on:
   workflow_dispatch:
-    branches:
-      - 'sb_dev'
 
 jobs:
   stage-release:
-    uses: squarebit-studios/sbgitworkflows/.github/workflows/stage_release.yml@main
+    runs-on: [ self-hosted, macOS ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Stage release
+        shell: bash -leo pipefail {0}
+        env:
+          SB_STAGE_RELEASE: "1"
+        run: rez build -ic -p "$SB_PACKAGES_ROOT"

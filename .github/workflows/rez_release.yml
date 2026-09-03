@@ -3,6 +3,11 @@ name: Rez Release
 # Releases nxt_editor into the studio rez packages. Only sb_release publishes;
 # package.py pins release_branches to match, so a release from anywhere else
 # is refused by rez itself as well as by this trigger.
+#
+# The steps are inlined rather than calling sbgitworkflows. That repository is
+# private and this one is a public fork, and GitHub does not let a public
+# repository call a private reusable workflow. touchpose inlines its release
+# for its own reasons, so this is not a new shape in the org.
 on:
   push:
     branches:
@@ -10,6 +15,23 @@ on:
 
 jobs:
   rez-release:
-    uses: squarebit-studios/sbgitworkflows/.github/workflows/rez_release.yml@main
-    with:
-      package-name: "nxt_editor"
+    runs-on: [ self-hosted, macOS ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # rez tags the release and checks the version does not already
+          # exist, so it needs the history and the tags.
+          fetch-depth: 0
+
+      - name: Cleanup stage versions
+        shell: bash -leo pipefail {0}
+        run: |
+          if [ -d "$SB_PACKAGES_ROOT/nxt_editor" ]; then
+            find "$SB_PACKAGES_ROOT/nxt_editor" -maxdepth 1 -type d -iname '*-stage*' -exec rm -fr {} \;
+          fi
+
+      - name: Release
+        shell: bash -leo pipefail {0}
+        run: rez release
