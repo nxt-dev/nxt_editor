@@ -344,6 +344,10 @@ class TestCompletion(CodeEditorTestCase):
     def setUp(self):
         self.load(SAMPLE)
         self.editor.ce_actions.autocomplete_action.setChecked(True)
+        # Completion sources are preferences on disk, so another test file
+        # can have turned them off. Say what this one needs.
+        for action, _pref, _default in                 self.editor.ce_actions.completion_source_actions:
+            action.setChecked(True)
 
     def tearDown(self):
         self.editor.hide_completions()

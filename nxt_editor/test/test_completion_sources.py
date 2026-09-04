@@ -71,6 +71,16 @@ class CompletionSources(unittest.TestCase):
     def tearDown(self):
         for key, value in self.saved.items():
             if value is None:
+                # There was no preference before, so leaving ours behind
+                # would not be restoring anything, it would be deciding
+                # for the person running the tests. On a fresh machine
+                # every one of these is None, which is how a test run left
+                # completion switched off and the next test file inherited
+                # it.
+                try:
+                    user_dir.user_prefs.pop(key)
+                except KeyError:
+                    pass
                 continue
             user_dir.user_prefs[key] = value
 
