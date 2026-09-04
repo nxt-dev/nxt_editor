@@ -141,7 +141,66 @@ class CompletionSources(unittest.TestCase):
         self.actions.complete_document_action.setChecked(False)
         self.assertNotIn('my_own_variable_name', self.words())
 
+    # -- live -----------------------------------------------------------
+
+    def offered(self):
+        completer = self.editor.completer
+        return [completer.completionModel().index(row, 0).data()
+                for row in range(completer.completionCount())]
+
+    def test_turning_a_source_off_takes_effect_at_once(self):
+        # No retyping, no restart.
+        self.editor.setPlainText("enumer")
+        cursor = self.editor.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.editor.setTextCursor(cursor)
+        self.editor.update_completions(force=True)
+        self.assertIn('enumerate', self.offered())
+        self.actions.complete_python_action.setChecked(False)
+        self.editor.update_completions(force=True)
+        self.assertNotIn('enumerate', self.offered())
+
+    def test_an_open_popup_follows_the_menu(self):
+        self.editor.setPlainText("enumer")
+        cursor = self.editor.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        self.editor.setTextCursor(cursor)
+        self.editor.update_completions(force=True)
+        self.assertTrue(self.editor.completer.popup().isVisible())
+        self.actions.complete_python_action.setChecked(False)
+        app.processEvents()
+        # Either it closed because there is nothing left to offer, or it
+        # is showing something that is not the switched off source.
+        self.assertNotIn('enumerate', self.offered(),
+                         'the list on screen still disagrees with the menu')
+        self.editor.hide_completions()
+
     # -- persistence --------------------------------------------------
+
+    def test_everything_is_on_unless_turned_off(self):
+        # The menu is the answer to what completion does, so nothing starts
+        # switched off behind it.
+        self.assertTrue(all(default for _a, _p, default in
+                            self.actions.completion_source_actions),
+                        'a source defaults off, so the menu would disagree '
+                        'with what it actually does on a fresh install')
+        pref = user_dir.USER_PREF.CE_AUTOCOMPLETE
+        saved = user_dir.user_prefs.get(pref)
+        try:
+            user_dir.user_prefs.pop(pref)
+        except KeyError:
+            pass
+        try:
+            self.assertTrue(user_dir.user_prefs.get(pref, True),
+                            'suggestions while typing should start on too')
+        finally:
+            if saved is not None:
+                user_dir.user_prefs[pref] = saved
+
+    def test_every_source_is_a_menu_switch(self):
+        for action, _pref, _default in self.actions.completion_source_actions:
+            self.assertTrue(action.isCheckable(),
+                            '%s cannot be turned off' % action.text())
 
     def test_a_choice_is_written_to_preferences(self):
         pref = user_dir.USER_PREF.CE_COMPLETE_MODULES
