@@ -2,7 +2,6 @@
 
 [![Unittests](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml?query=branch%3Adev)
 
-![Version](https://img.shields.io/badge/version-4.0.3-green?logo=rocket&logoColor=green)
 ![License](https://img.shields.io/badge/License-MIT-blue)&nbsp;&nbsp;
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)
