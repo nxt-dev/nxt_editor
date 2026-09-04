@@ -352,6 +352,56 @@ class SetNodeAttributeData(NxtCommand):
         self.return_value = None
         self.prev_selection = model.selection
 
+    def name_change_needs_recomp(self, layer, comp, new_name):
+        """Whether renaming this node has to rebuild the whole stage.
+
+        A rename only changes what composites when another layer authors
+        the path, or something derives its own path from this one. The
+        stage already works that out to decide whether it can update the
+        comp layer in place, so ask it rather than assume the worst.
+
+        :param layer: SpecLayer the node is authored on
+        :param comp: CompLayer being displayed
+        :param new_name: name the node is being given
+        :type new_name: str
+        :rtype: bool
+        """
+        if not new_name:
+            return True
+        parent_path = nxt_path.get_parent_path(self.node_path)
+        new_path = nxt_path.join_node_paths(parent_path, new_name)
+        can_target, why = self.stage.can_rename_targeted(self.node_path,
+                                                         new_path, layer,
+                                                         comp)
+        if not can_target:
+            logger.debug('Rebuilding for rename of %s: %s'
+                         % (self.node_path, why))
+        return not can_target
+
+    def apply_comp_change(self, dirties):
+        """Tell the view what changed, rebuilding only if we have to.
+
+        A targeted rename has already put the node in its new place in the
+        comp layer, but the view still has to be told, so it goes through
+        the same refresh a rebuild would, minus the rebuild.
+        """
+        if self.recomp:
+            self.model.update_comp_layer(rebuild=True)
+            return
+        if self.attr_name == INTERNAL_ATTRS.NAME:
+            self.model.update_comp_layer(rebuild=False)
+            return
+        if (self.remove_attr or self.created_node_paths or
+                self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
+                                   INTERNAL_ATTRS.PARENT_PATH,
+                                   INTERNAL_ATTRS.ENABLED)):
+            self.model.nodes_changed.emit(dirties)
+            return
+        changed_attrs = ()
+        for dirty in dirties:
+            changed_attrs += (nxt_path.make_attr_path(dirty, self.attr_name),)
+        self.model.attrs_changed.emit(changed_attrs)
+
     @processing
     def undo(self):
         start = time.time()
@@ -371,6 +421,11 @@ class SetNodeAttributeData(NxtCommand):
                 self.stage.delete_node_attr(n, self.attr_name)
                 dirties += comp.get_node_dirties(self.node_path)
             else:
+                if (self.attr_name == INTERNAL_ATTRS.NAME
+                        and not self.created_node_paths):
+                    prev_name = self.prev_data.get(META_ATTRS.VALUE)
+                    self.recomp = self.name_change_needs_recomp(layer, comp,
+                                                                prev_name)
                 result = self.stage.node_setattr_data(node=n,
                                                       attr=self.attr_name,
                                                       layer=layer, create=False,
@@ -385,16 +440,7 @@ class SetNodeAttributeData(NxtCommand):
         for dirty in dirties:
             attr_path = nxt_path.make_attr_path(dirty, self.attr_name)
             changed_attrs += (attr_path,)
-        if self.recomp:
-            self.model.update_comp_layer(rebuild=self.recomp)
-        else:
-            if (self.remove_attr or self.created_node_paths or
-                    self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
-                                       INTERNAL_ATTRS.PARENT_PATH,
-                                       INTERNAL_ATTRS.ENABLED)):
-                self.model.nodes_changed.emit(dirties)
-            else:
-                self.model.attrs_changed.emit(changed_attrs)
+        self.apply_comp_change(dirties)
         if not self.recomp:
             changed = tuple([self.node_path] + self.created_node_paths)
             self.model.nodes_changed.emit(changed)
@@ -442,6 +488,10 @@ class SetNodeAttributeData(NxtCommand):
         if not self.stage.node_attr_exists(node, self.attr_name):
             self.remove_attr = True
         if not created_node:
+            if self.attr_name == INTERNAL_ATTRS.NAME:
+                new_name = self.data.get(META_ATTRS.VALUE)
+                self.recomp = self.name_change_needs_recomp(layer, comp,
+                                                            new_name)
             self.return_value = self.stage.node_setattr_data(node,
                                                              self.attr_name,
                                                              layer=layer,
@@ -455,20 +505,7 @@ class SetNodeAttributeData(NxtCommand):
             # TODO: Some functions already calculated the dirty nodes,
             #  do we really need to do it again here?
             dirties += comp.get_node_dirties(self.node_path)
-        if self.recomp:
-            self.model.update_comp_layer(rebuild=self.recomp)
-        else:
-            if (self.remove_attr or self.created_node_paths or
-                    self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
-                                       INTERNAL_ATTRS.PARENT_PATH,
-                                       INTERNAL_ATTRS.ENABLED)):
-                self.model.nodes_changed.emit(dirties)
-            else:
-                changed_attrs = ()
-                for dirty in dirties:
-                    attr_path = nxt_path.make_attr_path(dirty, self.attr_name)
-                    changed_attrs += (attr_path,)
-                self.model.attrs_changed.emit(changed_attrs)
+        self.apply_comp_change(dirties)
         attr_path = nxt_path.make_attr_path(self.node_path, self.nice_attr_name)
         val = str(self.data.get(META_ATTRS.VALUE))
         self.setText("Set {} to {}".format(attr_path, val))
