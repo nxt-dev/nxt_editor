@@ -1914,8 +1914,10 @@ class CodeEditorActions(NxtActionContainer):
                                               'always offers them either way.')
         self.autocomplete_action.setAutoRepeat(False)
         self.autocomplete_action.setCheckable(True)
+        # Off by default. Suggestions arriving while you type are a matter
+        # of taste, and Ctrl+Space asks for them either way.
         state = user_dir.user_prefs.get(user_dir.USER_PREF.CE_AUTOCOMPLETE,
-                                        True)
+                                        False)
         self.autocomplete_action.setChecked(state)
 
         def toggle_autocomplete():

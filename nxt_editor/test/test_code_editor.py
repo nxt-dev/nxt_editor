@@ -367,6 +367,38 @@ class TestCompletion(CodeEditorTestCase):
         self.type_at_end("\nretu")
         self.assertEqual("retu", self.editor.completion_prefix())
 
+    def test_token_prefixes_are_readable(self):
+        # Stopping the prefix at the $ meant "${fi" offered "fi", which
+        # matches no token, so only python names ever came back.
+        self.type_at_end("\nx = ${fi")
+        self.assertEqual("${fi", self.editor.completion_prefix())
+
+    def test_a_token_completes(self):
+        self.type_at_end("\nx = ${fi")
+        self.editor.update_completions(force=True)
+        self.assertTrue(self.editor.completer.popup().isVisible(),
+                        'no completions offered for a token prefix')
+        completions = [self.editor.completer.completionModel().index(
+            row, 0).data() for row in
+            range(self.editor.completer.completionCount())]
+        self.assertTrue(any(c.startswith('${file::') for c in completions),
+                        'expected the file token, got %s' % completions[:5])
+
+    def test_node_attrs_are_offered_as_tokens(self):
+        words = self.editor.build_completion_words()
+        attrs = self.editor.ce_widget.stage_model.get_node_attr_names(
+            self.editor.ce_widget.node_path)
+        if not attrs:
+            self.skipTest('the represented node has no attributes')
+        name = attrs[0]
+        self.assertIn('${%s}' % name, words,
+                      'attributes should be offered the way a compute '
+                      'writes them')
+
+    def test_plain_words_still_work(self):
+        self.type_at_end("\nretu")
+        self.assertEqual("retu", self.editor.completion_prefix())
+
     def test_dotted_prefix_is_kept_whole(self):
         self.type_at_end("\nself.va")
         self.assertEqual("self.va", self.editor.completion_prefix())

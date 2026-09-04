@@ -1152,6 +1152,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                 for name in model.get_node_attr_names(node_path):
                     words.add(name)
                     words.add('self.' + name)
+                    # How an attribute is actually referenced in a compute
+                    words.add(tokens.TOKEN_PREFIX + name
+                              + tokens.TOKEN_SUFFIX)
             except Exception:
                 logger.debug('Could not read attrs for completion on '
                              + str(node_path), exc_info=True)
@@ -1163,17 +1166,21 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                                 self.toPlainText()))
         return sorted(words)
 
+    # What a partial word can be made of. Dots, so self.na completes
+    # against attribute names rather than starting over at na. Dollars,
+    # braces and colons, because a token is a word too: stopping at the $
+    # meant ${fi offered the prefix "fi", which matches no token, which is
+    # why only python builtins ever appeared.
+    PREFIX_CHARS = r'[A-Za-z0-9_.:${}]*$'
+
     def completion_prefix(self):
         """The partial word in front of the cursor.
-
-        Dots count as part of it, so ``self.na`` completes against attribute
-        names instead of starting over at ``na``.
 
         :rtype: str
         """
         cursor = self.textCursor()
         text = cursor.block().text()[:cursor.positionInBlock()]
-        match = re.search(r'[A-Za-z_][A-Za-z0-9_.]*$', text)
+        match = re.search(self.PREFIX_CHARS, text)
         return match.group(0) if match else ''
 
     def update_completions(self, force=False):
