@@ -1,13 +1,12 @@
 name: Rez Release
 
 # Releases nxt_editor into the studio rez packages. Only sb_release publishes;
-# package.py pins release_branches to match, so a release from anywhere else
-# is refused by rez itself as well as by this trigger.
+# package.py pins release_branches to match, so a release from anywhere else is
+# refused by rez itself as well as by this trigger.
 #
-# The steps are inlined rather than calling sbgitworkflows. That repository is
-# private and this one is a public fork, and GitHub does not let a public
-# repository call a private reusable workflow. touchpose inlines its release
-# for its own reasons, so this is not a new shape in the org.
+# Calls the shared workflow, the same as core and touchpose. This was inlined
+# while the repo was public, because a public repository cannot call a private
+# reusable workflow.
 on:
   push:
     branches:
@@ -16,32 +15,9 @@ on:
 
 jobs:
   rez-release:
-    # squarebit-mac, the org runner in the default group that core and
-    # touchpose release on. It carries exactly these two labels.
-    runs-on: [ self-hosted, macOS ]
-
-    # Both repos keep hand written build graphs in build/, which is
-    # also rez's default build directory. Letting rez use it wipes
-    # those files and leaves the tree dirty, which rez release then
-    # refuses to tag. Build somewhere else.
-    env:
-      REZ_BUILD_DIRECTORY: .rez_build
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          # rez tags the release and checks the version does not already
-          # exist, so it needs the history and the tags.
-          fetch-depth: 0
-
-      - name: Cleanup stage versions
-        shell: bash -leo pipefail {0}
-        run: |
-          if [ -d "$SB_PACKAGES_ROOT/nxt_editor" ]; then
-            find "$SB_PACKAGES_ROOT/nxt_editor" -maxdepth 1 -type d -iname '*-stage*' -exec rm -fr {} \;
-          fi
-
-      - name: Release
-        shell: bash -leo pipefail {0}
-        run: rez release
+    secrets: inherit
+    uses: squarebit-studios/sbgitworkflows/.github/workflows/rez_release.yml@main
+    with:
+      package-name: "nxt_editor"
+      # build/ holds this repo's own build graphs, and rez would empty it.
+      build-directory: ".rez_build"

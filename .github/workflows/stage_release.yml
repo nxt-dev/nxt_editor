@@ -1,30 +1,14 @@
 name: Stage Release
 
-# Builds nxt_editor into the packages root without tagging or releasing, so a
-# change can be tried in a real environment before it goes out.
+# Builds nxt_editor into the studio rez packages as a stage version, for
+# trying a build without releasing it.
 on:
   workflow_dispatch:
 
 jobs:
   stage-release:
-    runs-on: [ self-hosted, macOS ]
-
-    # Both repos keep hand written build graphs in build/, which is
-    # also rez's default build directory. Letting rez use it wipes
-    # those files and leaves the tree dirty, which rez release then
-    # refuses to tag. Build somewhere else.
-    env:
-      REZ_BUILD_DIRECTORY: .rez_build
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-
-      - name: Stage release
-        shell: bash -leo pipefail {0}
-        env:
-          SB_STAGE_RELEASE: "1"
-        run: rez build -ic -p "$SB_PACKAGES_ROOT"
+    secrets: inherit
+    uses: squarebit-studios/sbgitworkflows/.github/workflows/stage_release.yml@main
+    with:
+      # build/ holds this repo's own build graphs, and rez would empty it.
+      build-directory: ".rez_build"
