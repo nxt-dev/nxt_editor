@@ -124,6 +124,7 @@ class USER_PREF():
     ANIMATION = 'animation'
     SHOW_DBL_CLICK_MSG = 'show_double_click_message'
     SHOW_CE_DATA_STATE = 'show_code_editor_data_state'
+    CE_AUTOCOMPLETE = 'code_editor_autocomplete'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
     SHOW_MINI_MAP = 'show_mini_map'

@@ -1841,6 +1841,71 @@ class CodeEditorActions(NxtActionContainer):
         self.font_size_revert.setWhatsThis('Revert the code editor font size '
                                            'to default.')
         self.font_size_revert.setShortcut('Ctrl+0')
+        # find and replace, inside the code being edited. The graph wide
+        # find and replace dock also answers to Ctrl+F, but these are widget
+        # shortcuts, so they win while the code editor has focus.
+        self.find_action = NxtAction('Find In Code', parent=self)
+        self.find_action.setWhatsThis('Search the code in this editor.')
+        self.find_action.setAutoRepeat(False)
+        self.find_action.setShortcut('Ctrl+F')
+        self.replace_action = NxtAction('Replace In Code', parent=self)
+        self.replace_action.setWhatsThis('Search and replace in the code in '
+                                         'this editor.')
+        self.replace_action.setAutoRepeat(False)
+        self.replace_action.setShortcut('Ctrl+H')
+        self.find_next_action = NxtAction('Find Next', parent=self)
+        self.find_next_action.setWhatsThis('Jump to the next match.')
+        self.find_next_action.setShortcut('F3')
+        self.find_prev_action = NxtAction('Find Previous', parent=self)
+        self.find_prev_action.setWhatsThis('Jump to the previous match.')
+        self.find_prev_action.setShortcut('Shift+F3')
+        # navigation
+        self.goto_line_action = NxtAction('Go To Line', parent=self)
+        self.goto_line_action.setWhatsThis('Jump to a line number.')
+        self.goto_line_action.setAutoRepeat(False)
+        self.goto_line_action.setShortcut('Ctrl+G')
+        # line editing
+        self.duplicate_line = NxtAction('Duplicate Line', parent=self)
+        self.duplicate_line.setWhatsThis('Copy the selected line(s) below.')
+        self.duplicate_line.setShortcut('Ctrl+Shift+D')
+        self.move_line_up = NxtAction('Move Line Up', parent=self)
+        self.move_line_up.setWhatsThis('Swap the selected line(s) with the '
+                                       'line above.')
+        self.move_line_up.setShortcut('Alt+Up')
+        self.move_line_down = NxtAction('Move Line Down', parent=self)
+        self.move_line_down.setWhatsThis('Swap the selected line(s) with the '
+                                         'line below.')
+        self.move_line_down.setShortcut('Alt+Down')
+        self.delete_line = NxtAction('Delete Line', parent=self)
+        self.delete_line.setWhatsThis('Delete the selected line(s).')
+        self.delete_line.setShortcut('Ctrl+Shift+K')
+        self.expand_selection = NxtAction('Expand Selection', parent=self)
+        self.expand_selection.setWhatsThis('Grow the selection from the word '
+                                           'under the cursor, to the line, to '
+                                           'everything.')
+        self.expand_selection.setShortcut('Ctrl+D')
+        # completion
+        self.complete_action = NxtAction('Complete Word', parent=self)
+        self.complete_action.setWhatsThis('Offer completions for the word '
+                                          'being typed.')
+        self.complete_action.setAutoRepeat(False)
+        self.complete_action.setShortcut('Ctrl+Space')
+        self.autocomplete_action = NxtAction('Code Editor Autocomplete',
+                                             parent=self)
+        self.autocomplete_action.setWhatsThis('When on, completions are '
+                                              'offered as you type. Ctrl+Space '
+                                              'always offers them either way.')
+        self.autocomplete_action.setAutoRepeat(False)
+        self.autocomplete_action.setCheckable(True)
+        state = user_dir.user_prefs.get(user_dir.USER_PREF.CE_AUTOCOMPLETE,
+                                        True)
+        self.autocomplete_action.setChecked(state)
+
+        def toggle_autocomplete():
+            new = self.autocomplete_action.isChecked()
+            user_dir.user_prefs[user_dir.USER_PREF.CE_AUTOCOMPLETE] = new
+
+        self.autocomplete_action.toggled.connect(toggle_autocomplete)
         # accept edit
         self.accept_edit_action = NxtAction('Accept Code Edit', parent=self)
         self.accept_edit_action.setWhatsThis('Accept changes and commit them '
@@ -1928,8 +1993,17 @@ class CodeEditorActions(NxtActionContainer):
                                      self.font_size_revert,
                                      self.overlay_message_action,
                                      self.show_data_state_action,
+                                     self.autocomplete_action,
                                      self.new_line, self.indent_line,
                                      self.unindent_line,
+                                     self.find_action, self.replace_action,
+                                     self.find_next_action,
+                                     self.find_prev_action,
+                                     self.goto_line_action,
+                                     self.duplicate_line,
+                                     self.move_line_up, self.move_line_down,
+                                     self.delete_line, self.expand_selection,
+                                     self.complete_action,
                                      self.run_line_global_action,
                                      self.run_line_local_action]
 
