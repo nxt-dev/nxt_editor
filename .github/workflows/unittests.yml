@@ -12,6 +12,10 @@ on:
 jobs:
   test-python:
     secrets: inherit
-    uses: nxt-dev/nxt/.github/workflows/unittests.yml@dev
+    # Our fork, not nxt-dev/nxt@dev. Upstream's matrix moved to a python
+    # the package declares it does not support, so every job died at the
+    # install step and fail-fast cancelled the rest, which is why these
+    # tests have not actually run in a while.
+    uses: squarebit-studios/nxt/.github/workflows/unittests.yml@sb_dev
     with:
       QT_DEPENDENCIES: true
