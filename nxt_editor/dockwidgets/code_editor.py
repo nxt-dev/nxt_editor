@@ -1275,9 +1275,18 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.prev_h_scroll_value = self.horizontalScrollBar().value()
 
     def suspend_global_actions(self):
-        # I don't know why the event filter isn't stopping these actions so
-        # I'm just forcing them to be disabled while we're typing.
-        self.action_states = {}
+        """Stand the main window's actions down while typing goes on here.
+
+        The event filter does not stop them, so they are disabled outright.
+        Suspending twice would record the already disabled states as if
+        they were the real ones, and restoring would then leave the whole
+        main window greyed out: Save Layer among them, with no way back
+        short of restarting. The find and go to line fields suspend on
+        their own focus as well, so that second call is a normal thing to
+        happen, not a bug to guard against elsewhere.
+        """
+        if self.action_states:
+            return
         for a in self.ce_widget.main_window.get_global_actions():
             self.action_states[a] = a.isEnabled()
             a.setEnabled(False)
@@ -1286,6 +1295,13 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         for a, state in self.action_states.items():
             a.setEnabled(state)
         self.action_states = {}
+
+    def hideEvent(self, event):
+        # Losing focus is not the only way to stop typing here. Being
+        # hidden, by selecting a node with no code or closing the tab,
+        # leaves the actions disabled with nothing left to re-enable them.
+        self.restore_global_actions()
+        super(NxtCodeEditor, self).hideEvent(event)
 
     def focusInEvent(self, event):
         self.suspend_global_actions()
