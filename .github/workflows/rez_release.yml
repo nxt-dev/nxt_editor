@@ -8,22 +8,16 @@ name: Rez Release
 # private and this one is a public fork, and GitHub does not let a public
 # repository call a private reusable workflow. touchpose inlines its release
 # for its own reasons, so this is not a new shape in the org.
-# Manual only. This job needs [self-hosted, macOS] to reach the studio
-# packages path, both forks are public, and GitHub will not schedule a self
-# hosted runner for a public repository. Left on push it queued on every
-# sb_release push and was cancelled five minutes later, every time.
-#
-# Releases are done from the studio machine instead:
-#
-#     git checkout sb_release && git pull
-#     rez release
-#
-# Put the push trigger back the moment a runner this repo can use exists.
 on:
+  push:
+    branches:
+      - 'sb_release'
   workflow_dispatch:
 
 jobs:
   rez-release:
+    # squarebit-mac, the org runner in the default group that core and
+    # touchpose release on. It carries exactly these two labels.
     runs-on: [ self-hosted, macOS ]
 
     # Both repos keep hand written build graphs in build/, which is
