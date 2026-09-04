@@ -1,5 +1,9 @@
 # Builtin
+import builtins
+import keyword
 import logging
+import re
+from collections import OrderedDict
 from functools import partial
 
 # External
@@ -13,9 +17,10 @@ from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors, user_dir
 from nxt_editor.decorator_widgets import OpinionDots
-from nxt import DATA_STATE, nxt_path
+from nxt import DATA_STATE, nxt_path, tokens
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
+from nxt_editor.dockwidgets.code_find import CodeFindBar
 from nxt_editor.constants import FONTS
 import nxt_editor
 
@@ -116,6 +121,13 @@ class CodeEditor(DockWidgetBase):
         self.editor.cancel.connect(self.exit_editing)
         self.editor.accept.connect(self.accept_edit)
         self.code_layout.addWidget(self.editor)
+
+        # Find and replace for the code in this editor, hidden until asked
+        # for. Sits below the editor so showing it never moves the code.
+        self.find_bar = CodeFindBar(self.editor, parent=self)
+        self.code_layout.addWidget(self.find_bar)
+        self.editor.find_bar = self.find_bar
+        self.editor.textChanged.connect(self.find_bar.on_editor_text_changed)
 
         self.viewport = self.editor.viewport()
 
@@ -472,10 +484,13 @@ class CodeEditor(DockWidgetBase):
         self.editor.verticalScrollBar().blockSignals(False)
         self.editor.verticalScrollBar().setValue(self.editor.prev_v_scroll_value)
         self.editing_active = True
+        self.find_bar.update_replace_enabled()
 
     def exit_editing(self):
         self.editor.setReadOnly(True)
         self.editing_active = False
+        self.editor.hide_completions()
+        self.find_bar.update_replace_enabled()
         self.cached_code_lines = []
         self.cached_code = ''
         self.set_represented_node()
@@ -548,6 +563,16 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.action_states = {}
         self.format_characters_on = False
         self.standard_menu = None
+        # Set by the CodeEditor dock once the bar exists.
+        self.find_bar = None
+        # Highlights are kept as named layers and recombined, because
+        # setExtraSelections replaces the lot. Painted in this order, so
+        # later layers sit on top of earlier ones.
+        self.extra_selection_order = ('current_line', 'occurrences',
+                                      'find_matches', 'find_current',
+                                      'brackets')
+        self.extra_selection_layers = OrderedDict()
+        self.completion_words = None
         self.prev_v_scroll_value = 0
         self.prev_h_scroll_value = 0
         self.changed_lines = []
@@ -569,6 +594,24 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.ce_actions.font_bigger.triggered.connect(self.increase_font_size)
         self.ce_actions.font_smaller.triggered.connect(self.decrease_font_size)
         self.ce_actions.font_size_revert.triggered.connect(self.reset_font_size)
+        # find and replace
+        self.ce_actions.find_action.triggered.connect(self.open_find)
+        self.ce_actions.replace_action.triggered.connect(self.open_replace)
+        self.ce_actions.find_next_action.triggered.connect(self.find_next)
+        self.ce_actions.find_prev_action.triggered.connect(self.find_previous)
+        # navigation
+        self.ce_actions.goto_line_action.triggered.connect(self.goto_line)
+        # line editing
+        self.ce_actions.duplicate_line.triggered.connect(self.duplicate_lines)
+        self.ce_actions.move_line_up.triggered.connect(partial(self.move_lines,
+                                                               -1))
+        self.ce_actions.move_line_down.triggered.connect(partial(self.move_lines,
+                                                                 1))
+        self.ce_actions.delete_line.triggered.connect(self.delete_lines)
+        self.ce_actions.expand_selection.triggered.connect(self.expand_selection)
+        # completion
+        func = partial(self.update_completions, True)
+        self.ce_actions.complete_action.triggered.connect(func)
         self.run_line_local_act = self.ce_actions.run_line_local_action
         self.run_line_local_act.triggered.connect(partial(self.exec_selection,
                                                           False))
@@ -637,7 +680,21 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.current_line_highlight = highlight_current_line
         self.current_line_number = None
         self.current_line_color = QtGui.QColor('#181818')
-        self.cursorPositionChanged.connect(self.highlight_current_line)
+        self.occurrence_color = QtGui.QColor('#2E4451')
+        self.bracket_color = QtGui.QColor('#3F6079')
+        self.unmatched_bracket_color = QtGui.QColor('#7A3030')
+        self.cursorPositionChanged.connect(self.cursor_moved)
+
+        # completion
+        self.completer = QtWidgets.QCompleter([], self)
+        self.completer.setWidget(self)
+        self.completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
+        self.completer.setCaseSensitivity(QtCore.Qt.CaseSensitive)
+        self.completer.activated.connect(self.insert_completion)
+        self.completer.popup().installEventFilter(self)
+        # The word list is rebuilt from the document, so it goes stale on
+        # every edit. Rebuilding is deferred until a completion is asked for.
+        self.textChanged.connect(self.invalidate_completion_words)
 
         # apply syntax highlighting
         self.syntax_highlighter = syntax_highlighter
@@ -735,19 +792,447 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         qss = code_style_factory(color, border, thickness=thickness)
         self.setStyleSheet(qss)
 
+    # -- highlight layers ---------------------------------------------
+
+    def set_extra_selection_layer(self, name, selections):
+        """Replace one named group of highlights and repaint them all.
+
+        setExtraSelections takes the whole list, so the current line, the
+        find matches and the bracket match would otherwise each wipe out
+        the others.
+
+        :param name: one of self.extra_selection_order
+        :type name: str
+        :param selections: QTextEdit.ExtraSelection list, may be empty
+        :type selections: list
+        """
+        self.extra_selection_layers[name] = selections or []
+        combined = []
+        for key in self.extra_selection_order:
+            combined += self.extra_selection_layers.get(key, [])
+        self.setExtraSelections(combined)
+
+    def cursor_moved(self):
+        self.highlight_current_line()
+        self.highlight_occurrences()
+        self.highlight_brackets()
+
     def highlight_current_line(self):
-        if self.current_line_highlight:
-            new_current_line_number = self.textCursor().blockNumber()
-            if new_current_line_number != self.current_line_number:
-                self.current_line_number = new_current_line_number
-                hi_selection = QtWidgets.QTextEdit.ExtraSelection()
-                hi_selection.format.setBackground(self.current_line_color)
-                hi_selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
-                hi_selection.cursor = self.textCursor()
-                hi_selection.cursor.clearSelection()
-                self.setExtraSelections([hi_selection])
+        if not self.current_line_highlight:
+            self.set_extra_selection_layer('current_line', [])
+            return
+        self.current_line_number = self.textCursor().blockNumber()
+        hi_selection = QtWidgets.QTextEdit.ExtraSelection()
+        hi_selection.format.setBackground(self.current_line_color)
+        hi_selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection,
+                                        True)
+        hi_selection.cursor = self.textCursor()
+        hi_selection.cursor.clearSelection()
+        self.set_extra_selection_layer('current_line', [hi_selection])
+
+    def word_under_cursor(self):
+        """The identifier the cursor is inside or touching.
+
+        :return: (word, start position), or ('', -1)
+        :rtype: tuple
+        """
+        cursor = self.textCursor()
+        block_text = cursor.block().text()
+        column = cursor.positionInBlock()
+        start = column
+        while start > 0 and (block_text[start - 1].isalnum()
+                             or block_text[start - 1] == '_'):
+            start -= 1
+        end = column
+        while end < len(block_text) and (block_text[end].isalnum()
+                                         or block_text[end] == '_'):
+            end += 1
+        if end <= start:
+            return '', -1
+        return block_text[start:end], cursor.block().position() + start
+
+    def highlight_occurrences(self):
+        """Mark every other use of the word the cursor is on."""
+        word, _ = self.word_under_cursor()
+        if len(word) < 2 or word in keyword.kwlist:
+            self.set_extra_selection_layer('occurrences', [])
+            return
+        document = self.document()
+        text = self.toPlainText()
+        selections = []
+        pattern = r'\b' + re.escape(word) + r'\b'
+        for match in re.finditer(pattern, text):
+            selection = QtWidgets.QTextEdit.ExtraSelection()
+            selection.format.setBackground(self.occurrence_color)
+            cursor = QtGui.QTextCursor(document)
+            cursor.setPosition(match.start())
+            cursor.setPosition(match.end(), QtGui.QTextCursor.KeepAnchor)
+            selection.cursor = cursor
+            selections.append(selection)
+        if len(selections) < 2:
+            # The only use is the one being looked at, so there is nothing
+            # to point out.
+            selections = []
+        self.set_extra_selection_layer('occurrences', selections)
+
+    OPENING_BRACKETS = '([{'
+    CLOSING_BRACKETS = ')]}'
+
+    def highlight_brackets(self):
+        """Mark the bracket beside the cursor and its partner."""
+        text = self.toPlainText()
+        position = self.textCursor().position()
+        found = None
+        # Prefer the bracket the cursor sits just after, the way most
+        # editors behave, then the one it sits just before.
+        for probe in (position - 1, position):
+            if 0 <= probe < len(text) and text[probe] in (
+                    self.OPENING_BRACKETS + self.CLOSING_BRACKETS):
+                found = probe
+                break
+        if found is None:
+            self.set_extra_selection_layer('brackets', [])
+            return
+        partner = self.match_bracket(text, found)
+        positions = [found] if partner is None else [found, partner]
+        color = (self.unmatched_bracket_color if partner is None
+                 else self.bracket_color)
+        document = self.document()
+        selections = []
+        for pos in positions:
+            selection = QtWidgets.QTextEdit.ExtraSelection()
+            selection.format.setBackground(color)
+            cursor = QtGui.QTextCursor(document)
+            cursor.setPosition(pos)
+            cursor.setPosition(pos + 1, QtGui.QTextCursor.KeepAnchor)
+            selection.cursor = cursor
+            selections.append(selection)
+        self.set_extra_selection_layer('brackets', selections)
+
+    def match_bracket(self, text, position):
+        """Walk out from a bracket to find the one that closes it.
+
+        :param text: the whole document
+        :type text: str
+        :param position: index of the bracket to match
+        :type position: int
+        :return: index of the partner, or None if it is unbalanced
+        :rtype: int | None
+        """
+        char = text[position]
+        if char in self.OPENING_BRACKETS:
+            partner = self.CLOSING_BRACKETS[self.OPENING_BRACKETS.index(char)]
+            step, opening, closing = 1, char, partner
         else:
-            self.setExtraSelections([QtWidgets.QTextEdit.ExtraSelection()])
+            partner = self.OPENING_BRACKETS[self.CLOSING_BRACKETS.index(char)]
+            step, opening, closing = -1, partner, char
+        depth = 0
+        index = position
+        while 0 <= index < len(text):
+            if text[index] == opening:
+                depth += 1 if step == 1 else -1
+            elif text[index] == closing:
+                depth -= 1 if step == 1 else -1
+            if depth == 0:
+                return index
+            index += step
+        return None
+
+    # -- find and replace ----------------------------------------------
+
+    def open_find(self):
+        if self.find_bar:
+            self.find_bar.open_find()
+
+    def open_replace(self):
+        if self.find_bar:
+            self.find_bar.open_find(replace=True)
+
+    def find_next(self):
+        if self.find_bar:
+            self.find_bar.find_next()
+
+    def find_previous(self):
+        if self.find_bar:
+            self.find_bar.find_previous()
+
+    # -- navigation -----------------------------------------------------
+
+    def goto_line(self):
+        """Ask for a line number and put the cursor at the start of it."""
+        last = self.blockCount()
+        current = self.textCursor().blockNumber() + 1
+        number, accepted = QtWidgets.QInputDialog.getInt(
+            self, 'Go To Line', 'Line (1 - %d):' % last, current, 1, last)
+        if not accepted:
+            return
+        block = self.document().findBlockByNumber(number - 1)
+        cursor = self.textCursor()
+        cursor.setPosition(block.position())
+        self.setTextCursor(cursor)
+        self.centerCursor()
+
+    def expand_selection(self):
+        """Grow the selection: word, then line, then everything."""
+        cursor = self.textCursor()
+        selected = cursor.selectedText()
+        if not selected:
+            word, start = self.word_under_cursor()
+            if word:
+                cursor.setPosition(start)
+                cursor.setPosition(start + len(word),
+                                   QtGui.QTextCursor.KeepAnchor)
+                self.setTextCursor(cursor)
+                return
+        line = cursor.block().text()
+        if selected and selected != line:
+            cursor.movePosition(QtGui.QTextCursor.StartOfBlock)
+            cursor.movePosition(QtGui.QTextCursor.EndOfBlock,
+                                QtGui.QTextCursor.KeepAnchor)
+            self.setTextCursor(cursor)
+            return
+        self.selectAll()
+
+    # -- line editing ----------------------------------------------------
+
+    def selected_block_range(self, cursor):
+        """First and last block numbers the given cursor covers.
+
+        :param cursor: QTextCursor to measure
+        :return: (first, last) block numbers
+        :rtype: tuple
+        """
+        document = self.document()
+        first = document.findBlock(cursor.selectionStart()).blockNumber()
+        last = document.findBlock(cursor.selectionEnd()).blockNumber()
+        return first, last
+
+    def duplicate_lines(self):
+        """Copy the selected line(s) in below themselves."""
+        if self.isReadOnly():
+            return
+        cursor = self.textCursor()
+        first, last = self.selected_block_range(cursor)
+        document = self.document()
+        lines = [document.findBlockByNumber(n).text()
+                 for n in range(first, last + 1)]
+        end_block = document.findBlockByNumber(last)
+        edit = QtGui.QTextCursor(document)
+        edit.beginEditBlock()
+        try:
+            edit.setPosition(end_block.position() + end_block.length() - 1)
+            edit.insertText('\n' + '\n'.join(lines))
+        finally:
+            edit.endEditBlock()
+
+    def move_lines(self, direction):
+        """Swap the selected line(s) with the line above or below.
+
+        :param direction: -1 for up, 1 for down
+        :type direction: int
+        """
+        if self.isReadOnly():
+            return
+        cursor = self.textCursor()
+        first, last = self.selected_block_range(cursor)
+        document = self.document()
+        target = first - 1 if direction < 0 else last + 1
+        if target < 0 or target >= document.blockCount():
+            return
+        moving = [document.findBlockByNumber(n).text()
+                  for n in range(first, last + 1)]
+        neighbour = document.findBlockByNumber(target).text()
+        if direction < 0:
+            new_lines = moving + [neighbour]
+            span_first, span_last = target, last
+        else:
+            new_lines = [neighbour] + moving
+            span_first, span_last = first, target
+        column = cursor.positionInBlock()
+        start_block = document.findBlockByNumber(span_first)
+        end_block = document.findBlockByNumber(span_last)
+        edit = QtGui.QTextCursor(document)
+        edit.beginEditBlock()
+        try:
+            edit.setPosition(start_block.position())
+            edit.setPosition(end_block.position() + end_block.length() - 1,
+                             QtGui.QTextCursor.KeepAnchor)
+            edit.insertText('\n'.join(new_lines))
+        finally:
+            edit.endEditBlock()
+        # Follow the lines to where they landed, so the shortcut can be
+        # held down to walk a block up or down the compute.
+        moved_first = first + direction
+        moved_last = last + direction
+        new_cursor = QtGui.QTextCursor(document)
+        landed = document.findBlockByNumber(moved_first)
+        new_cursor.setPosition(landed.position()
+                               + min(column, len(landed.text())))
+        if moved_last != moved_first:
+            end = document.findBlockByNumber(moved_last)
+            new_cursor.setPosition(end.position() + len(end.text()),
+                                   QtGui.QTextCursor.KeepAnchor)
+        self.setTextCursor(new_cursor)
+
+    def delete_lines(self):
+        """Remove the selected line(s) entirely."""
+        if self.isReadOnly():
+            return
+        cursor = self.textCursor()
+        first, last = self.selected_block_range(cursor)
+        document = self.document()
+        start_block = document.findBlockByNumber(first)
+        end_block = document.findBlockByNumber(last)
+        start = start_block.position()
+        end = end_block.position() + end_block.length()
+        limit = document.characterCount() - 1
+        if end > limit:
+            # The last line has no trailing newline of its own to remove,
+            # so take the one in front of it instead.
+            end = limit
+            start = max(0, start - 1)
+        edit = QtGui.QTextCursor(document)
+        edit.beginEditBlock()
+        try:
+            edit.setPosition(start)
+            edit.setPosition(end, QtGui.QTextCursor.KeepAnchor)
+            edit.removeSelectedText()
+        finally:
+            edit.endEditBlock()
+        self.setTextCursor(edit)
+
+    # -- completion -------------------------------------------------------
+
+    def invalidate_completion_words(self):
+        self.completion_words = None
+
+    def build_completion_words(self):
+        """Everything worth offering as a completion for this node.
+
+        Python's own names, the node's attributes, the token prefixes nxt
+        knows about including any a plugin registered, and the words already
+        written in this compute.
+
+        :rtype: list
+        """
+        words = set(keyword.kwlist)
+        words.update(dir(builtins))
+        words.update(('self', 'STAGE'))
+        model = self.ce_widget.stage_model
+        node_path = self.ce_widget.node_path
+        if model and node_path:
+            try:
+                for name in model.get_node_attr_names(node_path):
+                    words.add(name)
+                    words.add('self.' + name)
+            except Exception:
+                logger.debug('Could not read attrs for completion on '
+                             + str(node_path), exc_info=True)
+        all_tokens = tuple(tokens.TOKENTYPE.ALL) + tuple(tokens.plugin_tokens)
+        for token in all_tokens:
+            if token.prefix:
+                words.add(tokens.TOKEN_PREFIX + token.prefix)
+        words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
+                                self.toPlainText()))
+        return sorted(words)
+
+    def completion_prefix(self):
+        """The partial word in front of the cursor.
+
+        Dots count as part of it, so ``self.na`` completes against attribute
+        names instead of starting over at ``na``.
+
+        :rtype: str
+        """
+        cursor = self.textCursor()
+        text = cursor.block().text()[:cursor.positionInBlock()]
+        match = re.search(r'[A-Za-z_][A-Za-z0-9_.]*$', text)
+        return match.group(0) if match else ''
+
+    def update_completions(self, force=False):
+        """Offer completions for the word being typed.
+
+        :param force: show them even when the prefix is short or the
+            auto-complete preference is off, which is what Ctrl+Space does
+        :type force: bool
+        """
+        if self.isReadOnly():
+            self.hide_completions()
+            return
+        auto_on = self.ce_actions.autocomplete_action.isChecked()
+        if not force and not auto_on:
+            self.hide_completions()
+            return
+        prefix = self.completion_prefix()
+        if not force and len(prefix) < 2:
+            self.hide_completions()
+            return
+        if self.completion_words is None:
+            self.completion_words = self.build_completion_words()
+            model = QtCore.QStringListModel(self.completion_words,
+                                            self.completer)
+            self.completer.setModel(model)
+        self.completer.setCompletionPrefix(prefix)
+        if not self.completer.completionCount():
+            self.hide_completions()
+            return
+        if (self.completer.completionCount() == 1
+                and self.completer.currentCompletion() == prefix):
+            # Already typed out in full, so there is nothing to offer.
+            self.hide_completions()
+            return
+        popup = self.completer.popup()
+        popup.setFont(self.font())
+        popup.setCurrentIndex(self.completer.completionModel().index(0, 0))
+        rect = self.cursorRect()
+        width = (popup.sizeHintForColumn(0)
+                 + popup.verticalScrollBar().sizeHint().width() + 12)
+        rect.setWidth(width)
+        self.set_completion_shortcuts(False)
+        self.completer.complete(rect)
+
+    def hide_completions(self):
+        if self.completer.popup().isVisible():
+            self.completer.popup().hide()
+        self.set_completion_shortcuts(True)
+
+    def set_completion_shortcuts(self, enabled):
+        """Free up the keys the completion popup needs, and give them back.
+
+        Return, Tab and Esc are bound to editor actions, and a QAction
+        shortcut is consumed before the completer ever sees the key. While
+        the popup is up those actions stand down, so it can be driven the
+        way every other completion popup is.
+
+        :param enabled: True to give the keys back to the editor
+        :type enabled: bool
+        """
+        for action in (self.ce_actions.new_line,
+                       self.ce_actions.indent_line,
+                       self.ce_actions.unindent_line,
+                       self.ce_actions.accept_edit_action,
+                       self.ce_actions.cancel_edit_action):
+            action.setEnabled(enabled)
+
+    def insert_completion(self, completion):
+        """Swap the typed prefix for the completion that was chosen."""
+        prefix = self.completion_prefix()
+        cursor = self.textCursor()
+        cursor.setPosition(cursor.position() - len(prefix),
+                           QtGui.QTextCursor.KeepAnchor)
+        cursor.insertText(completion)
+        self.setTextCursor(cursor)
+        self.set_completion_shortcuts(True)
+
+    def keyPressEvent(self, event):
+        super(NxtCodeEditor, self).keyPressEvent(event)
+        if self.isReadOnly():
+            return
+        typed = event.text()
+        if typed and (typed.isalnum() or typed in '_.'):
+            self.update_completions()
+        elif self.completer.popup().isVisible():
+            self.hide_completions()
 
     def set_font_size(self, delta=0.0, default=False):
         if default:
@@ -762,18 +1247,25 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.prev_v_scroll_value = self.verticalScrollBar().value()
         self.prev_h_scroll_value = self.horizontalScrollBar().value()
 
-    def focusInEvent(self, event):
+    def suspend_global_actions(self):
         # I don't know why the event filter isn't stopping these actions so
         # I'm just forcing them to be disabled while we're typing.
         self.action_states = {}
         for a in self.ce_widget.main_window.get_global_actions():
             self.action_states[a] = a.isEnabled()
             a.setEnabled(False)
+
+    def restore_global_actions(self):
+        for a, state in self.action_states.items():
+            a.setEnabled(state)
+        self.action_states = {}
+
+    def focusInEvent(self, event):
+        self.suspend_global_actions()
         super(NxtCodeEditor, self).focusInEvent(event)
 
     def focusOutEvent(self, event):
-        for a, state in self.action_states.items():
-            a.setEnabled(state)
+        self.restore_global_actions()
         if self.standard_menu:
             if self.standard_menu.isVisible():
                 return QtWidgets.QPlainTextEdit.focusOutEvent(self, event)
@@ -811,10 +1303,32 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.standard_menu.insertAction(self.standard_menu.actions()[1],
                                         self.ce_actions.revert_code_action)
 
+        self.standard_menu.addSeparator()
+        self.standard_menu.addAction(self.ce_actions.find_action)
+        self.standard_menu.addAction(self.ce_actions.replace_action)
+        self.standard_menu.addAction(self.ce_actions.goto_line_action)
+        edit_menu = self.standard_menu.addMenu('Line')
+        edit_menu.addAction(self.ce_actions.duplicate_line)
+        edit_menu.addAction(self.ce_actions.move_line_up)
+        edit_menu.addAction(self.ce_actions.move_line_down)
+        edit_menu.addAction(self.ce_actions.delete_line)
+        edit_menu.addAction(self.ce_actions.expand_selection)
+        edit_menu.setEnabled(not self.isReadOnly())
+
         self.standard_menu.exec_(event.globalPos())
 
     def eventFilter(self, widget, event):
         if not isinstance(event, QtCore.QEvent):
+            return False
+        # QAbstractScrollArea filters its own viewport, so this runs during
+        # construction as well, before there is a completer to ask about.
+        completer = getattr(self, 'completer', None)
+        if completer is not None and widget is completer.popup():
+            # The popup can go away without us: Escape and clicking outside
+            # are both handled inside QCompleter. Whatever closed it, the
+            # editor wants Return, Tab and Esc back.
+            if event.type() == QtCore.QEvent.Type.Hide:
+                self.set_completion_shortcuts(True)
             return False
         if event.type() == QtCore.QEvent.Type.ShortcutOverride:
             return True

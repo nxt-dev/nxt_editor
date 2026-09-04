@@ -15,7 +15,9 @@ from nxt.session import Session
 path_logger = logging.getLogger(nxt_path.__name__)
 path_logger.propagate = False
 
-app = QtWidgets.QApplication(sys.argv)
+# Only one application may exist, and another test module may have
+# already made it.
+app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
 
 class NodeLocalAndInheritAttributes(unittest.TestCase):
