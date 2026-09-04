@@ -25,3 +25,7 @@ jobs:
       # entry rather than several identical jobs. rez decides the
       # interpreter from the package's own python requirement.
       python_versions: '[ "3.11" ]'
+      # macOS only. On the windows runner rez-env exits immediately with no
+      # resolve output, and reports its package cache directory missing, so
+      # that machine is not set up to resolve these yet.
+      runners: '[ [ "self-hosted", "macOS" ] ]'
