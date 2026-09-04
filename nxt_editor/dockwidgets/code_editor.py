@@ -108,6 +108,11 @@ class CodeEditor(DockWidgetBase):
         self.code_frame.setLayout(self.frame_layout)
 
         self.code_widget = QtWidgets.QWidget(self)
+        # Nothing painted here, so the strip the editor gives up when it
+        # shrinks kept whatever was drawn there last, which is how dragging
+        # the splitter smeared the editor's border across the top.
+        self.code_widget.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.code_widget.setStyleSheet('background-color: #3E3E3E;')
         self.frame_layout.addWidget(self.code_widget)
 
         self.code_layout = QtWidgets.QVBoxLayout()
@@ -239,8 +244,26 @@ class CodeEditor(DockWidgetBase):
             style = 'background-color: #232323;'
         self.code_widget.setStyleSheet(style)
 
+    def sync_overlay_geometry(self):
+        """Keep the overlay sitting exactly on the editor.
+
+        It is a child of the editor and paints with no background of its
+        own, so any moment where it is larger than the editor leaves what
+        it drew behind. Driven only from this dock's resize it lagged the
+        editor for a frame on every step of a splitter drag, which is what
+        smeared the border across the top.
+        """
+        rect = self.editor.rect().marginsRemoved(QtCore.QMargins(3, 2, 2, 2))
+        if self.overlay_widget.geometry() != rect:
+            self.overlay_widget.setGeometry(rect)
+            self.overlay_widget.update()
+
     def resizeEvent(self, event):
-        self.overlay_widget.setGeometry(self.editor.rect().marginsRemoved(QtCore.QMargins(3, 2, 2, 2)))
+        self.sync_overlay_geometry()
+        # The editor draws its border with a stylesheet, and the strip it
+        # gives up when it shrinks belongs to this frame, which has nothing
+        # to paint there unless asked.
+        self.code_frame.update()
         return super(CodeEditor, self).resizeEvent(event)
 
     def set_stage_model(self, stage):
@@ -319,9 +342,7 @@ class CodeEditor(DockWidgetBase):
             self.code_frame.hide()
         elif self.code_frame.isHidden():
             self.code_frame.show()
-            rect = self.editor.rect().marginsRemoved(QtCore.QMargins(3, 2,
-                                                                     2, 2))
-            self.overlay_widget.setGeometry(rect)
+            self.sync_overlay_geometry()
 
     def display_details(self):
         if self.isTopLevel() and self.node_path:
@@ -788,6 +809,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         for overlay in (self.find_widget, self.goto_widget):
             if overlay is not None:
                 overlay.reposition()
+        # The dock resizing is not the only way this widget changes size.
+        if self.ce_widget is not None:
+            self.ce_widget.sync_overlay_geometry()
 
         QtWidgets.QPlainTextEdit.resizeEvent(self, *e)
 
