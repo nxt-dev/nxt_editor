@@ -81,6 +81,31 @@ class BuildViewFindButton(unittest.TestCase):
         self.assertEqual(paths.index(target),
                          self.view.build_table.currentIndex().row())
 
+    def test_the_found_node_is_scrolled_to_the_top(self):
+        """Not centred: centring spends half the view on what already ran.
+
+        Asserts the hint asked for rather than the pixels it produced. A
+        dock with no laid out height has nothing to scroll, so measuring
+        the result would be testing Qt's layout and not this decision.
+        """
+        table = self.view.build_table
+        rows = ['/filler_%02d' % i for i in range(60)]
+        self.view.build_model.nodes = rows
+        app.processEvents()
+        asked = []
+        real_scroll_to = table.scrollTo
+
+        def spy(index, hint=table.ScrollHint.EnsureVisible):
+            asked.append(hint)
+            return real_scroll_to(index, hint)
+
+        table.scrollTo = spy
+        try:
+            self.assertTrue(table.scroll_to_path(rows[40]))
+        finally:
+            table.scrollTo = real_scroll_to
+        self.assertEqual([table.ScrollHint.PositionAtTop], asked)
+
     def test_no_selection_is_harmless(self):
         self.model.selection = []
         # Must not raise; there is simply nothing to go to.

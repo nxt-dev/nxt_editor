@@ -401,7 +401,10 @@ class BuildTable(QtWidgets.QTableView):
         except ValueError:
             return False
         model_index = build_model.index(row, BuildModel.PATH_COLUMN)
-        self.scrollTo(model_index, self.ScrollHint.PositionAtCenter)
+        # Top rather than centre: what you want to read after jumping to a
+        # node is that node and what runs after it, and centring spends
+        # half the view on what already ran.
+        self.scrollTo(model_index, self.ScrollHint.PositionAtTop)
         # The table selects nothing by design, so the current index is what
         # marks where you were sent.
         self.setCurrentIndex(model_index)
