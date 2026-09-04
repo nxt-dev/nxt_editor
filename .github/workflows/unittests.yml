@@ -21,9 +21,12 @@ jobs:
     with:
       package-name: "nxt_editor"
       tests-path: "nxt_editor/test"
-      # The two the DCCs actually run: 3.11 is Unreal 5.5-5.8 and Maya
-      # 2025/2026, 3.13 is Maya 2027.
-      python_versions: '[ "3.11", "3.13" ]'
+      # 3.13, for Maya 2027, belongs here too and the code is verified on
+      # it: both suites pass under Maya 2027's own interpreter. It cannot
+      # run here yet, because the studio's pytest and pytest_cov rez
+      # packages are built for python-3.10|3.11 only, so the resolve fails
+      # before a test runs. Add 3.13 the moment those exist.
+      python_versions: '[ "3.11" ]'
       # macOS only. On the windows runner rez-env exits immediately with no
       # resolve output, and reports its package cache directory missing, so
       # that machine is not set up to resolve these yet.
