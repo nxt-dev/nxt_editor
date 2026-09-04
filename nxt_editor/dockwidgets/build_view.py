@@ -102,6 +102,18 @@ class BuildView(DockWidgetBase):
                              QtGui.QIcon.Off)
         self.pause_resume_button = QtWidgets.QPushButton(self.play_icon, '')
         self.pause_resume_button.pressed.connect(self.pause_resume_pressed)
+        # Find the selected node in the build
+        self.find_icon = QtGui.QIcon()
+        find_pixmap_on = QtGui.QPixmap(':icons/icons/find_startpoint.png')
+        find_pixmap_hov = QtGui.QPixmap(':icons/icons/find_startpoint_hover.png')
+        self.find_icon.addPixmap(find_pixmap_on, QtGui.QIcon.Normal,
+                                 QtGui.QIcon.Off)
+        self.find_icon.addPixmap(find_pixmap_hov, QtGui.QIcon.Active,
+                                 QtGui.QIcon.Off)
+        self.find_selected_button = QtWidgets.QPushButton(self.find_icon, '')
+        self.find_selected_button.setToolTip('Scroll to the node selected in '
+                                             'the graph')
+        self.find_selected_button.pressed.connect(self.find_selected_pressed)
         # Stop button
         self.stop_button = QtWidgets.QPushButton(self.stop_exec_action.icon(),
                                                  '')
@@ -109,11 +121,32 @@ class BuildView(DockWidgetBase):
 
         self.controls_layout = QtWidgets.QHBoxLayout()
         self.controls_layout.addWidget(self.starts_combo, 1)
+        self.controls_layout.addWidget(self.find_selected_button, 0)
         self.controls_layout.addWidget(self.pause_resume_button, 0)
         self.controls_layout.addWidget(self.step_button, 0)
         self.controls_layout.addWidget(self.stop_button, 0)
         self.controls_layout.addWidget(self.restart_button, 0)
         return self.controls_layout
+
+    def find_selected_pressed(self):
+        """Scroll the build to whatever is selected in the graph.
+
+        The build is an execution order, not a picture of the graph, so a
+        selected node is not always in it: it may be skipped, outside the
+        start point's branch, or not executable at all. Say which, rather
+        than appearing to do nothing.
+        """
+        if not self.stage_model:
+            return
+        selection = self.stage_model.selection
+        if not selection:
+            logger.info('Select a node in the graph to find it in the build.')
+            return
+        node_path = selection[0]
+        if self.build_table.scroll_to_path(node_path):
+            return
+        logger.info('{} is not in this build.'.format(node_path))
+        self.stage_model.request_ding.emit()
 
     def pause_resume_pressed(self):
         """When the pause resume button is pressed,
@@ -351,6 +384,28 @@ class BuildTable(QtWidgets.QTableView):
         if not model:
             return
         model.stage_model.build_idx_changed.connect(self.on_build_idx_changed)
+
+    def scroll_to_path(self, node_path):
+        """Bring the row for a node path into view.
+
+        :param node_path: node to scroll to
+        :type node_path: str
+        :return: whether the path was in the build at all
+        :rtype: bool
+        """
+        build_model = self.model()
+        if not build_model:
+            return False
+        try:
+            row = build_model._nodes.index(node_path)
+        except ValueError:
+            return False
+        model_index = build_model.index(row, BuildModel.PATH_COLUMN)
+        self.scrollTo(model_index, self.ScrollHint.PositionAtCenter)
+        # The table selects nothing by design, so the current index is what
+        # marks where you were sent.
+        self.setCurrentIndex(model_index)
+        return True
 
     def on_build_idx_changed(self, build_idx):
         if self.model().stage_model.can_build_run():
