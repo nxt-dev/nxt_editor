@@ -1242,6 +1242,22 @@ class StageViewActions(NxtActionContainer):
                                           'the bottom right of the graph '
                                           'for all tabs.')
         self.mini_map_action.triggered.connect(toggle_mini_map)
+        # TOGGLE NODE ANIMATIONS
+
+        def toggle_animations():
+            state = self.animation_action.isChecked()
+            self.main_window.view.set_animations(state)
+
+        self.animation_action = BoolUserPrefAction(
+            'Animate Nodes', user_dir.USER_PREF.ANIMATION,
+            default=False, parent=self)
+        self.animation_action.setToolTip('Animate nodes opening and closing')
+        self.animation_action.setWhatsThis('When on, nodes slide and fade as '
+                                           'they open and close. Every node '
+                                           'is animated separately, so a '
+                                           'parent with a lot of children '
+                                           'takes noticeably longer to open.')
+        self.animation_action.triggered.connect(toggle_animations)
         # TOGGLE CONNECTION LINES
 
         def toggle_lines():
@@ -1436,6 +1452,7 @@ class StageViewActions(NxtActionContainer):
                                      self.disp_inst_attrs_action,
                                      self.disp_all_attrs_action,
                                      self.grid_action, self.mini_map_action,
+                                     self.animation_action,
                                      self.implicit_action,
                                      self.pick_walk_up_action,
                                      self.pick_walk_down_action,

@@ -43,7 +43,10 @@ class StageView(QtWidgets.QGraphicsView):
     def __init__(self, model, parent=None):
         super(StageView, self).__init__(parent=parent)
         self.main_window = parent
-        self._do_anim_pref = user_prefs.get(USER_PREF.ANIMATION, True)
+        # Off by default. Every node animates separately, so opening a
+        # parent with a lot of children spends most of its time on the
+        # animation rather than on drawing the result.
+        self._do_anim_pref = user_prefs.get(USER_PREF.ANIMATION, False)
         self.do_animations = self._do_anim_pref
         self.once_sec_timer = QtCore.QTimer(self)
         self.once_sec_timer.timeout.connect(self.calculate_fps)
@@ -1281,6 +1284,15 @@ class StageView(QtWidgets.QGraphicsView):
         node_item = self.get_node_graphic(node_path)
         if node_item:
             node_item.setPos(pos[0], pos[1])
+
+    def set_animations(self, state):
+        """Turn node open and close animations on or off for this view.
+
+        :param state: True to animate
+        :type state: bool
+        """
+        self._do_anim_pref = state
+        self.do_animations = state
 
     def handle_collapse_changed(self, node_paths):
         while self._animating:
