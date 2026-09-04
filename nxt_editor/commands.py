@@ -383,12 +383,26 @@ class SetNodeAttributeData(NxtCommand):
                          % (self.node_path, why))
         return not can_target
 
-    def apply_comp_change(self, dirties):
-        """Tell the view what changed, rebuilding only if we have to.
+    # Attributes that change what the graph will do, rather than what a
+    # node looks like. The build view refreshes when the comp layer says it
+    # changed, not when nodes do, so a change to one of these has to say so
+    # or the build keeps describing the old execution order and has to be
+    # recomposited by hand.
+    BUILD_SHAPING_ATTRS = (INTERNAL_ATTRS.NAME,
+                           INTERNAL_ATTRS.ENABLED,
+                           INTERNAL_ATTRS.START_POINT,
+                           INTERNAL_ATTRS.EXECUTE_IN,
+                           INTERNAL_ATTRS.CHILD_ORDER,
+                           INTERNAL_ATTRS.INSTANCE_PATH,
+                           INTERNAL_ATTRS.PARENT_PATH)
 
-        A targeted rename has already put the node in its new place in the
-        comp layer, but the view still has to be told, so it goes through
-        the same refresh a rebuild would, minus the rebuild.
+    def apply_comp_change(self, dirties):
+        """Tell the views what changed, rebuilding only if we have to.
+
+        These edits are already applied to the comp layer in place. What
+        is left is saying so: the graph listens for nodes changing, the
+        build view for the comp layer changing, and an edit that alters
+        the execution order has to reach both.
         """
         if self.recomp:
             self.model.update_comp_layer(rebuild=True)
@@ -401,11 +415,14 @@ class SetNodeAttributeData(NxtCommand):
                                    INTERNAL_ATTRS.PARENT_PATH,
                                    INTERNAL_ATTRS.ENABLED)):
             self.model.nodes_changed.emit(dirties)
-            return
-        changed_attrs = ()
-        for dirty in dirties:
-            changed_attrs += (nxt_path.make_attr_path(dirty, self.attr_name),)
-        self.model.attrs_changed.emit(changed_attrs)
+        else:
+            changed_attrs = ()
+            for dirty in dirties:
+                changed_attrs += (nxt_path.make_attr_path(dirty,
+                                                          self.attr_name),)
+            self.model.attrs_changed.emit(changed_attrs)
+        if self.attr_name in self.BUILD_SHAPING_ATTRS:
+            self.model.update_comp_layer(rebuild=False)
 
     @processing
     def undo(self):
