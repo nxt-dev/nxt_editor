@@ -152,10 +152,10 @@
                 }
             },
             "code": [
-                "# from nxt_maya import MAYA_PLUGIN_VERSION",
+                "from nxt_editor.integration import plugin_version",
                 "with open('${mod_file}', 'r') as fp:",
                 "    content = fp.read()",
-                "content = content.replace('<VERSION>', '0.1.0')",
+                "content = content.replace('<VERSION>', plugin_version())",
                 "with open('${mod_file}', 'w') as fp:",
                 "    fp.write(content)"
             ]
