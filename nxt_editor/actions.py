@@ -1914,10 +1914,11 @@ class CodeEditorActions(NxtActionContainer):
                                               'always offers them either way.')
         self.autocomplete_action.setAutoRepeat(False)
         self.autocomplete_action.setCheckable(True)
-        # Off by default. Suggestions arriving while you type are a matter
-        # of taste, and Ctrl+Space asks for them either way.
+        # On, like every other completion switch. The menu is the answer to
+        # what it does; a default that disagrees with the menu is just a
+        # second place to look.
         state = user_dir.user_prefs.get(user_dir.USER_PREF.CE_AUTOCOMPLETE,
-                                        False)
+                                        True)
         self.autocomplete_action.setChecked(state)
 
         def toggle_autocomplete():
@@ -1969,20 +1970,27 @@ class CodeEditorActions(NxtActionContainer):
              user_dir.USER_PREF.CE_COMPLETE_DOCUMENT, True),
         )
 
-        def make_source_toggle(action, pref_key):
-            action.setChecked(user_dir.user_prefs.get(pref_key, True))
+        def make_source_toggle(action, pref_key, default):
+            action.setChecked(user_dir.user_prefs.get(pref_key, default))
 
             def on_toggle():
                 user_dir.user_prefs[pref_key] = action.isChecked()
                 editor = getattr(self.main_window, 'code_editor', None)
-                if editor is not None:
-                    # The word list is built from these, so it is stale now.
-                    editor.editor.invalidate_completion_words()
+                if editor is None:
+                    return
+                code = editor.editor
+                # The word list is built from these, so it is stale now.
+                code.invalidate_completion_words()
+                if code.completer.popup().isVisible():
+                    # Turning a source off with the list on screen should
+                    # take it off the screen, not wait for the next
+                    # keystroke to agree with the menu.
+                    code.update_completions(force=True)
 
             action.toggled.connect(on_toggle)
 
-        for source_action, pref, _default in self.completion_source_actions:
-            make_source_toggle(source_action, pref)
+        for source_action, pref, default in self.completion_source_actions:
+            make_source_toggle(source_action, pref, default)
         # accept edit
         self.accept_edit_action = NxtAction('Accept Code Edit', parent=self)
         self.accept_edit_action.setWhatsThis('Accept changes and commit them '
