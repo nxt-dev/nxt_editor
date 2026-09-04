@@ -23,6 +23,8 @@ from nxt import nxt_log
 from nxt_editor.constants import NXT_WEBSITE
 from nxt.constants import NXT_DCC_ENV_VAR
 
+from nxt_editor.integration import plugin_version
+
 logger = logging.getLogger('nxt')
 CREATED_UI = []
 global __NXT_INSTANCE__
@@ -30,18 +32,12 @@ __NXT_INSTANCE__ = None
 
 
 class MAYA_PLUGIN_VERSION(object):
-    # TODO: Where/if to track these
-    # with open(version_file, 'r') as f:
-    #     version_data = json.load(f)
-    # plugin_v_data = version_data['MAYA_PLUGIN']
-    plugin_v_data = {'MAJOR': 0,
-                     'MINOR': 1,
-                     'PATCH': 0}
-    MAJOR = plugin_v_data['MAJOR']
-    MINOR = plugin_v_data['MINOR']
-    PATCH = plugin_v_data['PATCH']
-    VERSION_TUPLE = (MAJOR, MINOR, PATCH)
-    VERSION_STR = '.'.join(str(v) for v in VERSION_TUPLE)
+    # The plugin ships with the editor, so it reports the editor's version
+    # rather than a second number nobody remembers to bump. It used to be
+    # hardcoded to 0.1.0 and had drifted years behind.
+    VERSION_STR = plugin_version() or '0.0.0'
+    VERSION_TUPLE = tuple(int(part) for part in VERSION_STR.split('.'))
+    MAJOR, MINOR, PATCH = VERSION_TUPLE
     VERSION = VERSION_STR
 
 
