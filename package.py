@@ -33,7 +33,7 @@ requires = [
 
 private_build_requires = []
 
-release_branches = ["sb_release"]
+release_branches = ["release"]
 
 help = [["Home Page", "https://github.com/nxt-dev/nxt_editor"]]
 

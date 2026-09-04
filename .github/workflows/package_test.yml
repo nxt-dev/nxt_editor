@@ -7,8 +7,8 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches:
-      - 'sb_dev'
-      - 'sb_release'
+      - 'dev'
+      - 'release'
 
 jobs:
   test-package-version:

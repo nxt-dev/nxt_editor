@@ -1,6 +1,6 @@
 name: Rez Release
 
-# Releases nxt_editor into the studio rez packages. Only sb_release publishes;
+# Releases nxt_editor into the studio rez packages. Only release publishes;
 # package.py pins release_branches to match, so a release from anywhere else is
 # refused by rez itself as well as by this trigger.
 #
@@ -10,7 +10,7 @@ name: Rez Release
 on:
   push:
     branches:
-      - 'sb_release'
+      - 'release'
   workflow_dispatch:
 
 jobs:
