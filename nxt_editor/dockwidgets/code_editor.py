@@ -20,7 +20,8 @@ from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path, tokens
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
-from nxt_editor.dockwidgets.code_find import CodeFindBar
+from nxt_editor.dockwidgets.code_overlays import (FindOverlay,
+                                                  GotoLineOverlay)
 from nxt_editor.constants import FONTS
 import nxt_editor
 
@@ -122,12 +123,15 @@ class CodeEditor(DockWidgetBase):
         self.editor.accept.connect(self.accept_edit)
         self.code_layout.addWidget(self.editor)
 
-        # Find and replace for the code in this editor, hidden until asked
-        # for. Sits below the editor so showing it never moves the code.
-        self.find_bar = CodeFindBar(self.editor, parent=self)
-        self.code_layout.addWidget(self.find_bar)
-        self.editor.find_bar = self.find_bar
-        self.editor.textChanged.connect(self.find_bar.on_editor_text_changed)
+        # Panels that float over the code rather than taking a strip of the
+        # dock, so opening one never reflows what is being read. Children of
+        # the editor, so they follow it wherever the dock ends up.
+        self.find_widget = FindOverlay(self.editor, ce_widget=self)
+        self.goto_widget = GotoLineOverlay(self.editor, ce_widget=self)
+        self.editor.find_widget = self.find_widget
+        self.editor.goto_widget = self.goto_widget
+        self.editor.textChanged.connect(
+            self.find_widget.on_editor_text_changed)
 
         self.viewport = self.editor.viewport()
 
@@ -484,13 +488,13 @@ class CodeEditor(DockWidgetBase):
         self.editor.verticalScrollBar().blockSignals(False)
         self.editor.verticalScrollBar().setValue(self.editor.prev_v_scroll_value)
         self.editing_active = True
-        self.find_bar.update_replace_enabled()
+        self.find_widget.update_replace_enabled()
 
     def exit_editing(self):
         self.editor.setReadOnly(True)
         self.editing_active = False
         self.editor.hide_completions()
-        self.find_bar.update_replace_enabled()
+        self.find_widget.update_replace_enabled()
         self.cached_code_lines = []
         self.cached_code = ''
         self.set_represented_node()
@@ -563,8 +567,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.action_states = {}
         self.format_characters_on = False
         self.standard_menu = None
-        # Set by the CodeEditor dock once the bar exists.
-        self.find_bar = None
+        # Set by the CodeEditor dock once the overlays exist.
+        self.find_widget = None
+        self.goto_widget = None
         # Highlights are kept as named layers and recombined, because
         # setExtraSelections replaces the lot. Painted in this order, so
         # later layers sit on top of earlier ones.
@@ -695,6 +700,10 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         # The word list is rebuilt from the document, so it goes stale on
         # every edit. Rebuilding is deferred until a completion is asked for.
         self.textChanged.connect(self.invalidate_completion_words)
+        # Setting text does not move the cursor if it was already at the
+        # top, so without this a freshly opened node shows no current line
+        # highlight until something is clicked.
+        self.textChanged.connect(self.cursor_moved)
 
         # apply syntax highlighting
         self.syntax_highlighter = syntax_highlighter
@@ -776,6 +785,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             cr = self.contentsRect()
             rec = QtCore.QRect(cr.left(), cr.top(), self.number_bar.get_width(), cr.height())
             self.number_bar.setGeometry(rec)
+        for overlay in (self.find_widget, self.goto_widget):
+            if overlay is not None:
+                overlay.reposition()
 
         QtWidgets.QPlainTextEdit.resizeEvent(self, *e)
 
@@ -941,36 +953,27 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     # -- find and replace ----------------------------------------------
 
     def open_find(self):
-        if self.find_bar:
-            self.find_bar.open_find()
+        if self.find_widget:
+            self.find_widget.open_find()
 
     def open_replace(self):
-        if self.find_bar:
-            self.find_bar.open_find(replace=True)
+        if self.find_widget:
+            self.find_widget.open_find(replace=True)
 
     def find_next(self):
-        if self.find_bar:
-            self.find_bar.find_next()
+        if self.find_widget:
+            self.find_widget.find_next()
 
     def find_previous(self):
-        if self.find_bar:
-            self.find_bar.find_previous()
+        if self.find_widget:
+            self.find_widget.find_previous()
 
     # -- navigation -----------------------------------------------------
 
     def goto_line(self):
-        """Ask for a line number and put the cursor at the start of it."""
-        last = self.blockCount()
-        current = self.textCursor().blockNumber() + 1
-        number, accepted = QtWidgets.QInputDialog.getInt(
-            self, 'Go To Line', 'Line (1 - %d):' % last, current, 1, last)
-        if not accepted:
-            return
-        block = self.document().findBlockByNumber(number - 1)
-        cursor = self.textCursor()
-        cursor.setPosition(block.position())
-        self.setTextCursor(cursor)
-        self.centerCursor()
+        """Drop the line number panel from the top of the editor."""
+        if self.goto_widget:
+            self.goto_widget.open_goto()
 
     def expand_selection(self):
         """Grow the selection: word, then line, then everything."""
