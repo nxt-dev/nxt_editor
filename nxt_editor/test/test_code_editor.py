@@ -14,12 +14,6 @@ from nxt_editor.dockwidgets import code_overlays
 path_logger = logging.getLogger(nxt_path.__name__)
 path_logger.propagate = False
 
-if (sys.platform.startswith('linux') and not os.environ.get('DISPLAY')
-        and not os.environ.get('WAYLAND_DISPLAY')):
-    # These tests need a real widget with a real size, which Qt will give
-    # us without a display as long as it is told to expect one.
-    os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
 # Imported after the application exists, because building the main window
