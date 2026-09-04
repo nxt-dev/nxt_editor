@@ -1,21 +1,27 @@
 name: Unittests
 
+# Runs the suite the way the rest of the org does: inside a rez resolve on
+# the studio runners, where nxt_editor's own requires supply everything the
+# tests need. Nothing is cloned from another repo, so nothing needs a token.
+#
+# This replaces the workflow inherited from nxt-dev, which pip installed
+# nxt-core straight from GitHub. That worked only while these repos were
+# public.
 on:
   workflow_dispatch:
-    branches-ignore: [release]
-  workflow_call:
   pull_request:
-    branches-ignore: [release]
+    branches-ignore: [ release ]
   push:
-    branches-ignore: [release]
+    branches-ignore: [ release ]
 
 jobs:
-  test-python:
+  test-package:
     secrets: inherit
-    # Our fork, not nxt-dev/nxt@dev. Upstream's matrix moved to a python
-    # the package declares it does not support, so every job died at the
-    # install step and fail-fast cancelled the rest, which is why these
-    # tests have not actually run in a while.
-    uses: squarebit-studios/nxt/.github/workflows/unittests.yml@sb_dev
+    uses: squarebit-studios/sbgitworkflows/.github/workflows/package_run_tests.yml@main
     with:
-      QT_DEPENDENCIES: true
+      package-name: "nxt_editor"
+      tests-path: "nxt_editor/test"
+      # The shared workflow does not feed this into the resolve, so one
+      # entry rather than several identical jobs. rez decides the
+      # interpreter from the package's own python requirement.
+      python_versions: '[ "3.11" ]'
