@@ -32,13 +32,14 @@ Only clone this repo if you're [contributing](CONTRIBUTING.md) to the NXT codeba
 <br>
 
 #### Requirements
-- Python >= [3.9.*](https://www.python.org/downloads/release/python-390/)
+- Python [3.9](https://www.python.org/downloads/release/python-390/) to [3.13](https://www.python.org/downloads/release/python-3130/)
 - We strongly recommend using a Python [virtual environment](https://docs.python.org/3/library/venv.html)
 
 *[Requirements for contributors](CONTRIBUTING.md#python-environment)*  
 
 ### NXT Standalone
 Our releases are hosted on [PyPi](https://pypi.org/project/nxt-editor/).
+
 - Install:
     - `pip install nxt-editor`
 - Launch:
@@ -61,9 +62,4 @@ Each one contains a `README.md` inside to explain how to install/update them.
 
 [Sunrise Productions](https://sunriseproductions.tv/) | [School of Visual Art and Design](https://www.southern.edu/visualartanddesign/)
 
----
-
-| Release | Dev |
-| :---: | :---: |
-| ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=release) | ![Build Status](https://travis-ci.com/nxt-dev/nxt_editor.svg?token=rBRbAJTv2rq1c8WVEwGs&branch=dev) |
 
