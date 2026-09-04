@@ -1,8 +1,10 @@
 # Builtin
 import builtins
+import importlib
 import keyword
 import logging
 import re
+import sys
 from collections import OrderedDict
 from functools import partial
 
@@ -1133,37 +1135,123 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     def invalidate_completion_words(self):
         self.completion_words = None
 
+    # An import line, either shape, capturing the name the compute will
+    # actually use: "import os", "import os.path as p", "from os import x".
+    IMPORT_RE = re.compile(
+        r'^\s*(?:import\s+(?P<mod>[A-Za-z_][\w.]*)'
+        r'(?:\s+as\s+(?P<alias>[A-Za-z_]\w*))?'
+        r'|from\s+(?P<from>[A-Za-z_][\w.]*)\s+import\s+(?P<names>[^#\n]+))',
+        re.MULTILINE)
+
+    def completion_source_enabled(self, action_name):
+        """Whether one source of completions is switched on.
+
+        :param action_name: attribute on the code editor's actions
+        :type action_name: str
+        :rtype: bool
+        """
+        action = getattr(self.ce_actions, action_name, None)
+        return True if action is None else action.isChecked()
+
+    def imported_modules(self):
+        """The modules this compute imports, by the name it calls them.
+
+        Only what the compute asks for, and only if it can be imported
+        without complaint. Importing runs module level code, so this stays
+        with what the compute was going to import anyway when it runs.
+
+        :return: {name used in the code: module}
+        :rtype: dict
+        """
+        found = {}
+        for match in self.IMPORT_RE.finditer(self.toPlainText()):
+            module_name = match.group('mod') or match.group('from')
+            if not module_name:
+                continue
+            local_name = match.group('alias') or module_name.split('.')[0]
+            if match.group('mod') and not match.group('alias'):
+                # "import os.path" binds os, not os.path
+                module_name = module_name.split('.')[0]
+            if local_name in found:
+                continue
+            module = sys.modules.get(module_name)
+            if module is None:
+                try:
+                    module = importlib.import_module(module_name)
+                except Exception:
+                    logger.debug('No completions for %s, it would not import'
+                                 % module_name)
+                    continue
+            found[local_name] = module
+        return found
+
+    def module_completions(self, prefix):
+        """Names reachable through a dotted prefix, like os.pa.
+
+        :param prefix: the partial word being typed
+        :type prefix: str
+        :rtype: list
+        """
+        if '.' not in prefix or not self.completion_source_enabled(
+                'complete_modules_action'):
+            return []
+        root, _, rest = prefix.partition('.')
+        module = self.imported_modules().get(root)
+        if module is None:
+            return []
+        walked = root
+        # Follow the dots that are already complete, so os.path.jo looks
+        # inside os.path rather than os.
+        parts = rest.split('.')
+        for part in parts[:-1]:
+            module = getattr(module, part, None)
+            if module is None:
+                return []
+            walked += '.' + part
+        return ['%s.%s' % (walked, name) for name in dir(module)
+                if not name.startswith('_')]
+
     def build_completion_words(self):
         """Everything worth offering as a completion for this node.
 
-        Python's own names, the node's attributes, the token prefixes nxt
-        knows about including any a plugin registered, and the words already
-        written in this compute.
+        Each source can be switched off on its own, because they are not
+        equally welcome: python's own names are noise to someone writing
+        mostly tokens, and the words already in a long compute are noise
+        to everyone.
 
         :rtype: list
         """
-        words = set(keyword.kwlist)
-        words.update(dir(builtins))
-        words.update(('self', 'STAGE'))
-        model = self.ce_widget.stage_model
-        node_path = self.ce_widget.node_path
-        if model and node_path:
-            try:
-                for name in model.get_node_attr_names(node_path):
-                    words.add(name)
-                    words.add('self.' + name)
-                    # How an attribute is actually referenced in a compute
-                    words.add(tokens.TOKEN_PREFIX + name
-                              + tokens.TOKEN_SUFFIX)
-            except Exception:
-                logger.debug('Could not read attrs for completion on '
-                             + str(node_path), exc_info=True)
-        all_tokens = tuple(tokens.TOKENTYPE.ALL) + tuple(tokens.plugin_tokens)
-        for token in all_tokens:
-            if token.prefix:
-                words.add(tokens.TOKEN_PREFIX + token.prefix)
-        words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
-                                self.toPlainText()))
+        words = set()
+        if self.completion_source_enabled('complete_python_action'):
+            words.update(keyword.kwlist)
+            words.update(dir(builtins))
+        if self.completion_source_enabled('complete_node_action'):
+            words.update(('self', 'STAGE'))
+            model = self.ce_widget.stage_model
+            node_path = self.ce_widget.node_path
+            if model and node_path:
+                try:
+                    for name in model.get_node_attr_names(node_path):
+                        words.add(name)
+                        words.add('self.' + name)
+                        # How an attribute is written in a compute
+                        words.add(tokens.TOKEN_PREFIX + name
+                                  + tokens.TOKEN_SUFFIX)
+                except Exception:
+                    logger.debug('Could not read attrs for completion on '
+                                 + str(node_path), exc_info=True)
+            all_tokens = (tuple(tokens.TOKENTYPE.ALL)
+                          + tuple(tokens.plugin_tokens))
+            for token in all_tokens:
+                if token.prefix:
+                    words.add(tokens.TOKEN_PREFIX + token.prefix)
+        if self.completion_source_enabled('complete_modules_action'):
+            # The bare module names. What is inside them is resolved per
+            # prefix, since dir() on everything imported would be huge.
+            words.update(self.imported_modules())
+        if self.completion_source_enabled('complete_document_action'):
+            words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
+                                    self.toPlainText()))
         return sorted(words)
 
     # What a partial word can be made of. Dots, so self.na completes
@@ -1203,9 +1291,11 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             return
         if self.completion_words is None:
             self.completion_words = self.build_completion_words()
-            model = QtCore.QStringListModel(self.completion_words,
-                                            self.completer)
-            self.completer.setModel(model)
+        # Module contents depend on what is being typed, so they are worked
+        # out per prefix rather than kept in the cached list.
+        words = self.completion_words + self.module_completions(prefix)
+        model = QtCore.QStringListModel(sorted(set(words)), self.completer)
+        self.completer.setModel(model)
         self.completer.setCompletionPrefix(prefix)
         if not self.completer.completionCount():
             self.hide_completions()

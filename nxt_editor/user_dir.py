@@ -125,6 +125,11 @@ class USER_PREF():
     SHOW_DBL_CLICK_MSG = 'show_double_click_message'
     SHOW_CE_DATA_STATE = 'show_code_editor_data_state'
     CE_AUTOCOMPLETE = 'code_editor_autocomplete'
+    # What the code editor offers completions from, each on its own
+    CE_COMPLETE_PYTHON = 'code_editor_complete_python'
+    CE_COMPLETE_MODULES = 'code_editor_complete_modules'
+    CE_COMPLETE_NODE = 'code_editor_complete_node'
+    CE_COMPLETE_DOCUMENT = 'code_editor_complete_document'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
     SHOW_MINI_MAP = 'show_mini_map'

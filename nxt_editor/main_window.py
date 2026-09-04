@@ -1325,6 +1325,15 @@ class MenuBar(QtWidgets.QMenuBar):
         self.options_view_sub = self.options_menu.addMenu("View")
         self.options_view_sub.setTearOffEnabled(True)
         self.options_view_sub.addActions(self.view_opt_menu.actions())
+        # Code editor completion: whether it offers anything unasked, and
+        # what it is allowed to look at.
+        ce_actions = self.main_window.code_editor_actions
+        self.options_complete_sub = self.options_menu.addMenu("Autocomplete")
+        self.options_complete_sub.setTearOffEnabled(True)
+        self.options_complete_sub.addAction(ce_actions.autocomplete_action)
+        self.options_complete_sub.addSeparator()
+        for source_action, _pref, _default in                 ce_actions.completion_source_actions:
+            self.options_complete_sub.addAction(source_action)
         # Help Menu
         self.help_menu = self.addMenu("Help")
         self.help_menu.setTearOffEnabled(True)

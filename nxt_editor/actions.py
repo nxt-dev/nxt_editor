@@ -1925,6 +1925,64 @@ class CodeEditorActions(NxtActionContainer):
             user_dir.user_prefs[user_dir.USER_PREF.CE_AUTOCOMPLETE] = new
 
         self.autocomplete_action.toggled.connect(toggle_autocomplete)
+
+        # What it is allowed to look at. Each source costs something
+        # different: python's own names are free, a module has to be
+        # introspected, and the words already written in the compute are
+        # noisy on a long one. Which of those is worth it is a matter of
+        # taste, so it is configurable rather than decided here.
+        self.complete_python_action = NxtAction('Python Builtins', parent=self)
+        self.complete_python_action.setCheckable(True)
+        self.complete_python_action.setWhatsThis(
+            "Python's keywords and builtins, such as return and enumerate.")
+
+        self.complete_modules_action = NxtAction('Imported Modules',
+                                                 parent=self)
+        self.complete_modules_action.setCheckable(True)
+        self.complete_modules_action.setWhatsThis(
+            'Names from modules this compute imports, so os. offers path, '
+            'listdir and the rest. Only modules the compute imports, read '
+            'from its import lines.')
+
+        self.complete_node_action = NxtAction('Node Attributes And Tokens',
+                                              parent=self)
+        self.complete_node_action.setCheckable(True)
+        self.complete_node_action.setWhatsThis(
+            "This node's attributes, as bare names, as self.name and as "
+            "${name}, plus the token prefixes nxt knows about.")
+
+        self.complete_document_action = NxtAction('Words In This Compute',
+                                                  parent=self)
+        self.complete_document_action.setCheckable(True)
+        self.complete_document_action.setWhatsThis(
+            'Words already written in this compute, which catches your own '
+            'variable names.')
+
+        self.completion_source_actions = (
+            (self.complete_python_action,
+             user_dir.USER_PREF.CE_COMPLETE_PYTHON, True),
+            (self.complete_modules_action,
+             user_dir.USER_PREF.CE_COMPLETE_MODULES, True),
+            (self.complete_node_action,
+             user_dir.USER_PREF.CE_COMPLETE_NODE, True),
+            (self.complete_document_action,
+             user_dir.USER_PREF.CE_COMPLETE_DOCUMENT, True),
+        )
+
+        def make_source_toggle(action, pref_key):
+            action.setChecked(user_dir.user_prefs.get(pref_key, True))
+
+            def on_toggle():
+                user_dir.user_prefs[pref_key] = action.isChecked()
+                editor = getattr(self.main_window, 'code_editor', None)
+                if editor is not None:
+                    # The word list is built from these, so it is stale now.
+                    editor.editor.invalidate_completion_words()
+
+            action.toggled.connect(on_toggle)
+
+        for source_action, pref, _default in self.completion_source_actions:
+            make_source_toggle(source_action, pref)
         # accept edit
         self.accept_edit_action = NxtAction('Accept Code Edit', parent=self)
         self.accept_edit_action.setWhatsThis('Accept changes and commit them '
@@ -2013,6 +2071,10 @@ class CodeEditorActions(NxtActionContainer):
                                      self.overlay_message_action,
                                      self.show_data_state_action,
                                      self.autocomplete_action,
+                                     self.complete_python_action,
+                                     self.complete_modules_action,
+                                     self.complete_node_action,
+                                     self.complete_document_action,
                                      self.new_line, self.indent_line,
                                      self.unindent_line,
                                      self.find_action, self.replace_action,
