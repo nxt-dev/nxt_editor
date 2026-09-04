@@ -9,6 +9,13 @@ jobs:
   stage-release:
     runs-on: [ self-hosted, macOS ]
 
+    # Both repos keep hand written build graphs in build/, which is
+    # also rez's default build directory. Letting rez use it wipes
+    # those files and leaves the tree dirty, which rez release then
+    # refuses to tag. Build somewhere else.
+    env:
+      REZ_BUILD_DIRECTORY: .rez_build
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4

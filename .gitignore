@@ -9,3 +9,4 @@ docs/build/
 build/
 site/
 nxt_editor/qresources.py*
+.rez_build/
