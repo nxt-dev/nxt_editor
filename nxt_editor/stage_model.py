@@ -875,10 +875,38 @@ class StageModel(QtCore.QObject):
         new_node_path = cmd.node_path
         return new_node_path
 
+    def delete_is_orphaning(self, node_path, layer):
+        """Whether deleting this node would leave its path behind as a ghost.
+
+        Deleting a node keeps its children by default, so the path it
+        occupied still has things hanging off it and comes back as an
+        implied node: drawn in the graph, listed in the build, and not
+        deletable, because nothing is there to delete. That is only the
+        right answer when another layer actually provides the node, in
+        which case the lower opinion should surface.
+
+        :param node_path: node about to be deleted
+        :type node_path: str
+        :param layer: layer it is being deleted from
+        :return: True when the descendants should go with it
+        :rtype: bool
+        """
+        if not layer.descendants(node_path, include_implied=True):
+            return False
+        others = [l for l in self.stage.get_layers_with_opinion(node_path)
+                  if l is not layer]
+        return not others
+
     def delete_nodes(self, node_paths=(), layer=None, recursive=False):
         if not node_paths:
             node_paths = self.selection
         layer = layer or self.target_layer
+        if not recursive:
+            # Taking the descendants is not really a separate mode when
+            # nothing else can fill the path; it is the difference between
+            # deleting the node and leaving a ghost of it.
+            recursive = any(self.delete_is_orphaning(p, layer)
+                            for p in node_paths)
         valid_nodes = []
         node_is_implied = False
         for node_path in node_paths:
