@@ -329,6 +329,11 @@ class DeleteNode(NxtCommand):
             fix_selection.remove(self.node_path)
             self.model.selection = fix_selection
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
+        # delete_node keeps the comp layer's nodes right on its own, but the
+        # build view listens for the comp layer changing rather than for
+        # nodes changing. Without this the deleted node stayed in the build,
+        # looking like a ghost of something that no longer exists.
+        self.model.update_comp_layer(rebuild=False)
         self.redo_effected_layer(layer.real_path)
         self.setText("Delete node: {}".format(self.node_path))
 
