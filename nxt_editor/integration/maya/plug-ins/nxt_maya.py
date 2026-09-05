@@ -8,6 +8,7 @@ import webbrowser
 import logging
 import time
 import os
+import json
 
 # External
 # maya
@@ -20,7 +21,7 @@ from Qt import QtCore
 import nxt_editor.main_window
 import nxt.remote.nxt_socket
 from nxt import nxt_log
-from nxt_editor.constants import NXT_WEBSITE
+from nxt_editor.constants import NXT_WEBSITE, version_file
 from nxt.constants import NXT_DCC_ENV_VAR
 
 logger = logging.getLogger('nxt')
@@ -30,13 +31,9 @@ __NXT_INSTANCE__ = None
 
 
 class MAYA_PLUGIN_VERSION(object):
-    # TODO: Where/if to track these
-    # with open(version_file, 'r') as f:
-    #     version_data = json.load(f)
-    # plugin_v_data = version_data['MAYA_PLUGIN']
-    plugin_v_data = {'MAJOR': 0,
-                     'MINOR': 1,
-                     'PATCH': 0}
+    # Tracked next to the editor version in nxt_editor/version.json
+    with open(version_file, 'r') as f:
+        plugin_v_data = json.load(f)['MAYA_PLUGIN']
     MAJOR = plugin_v_data['MAJOR']
     MINOR = plugin_v_data['MINOR']
     PATCH = plugin_v_data['PATCH']
