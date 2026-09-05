@@ -218,6 +218,14 @@ class MainWindow(QtWidgets.QMainWindow):
                        QtCore.Qt.LeftDockWidgetArea)
         self.setTabPosition(QtCore.Qt.AllDockWidgetAreas,
                             QtWidgets.QTabWidget.North)
+        # Snapshot the factory dock/toolbar layout before any saved state is
+        # restored, so reset_layout can always return to it
+        self.default_layout_state = self.saveState()
+        # Qt creates dock tab bars lazily when docks get tabified, so watch
+        # for them to support double clicking a tab to float its dock
+        for dock in self.findChildren(DockWidgetBase):
+            dock.dockLocationChanged.connect(self.install_dock_tab_filters)
+            dock.topLevelChanged.connect(self.install_dock_tab_filters)
 
         # status bar
         self.status_bar = QtWidgets.QStatusBar()
@@ -849,8 +857,39 @@ QCheckBox::indicator {
             if isinstance(widget.parent(), NxtCodeEditor):
                 self.code_editor.update_code_is_local()
                 self.code_editor.enter_editing()
+            elif isinstance(widget, QtWidgets.QTabBar):
+                return self.float_dock_from_tab(widget, event.pos())
 
         return False
+
+    def float_dock_from_tab(self, tab_bar, pos):
+        """Float the dock widget whose tab sits at `pos` in `tab_bar`.
+        :param tab_bar: QTabBar of a dock area owned by this window
+        :param pos: QPoint click position local to the tab bar
+        :return: True if a dock was floated
+        """
+        index = tab_bar.tabAt(pos)
+        if index == -1:
+            return False
+        title = tab_bar.tabText(index)
+        for dock in self.findChildren(DockWidgetBase):
+            if dock.windowTitle() == title:
+                dock.setFloating(True)
+                dock.raise_()
+                return True
+        return False
+
+    def install_dock_tab_filters(self, *args):
+        """Defer a tick so Qt has (re)built its internal dock tab bars."""
+        QtCore.QTimer.singleShot(0, self.scan_dock_tab_bars)
+
+    def scan_dock_tab_bars(self):
+        """Filter the dock area tab bars so tab double clicks reach
+        eventFilter. Qt creates them lazily when docks get tabified.
+        """
+        for tab_bar in self.findChildren(QtWidgets.QTabBar):
+            if tab_bar.parent() is self:
+                tab_bar.installEventFilter(self)
 
     def show(self):
         """Centering after the window is shown because the center is based on the window's size."""
@@ -858,7 +897,13 @@ QCheckBox::indicator {
         super(MainWindow, self).show()
         self.center_view()
 
+    def reset_layout(self):
+        """Restore all dock widgets and toolbars to the default layout."""
+        self.restoreState(self.default_layout_state)
+        self.state_last_hidden = None
+
     def showEvent(self, event):
+        self.install_dock_tab_filters()
         if self.state_last_hidden:
             self.restoreState(self.state_last_hidden)
             super(MainWindow, self).showEvent(event)
@@ -1173,6 +1218,10 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.view_actions.implicit_action)
         self.view_menu.addAction(self.view_actions.grid_action)
+        self.view_menu.addSeparator()
+        self.reset_layout_action = self.view_menu.addAction('Reset Layout')
+        self.reset_layout_action.triggered.connect(
+            self.main_window.reset_layout)
         self.view_opt_menu = self.view_menu.addMenu('Options')
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
