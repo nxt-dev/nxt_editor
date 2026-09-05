@@ -524,6 +524,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     cancel = QtCore.Signal()
     accept = QtCore.Signal()
 
+    # Opening char -> closing char inserted automatically while editing
+    AUTO_PAIRS = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"}
+
     def __init__(self, show_line_numbers=True, highlight_current_line=True,
                  syntax_highlighter=None, indent='    ',
                  comment_character='#', parent=None):
@@ -1206,6 +1209,59 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.ce_widget.stage_model.execute_snippet(code_string,
                                                    self.ce_widget.node_path,
                                                    globally=globally)
+
+    def keyPressEvent(self, event):
+        plain = not (event.modifiers() & (QtCore.Qt.ControlModifier |
+                                          QtCore.Qt.AltModifier))
+        if plain and not self.isReadOnly() and self.handle_auto_pair(event):
+            event.accept()
+            return
+        super(NxtCodeEditor, self).keyPressEvent(event)
+
+    def char_after_cursor(self):
+        cursor = self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col] if col < len(text) else ''
+
+    def char_before_cursor(self):
+        cursor = self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col - 1] if col > 0 else ''
+
+    def handle_auto_pair(self, event):
+        """Insert the matching closer for a bracket/quote, wrap the selection
+        in the pair, or step over a closer that is already there.
+        :param event: QKeyEvent
+        :return: True if the key was handled.
+        """
+        text = event.text()
+        if not text:
+            return False
+        cursor = self.textCursor()
+        closers = set(self.AUTO_PAIRS.values())
+        # Step over an auto-inserted closer instead of doubling it
+        if (text in closers and not cursor.hasSelection() and
+                self.char_after_cursor() == text):
+            cursor.movePosition(QtGui.QTextCursor.Right)
+            self.setTextCursor(cursor)
+            return True
+        close = self.AUTO_PAIRS.get(text)
+        if close is None:
+            return False
+        # Don't pair quotes mid-word (apostrophes, string suffixes)
+        if text in ("'", '"'):
+            if (self.char_before_cursor().isalnum() or
+                    self.char_after_cursor().isalnum()):
+                return False
+        if cursor.hasSelection():
+            cursor.insertText(text + cursor.selectedText() + close)
+            return True
+        cursor.insertText(text + close)
+        cursor.movePosition(QtGui.QTextCursor.Left)
+        self.setTextCursor(cursor)
+        return True
 
 
 class NumberBar(QtWidgets.QWidget):
