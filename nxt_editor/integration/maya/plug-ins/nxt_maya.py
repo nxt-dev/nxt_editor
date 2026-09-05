@@ -44,9 +44,13 @@ class MAYA_PLUGIN_VERSION(object):
     VERSION_STR = '.'.join(str(v) for v in VERSION_TUPLE)
     VERSION = VERSION_STR
 
+def open_editor(*args):
+    cmds.nxt_ui()
+
 
 def about_menu(*args):
     webbrowser.open_new(NXT_WEBSITE)
+
 
 
 def auto_reload(*args):
@@ -58,6 +62,7 @@ def auto_reload(*args):
         cmds.nxt_ui('reload')
     else:
         cmds.warning('Aborted reload!')
+
 
 
 def enable_cmd_port(enable):
@@ -92,22 +97,61 @@ def create_remote_context(*args):
 class NxtUiCmd(om.MPxCommand):
     cmd_name = "nxt_ui"
 
+    kCloseFlag = '-c'
+    kCloseFlagLong = '-close'
+    kReloadFlag = '-r'
+    kReloadFlagLong = '-reload'
+    kPathFlag = '-p'
+    kPathFlagLong = '-path'
+
     @staticmethod
     def cmdCreator():
         return NxtUiCmd()
 
+    @staticmethod
+    def syntaxCreator():
+        syntax = om.MSyntax()
+        syntax.addFlag(NxtUiCmd.kCloseFlag, NxtUiCmd.kCloseFlagLong)
+        syntax.addFlag(NxtUiCmd.kPathFlag, NxtUiCmd.kPathFlagLong, om.MSyntax.kString)
+        syntax.makeFlagMultiUse(NxtUiCmd.kPathFlag)
+        syntax.addFlag(NxtUiCmd.kReloadFlag, NxtUiCmd.kReloadFlagLong, om.MSyntax.kString)
+        
+        return syntax
+
     def doIt(self, args):
         global __NXT_INSTANCE__
         os.environ[NXT_DCC_ENV_VAR] = 'maya'
-        if args:
-            string_args = []
-            for arg in range(len(args)):
-                string_args += [args.asString(arg)]
-            if 'close' in string_args:
-                if __NXT_INSTANCE__:
-                    __NXT_INSTANCE__.close()
-                return
-        nxt_win = nxt_editor.show_new_editor()
+
+        try:
+            parser = om.MArgParser(self.syntax(), args)
+        except RuntimeError:
+            raise RuntimeError(
+                "nxt_ui: invalid flag(s). Valid flags are -close/-c and "
+                "-path/-p.")
+
+        if parser.isFlagSet(NxtUiCmd.kCloseFlag):
+            if __NXT_INSTANCE__:
+                __NXT_INSTANCE__.close()
+            return
+
+        if parser.isFlagSet(NxtUiCmd.kReloadFlag):
+            pass
+
+        paths = []
+        if parser.isFlagSet(NxtUiCmd.kPathFlag):
+            for i in range(parser.numberOfFlagUses(NxtUiCmd.kPathFlag)):
+                flag_args = parser.getFlagArgumentList(NxtUiCmd.kPathFlag, i)
+                paths.append(flag_args.asString(0))
+
+        if __NXT_INSTANCE__ and paths:
+            __NXT_INSTANCE__.raise_()
+            for p in paths:
+                __NXT_INSTANCE__.load_file(p)
+            return
+
+        nxt_win = nxt_editor.show_new_editor(paths=paths or None)
+        __NXT_INSTANCE__ = nxt_win
+        
         if 'win32' in sys.platform:
             # gives nxt it's own entry on taskbar
             nxt_win.setWindowFlags(QtCore.Qt.Window)
@@ -131,21 +175,27 @@ class NxtUiCmd(om.MPxCommand):
             if model:
                 model.process_events()
         cb_id = om.MCommandMessage.addCommandOutputCallback(log_callback, None)
-        sj = cmds.scriptJob(e=["quitApplication", "cmds.nxt_ui('close')"],
+        sj = cmds.scriptJob(e=["quitApplication", "cmds.nxt_ui(close=True)"],
                             protected=True)
         nxt_win.output_log.unwrap_std_streams()
 
         def remove_callback():
+            global __NXT_INSTANCE__
+        
             om.MCommandMessage.removeCallback(cb_id)
+        
             try:
                 cmds.scriptJob(kill=sj, force=True)
             except RuntimeError:
-                # During a real close it will try to kill the job while its
-                # running. Maybe we should just block the signal?
                 pass
+        
+            if __NXT_INSTANCE__ is nxt_win:
+                __NXT_INSTANCE__ = None
+
         nxt_win.close_signal.connect(remove_callback)
+
         nxt_win.show()
-        __NXT_INSTANCE__ = nxt_win
+
 
 
 # PLUGIN BOILERPLATE #
@@ -159,7 +209,7 @@ def initializePlugin(plugin):
     # Commands
     # TODO promote to for loop if building multiple commands(same for uninit)
     try:
-        pluginFn.registerCommand(NxtUiCmd.cmd_name, NxtUiCmd.cmdCreator)
+        pluginFn.registerCommand(NxtUiCmd.cmd_name, NxtUiCmd.cmdCreator, NxtUiCmd.syntaxCreator)
     except Exception:
         logger.exception("Failed to register: {}".format(NxtUiCmd.cmd_name))
         raise
@@ -167,7 +217,7 @@ def initializePlugin(plugin):
     maya_window = mel.eval('$_=$gMainWindow')
     nxt_menu = cmds.menu('nxt', parent=maya_window, tearOff=True)
     CREATED_UI.append(nxt_menu)
-    cmds.menuItem('Open Editor', command=cmds.nxt_ui, parent=nxt_menu)
+    cmds.menuItem('Open Editor', command=open_editor, parent=nxt_menu)
     cmds.menuItem('Create Maya Context', command=create_remote_context,
                   parent=nxt_menu)
     # cmds.menuItem('Open Command Port', command=enable_cmd_port,
