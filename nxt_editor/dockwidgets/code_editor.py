@@ -373,6 +373,8 @@ class CodeEditor(DockWidgetBase):
             prev_h_scroll = self.editor.prev_h_scroll_value
             self.editor.verticalScrollBar().setValue(prev_v_scroll)
             self.editor.horizontalScrollBar().setValue(prev_h_scroll)
+            # Keep find highlights/counter in sync with the new node's code
+            self.editor.find_bar.reevaluate()
 
     def update_border_color(self):
         color = None
@@ -637,6 +639,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.current_line_highlight = highlight_current_line
         self.current_line_number = None
         self.current_line_color = QtGui.QColor('#181818')
+        # Extra selections owned by the find bar (all matches). Kept apart
+        # from the current line highlight so refreshing one keeps the other.
+        self.find_selections = []
         self.cursorPositionChanged.connect(self.highlight_current_line)
 
         # apply syntax highlighting
@@ -647,6 +652,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         func = self.update_previous_scroll_positions
         self.verticalScrollBar().valueChanged.connect(func)
         self.installEventFilter(self)
+
+        # Find / replace bar. Parented to the editor's container rather than
+        # the editor itself: as a child of the QPlainTextEdit it could not
+        # hold keyboard focus and would inherit the editor's shortcuts.
+        self.find_bar = FindReplaceBar(self, parent=self.ce_widget.code_widget)
+        self.find_bar.hide()
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("text/plain"):
@@ -712,6 +723,16 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         doc = self.document()
         return [str(doc.findBlockByLineNumber(i).text()) for i in range(doc.lineCount())]
 
+    def selected_find_text(self):
+        """Single line selection to prefill the find field, else empty string.
+        :return: string
+        """
+        text = self.textCursor().selectedText()
+        # QTextCursor.selectedText uses U+2029 for line breaks
+        if not text or u'\u2029' in text:
+            return ''
+        return text
+
     def resizeEvent(self, *e):
         """overload resizeEvent handler"""
         # resize number_bar widget
@@ -721,6 +742,24 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             self.number_bar.setGeometry(rec)
 
         QtWidgets.QPlainTextEdit.resizeEvent(self, *e)
+        self.reposition_find_bar()
+
+    def reposition_find_bar(self):
+        """Anchor the find bar to the top right of the editor, clear of the
+        vertical scroll bar. The bar is a sibling overlay so it is placed in
+        the parent's coordinates using the editor geometry.
+        """
+        find_bar = getattr(self, 'find_bar', None)
+        if find_bar is None or not find_bar.isVisible():
+            return
+        find_bar.adjustSize()
+        margin = 8
+        geo = self.geometry()
+        scrollbar = self.verticalScrollBar()
+        scrollbar_w = scrollbar.width() if scrollbar.isVisible() else 0
+        x = geo.right() - find_bar.width() - margin - scrollbar_w
+        y = geo.top() + margin
+        find_bar.move(max(geo.left() + margin, x), y)
 
     def update_width(self):
         self.frame.setFixedWidth(self.number_bar.get_width())
@@ -735,19 +774,29 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         qss = code_style_factory(color, border, thickness=thickness)
         self.setStyleSheet(qss)
 
+    def apply_extra_selections(self):
+        """Set extra selections from the current line highlight plus the find
+        bar matches, so refreshing either one does not clobber the other.
+        """
+        selections = []
+        if self.current_line_highlight:
+            hi_selection = QtWidgets.QTextEdit.ExtraSelection()
+            hi_selection.format.setBackground(self.current_line_color)
+            hi_selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
+            hi_selection.cursor = self.textCursor()
+            hi_selection.cursor.clearSelection()
+            selections.append(hi_selection)
+        selections.extend(self.find_selections)
+        self.setExtraSelections(selections)
+
     def highlight_current_line(self):
         if self.current_line_highlight:
             new_current_line_number = self.textCursor().blockNumber()
             if new_current_line_number != self.current_line_number:
                 self.current_line_number = new_current_line_number
-                hi_selection = QtWidgets.QTextEdit.ExtraSelection()
-                hi_selection.format.setBackground(self.current_line_color)
-                hi_selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
-                hi_selection.cursor = self.textCursor()
-                hi_selection.cursor.clearSelection()
-                self.setExtraSelections([hi_selection])
+                self.apply_extra_selections()
         else:
-            self.setExtraSelections([QtWidgets.QTextEdit.ExtraSelection()])
+            self.apply_extra_selections()
 
     def set_font_size(self, delta=0.0, default=False):
         if default:
@@ -817,6 +866,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if not isinstance(event, QtCore.QEvent):
             return False
         if event.type() == QtCore.QEvent.Type.ShortcutOverride:
+            # Claim Ctrl+F / Ctrl+R from the window level Find and Replace
+            # action so they reach keyPressEvent and drive the in-editor bar
+            if (event.modifiers() & QtCore.Qt.ControlModifier and
+                    event.key() in (QtCore.Qt.Key_F, QtCore.Qt.Key_R)):
+                event.accept()
+                return True
             return True
         return False
 
@@ -1206,6 +1261,313 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.ce_widget.stage_model.execute_snippet(code_string,
                                                    self.ce_widget.node_path,
                                                    globally=globally)
+
+    def keyPressEvent(self, event):
+        if event.modifiers() & QtCore.Qt.ControlModifier:
+            if event.key() == QtCore.Qt.Key_F:
+                self.find_bar.open_find(self.selected_find_text())
+                event.accept()
+                return
+            if event.key() == QtCore.Qt.Key_R:
+                self.find_bar.open_replace(self.selected_find_text())
+                event.accept()
+                return
+        if event.key() == QtCore.Qt.Key_Escape and self.find_bar.isVisible():
+            self.find_bar.close_bar()
+            event.accept()
+            return
+        super(NxtCodeEditor, self).keyPressEvent(event)
+
+
+class FindReplaceBar(QtWidgets.QFrame):
+    """Find / replace bar floating over an NxtCodeEditor.
+
+    Find (Ctrl+F) and replace (Ctrl+R) work on the text currently shown in
+    the editor: every match is highlighted, the active match is selected and
+    the counter shows position/total. Replace is only enabled while the
+    editor is editable.
+    """
+
+    STYLE = '''
+        QFrame {
+            background-color: #323232;
+            border: 1px solid #555555;
+            border-radius: 6px;
+        }
+        QLineEdit {
+            background-color: #232323;
+            color: #d6d6d6;
+            border: 1px solid #555555;
+            border-radius: 3px;
+            padding: 2px;
+        }
+        QToolButton, QPushButton {
+            background-color: #3E3E3E;
+            color: #d6d6d6;
+            border: 1px solid #555555;
+            border-radius: 3px;
+            padding: 2px 6px;
+        }
+        QToolButton:checked { background-color: #5a5a5a; }
+        QToolButton:hover, QPushButton:hover { background-color: #4a4a4a; }
+        QLabel { color: #b7b4b1; border: none; background: transparent; }
+        '''
+
+    RETURN_KEYS = (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter)
+
+    def __init__(self, editor, parent=None):
+        super(FindReplaceBar, self).__init__(parent=parent or editor)
+        self.editor = editor
+        self.match_starts = []
+        self.setStyleSheet(self.STYLE)
+        self.setFont(QtGui.QFont(FONTS.DEFAULT_FAMILY, 9))
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
+
+        # find row
+        find_row = QtWidgets.QHBoxLayout()
+        find_row.setSpacing(4)
+        layout.addLayout(find_row)
+
+        self.find_field = QtWidgets.QLineEdit()
+        self.find_field.setPlaceholderText('Find')
+        self.find_field.setMinimumWidth(160)
+        self.find_field.textChanged.connect(self.refresh)
+        find_row.addWidget(self.find_field)
+
+        self.count_label = QtWidgets.QLabel('')
+        self.count_label.setMinimumWidth(48)
+        self.count_label.setAlignment(QtCore.Qt.AlignCenter)
+        find_row.addWidget(self.count_label)
+
+        self.case_button = QtWidgets.QToolButton()
+        self.case_button.setText('Aa')
+        self.case_button.setCheckable(True)
+        self.case_button.setToolTip('Case Sensitive')
+        self.case_button.toggled.connect(self.refresh)
+        find_row.addWidget(self.case_button)
+
+        self.word_button = QtWidgets.QToolButton()
+        self.word_button.setText('W')
+        self.word_button.setCheckable(True)
+        self.word_button.setToolTip('Whole Word')
+        self.word_button.toggled.connect(self.refresh)
+        find_row.addWidget(self.word_button)
+
+        self.prev_button = QtWidgets.QToolButton()
+        self.prev_button.setText('Prev')
+        self.prev_button.setToolTip('Previous Match (Shift+Enter)')
+        self.prev_button.clicked.connect(self.find_previous)
+        find_row.addWidget(self.prev_button)
+
+        self.next_button = QtWidgets.QToolButton()
+        self.next_button.setText('Next')
+        self.next_button.setToolTip('Next Match (Enter)')
+        self.next_button.clicked.connect(self.find_next)
+        find_row.addWidget(self.next_button)
+
+        self.close_button = QtWidgets.QToolButton()
+        self.close_button.setText('X')
+        self.close_button.setToolTip('Close (Esc)')
+        self.close_button.clicked.connect(self.close_bar)
+        find_row.addWidget(self.close_button)
+
+        # replace row
+        self.replace_row = QtWidgets.QWidget()
+        replace_layout = QtWidgets.QHBoxLayout(self.replace_row)
+        replace_layout.setContentsMargins(0, 0, 0, 0)
+        replace_layout.setSpacing(4)
+        layout.addWidget(self.replace_row)
+
+        self.replace_field = QtWidgets.QLineEdit()
+        self.replace_field.setPlaceholderText('Replace')
+        self.replace_field.setMinimumWidth(160)
+        replace_layout.addWidget(self.replace_field)
+
+        self.replace_button = QtWidgets.QPushButton('Replace')
+        self.replace_button.clicked.connect(self.replace_one)
+        replace_layout.addWidget(self.replace_button)
+
+        self.replace_all_button = QtWidgets.QPushButton('Replace All')
+        self.replace_all_button.clicked.connect(self.replace_all)
+        replace_layout.addWidget(self.replace_all_button)
+
+        # Esc and Enter inside either field are handled by the bar
+        self.find_field.installEventFilter(self)
+        self.replace_field.installEventFilter(self)
+
+    # -- show / hide --------------------------------------------------- #
+    def open_find(self, prefill=''):
+        self.replace_row.hide()
+        self.show_bar(prefill)
+
+    def open_replace(self, prefill=''):
+        editable = not self.editor.isReadOnly()
+        self.replace_row.setVisible(True)
+        self.replace_field.setEnabled(editable)
+        self.replace_button.setEnabled(editable)
+        self.replace_all_button.setEnabled(editable)
+        self.show_bar(prefill)
+
+    def show_bar(self, prefill):
+        if prefill:
+            self.find_field.setText(prefill)
+        self.show()
+        self.raise_()
+        self.adjustSize()
+        self.editor.reposition_find_bar()
+        self.refresh()
+        # Defer the focus grab: we are inside the editor's key handler and a
+        # synchronous setFocus gets overridden once the Ctrl+F event finishes
+        QtCore.QTimer.singleShot(0, self.grab_focus)
+
+    def grab_focus(self):
+        self.find_field.setFocus(QtCore.Qt.ShortcutFocusReason)
+        self.find_field.selectAll()
+
+    def close_bar(self):
+        self.hide()
+        self.clear_highlights()
+        self.editor.setFocus()
+
+    def eventFilter(self, obj, event):
+        if event.type() == QtCore.QEvent.KeyPress:
+            key = event.key()
+            if key == QtCore.Qt.Key_Escape:
+                self.close_bar()
+                return True
+            if key in self.RETURN_KEYS:
+                if obj is self.replace_field:
+                    self.replace_one()
+                elif event.modifiers() & QtCore.Qt.ShiftModifier:
+                    self.find_previous()
+                else:
+                    self.find_next()
+                return True
+        return super(FindReplaceBar, self).eventFilter(obj, event)
+
+    def reevaluate(self):
+        """Recompute matches against the editor's current content, e.g. after
+        a node change replaced the code.
+        """
+        if self.isVisible():
+            self.highlight_all()
+
+    # -- searching ----------------------------------------------------- #
+    def find_flags(self):
+        flags = QtGui.QTextDocument.FindFlags()
+        if self.case_button.isChecked():
+            flags |= QtGui.QTextDocument.FindCaseSensitively
+        if self.word_button.isChecked():
+            flags |= QtGui.QTextDocument.FindWholeWords
+        return flags
+
+    def refresh(self):
+        """Re-highlight all matches and jump to the first one."""
+        self.highlight_all()
+        if self.match_starts:
+            self.find_next()
+
+    def find_next(self, backward=False):
+        needle = self.find_field.text()
+        if not needle:
+            return
+        flags = self.find_flags()
+        if backward:
+            flags |= QtGui.QTextDocument.FindBackward
+        found = self.editor.find(needle, flags)
+        if not found:  # wrap around
+            cursor = self.editor.textCursor()
+            end = QtGui.QTextCursor.End if backward else QtGui.QTextCursor.Start
+            cursor.movePosition(end)
+            self.editor.setTextCursor(cursor)
+            self.editor.find(needle, flags)
+        self.update_count()
+
+    def find_previous(self):
+        self.find_next(backward=True)
+
+    def highlight_all(self):
+        needle = self.find_field.text()
+        selections = []
+        self.match_starts = []
+        if needle:
+            doc = self.editor.document()
+            flags = self.find_flags()
+            fmt = QtGui.QTextCharFormat()
+            highlight = QtGui.QColor(colors.SELECTED)
+            highlight.setAlpha(90)
+            fmt.setBackground(highlight)
+            cursor = QtGui.QTextCursor(doc)
+            while True:
+                cursor = doc.find(needle, cursor, flags)
+                if cursor.isNull():
+                    break
+                sel = QtWidgets.QTextEdit.ExtraSelection()
+                sel.format = fmt
+                sel.cursor = cursor
+                selections.append(sel)
+                self.match_starts.append(cursor.selectionStart())
+        self.editor.find_selections = selections
+        self.editor.apply_extra_selections()
+        self.update_count()
+
+    def update_count(self):
+        if not self.find_field.text():
+            self.count_label.setText('')
+            return
+        total = len(self.match_starts)
+        pos = self.editor.textCursor().selectionStart()
+        idx = self.match_starts.index(pos) + 1 if pos in self.match_starts else 0
+        self.count_label.setText('{}/{}'.format(idx, total))
+
+    def clear_highlights(self):
+        self.match_starts = []
+        self.editor.find_selections = []
+        self.editor.apply_extra_selections()
+
+    # -- replacing ----------------------------------------------------- #
+    def replace_one(self):
+        if self.editor.isReadOnly():
+            return
+        needle = self.find_field.text()
+        if not needle:
+            return
+        cursor = self.editor.textCursor()
+        selected = cursor.selectedText()
+        if self.case_button.isChecked():
+            is_match = selected == needle
+        else:
+            is_match = selected.lower() == needle.lower()
+        if cursor.hasSelection() and is_match:
+            cursor.insertText(self.replace_field.text())
+        self.highlight_all()
+        self.find_next()
+
+    def replace_all(self):
+        if self.editor.isReadOnly():
+            return
+        needle = self.find_field.text()
+        if not needle:
+            return
+        replacement = self.replace_field.text()
+        doc = self.editor.document()
+        flags = self.find_flags()
+        edit_cursor = self.editor.textCursor()
+        edit_cursor.beginEditBlock()
+        scan = QtGui.QTextCursor(doc)
+        count = 0
+        while True:
+            scan = doc.find(needle, scan, flags)
+            if scan.isNull():
+                break
+            scan.insertText(replacement)
+            count += 1
+        edit_cursor.endEditBlock()
+        logger.info("Replaced {} occurrence(s) of '{}'".format(count, needle))
+        self.highlight_all()
 
 
 class NumberBar(QtWidgets.QWidget):
