@@ -26,6 +26,7 @@ Only clone this repo if you're [contributing](CONTRIBUTING.md) to the NXT codeba
 Our releases are hosted on [PyPi](https://pypi.org/project/nxt-editor/).
 - Install:
     - `pip install nxt-editor`
+    - `pip install nxt-editor[completion]` to also get rich code completion (jedi)
 - Launch:
     - `nxt ui`
 - Update:

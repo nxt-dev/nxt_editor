@@ -17,6 +17,8 @@ from nxt import DATA_STATE, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
 from nxt_editor.constants import FONTS
+from nxt_editor.completion.model import CompletionModel
+from nxt_editor.completion.controller import CompletionController
 import nxt_editor
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -648,6 +650,13 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.verticalScrollBar().valueChanged.connect(func)
         self.installEventFilter(self)
 
+        # Code completion (see nxt_editor.completion). The controller owns
+        # the popup and the model; it is driven from keyPressEvent and
+        # eventFilter. The stage model is read live for ${} tokens.
+        self._completion_active = False
+        self.completion = CompletionController(
+            self, CompletionModel(stage_model_getter=self._get_stage_model))
+
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("text/plain"):
             event.acceptProposedAction()
@@ -772,6 +781,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         super(NxtCodeEditor, self).focusInEvent(event)
 
     def focusOutEvent(self, event):
+        # Never leave the completion popup orphaned when focus leaves
+        self.completion.dismiss()
         for a, state in self.action_states.items():
             a.setEnabled(state)
         if self.standard_menu:
@@ -813,10 +824,22 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
         self.standard_menu.exec_(event.globalPos())
 
+    # Keys the completion popup claims away from the editor Tab/Enter actions
+    _POPUP_KEYS = (QtCore.Qt.Key_Enter, QtCore.Qt.Key_Return,
+                   QtCore.Qt.Key_Tab, QtCore.Qt.Key_Backtab,
+                   QtCore.Qt.Key_Escape, QtCore.Qt.Key_Up, QtCore.Qt.Key_Down,
+                   QtCore.Qt.Key_PageUp, QtCore.Qt.Key_PageDown)
+
     def eventFilter(self, widget, event):
         if not isinstance(event, QtCore.QEvent):
             return False
         if event.type() == QtCore.QEvent.Type.ShortcutOverride:
+            # While the popup is up, claim Tab/Enter/etc as normal key input
+            # so they reach keyPressEvent instead of indent_line/new_line
+            if (self.completion.popup_visible() and
+                    event.key() in self._POPUP_KEYS):
+                event.accept()
+                return True
             return True
         return False
 
@@ -1206,6 +1229,64 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.ce_widget.stage_model.execute_snippet(code_string,
                                                    self.ce_widget.node_path,
                                                    globally=globally)
+
+    def _get_stage_model(self):
+        """Live stage model for the completion model (used by ${} tokens)."""
+        return self.ce_widget.stage_model
+
+    def insert_completion(self, text, prefix):
+        """Replace the active prefix with the chosen completion text.
+        :param text: completion string
+        :param prefix: the already typed prefix to replace
+        """
+        cursor = self.textCursor()
+        for _ in range(len(prefix)):
+            cursor.deletePreviousChar()
+        cursor.insertText(text)
+        self.setTextCursor(cursor)
+
+    def set_completion_active(self, active):
+        """Toggle the Tab/Enter edit actions while the popup is up so the
+        completion can claim those keys. Guarded so we never re-enable
+        actions the lock state disabled.
+        :param active: bool
+        """
+        if active == self._completion_active:
+            return
+        self._completion_active = active
+        for name in ('indent_line', 'unindent_line', 'new_line'):
+            action = getattr(self.ce_actions, name, None)
+            if action is not None:
+                action.setEnabled(not active)
+
+    def keyPressEvent(self, event):
+        """Delegate completion popup keys, else handle normal text input and
+        ask for completions. Ctrl+Space requests completion explicitly.
+        """
+        if self.completion.handle_key_press(event):
+            event.accept()
+            return
+        ctrl = event.modifiers() & QtCore.Qt.ControlModifier
+        manual = bool(ctrl) and event.key() == QtCore.Qt.Key_Space
+        if not manual:
+            super(NxtCodeEditor, self).keyPressEvent(event)
+        if self.isReadOnly():
+            return
+        if not manual:
+            # Don't pop on modifier only keys or ctrl/alt chords
+            if event.modifiers() & (QtCore.Qt.ControlModifier |
+                                    QtCore.Qt.AltModifier):
+                self.completion.dismiss()
+                return
+            if event.key() in (QtCore.Qt.Key_Shift, QtCore.Qt.Key_Control,
+                               QtCore.Qt.Key_Alt, QtCore.Qt.Key_Meta):
+                return
+        self.completion.request(force=manual)
+
+    def mousePressEvent(self, event):
+        # Clicking in the editor dismisses the completion popup
+        self.completion.dismiss()
+        super(NxtCodeEditor, self).mousePressEvent(event)
 
 
 class NumberBar(QtWidgets.QWidget):

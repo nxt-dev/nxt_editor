@@ -33,6 +33,10 @@ setuptools.setup(
                       'qt.py<3',
                       'PySide6>=6,<6.8'
                       ],
+    extras_require={
+        # Rich code completion in the code editor (optional)
+        'completion': ['jedi>=0.19'],
+    },
     package_data={
         # covers text nxt files
         "": ["*.nxt"],
