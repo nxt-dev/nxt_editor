@@ -1,5 +1,6 @@
 # Builtin
 import logging
+import re
 from functools import partial
 
 # External
@@ -13,7 +14,7 @@ from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors, user_dir
 from nxt_editor.decorator_widgets import OpinionDots
-from nxt import DATA_STATE, nxt_path
+from nxt import DATA_STATE, nxt_path, tokens
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
 from nxt_editor.constants import FONTS
@@ -647,6 +648,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         func = self.update_previous_scroll_positions
         self.verticalScrollBar().valueChanged.connect(func)
         self.installEventFilter(self)
+        # Needed to swap the cursor while hovering a token with Ctrl held
+        self.viewport().setMouseTracking(True)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("text/plain"):
@@ -1207,6 +1210,108 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                                                    self.ce_widget.node_path,
                                                    globally=globally)
 
+    def get_token_at(self, pos):
+        """Find the (non-nested) ${...} token under a viewport position.
+        :param pos: QPoint in viewport coordinates
+        :return: tuple of (full_token_str, token_body) or (None, None)
+        """
+        cursor = self.cursorForPosition(pos)
+        line = cursor.block().text()
+        col = cursor.positionInBlock()
+        for match in re.finditer(r'\$\{[^{}]*\}', line):
+            if match.start() <= col <= match.end():
+                full = match.group(0)
+                return full, tokens.get_token_content(full)
+        return None, None
+
+    def node_path_from_token_body(self, body):
+        """Resolve a token body to an absolute node path if it names one.
+        A bare ``${attr}`` (no '.' and no '/') is a local attribute, so it
+        resolves to the current node.
+        :param body: string content of a ${} token
+        :return: node path string or None
+        """
+        body = body.strip()
+        if not body:
+            return None
+        for token_type in tokens.TOKENTYPE.ALL:
+            if token_type.prefix and body.startswith(token_type.prefix):
+                return None  # file:: path:: contents:: are not node refs
+        current = self.ce_widget.node_path
+        start = current or nxt_path.WORLD
+        if '.' in body:
+            node_part = body.rpartition('.')[0]
+            if not node_part:
+                return current  # '.attr' is the current node
+            return nxt_path.expand_relative_node_path(node_part, start)
+        if nxt_path.NODE_SEP in body:
+            return nxt_path.expand_relative_node_path(body, start)
+        return current
+
+    def goto_token_definition(self, pos):
+        """Ctrl+click handler: select and frame the node a token references.
+        :param pos: QPoint in viewport coordinates
+        :return: True if a node was selected
+        """
+        full, body = self.get_token_at(pos)
+        if not full:
+            return False
+        model = self.ce_widget.stage_model
+        node_path = self.node_path_from_token_body(body)
+        if not node_path or model is None:
+            return False
+        if node_path == self.ce_widget.node_path:
+            return False  # local attr, nowhere to go
+        if not model.node_exists(node_path):
+            logger.warning("Cannot navigate: '{}' not found".format(node_path))
+            return False
+        model.select_and_frame(node_path)
+        return True
+
+    def show_token_tooltip(self, help_event):
+        """Show the resolved value of the token under the mouse as a tooltip.
+        :param help_event: QHelpEvent
+        :return: True if a tooltip was shown
+        """
+        full, _ = self.get_token_at(help_event.pos())
+        model = self.ce_widget.stage_model
+        if not full or model is None:
+            QtWidgets.QToolTip.hideText()
+            return False
+        try:
+            resolved = model.resolve(self.ce_widget.node_path, full)
+        except Exception:
+            logger.exception('Token resolve failed for tooltip')
+            QtWidgets.QToolTip.hideText()
+            return False
+        if resolved is None:
+            resolved = '<unresolved>'
+        QtWidgets.QToolTip.showText(help_event.globalPos(),
+                                    '{}  ->  {}'.format(full, resolved), self)
+        return True
+
+    def event(self, event):
+        if event.type() == QtCore.QEvent.ToolTip:
+            if self.show_token_tooltip(event):
+                return True
+        return super(NxtCodeEditor, self).event(event)
+
+    def mousePressEvent(self, event):
+        if (event.modifiers() & QtCore.Qt.ControlModifier and
+                event.button() == QtCore.Qt.LeftButton):
+            if self.goto_token_definition(event.pos()):
+                event.accept()
+                return
+        super(NxtCodeEditor, self).mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        over_token = False
+        if event.modifiers() & QtCore.Qt.ControlModifier:
+            over_token = bool(self.get_token_at(event.pos())[0])
+        cursor = QtCore.Qt.PointingHandCursor if over_token else QtCore.Qt.IBeamCursor
+        self.viewport().setCursor(cursor)
+        super(NxtCodeEditor, self).mouseMoveEvent(event)
+
 
 class NumberBar(QtWidgets.QWidget):
     """class that defines textEditor numberBar"""
@@ -1374,6 +1479,13 @@ def code_style_factory(color='', border='solid', thickness=(2, 2, 2)):
         
                             QPlainTextEdit:focus{
                                 %s;
+                            }
+
+                            QToolTip {
+                                color: #f0f0f0;
+                                background-color: #2b2b2b;
+                                border: 1px solid #5a5a5a;
+                                padding: 3px;
                             }
                             '''
     return code_edit_default_style % tuple(lines)
