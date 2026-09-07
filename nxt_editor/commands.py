@@ -1666,7 +1666,9 @@ class SetLayerReferences(NxtCommand):
             logger.error('Cannot set references, no layer at %s'
                          % self.layer_path)
             return []
-        removed = []
+        # Recorded on the command, so a throw partway through still leaves
+        # the caller able to say which layers went.
+        removed = self._removed = []
         # Take the existing referenced layers out of the stage first. The
         # ones still wanted come back below, reloaded, which is what makes
         # a changed reference actually show up.
@@ -1736,6 +1738,27 @@ class SetLayerReferences(NxtCommand):
             self.model.layer_removed.emit(real_path)
         self.model.layer_added.emit(self.layer_path)
 
+    def _apply_and_settle(self, references):
+        """Apply the references, and settle the model whatever happens.
+
+        Applying takes every referenced layer out before putting the
+        wanted ones back, so a throw halfway leaves the stage holding
+        neither: the layers gone from the stack, and a comp still full of
+        their nodes because the rebuild never ran. One unreadable file
+        nested under a reference used to do exactly that to the whole
+        graph.
+
+        Whatever came back is what there is. Settling is about making the
+        model agree with the stage, and it has to happen even when
+        applying went badly, so what is on screen is what is loaded.
+        """
+        was_targeting = self._target_path()
+        self._removed = []
+        try:
+            self._apply(references)
+        finally:
+            self._settle(self._removed, was_targeting)
+
     @processing
     def redo(self):
         if not self.changed():
@@ -1744,8 +1767,7 @@ class SetLayerReferences(NxtCommand):
             self.setText('References unchanged on {}'.format(self.layer_path))
             return
         self.redo_effected_layer(self.layer_path)
-        was_targeting = self._target_path()
-        self._settle(self._apply(self.new_references), was_targeting)
+        self._apply_and_settle(self.new_references)
         self.setText('Set references on {}'.format(self.layer_path))
 
     @processing
@@ -1753,8 +1775,7 @@ class SetLayerReferences(NxtCommand):
         if not self.changed():
             return
         self.undo_effected_layer(self.layer_path)
-        was_targeting = self._target_path()
-        self._settle(self._apply(self.old_references), was_targeting)
+        self._apply_and_settle(self.old_references)
 
 
 class RemoveLayer(ReferenceLayer):
