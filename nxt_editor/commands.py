@@ -1656,17 +1656,24 @@ class SetLayerReferences(NxtCommand):
         return self.new_references != self.old_references
 
     def _apply(self, references):
+        """Put the layer's references where the list says.
+
+        :return: real paths of the layers taken out of the stage
+        :rtype: list
+        """
         layer = self.model.lookup_layer(self.layer_path)
         if layer is None:
             logger.error('Cannot set references, no layer at %s'
                          % self.layer_path)
-            return
+            return []
+        removed = []
         # Take the existing referenced layers out of the stage first. The
         # ones still wanted come back below, reloaded, which is what makes
         # a changed reference actually show up.
         for ref_data in list(layer.sub_layers):
             ref_layer = ref_data.get('layer')
             if ref_layer is not None:
+                removed.append(ref_layer.real_path)
                 self.stage.remove_sublayer(ref_layer)
         layer.sub_layers = []
         layer.sub_layer_paths = []
@@ -1694,6 +1701,40 @@ class SetLayerReferences(NxtCommand):
                                SAVE_KEY.REAL_PATH: real_path,
                                'alias': layer_data.get('name')})
             self.stage.new_sublayer(layer_data=layer_data, idx=insert_idx)
+        return removed
+
+    def _target_path(self):
+        """Where the target layer is, before we start moving layers about."""
+        target = self.model.target_layer
+        return getattr(target, 'real_path', None)
+
+    def _settle(self, removed, was_targeting):
+        """Put the model back on its feet after layers have come and gone.
+
+        Applying rebuilds every referenced layer, including the ones that
+        are staying, because that is what makes the result identical to
+        opening a file that declares these references. The cost is that a
+        layer which is still there is not the same object it was, and the
+        model holds layer objects: the target is one. Left alone it points
+        at a layer that is not in the stage, and everything reaching for
+        the target then works on a layer outside the graph, which in a DCC
+        takes the application down rather than raising.
+
+        So the target is restored by path. It survives if its layer is
+        still referenced, whether or not it was rebuilt, and only falls
+        back to the top when the layer it named has really gone.
+
+        The layer manager rebuilds on layer_removed, and has to be told
+        about every layer that went, not only the ones that came.
+        """
+        self.model.update_comp_layer(rebuild=True)
+        if was_targeting and self.model.lookup_layer(was_targeting):
+            self.model.set_target_layer(was_targeting)
+        else:
+            self.model.set_target_layer(LAYERS.TOP)
+        for real_path in removed:
+            self.model.layer_removed.emit(real_path)
+        self.model.layer_added.emit(self.layer_path)
 
     @processing
     def redo(self):
@@ -1703,9 +1744,8 @@ class SetLayerReferences(NxtCommand):
             self.setText('References unchanged on {}'.format(self.layer_path))
             return
         self.redo_effected_layer(self.layer_path)
-        self._apply(self.new_references)
-        self.model.update_comp_layer(rebuild=True)
-        self.model.layer_added.emit(self.layer_path)
+        was_targeting = self._target_path()
+        self._settle(self._apply(self.new_references), was_targeting)
         self.setText('Set references on {}'.format(self.layer_path))
 
     @processing
@@ -1713,9 +1753,8 @@ class SetLayerReferences(NxtCommand):
         if not self.changed():
             return
         self.undo_effected_layer(self.layer_path)
-        self._apply(self.old_references)
-        self.model.update_comp_layer(rebuild=True)
-        self.model.layer_added.emit(self.layer_path)
+        was_targeting = self._target_path()
+        self._settle(self._apply(self.old_references), was_targeting)
 
 
 class RemoveLayer(ReferenceLayer):
