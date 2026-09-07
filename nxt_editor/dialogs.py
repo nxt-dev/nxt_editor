@@ -491,7 +491,13 @@ class UnsavedLayersDialogue(QtWidgets.QDialog):
             item.setForeground(QtGui.QBrush(QtCore.Qt.white))
             parent_item.appendRow(item)
             for lay_dict in layer.sub_layers:
-                r_add(stage_model, lay_dict['layer'], item, dirty)
+                # A reference that could not be resolved is kept on the
+                # layer with no layer behind it. There is nothing to show
+                # for it here, and nothing to save either.
+                sub_layer = lay_dict.get('layer')
+                if sub_layer is None:
+                    continue
+                r_add(stage_model, sub_layer, item, dirty)
         for s_m in stage_models:
             r_add(s_m, s_m.top_layer, model, s_m.get_unsaved_changes())
         return model
