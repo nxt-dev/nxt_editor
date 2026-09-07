@@ -38,8 +38,12 @@ def write_graph(path, name, references=(), node_names=()):
     return path
 
 
-@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
-class ReferenceEditorDialog(unittest.TestCase):
+class Fixture(object):
+    """A graph on disk and a dialog on it.
+
+    Split out so the classes below can share it without inheriting each
+    other's tests and running them all again.
+    """
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix='nxt_refdlg_')
@@ -62,6 +66,10 @@ class ReferenceEditorDialog(unittest.TestCase):
     def rows(self, dialog):
         return [dialog.list.item(i).text()
                 for i in range(dialog.list.count())]
+
+
+@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
+class ReferenceEditorDialog(Fixture, unittest.TestCase):
 
     # -- what it shows --------------------------------------------------
 
@@ -199,6 +207,179 @@ class ReferenceEditorDialog(unittest.TestCase):
         self.assertEqual(['a.nxt'],
                          model.get_layer_references(
                              model.top_layer.real_path))
+
+
+@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
+class ReferenceEditorLayout(Fixture, unittest.TestCase):
+    """The shape of it, which is what made it unpleasant to use.
+
+    These are about arrangement rather than behaviour, but a control
+    that moves out from under the pointer is a behaviour too.
+    """
+
+    def layer_row(self):
+        return self.dialog(['a.nxt'])[1].layout().itemAt(0).layout()
+
+    def test_the_toggle_sits_beside_the_layer_picker(self):
+        row = self.layer_row()
+        widgets = [row.itemAt(i).widget() for i in range(row.count())]
+        widgets = [w for w in widgets if w is not None]
+        combo = [w for w in widgets if isinstance(w, QtWidgets.QComboBox)][0]
+        toggle = [w for w in widgets
+                  if isinstance(w, QtWidgets.QToolButton)][0]
+        self.assertEqual(widgets.index(combo) + 1, widgets.index(toggle),
+                         'the toggle should be the next thing after the '
+                         'layer picker')
+
+    def test_the_picker_does_not_take_the_stretch(self):
+        # With the stretch on the combo, the toggle slid left and right as
+        # one layer name replaced another.
+        row = self.layer_row()
+        for index in range(row.count()):
+            item = row.itemAt(index)
+            if item.widget() is not None:
+                self.assertEqual(0, item.widget().sizePolicy()
+                                 .horizontalStretch(),
+                                 'no widget in this row should stretch')
+
+    def test_the_controls_are_icon_buttons(self):
+        _model, dialog = self.dialog(['a.nxt'])
+        for button in (dialog.add_button, dialog.remove_button,
+                       dialog.up_button, dialog.down_button,
+                       dialog.resolved_button):
+            self.assertIsInstance(button, QtWidgets.QToolButton)
+            self.assertTrue(button.toolTip(), 'an icon needs a tooltip')
+            self.assertTrue(not button.icon().isNull() or button.text(),
+                            'a button should show an icon or say something')
+
+    def test_the_status_line_hides_when_it_has_nothing_to_say(self):
+        _model, dialog = self.dialog(['a.nxt'])
+        self.assertFalse(dialog.status.isVisible())
+        self.assertEqual('', dialog.status.text())
+
+    def test_the_status_line_appears_when_something_is_missing(self):
+        _model, dialog = self.dialog(['not_here.nxt'])
+        self.assertTrue(dialog.status.text())
+        self.assertIn('could not be found', dialog.status.text())
+
+
+@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
+class ReferenceEditorDragging(Fixture, unittest.TestCase):
+    """Dragging a row is the direct way to say what the order should be."""
+
+    def move_row(self, dialog, source, destination):
+        model = dialog.list.model()
+        moved = model.moveRow(QtCore.QModelIndex(), source,
+                              QtCore.QModelIndex(), destination)
+        self.assertTrue(moved, 'the list would not move a row')
+
+    def test_dragging_reorders_the_stored_list(self):
+        _model, dialog = self.dialog(['a.nxt', 'b.nxt'])
+        self.move_row(dialog, 0, 2)
+        self.assertEqual(['b.nxt', 'a.nxt'], dialog.references)
+
+    def test_dragging_while_resolved_still_stores_partial_paths(self):
+        # The rows say the resolved path in this mode. Reading the order
+        # back off the text would write this machine's answers into the
+        # layer and pin the graph here.
+        _model, dialog = self.dialog(['a.nxt', 'b.nxt'])
+        dialog.resolved_button.setChecked(True)
+        self.move_row(dialog, 0, 2)
+        self.assertEqual(['b.nxt', 'a.nxt'], dialog.references,
+                         'dragging in the resolved view stored resolved '
+                         'paths')
+        for reference in dialog.references:
+            self.assertFalse(os.path.isabs(reference))
+
+    def test_dragging_a_missing_reference_keeps_it(self):
+        _model, dialog = self.dialog(['a.nxt', 'not_here.nxt'])
+        self.move_row(dialog, 1, 0)
+        self.assertEqual(['not_here.nxt', 'a.nxt'], dialog.references)
+
+
+@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
+class AddingByTyping(Fixture, unittest.TestCase):
+    """Typing a path in, which is the only way to write a partial one.
+
+    A file picker can only offer files that exist on this machine, so
+    without this there was no way to add $SHOW/lib/rig.nxt at all.
+    """
+
+    def test_typing_a_partial_path_and_pressing_enter(self):
+        _model, dialog = self.dialog([])
+        dialog.add_edit.setText('$SHOW/lib/rig.nxt')
+        dialog.add_edit.returnPressed.emit()
+        self.assertEqual(['$SHOW/lib/rig.nxt'], dialog.references)
+        self.assertEqual(['$SHOW/lib/rig.nxt'], self.rows(dialog))
+
+    def test_it_is_stored_exactly_as_written(self):
+        # Not made relative to the layer, not resolved against this
+        # machine. Rewriting it would undo the reason for typing it.
+        _model, dialog = self.dialog([])
+        for typed in ('$SHOW/lib/rig.nxt', 'sibling.nxt',
+                      '../up_one/thing.nxt', 'a.nxt'):
+            dialog.add_edit.setText(typed)
+            dialog.add_edit.returnPressed.emit()
+        self.assertEqual(['$SHOW/lib/rig.nxt', 'sibling.nxt',
+                          '../up_one/thing.nxt', 'a.nxt'],
+                         dialog.references)
+
+    def test_enter_adds_rather_than_applying_the_dialog(self):
+        # The default button would otherwise take the Return and apply,
+        # throwing away what was just typed.
+        results = []
+        _model, dialog = self.dialog([])
+        dialog.accepted.connect(lambda: results.append('accepted'))
+        dialog.add_edit.setText('typed.nxt')
+        dialog.add_edit.returnPressed.emit()
+        self.assertEqual([], results, 'Enter applied the dialog')
+        self.assertTrue(dialog.isVisible() or not dialog.result(),
+                        'the dialog closed on Enter')
+        self.assertEqual(['typed.nxt'], dialog.references)
+
+    def test_the_field_clears_so_the_next_one_can_be_typed(self):
+        _model, dialog = self.dialog([])
+        dialog.add_edit.setText('one.nxt')
+        dialog.add_edit.returnPressed.emit()
+        self.assertEqual('', dialog.add_edit.text())
+
+    def test_nothing_is_added_from_an_empty_field(self):
+        _model, dialog = self.dialog(['a.nxt'])
+        dialog.add_edit.setText('   ')
+        dialog.add_edit.returnPressed.emit()
+        self.assertEqual(['a.nxt'], dialog.references)
+
+    def test_the_add_button_waits_for_something_to_add(self):
+        _model, dialog = self.dialog([])
+        self.assertFalse(dialog.add_button.isEnabled())
+        dialog.add_edit.setText('something.nxt')
+        self.assertTrue(dialog.add_button.isEnabled())
+        dialog.add_button.click()
+        self.assertEqual(['something.nxt'], dialog.references)
+        self.assertFalse(dialog.add_button.isEnabled(),
+                         'the field emptied, so there is nothing to add')
+
+    def test_a_typed_path_that_resolves_is_not_flagged(self):
+        _model, dialog = self.dialog([])
+        dialog.add_edit.setText('a.nxt')
+        dialog.add_edit.returnPressed.emit()
+        self.assertNotIn('could not be found', dialog.status.text())
+
+    def test_a_typed_path_that_does_not_resolve_is_flagged_but_kept(self):
+        _model, dialog = self.dialog([])
+        dialog.add_edit.setText('$SHOW/lib/rig.nxt')
+        dialog.add_edit.returnPressed.emit()
+        self.assertIn('could not be found', dialog.status.text())
+        self.assertEqual(['$SHOW/lib/rig.nxt'], dialog.references)
+
+    def test_a_typed_reference_applies(self):
+        model, dialog = self.dialog([])
+        dialog.add_edit.setText('a.nxt')
+        dialog.add_edit.returnPressed.emit()
+        dialog.accept()
+        self.assertEqual(['a.nxt'], model.get_layer_references(
+            model.top_layer.real_path))
+        self.assertIn('/from_a', model.comp_layer._nodes_path_as_key)
 
 
 if __name__ == '__main__':
