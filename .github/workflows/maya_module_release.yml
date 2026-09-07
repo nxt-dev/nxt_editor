@@ -35,6 +35,17 @@ jobs:
       # The packaging graph expects nxt to sit BESIDE nxt_editor - it reaches
       # for ../nxt/nxt - which actions/checkout cannot do, since it refuses to
       # write outside the workspace. Cloning by hand can.
+      # squarebit-studios/nxt is private, and GITHUB_TOKEN is scoped to this
+      # repository only, so a token that can read it has to be provided. Said
+      # plainly here because the alternative is an opaque git auth failure that
+      # reads like a network problem.
+      - name: Check for a token that can read nxt
+        run: |
+          if [ -z "${{ secrets.GH_PAT }}" ]; then
+            echo "::error::GH_PAT is not set on this repository. It needs a token with read access to squarebit-studios/nxt, which is private."
+            exit 1
+          fi
+
       - name: Checkout nxt beside it
         run: |
           git clone --depth 1 --branch release \
