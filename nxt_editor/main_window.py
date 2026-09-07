@@ -36,6 +36,7 @@ from nxt_editor.dockwidgets import (
 )
 from nxt_editor.dockwidgets.output_log import FileTailingThread, QtLogStreamHandler
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
+from nxt_editor.dockwidgets.reference_editor import ReferenceEditor
 from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
     NxtFileDialog,
@@ -645,6 +646,21 @@ QCheckBox::indicator {
             return
         for layer in self.model.stage._sub_layers:
             self.save_layer(layer)
+
+    def edit_layer_references(self, layer=None):
+        """Open the reference editor on a layer.
+
+        :param layer: layer to edit, defaults to the one being targeted
+        :return: whether the dialog was accepted
+        :rtype: bool
+        """
+        if not self.model:
+            return False
+        layer = layer or self.model.target_layer
+        layer_path = getattr(layer, 'real_path', None)
+        dialog = ReferenceEditor(self.model, layer_path=layer_path,
+                                 parent=self)
+        return bool(dialog.exec_())
 
     def save_layer(self, layer=None):
         if not layer:
