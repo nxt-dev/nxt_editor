@@ -1,6 +1,7 @@
 # Built-in
 import copy
 import logging
+import os
 import time
 
 # External
@@ -1619,6 +1620,102 @@ class ReferenceLayer(NxtCommand):
         self.model.set_target_layer(self.real_path)
         self.model.layer_added.emit(self.real_path)
         self.setText("Added reference to {}".format(self.real_path))
+
+
+class SetLayerReferences(NxtCommand):
+    """Replace the whole list of references a layer holds.
+
+    References are stored as written, so the list is strings, not layers:
+    a partial path stays partial and keeps resolving through roots the way
+    it did before. Nothing is written to disk here. This marks the layer
+    unsaved like any other edit, and saving the layer writes it.
+    """
+
+    def __init__(self, layer_path, references, model):
+        """
+        :param layer_path: real path of the layer being edited
+        :type layer_path: str
+        :param references: the references it should hold, in order, as
+            they are to be stored
+        :type references: list
+        """
+        super(SetLayerReferences, self).__init__(model)
+        self.model = model
+        self.stage = model.stage
+        self.layer_path = layer_path
+        self.new_references = list(references)
+        layer = model.lookup_layer(layer_path)
+        self.old_references = list(layer.get_references()) if layer else []
+
+    def changed(self):
+        """Whether this would do anything at all.
+
+        Order counts: references are a stack, so moving one is a change
+        even though the set is the same.
+        """
+        return self.new_references != self.old_references
+
+    def _apply(self, references):
+        layer = self.model.lookup_layer(self.layer_path)
+        if layer is None:
+            logger.error('Cannot set references, no layer at %s'
+                         % self.layer_path)
+            return
+        # Take the existing referenced layers out of the stage first. The
+        # ones still wanted come back below, reloaded, which is what makes
+        # a changed reference actually show up.
+        for ref_data in list(layer.sub_layers):
+            ref_layer = ref_data.get('layer')
+            if ref_layer is not None:
+                self.stage.remove_sublayer(ref_layer)
+        layer.sub_layers = []
+        layer.sub_layer_paths = []
+        layer_dir = ''
+        if layer.real_path:
+            layer_dir = os.path.dirname(layer.real_path)
+        insert_idx = layer.layer_idx() + 1
+        # new_sublayer puts each one at the front of the parent's list, so
+        # adding backwards is what leaves them in the order asked for.
+        for reference in reversed(references):
+            real_path, found = nxt_io.expand_reference_path(reference,
+                                                            layer_dir)
+            if not found:
+                # Keep it. A reference to something not on this machine is
+                # still the graph's intent, and dropping it silently would
+                # be worse than a layer that does not load.
+                layer.sub_layer_paths.insert(0, reference)
+                layer.sub_layers.insert(0, {SAVE_KEY.FILEPATH: reference})
+                logger.warning('Reference "%s" from %s was not found'
+                               % (reference, layer.alias))
+                continue
+            layer_data = nxt_io.load_file_data(real_path)
+            layer_data.update({'parent_layer': layer,
+                               SAVE_KEY.FILEPATH: reference,
+                               SAVE_KEY.REAL_PATH: real_path,
+                               'alias': layer_data.get('name')})
+            self.stage.new_sublayer(layer_data=layer_data, idx=insert_idx)
+
+    @processing
+    def redo(self):
+        if not self.changed():
+            # Nothing to do, and saying so beats a recomp that changes
+            # nothing.
+            self.setText('References unchanged on {}'.format(self.layer_path))
+            return
+        self.redo_effected_layer(self.layer_path)
+        self._apply(self.new_references)
+        self.model.update_comp_layer(rebuild=True)
+        self.model.layer_added.emit(self.layer_path)
+        self.setText('Set references on {}'.format(self.layer_path))
+
+    @processing
+    def undo(self):
+        if not self.changed():
+            return
+        self.undo_effected_layer(self.layer_path)
+        self._apply(self.old_references)
+        self.model.update_comp_layer(rebuild=True)
+        self.model.layer_added.emit(self.layer_path)
 
 
 class RemoveLayer(ReferenceLayer):

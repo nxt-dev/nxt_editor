@@ -548,6 +548,61 @@ class StageModel(QtCore.QObject):
         cmd = SetLayerColor(color, layer_path, self)
         self.undo_stack.push(cmd)
 
+    def get_layer_references(self, layer_path):
+        """The references a layer holds, as stored.
+
+        Partial paths stay partial: what is stored is what resolves
+        through the file roots later, and rewriting them as absolute would
+        pin the graph to one machine.
+
+        :param layer_path: real path of the layer
+        :type layer_path: str
+        :rtype: list
+        """
+        layer = self.lookup_layer(layer_path)
+        return list(layer.get_references()) if layer else []
+
+    def get_editable_reference_layers(self):
+        """The layers whose references this session may edit.
+
+        The top layer, and any layer open below it. Editing a layer's
+        references rewrites that layer's file, so a layer that is not
+        open, or is locked, is not ours to change.
+
+        :return: layers, top first
+        :rtype: list
+        """
+        editable = []
+        for layer in self.stage._sub_layers:
+            if self.get_layer_locked(layer.real_path):
+                continue
+            editable += [layer]
+        return editable
+
+    def set_layer_references(self, layer_path, references):
+        """Replace the references a layer holds.
+
+        :param layer_path: real path of the layer to edit
+        :type layer_path: str
+        :param references: references in order, as they are to be stored
+        :type references: list
+        :return: whether anything changed
+        :rtype: bool
+        """
+        layer = self.lookup_layer(layer_path)
+        if layer is None:
+            logger.error('No layer at {}'.format(layer_path))
+            return False
+        if self.get_layer_locked(layer_path):
+            logger.warning('{} is locked'.format(layer.alias))
+            self.request_ding.emit()
+            return False
+        cmd = SetLayerReferences(layer_path, references, self)
+        if not cmd.changed():
+            return False
+        self.undo_stack.push(cmd)
+        return True
+
     def get_layer_colors(self, layer_list):
         layers_colors = []
         for layer in layer_list:

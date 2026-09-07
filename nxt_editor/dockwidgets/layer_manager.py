@@ -153,6 +153,9 @@ class LayerTreeView(QtWidgets.QTreeView):
             return
         stage_model = self.model().stage_model
 
+        self.actions.edit_references_action.setData(layer)
+        menu.addAction(self.actions.edit_references_action)
+        menu.addSeparator()
         self.actions.save_layer_action.setData(layer)
         menu.addAction(self.actions.save_layer_action)
         self.actions.save_layer_as_action.setData(layer)
