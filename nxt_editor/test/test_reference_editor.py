@@ -298,88 +298,145 @@ class ReferenceEditorDragging(Fixture, unittest.TestCase):
 
 
 @unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
-class AddingByTyping(Fixture, unittest.TestCase):
-    """Typing a path in, which is the only way to write a partial one.
+class TheFieldEditsTheSelectedRow(Fixture, unittest.TestCase):
+    """One field, editing whichever row is selected.
 
-    A file picker can only offer files that exist on this machine, so
-    without this there was no way to add $SHOW/lib/rig.nxt at all.
+    A picker can only offer files that exist on this machine, so typing is
+    the only way to write a partial path like $SHOW/lib/rig.nxt at all.
     """
 
-    def test_typing_a_partial_path_and_pressing_enter(self):
-        _model, dialog = self.dialog([])
-        dialog.add_edit.setText('$SHOW/lib/rig.nxt')
-        dialog.add_edit.returnPressed.emit()
-        self.assertEqual(['$SHOW/lib/rig.nxt'], dialog.references)
-        self.assertEqual(['$SHOW/lib/rig.nxt'], self.rows(dialog))
+    def test_selecting_a_row_brings_it_into_the_field(self):
+        _model, dialog = self.dialog(['a.nxt', 'b.nxt'])
+        dialog.list.setCurrentRow(1)
+        self.assertEqual('b.nxt', dialog.path_edit.text())
+        dialog.list.setCurrentRow(0)
+        self.assertEqual('a.nxt', dialog.path_edit.text())
+
+    def test_the_field_shows_the_stored_path_even_when_showing_resolved(self):
+        # Editing is always of the stored form. Handing back the resolved
+        # path here would let it be typed straight into the layer.
+        _model, dialog = self.dialog(['a.nxt'])
+        dialog.resolved_button.setChecked(True)
+        dialog.list.setCurrentRow(0)
+        self.assertEqual('a.nxt', dialog.path_edit.text())
+
+    def test_typing_changes_the_selected_row(self):
+        _model, dialog = self.dialog(['a.nxt', 'b.nxt'])
+        dialog.list.setCurrentRow(0)
+        dialog.path_edit.setText('$SHOW/lib/rig.nxt')
+        dialog.path_edit.textEdited.emit('$SHOW/lib/rig.nxt')
+        self.assertEqual(['$SHOW/lib/rig.nxt', 'b.nxt'], dialog.references)
+        self.assertEqual('$SHOW/lib/rig.nxt', dialog.list.item(0).text())
 
     def test_it_is_stored_exactly_as_written(self):
-        # Not made relative to the layer, not resolved against this
-        # machine. Rewriting it would undo the reason for typing it.
         _model, dialog = self.dialog([])
-        for typed in ('$SHOW/lib/rig.nxt', 'sibling.nxt',
-                      '../up_one/thing.nxt', 'a.nxt'):
-            dialog.add_edit.setText(typed)
-            dialog.add_edit.returnPressed.emit()
+        for typed in ('$SHOW/lib/rig.nxt', 'sibling.nxt', '../up/thing.nxt'):
+            dialog.add_button.click()
+            dialog.path_edit.setText(typed)
+            dialog.path_edit.textEdited.emit(typed)
         self.assertEqual(['$SHOW/lib/rig.nxt', 'sibling.nxt',
-                          '../up_one/thing.nxt', 'a.nxt'],
-                         dialog.references)
+                          '../up/thing.nxt'], dialog.references)
 
-    def test_enter_adds_rather_than_applying_the_dialog(self):
-        # The default button would otherwise take the Return and apply,
-        # throwing away what was just typed.
-        results = []
+    def test_the_field_and_picker_are_dead_with_nothing_selected(self):
         _model, dialog = self.dialog([])
-        dialog.accepted.connect(lambda: results.append('accepted'))
-        dialog.add_edit.setText('typed.nxt')
-        dialog.add_edit.returnPressed.emit()
-        self.assertEqual([], results, 'Enter applied the dialog')
-        self.assertTrue(dialog.isVisible() or not dialog.result(),
-                        'the dialog closed on Enter')
-        self.assertEqual(['typed.nxt'], dialog.references)
+        self.assertEqual(-1, dialog.list.currentRow())
+        self.assertFalse(dialog.path_edit.isEnabled())
+        self.assertFalse(dialog.browse_button.isEnabled())
 
-    def test_the_field_clears_so_the_next_one_can_be_typed(self):
-        _model, dialog = self.dialog([])
-        dialog.add_edit.setText('one.nxt')
-        dialog.add_edit.returnPressed.emit()
-        self.assertEqual('', dialog.add_edit.text())
-
-    def test_nothing_is_added_from_an_empty_field(self):
+    def test_they_come_alive_once_a_row_is_there(self):
         _model, dialog = self.dialog(['a.nxt'])
-        dialog.add_edit.setText('   ')
-        dialog.add_edit.returnPressed.emit()
-        self.assertEqual(['a.nxt'], dialog.references)
+        self.assertEqual(0, dialog.list.currentRow())
+        self.assertTrue(dialog.path_edit.isEnabled())
+        self.assertTrue(dialog.browse_button.isEnabled())
 
-    def test_the_add_button_waits_for_something_to_add(self):
+    def test_typing_into_the_row_itself_updates_the_field(self):
+        _model, dialog = self.dialog(['a.nxt'])
+        dialog.list.item(0).setText('typed_in_place.nxt')
+        self.assertEqual(['typed_in_place.nxt'], dialog.references)
+        self.assertEqual('typed_in_place.nxt', dialog.path_edit.text())
+
+
+@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
+class AddingARow(Fixture, unittest.TestCase):
+    """Add makes the row and puts you in the field, asking nothing first."""
+
+    def test_add_is_always_available(self):
         _model, dialog = self.dialog([])
-        self.assertFalse(dialog.add_button.isEnabled())
-        dialog.add_edit.setText('something.nxt')
-        self.assertTrue(dialog.add_button.isEnabled())
+        self.assertTrue(dialog.add_button.isEnabled(),
+                        'there is nothing for adding to wait for')
+
+    def test_adding_makes_an_empty_row_and_selects_it(self):
+        _model, dialog = self.dialog(['a.nxt'])
         dialog.add_button.click()
-        self.assertEqual(['something.nxt'], dialog.references)
-        self.assertFalse(dialog.add_button.isEnabled(),
-                         'the field emptied, so there is nothing to add')
+        self.assertEqual(['a.nxt', ''], dialog.references)
+        self.assertEqual(1, dialog.list.currentRow())
+        self.assertEqual('', dialog.path_edit.text())
 
-    def test_a_typed_path_that_resolves_is_not_flagged(self):
+    def test_adding_activates_the_field_and_the_picker(self):
         _model, dialog = self.dialog([])
-        dialog.add_edit.setText('a.nxt')
-        dialog.add_edit.returnPressed.emit()
+        dialog.add_button.click()
+        self.assertTrue(dialog.path_edit.isEnabled())
+        self.assertTrue(dialog.browse_button.isEnabled())
+
+    def test_the_new_row_is_not_reported_as_missing(self):
+        # It is a row waiting to be filled in, not a broken reference.
+        _model, dialog = self.dialog([])
+        dialog.add_button.click()
+        self.assertFalse(dialog.status.isVisible())
         self.assertNotIn('could not be found', dialog.status.text())
 
-    def test_a_typed_path_that_does_not_resolve_is_flagged_but_kept(self):
-        _model, dialog = self.dialog([])
-        dialog.add_edit.setText('$SHOW/lib/rig.nxt')
-        dialog.add_edit.returnPressed.emit()
-        self.assertIn('could not be found', dialog.status.text())
-        self.assertEqual(['$SHOW/lib/rig.nxt'], dialog.references)
-
-    def test_a_typed_reference_applies(self):
+    def test_filling_it_in(self):
         model, dialog = self.dialog([])
-        dialog.add_edit.setText('a.nxt')
-        dialog.add_edit.returnPressed.emit()
+        dialog.add_button.click()
+        dialog.path_edit.setText('a.nxt')
+        dialog.path_edit.textEdited.emit('a.nxt')
         dialog.accept()
         self.assertEqual(['a.nxt'], model.get_layer_references(
             model.top_layer.real_path))
         self.assertIn('/from_a', model.comp_layer._nodes_path_as_key)
+
+    def test_a_row_left_empty_is_dropped(self):
+        model, dialog = self.dialog(['a.nxt'])
+        dialog.add_button.click()
+        dialog.accept()
+        self.assertEqual(['a.nxt'], model.get_layer_references(
+            model.top_layer.real_path))
+
+    def test_a_row_left_empty_is_not_a_change(self):
+        _model, dialog = self.dialog(['a.nxt'])
+        dialog.add_button.click()
+        self.assertFalse(dialog.changed(),
+                         'an empty row is not a reference, so nothing has '
+                         'changed yet')
+
+    def test_adding_several(self):
+        _model, dialog = self.dialog([])
+        dialog.add_button.click()
+        dialog.path_edit.setText('a.nxt')
+        dialog.path_edit.textEdited.emit('a.nxt')
+        dialog.add_button.click()
+        dialog.path_edit.setText('b.nxt')
+        dialog.path_edit.textEdited.emit('b.nxt')
+        self.assertEqual(['a.nxt', 'b.nxt'], dialog.references)
+
+
+@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
+class TheBrowseButton(Fixture, unittest.TestCase):
+
+    def test_it_has_the_browse_icon(self):
+        _model, dialog = self.dialog(['a.nxt'])
+        self.assertFalse(dialog.browse_button.icon().isNull(),
+                         'the browse icon did not load out of the resources')
+
+    def test_choosing_a_file_fills_the_selected_row(self):
+        _model, dialog = self.dialog([])
+        dialog.add_button.click()
+        chosen = os.path.join(self.tmp, 'a.nxt')
+        stored = dialog.as_stored(chosen)
+        dialog.path_edit.setText(stored)
+        dialog.set_selected_reference(stored)
+        self.assertEqual(['a.nxt'], dialog.references)
+        self.assertEqual('a.nxt', dialog.list.item(0).text())
 
 
 if __name__ == '__main__':

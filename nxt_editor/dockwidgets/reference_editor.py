@@ -14,6 +14,13 @@ the full width, and the controls are an icon strip under them rather than
 a column of text buttons as tall as the list. The layer picker sizes to
 its own contents with the resolved toggle pinned beside it, so the toggle
 does not slide about as one layer name replaces another.
+
+The list is the reference stack and the field under it edits whichever row
+is selected, so there is one place to look for what a row says and one
+place to change it. Add makes an empty row and puts you in that field;
+nothing is asked for up front, because a reference is usually typed rather
+than found, and an empty row that is never filled is dropped on the way
+out.
 """
 # Builtin
 import logging
@@ -96,42 +103,39 @@ class ReferenceEditor(QtWidgets.QDialog):
         self.list.setDragDropMode(QtWidgets.QAbstractItemView.InternalMove)
         self.list.setDefaultDropAction(QtCore.Qt.MoveAction)
         self.list.itemChanged.connect(self.on_item_edited)
-        self.list.currentRowChanged.connect(self.update_buttons)
+        self.list.currentRowChanged.connect(self.on_row_changed)
         self.list.model().rowsMoved.connect(self.on_rows_moved)
         layout.addWidget(self.list, 1)
 
-        # -- adding -----------------------------------------------------
+        # -- the selected row -------------------------------------------
         # Typed, because most references are partial and a file dialog can
-        # only offer files that exist here. There was no way to write
-        # $SHOW/lib/rig.nxt at all without adding something real and then
-        # editing it.
-        add_row = QtWidgets.QHBoxLayout()
-        add_row.setSpacing(4)
-        layout.addLayout(add_row)
-        self.add_edit = QtWidgets.QLineEdit()
-        self.add_edit.setPlaceholderText('Type or paste a path, partial paths '
-                                         'welcome, then Enter')
-        self.add_edit.setToolTip('Stored exactly as you write it, so a path '
-                                 'under a file root keeps resolving on other '
-                                 'machines')
-        self.add_edit.returnPressed.connect(self.add_typed_reference)
-        self.add_edit.textChanged.connect(self.update_buttons)
-        add_row.addWidget(self.add_edit, 1)
-        # No folder icon in the application's set, and the ellipsis is the
-        # conventional way to say a picker opens here anyway.
-        self.browse_button = self._tool_button('Pick a layer file',
+        # only offer files that exist here. There would otherwise be no way
+        # to write $SHOW/lib/rig.nxt at all.
+        path_row = QtWidgets.QHBoxLayout()
+        path_row.setSpacing(4)
+        layout.addLayout(path_row)
+        self.path_edit = QtWidgets.QLineEdit()
+        self.path_edit.setPlaceholderText('Select a reference to edit it, or '
+                                          'add one')
+        self.path_edit.setToolTip('Stored exactly as you write it, so a path '
+                                  'under a file root keeps resolving on other '
+                                  'machines')
+        self.path_edit.textEdited.connect(self.on_path_typed)
+        path_row.addWidget(self.path_edit, 1)
+        self.browse_button = self._tool_button('Find the layer file',
+                                               icon=':icons/icons/browse.svg',
                                                text=u'…')
-        self.browse_button.clicked.connect(self.add_reference)
-        add_row.addWidget(self.browse_button)
+        self.browse_button.clicked.connect(self.browse_for_reference)
+        path_row.addWidget(self.browse_button)
 
         # -- the controls -----------------------------------------------
         controls = QtWidgets.QHBoxLayout()
         controls.setSpacing(2)
         layout.addLayout(controls)
-        self.add_button = self._tool_button('Add the path written above',
+        self.add_button = self._tool_button('Add a reference',
                                             icon=':icons/icons/plus.png',
                                             text='+')
-        self.add_button.clicked.connect(self.add_typed_reference)
+        self.add_button.clicked.connect(self.add_reference)
         controls.addWidget(self.add_button)
         self.remove_button = self._tool_button('Remove the selected reference',
                                                icon=':icons/icons/minus.png',
@@ -159,9 +163,9 @@ class ReferenceEditor(QtWidgets.QDialog):
 
         self.button_box = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        # Enter in the path field adds the path. Left alone it would reach
-        # the default button and apply the dialog instead, throwing away
-        # what was just typed.
+        # Return in the path field belongs to the field. Left alone it
+        # would reach the default button and apply the dialog, which is
+        # not what pressing it after typing a path means.
         for button in self.button_box.buttons():
             button.setAutoDefault(False)
             button.setDefault(False)
@@ -242,47 +246,67 @@ class ReferenceEditor(QtWidgets.QDialog):
             'Show where each reference resolves to on this machine')
         self.refresh_list()
 
+    def describe(self, reference):
+        """What a row should say, and whether its file was found.
+
+        :return: text, tooltip, found
+        :rtype: tuple
+        """
+        if not reference:
+            # An empty row is one being filled in, so it says nothing and
+            # is not counted as missing.
+            return '', 'Type a path below, or find the file', True
+        resolved, found = nxt_io.expand_reference_path(reference,
+                                                       self.layer_dir())
+        text = resolved if self.showing_resolved else reference
+        if not found:
+            return text, 'Not found. Looked at %s' % resolved, False
+        return text, (reference if self.showing_resolved else resolved), True
+
+    def style_item(self, item, reference):
+        """Put a reference into an item, however the list is being shown."""
+        text, tip, found = self.describe(reference)
+        item.setText(text)
+        item.setToolTip(tip)
+        # What it says changes with the toggle; what it is does not.
+        item.setData(STORED_ROLE, reference)
+        flags = item.flags() | QtCore.Qt.ItemIsDragEnabled
+        if self.showing_resolved:
+            # Resolved is a view of the stored path, not another place to
+            # type. Editing it would store this machine's answer.
+            flags &= ~QtCore.Qt.ItemIsEditable
+            item.setForeground(RESOLVED_COLOR)
+        else:
+            flags |= QtCore.Qt.ItemIsEditable
+            item.setForeground(QtGui.QBrush())
+        item.setFlags(flags)
+        if not found:
+            item.setForeground(MISSING_COLOR)
+        return found
+
     def refresh_list(self):
         current = self.list.currentRow()
         self.list.blockSignals(True)
         self.list.clear()
-        missing = 0
         for reference in self.references:
-            resolved, found = nxt_io.expand_reference_path(reference,
-                                                           self.layer_dir())
-            text = resolved if self.showing_resolved else reference
-            item = QtWidgets.QListWidgetItem(text)
-            # What it says changes with the toggle; what it is does not.
-            item.setData(STORED_ROLE, reference)
-            flags = item.flags() | QtCore.Qt.ItemIsDragEnabled
-            if self.showing_resolved:
-                # Resolved is a view of the stored path, not another place
-                # to type. Editing it would store this machine's answer.
-                flags &= ~QtCore.Qt.ItemIsEditable
-                item.setForeground(RESOLVED_COLOR)
-            else:
-                flags |= QtCore.Qt.ItemIsEditable
-            item.setFlags(flags)
-            if not found:
-                item.setForeground(MISSING_COLOR)
-                item.setToolTip('Not found. Looked at %s' % resolved)
-                missing += 1
-            else:
-                item.setToolTip(resolved if not self.showing_resolved
-                                else reference)
+            item = QtWidgets.QListWidgetItem()
+            self.style_item(item, reference)
             self.list.addItem(item)
         self.list.blockSignals(False)
         if current < 0 and self.references:
             current = 0
         self.list.setCurrentRow(min(current, len(self.references) - 1))
-        self.update_status(missing)
+        self.update_status()
         self.update_buttons()
 
-    def update_status(self, missing):
+    def missing_count(self):
+        return len([r for r in self.references if not self.describe(r)[2]])
+
+    def update_status(self):
+        missing = self.missing_count()
         if missing:
-            self.status.setText(
-                '%d could not be found' % missing
-                if missing > 1 else '1 could not be found')
+            self.status.setText('%d could not be found' % missing
+                                if missing > 1 else '1 could not be found')
             self.status.setToolTip(
                 'Kept as written, in case they resolve on another machine.')
             self.status.setStyleSheet('color: %s;' % MISSING_COLOR.name())
@@ -299,30 +323,71 @@ class ReferenceEditor(QtWidgets.QDialog):
 
     def update_buttons(self, *_args):
         row = self.list.currentRow()
-        has_row = row >= 0
-        editing_stored = not self.showing_resolved
+        has_row = 0 <= row < len(self.references)
         self.remove_button.setEnabled(has_row)
         self.up_button.setEnabled(has_row and row > 0)
         self.down_button.setEnabled(has_row
                                     and row < len(self.references) - 1)
-        has_text = bool(self.add_edit.text().strip())
-        self.add_button.setEnabled(bool(self.layer_path) and has_text)
-        self.browse_button.setEnabled(bool(self.layer_path))
-        self.add_edit.setEnabled(bool(self.layer_path))
+        # Adding never depends on the selection: it makes the row it then
+        # selects.
+        self.add_button.setEnabled(bool(self.layer_path))
+        # The field and the picker edit the selected row, so with nothing
+        # selected there is nothing for them to edit.
+        self.path_edit.setEnabled(has_row)
+        self.browse_button.setEnabled(has_row)
         # Reordering and removing change the stored list, which is fine in
-        # either view; typing is not.
+        # either view; typing into a resolved row is not.
         self.list.setEditTriggers(
             QtWidgets.QAbstractItemView.DoubleClicked
             | QtWidgets.QAbstractItemView.EditKeyPressed
-            if editing_stored else QtWidgets.QAbstractItemView.NoEditTriggers)
+            if not self.showing_resolved
+            else QtWidgets.QAbstractItemView.NoEditTriggers)
+
+    def on_row_changed(self, row):
+        """Bring the selected row into the field below."""
+        if 0 <= row < len(self.references):
+            self.path_edit.setText(self.references[row])
+        else:
+            self.path_edit.clear()
+        self.update_buttons()
+
+    def set_selected_reference(self, reference):
+        """Put a path into the selected row, and show what it means now.
+
+        The row is updated where it stands rather than by rebuilding the
+        list, which would take the focus out of the field being typed in.
+        """
+        row = self.list.currentRow()
+        if not (0 <= row < len(self.references)):
+            return
+        self.references[row] = reference
+        self.list.blockSignals(True)
+        self.style_item(self.list.item(row), reference)
+        self.list.blockSignals(False)
+        self.update_status()
+
+    def on_path_typed(self, text):
+        """Typed into the field, so the selected row says it too.
+
+        Stored exactly as written. Making it relative to the layer, or
+        resolving it against this machine, would undo the reason for
+        typing a partial path in the first place.
+        """
+        self.set_selected_reference(text.strip())
 
     def on_item_edited(self, item):
+        """Typed into the row itself, which the list still allows."""
         if self.showing_resolved:
             return
         row = self.list.row(item)
         if 0 <= row < len(self.references):
-            self.references[row] = item.text().strip()
-            self.refresh_list()
+            reference = item.text().strip()
+            self.references[row] = reference
+            self.path_edit.setText(reference)
+            self.list.blockSignals(True)
+            self.style_item(item, reference)
+            self.list.blockSignals(False)
+            self.update_status()
 
     def on_rows_moved(self, *_args):
         """Take the new order from the rows after a drag.
@@ -342,31 +407,38 @@ class ReferenceEditor(QtWidgets.QDialog):
 
     # -- editing --------------------------------------------------------
 
-    def add_typed_reference(self):
-        """Add whatever is written in the path field, exactly as written.
+    def add_reference(self):
+        """Make an empty row, select it, and wait to be told what it is.
 
-        Not put through as_stored: a typed path is already the form the
-        person means it to be kept in. Rewriting $SHOW/lib/rig.nxt into
-        something relative to this layer, or into where it happens to land
-        on this machine, would undo the reason for typing it.
+        Nothing is asked for up front. A reference is usually typed, and a
+        picker cannot offer a partial path at all, so the row comes first
+        and the field below is where it gets filled in.
         """
-        reference = self.add_edit.text().strip()
-        if not reference:
-            return
-        self.references.append(reference)
-        self.add_edit.clear()
+        self.references.append('')
         self.refresh_list()
         self.list.setCurrentRow(len(self.references) - 1)
+        self.path_edit.clear()
+        self.path_edit.setFocus(QtCore.Qt.OtherFocusReason)
 
-    def add_reference(self):
+    def browse_for_reference(self):
+        """Find a file for the selected row."""
+        row = self.list.currentRow()
+        if not (0 <= row < len(self.references)):
+            return
         start = self.layer_dir() or os.getcwd()
+        current = self.references[row]
+        if current:
+            resolved, found = nxt_io.expand_reference_path(current,
+                                                           self.layer_dir())
+            if found:
+                start = os.path.dirname(resolved)
         path, _filter = QtWidgets.QFileDialog.getOpenFileName(
             self, 'Reference layer', start, 'nxt files (*.nxt *.nxtb)')
         if not path:
             return
-        self.references.append(self.as_stored(path))
-        self.refresh_list()
-        self.list.setCurrentRow(len(self.references) - 1)
+        stored = self.as_stored(path)
+        self.path_edit.setText(stored)
+        self.set_selected_reference(stored)
 
     def as_stored(self, path):
         """How a chosen file should be written into the layer.
@@ -415,6 +487,8 @@ class ReferenceEditor(QtWidgets.QDialog):
         return [r for r in self.references if r] != stored
 
     def accept(self):
+        # A row that was added and never filled in is not a reference, and
+        # goes no further than this dialog.
         references = [r for r in self.references if r]
         if not self.changed():
             # Nothing to apply, so no recomposite and no unsaved marker.
