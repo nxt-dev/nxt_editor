@@ -188,5 +188,105 @@ class WhenApplyingGoesWrong(unittest.TestCase):
                       'the target was left pointing outside the stage')
 
 
+@unittest.skipUnless(HAS_REF_EXPAND, NEEDS_CORE)
+class TheLayerManagerWithAnUnresolvedReference(unittest.TestCase):
+    """The layer tree shows layers, and one of these did not open.
+
+    The model walked sub_layers assuming every entry had a layer behind
+    it. A reference that did not resolve has none, so building the tree
+    reached for sub_layers on nothing and threw while the window was
+    opening. Every later signal into that model threw too, which cut
+    applying a reference change off partway: the layers went, and the
+    graph kept the nodes because the settle never finished.
+    """
+
+    def setUp(self):
+        self.cwd = os.getcwd()
+        self.tmp = tempfile.mkdtemp(prefix='nxt_lm_')
+        write_graph(os.path.join(self.tmp, 'rig.nxt'), 'rig',
+                    references=[MISSING], node_names=['from_rig'])
+        write_graph(os.path.join(self.tmp, 'utils.nxt'), 'utils',
+                    node_names=['from_utils'])
+        self.top_path = write_graph(os.path.join(self.tmp, 'top.nxt'), 'top',
+                                    references=['rig.nxt', 'utils.nxt'],
+                                    node_names=['from_top'])
+        from nxt_editor.main_window import MainWindow
+        self.win = MainWindow(filepath=self.top_path)
+        self.model = self.win.model
+        app.processEvents()
+
+    def tearDown(self):
+        self.model.effected_layers.clear()
+        self.win.close()
+        self.win = None
+        os.chdir(self.cwd)
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def layer_model(self):
+        return self.win.layer_manager.layer_tree.model()
+
+    def drawn(self):
+        return sorted(self.win.view._node_graphics)
+
+    def comped(self):
+        return sorted(self.model.comp_layer._nodes_path_as_key)
+
+    # -- the tree ------------------------------------------------------
+
+    def test_the_window_opens_at_all(self):
+        # Building the tree threw here, before anything was asked of it.
+        self.assertIsNotNone(self.layer_model())
+
+    def test_walking_every_index_does_not_throw(self):
+        indices = self.layer_model().get_all_layer_indices()
+        self.assertTrue(indices)
+        for index in indices:
+            self.assertIsNotNone(index.internalPointer(),
+                                 'an index was made for something that is '
+                                 'not a layer')
+
+    def test_a_reference_that_did_not_open_gets_no_row(self):
+        model = self.layer_model()
+        rig = [l for l in self.model.stage._sub_layers
+               if l.get_alias() == 'rig'][0]
+        self.assertEqual([MISSING], rig.get_references(),
+                         'the reference should still be on the layer')
+        index = model.get_index_of_layer(rig)
+        self.assertEqual(0, model.rowCount(index),
+                         'rig has one reference and it did not open, so it '
+                         'has no rows')
+
+    # -- and the change goes through -----------------------------------
+
+    def test_removing_a_layer_clears_its_nodes_from_the_view(self):
+        self.assertIn('/from_utils', self.drawn())
+        self.model.set_layer_references(self.model.top_layer.real_path,
+                                        ['rig.nxt'])
+        app.processEvents()
+        self.assertEqual(['top', 'rig'],
+                         [l.get_alias() for l in self.model.stage._sub_layers])
+        self.assertNotIn('/from_utils', self.comped())
+        self.assertNotIn('/from_utils', self.drawn(),
+                         'the layer is gone but the stage view still draws '
+                         'its node')
+
+    def test_what_is_drawn_is_what_is_comped(self):
+        self.model.set_layer_references(self.model.top_layer.real_path,
+                                        ['rig.nxt'])
+        app.processEvents()
+        self.assertEqual(self.comped(), self.drawn())
+
+    def test_putting_it_back(self):
+        self.model.set_layer_references(self.model.top_layer.real_path,
+                                        ['rig.nxt'])
+        app.processEvents()
+        self.model.set_layer_references(self.model.top_layer.real_path,
+                                        ['rig.nxt', 'utils.nxt'])
+        app.processEvents()
+        self.assertIn('/from_utils', self.comped())
+        self.assertIn('/from_utils', self.drawn())
+        self.assertEqual(self.comped(), self.drawn())
+
+
 if __name__ == '__main__':
     unittest.main()
