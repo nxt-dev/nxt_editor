@@ -301,8 +301,10 @@ class LayerModel(QtCore.QAbstractItemModel):
         """
         layer = index.internalPointer()
         out = []
+        if layer is None:
+            return out
         i = 0
-        for layer_dict in layer.sub_layers:
+        for _layer_dict in self.loaded_sub_layers(layer):
             sub_idx = self.index(i, 0, index)
             out += [sub_idx]
             out += self.descendant_indicies(sub_idx)
@@ -338,6 +340,22 @@ class LayerModel(QtCore.QAbstractItemModel):
             bot_right = self.createIndex(layer_index.row(), self.SOLO_COLUMN)
             self.dataChanged.emit(top_left, bot_right)
 
+    @staticmethod
+    def loaded_sub_layers(layer):
+        """The sub layers of `layer` that actually opened.
+
+        A reference that could not be resolved is kept on the layer with
+        nothing behind it, because it is still what the graph asks for and
+        may resolve on another machine. There is no layer to put in a row
+        for it, and counting it makes a row the rest of this model cannot
+        fill: walking it reaches for sub_layers on nothing.
+
+        :param layer: layer whose sub layers are wanted
+        :return: the sub layer dicts that have a layer
+        :rtype: list
+        """
+        return [d for d in layer.sub_layers if d.get('layer') is not None]
+
     def get_index_of_layer(self, layer):
         """Create and return a model index for given `layer`
 
@@ -360,12 +378,13 @@ class LayerModel(QtCore.QAbstractItemModel):
         if not parent or not parent.isValid():
             return self.createIndex(row, column, self.stage_model.top_layer)
         parent_layer = parent.internalPointer()
+        if parent_layer is None:
+            return QtCore.QModelIndex()
         try:
-            target_dict = parent_layer.sub_layers[row]
+            target_dict = self.loaded_sub_layers(parent_layer)[row]
         except IndexError:
             return QtCore.QModelIndex()
-        target_layer = target_dict.get('layer')
-        return self.createIndex(row, column, target_layer)
+        return self.createIndex(row, column, target_dict['layer'])
 
     @staticmethod
     def find_layer_index_in_parent(layer):
@@ -381,7 +400,7 @@ class LayerModel(QtCore.QAbstractItemModel):
         if not parent_layer:
             return 0
         i = 0
-        for layer_dict in parent_layer.sub_layers:
+        for layer_dict in LayerModel.loaded_sub_layers(parent_layer):
             if layer_dict['layer'] == layer:
                 return i
             i += 1
@@ -415,7 +434,7 @@ class LayerModel(QtCore.QAbstractItemModel):
         layer = parent.internalPointer()
         if not layer:
             return 0
-        return len(layer.sub_layers)
+        return len(self.loaded_sub_layers(layer))
 
     def columnCount(self, parent=None):
         """Returns number of columns in the model.
