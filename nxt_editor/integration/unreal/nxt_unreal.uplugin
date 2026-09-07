@@ -1,7 +1,7 @@
 {
     "FileVersion": 3,
     "Version": 1,
-    "VersionName": "4.1.0",
+    "VersionName": "4.2.0",
     "FriendlyName": "Nxt Unreal",
     "Description": "Unreal editor connections to the nxt python module.",
     "Category": "Scripting",
