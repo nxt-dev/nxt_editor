@@ -91,13 +91,28 @@
         },
         "/make_module_folder/clean_up": {
             "code": [
-                "if os.path.isdir('D:/Projects/nxt_editor/build/nxt-src'):",
+                "# Whatever a local checkout picked up that has no business shipping.",
+                "# A build on a build machine never has these; a build on a working",
+                "# machine does, and they went straight into the module.",
+                "junk = ('__pycache__', '.mypy_cache', '.pytest_cache')",
+                "removed = 0",
+                "for root, dirs, files in os.walk('${mod_folder}'):",
+                "    for name in list(dirs):",
+                "        if name in junk:",
+                "            shutil.rmtree(os.path.join(root, name), ignore_errors=True)",
+                "            dirs.remove(name)",
+                "            removed += 1",
+                "print('removed {} cache folder(s) from the module'.format(removed))",
+                "",
+                "# The clone only exists when building from a fetched source. This",
+                "# checked a path on somebody's D: drive, so it never ran anywhere else.",
+                "if os.path.isdir('${src_clone}'):",
                 "    try:",
                 "        shutil.rmtree('${src_clone}')",
-                "    except:",
+                "    except Exception:",
                 "        print('!' * 79)",
-                "        print('Failed to delete soruce clone, do so by hand!')",
-                "        print(' '* 3 + '${src_clone}')"
+                "        print('Failed to delete source clone, do so by hand!')",
+                "        print(' ' * 3 + '${src_clone}')"
             ]
         },
         "/make_module_folder/copy_source": {
@@ -131,17 +146,29 @@
         "/make_module_folder/make_resources": {
             "code": [
                 "import subprocess",
-                "result_path = '${../copy_source.source_folder}/ui/resources.py'",
-                "result_pyc = result_path + 'c'",
-                "qrc_path = '${../copy_source.source_folder}/ui/resources/resources.qrc'",
-                "if os.path.isfile(result_path):",
-                "    os.remove(result_path)",
-                "    print('removed old {}'.format(result_path))",
-                "if os.path.isfile(result_pyc):",
-                "    os.remove(result_pyc)",
-                "    print('removed old {}'.format(result_pyc))",
-                "print('generating nxt resources from {} to {}'.format(qrc_path, result_path))",
-                "subprocess.call(['pyside2-rcc', qrc_path, '-o', result_path])"
+                "# The editor's resources are generated, not committed. This used to",
+                "# reach for a ui/ folder that no longer exists and call pyside2-rcc,",
+                "# from before the move to PySide6, so it threw and took the rest of",
+                "# the build with it: the .mod kept its <VERSION> placeholder and the",
+                "# clean up step never ran.",
+                "editor = '${../copy_source.editor_script_src}'",
+                "qrc_path = os.path.join(editor, 'resources', 'resources.qrc')",
+                "result_path = os.path.join(editor, 'qresources.py')",
+                "for stale in (result_path, result_path + 'c'):",
+                "    if os.path.isfile(stale):",
+                "        os.remove(stale)",
+                "        print('removed old {}'.format(stale))",
+                "print('generating nxt resources from {} to {}'.format(qrc_path,",
+                "                                                      result_path))",
+                "try:",
+                "    subprocess.check_call(['pyside6-rcc', qrc_path, '-o', result_path,",
+                "                           '-g', 'python'])",
+                "except Exception as error:",
+                "    # nxt_editor builds these itself on first import when they are",
+                "    # missing or older than the qrc, so a machine without rcc still",
+                "    # ends up with them. Worth saying, not worth failing the package.",
+                "    print('could not build resources here ({}); nxt_editor will build '",
+                "          'them on first import'.format(error))"
             ]
         },
         "/make_module_folder/populate_mod_template": {
