@@ -483,6 +483,22 @@ class LayerActions(NxtActionContainer):
             clear_action_data(self.actions())
             self.main_window.save_layer(layer)
         self.save_layer_action.triggered.connect(save_layer)
+        # Edit references
+        self.edit_references_action = NxtAction(text='Edit References...',
+                                                parent=self)
+        self.edit_references_action.setAutoRepeat(False)
+        self.edit_references_action.setData(None)
+        self.edit_references_action.setToolTip('Edit which layers this layer '
+                                               'references')
+        self.edit_references_action.setWhatsThis(
+            'Change what a layer references. Applying reloads the referenced '
+            'layers and recomposites; the layer is written when you save it.')
+
+        def edit_references():
+            layer = self.edit_references_action.data()
+            clear_action_data(self.actions())
+            self.main_window.edit_layer_references(layer)
+        self.edit_references_action.triggered.connect(edit_references)
         # Save as
         self.save_layer_as_action = NxtAction(text='Save Layer As',
                                               parent=self)
@@ -686,7 +702,8 @@ class LayerActions(NxtActionContainer):
                                      self.new_layer_below_action,
                                      self.ref_layer_above_action,
                                      self.ref_layer_below_action,
-                                     self.remove_layer_action]
+                                     self.remove_layer_action,
+                                     self.edit_references_action]
 
 
 class NodeActions(NxtActionContainer):

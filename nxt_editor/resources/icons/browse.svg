@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16">
+    <!-- A folder, drawn in the Feather idiom the rest of this set uses:
+         24 grid, 2px stroke, round caps and joins. #a09e9e is the colour
+         plus.png and minus.png are drawn in, so it sits with them in the
+         reference editor's control strip. -->
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+          fill="none" stroke="#a09e9e" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

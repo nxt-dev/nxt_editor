@@ -46,6 +46,7 @@
         <file>icons/plus_hover.png</file>
         <file>icons/minus.png</file>
         <file>icons/minus_hover.png</file>
+        <file>icons/browse.svg</file>
         <file>icons/eye_checkbox_checked.png</file>
         <file>icons/eye_checkbox_checked_disabled.png</file>
         <file>icons/eye_checkbox_checked_focus.png</file>
