@@ -153,9 +153,6 @@ class LayerTreeView(QtWidgets.QTreeView):
             return
         stage_model = self.model().stage_model
 
-        self.actions.edit_references_action.setData(layer)
-        menu.addAction(self.actions.edit_references_action)
-        menu.addSeparator()
         self.actions.save_layer_action.setData(layer)
         menu.addAction(self.actions.save_layer_action)
         self.actions.save_layer_as_action.setData(layer)
@@ -213,6 +210,9 @@ class LayerTreeView(QtWidgets.QTreeView):
         nxt_editor.main_window.populate_builtins_menu(qmenu=builtins_menu,
                                                       main_window=self.actions.main_window)
         menu.addMenu(builtins_menu)
+        # Last, with the other things that change what this layer pulls in.
+        self.actions.edit_references_action.setData(layer)
+        menu.addAction(self.actions.edit_references_action)
         menu.popup(QtGui.QCursor.pos())
 
 
@@ -239,12 +239,38 @@ class LayerModel(QtCore.QAbstractItemModel):
         self.stage_model.layer_removed.connect(self.reset)
         self.stage_model.selection_changed.connect(self.on_selection_changed)
         self.stage_model.effected_layers.signal.connect(self.on_command)
+        # Layers that indices point at, kept alive for as long as the
+        # view may still be holding those indices. See keep().
+        self._indexed_layers = {}
         self.layers_with_selected = []
         self.on_selection_changed()
+
+    def keep(self, layer):
+        """Hold a reference to a layer an index is about to point at.
+
+        createIndex stores the object as a bare pointer and keeps nothing
+        alive. The view holds on to indices, so once a layer is removed
+        from the stage and its last reference goes, every index the view
+        still has points at freed memory. Painting asks the model for the
+        parent of each index, which reads the layer, and the process dies
+        in C++ rather than raising anything Python can report.
+
+        Held until the view is told to start over, which is when it lets
+        go of the indices these belong to.
+
+        :param layer: layer an index will point at
+        :return: the same layer, so this can wrap a call
+        """
+        if layer is not None:
+            self._indexed_layers[id(layer)] = layer
+        return layer
 
     def reset(self):
         self.beginResetModel()
         self.endResetModel()
+        # The view has dropped its indices, so nothing points at these any
+        # more and holding them would only keep dead layers about.
+        self._indexed_layers = {}
 
     def on_disp_changed(self):
         self.emit_columns_changed([self.DISPLAY_COLUMN])
@@ -279,9 +305,9 @@ class LayerModel(QtCore.QAbstractItemModel):
         max_col = max(columns)
         for index in self.get_all_layer_indices():
             top_left = self.createIndex(index.row(), min_col,
-                                        index.internalPointer())
+                                        self.keep(index.internalPointer()))
             bot_right = self.createIndex(index.row(), max_col,
-                                         index.internalPointer())
+                                         self.keep(index.internalPointer()))
             self.dataChanged.emit(top_left, bot_right)
 
     def get_all_layer_indices(self):
@@ -365,7 +391,7 @@ class LayerModel(QtCore.QAbstractItemModel):
         :rtype: QModelIndex
         """
         if not layer.parent_layer:
-            return self.createIndex(0, 0, layer)
+            return self.createIndex(0, 0, self.keep(layer))
         layer_row = LayerModel.find_layer_index_in_parent(layer)
         parent_idx = self.get_index_of_layer(layer.parent_layer)
         return self.index(layer_row, self.ALIAS_COLUMN, parent_idx)
@@ -376,7 +402,8 @@ class LayerModel(QtCore.QAbstractItemModel):
         Part of QAbstractItemModel
         """
         if not parent or not parent.isValid():
-            return self.createIndex(row, column, self.stage_model.top_layer)
+            return self.createIndex(row, column,
+                                self.keep(self.stage_model.top_layer))
         parent_layer = parent.internalPointer()
         if parent_layer is None:
             return QtCore.QModelIndex()
@@ -384,7 +411,8 @@ class LayerModel(QtCore.QAbstractItemModel):
             target_dict = self.loaded_sub_layers(parent_layer)[row]
         except IndexError:
             return QtCore.QModelIndex()
-        return self.createIndex(row, column, target_dict['layer'])
+        return self.createIndex(row, column,
+                                self.keep(target_dict['layer']))
 
     @staticmethod
     def find_layer_index_in_parent(layer):
@@ -420,7 +448,7 @@ class LayerModel(QtCore.QAbstractItemModel):
         if not parent_layer:
             return QtCore.QModelIndex()
         parent_row = LayerModel.find_layer_index_in_parent(parent_layer)
-        return self.createIndex(parent_row, 0, parent_layer)
+        return self.createIndex(parent_row, 0, self.keep(parent_layer))
 
     def rowCount(self, parent=None):
         """Returns count of rows(children) for the model, or parent specified

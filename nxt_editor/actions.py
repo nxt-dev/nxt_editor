@@ -690,8 +690,7 @@ class LayerActions(NxtActionContainer):
         self.lay_manger_table_action.setShortcut('V')
         self.lay_manger_table_action.setShortcutContext(widget_context)
 
-        self.action_display_order = [self.edit_references_action,
-                                     self.save_layer_action,
+        self.action_display_order = [self.save_layer_action,
                                      self.save_layer_as_action,
                                      self.save_all_layers_action,
                                      self.open_source_action,
@@ -703,7 +702,8 @@ class LayerActions(NxtActionContainer):
                                      self.new_layer_below_action,
                                      self.ref_layer_above_action,
                                      self.ref_layer_below_action,
-                                     self.remove_layer_action]
+                                     self.remove_layer_action,
+                                     self.edit_references_action]
 
 
 class NodeActions(NxtActionContainer):
