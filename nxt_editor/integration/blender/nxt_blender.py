@@ -26,6 +26,7 @@ when it no longer matches the files.
 """
 import hashlib
 import importlib.util
+import json
 import os
 import sys
 
@@ -272,7 +273,8 @@ class NXT_OT_reload(bpy.types.Operator):
         else:
             dropped = module.reload_core()
         _stamp()
-        self.report({"INFO"}, "Forgot {} module(s)".format(dropped))
+        self.report({"INFO"}, "Forgot {} module(s); {}".format(
+            dropped, nxt_report()))
         return {"FINISHED"}
 
 
@@ -288,14 +290,68 @@ def _paths():
             sys.path.insert(0, path)
 
 
+#: Live editor windows, so a reload does not pull the
+#: module out from under one.
+__NXT_WINDOWS__ = []
+
+
+def nxt_report():
+    """Which nxt is actually loaded, and whether it can resolve layers.
+
+    Worth surfacing because getting this wrong looks like a broken GRAPH,
+    not a stale interpreter. A session holding nxt 0.19.0 loses the
+    ``layer_dir`` fallback in ``nxt.nxt_io.expand_reference_path`` -- the
+    part that resolves a reference relative to the referring layer's own
+    directory. Without it every NESTED relative reference dangles, so a
+    stack that should compose nine layers composes three and the graph
+    looks like it lost its references.
+
+    :return: a one line summary.
+    :rtype: str
+    """
+    module = sys.modules.get("nxt")
+    if module is None:
+        return "nxt not loaded"
+    here = os.path.dirname(getattr(module, "__file__", "") or "")
+    version = "?"
+    try:
+        with open(os.path.join(here, "version.json")) as handle:
+            api = json.load(handle).get("API", {})
+        version = "{}.{}.{}".format(api.get("MAJOR"), api.get("MINOR"),
+                                    api.get("PATCH"))
+    except Exception:
+        pass
+    resolves = False
+    try:
+        from nxt.nxt_io import expand_reference_path
+        resolves = "layer_dir" in expand_reference_path.__code__.co_varnames
+    except Exception:
+        pass
+    return "nxt {} from {}{}".format(
+        version, here,
+        "" if resolves else "  -- TOO OLD to resolve nested references")
+
+
 def _drop_core():
-    """Forget the core modules, when the launcher is not loaded.
+    """Forget the core modules AND nxt, when the launcher is not loaded.
+
+    ``nxt`` is dropped as well as ``core``. It used not to be, and that is
+    a trap: Blender caches modules for the life of the session, so a
+    session that first imported an older nxt kept it through every Reload
+    Code. The graphs then stop resolving their nested references and the
+    fault reads as a graph problem rather than a stale import.
+
+    ``nxt_editor`` is left alone when an editor window is open, because
+    dropping the module out from under a live Qt window crashes it.
 
     :return: how many were dropped.
     :rtype: int
     """
+    roots = ["core", "nxt"]
+    if not __NXT_WINDOWS__:
+        roots.append("nxt_editor")
     names = [n for n in list(sys.modules)
-             if n == "core" or n.startswith("core.")]
+             if any(n == r or n.startswith(r + ".") for r in roots)]
     for name in names:
         del sys.modules[name]
     importlib.invalidate_caches()
@@ -333,9 +389,24 @@ def _run(operator, graph, fresh):
                             os.path.join(DEV_ROOT, "nxt"), error))
         return {"CANCELLED"}
 
-    print("nxt: running {}".format(graph))
-    try:
+    # Ask BEFORE anything is cleared, the way Maya's /init/new_scene does.
+    # The dialog cannot block, so the build goes behind it: press Run, get
+    # asked, and nothing happens until you answer. A clean scene and a
+    # --background run are never asked and go straight through.
+    def _build():
+        print("nxt: running {}".format(graph))
         Session().execute_graph(graph)
+
+    try:
+        import core.blender.ui as sb_ui
+    except ImportError:
+        sb_ui = None
+
+    try:
+        if sb_ui is not None:
+            sb_ui.confirm_scene_build(_build, label=os.path.basename(graph))
+        else:
+            _build()
     except Exception as error:                  # noqa: BLE001
         # nxt prints the failing node's path and traceback to the console,
         # which locates the problem far better than a dialog can.
