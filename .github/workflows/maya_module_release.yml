@@ -14,9 +14,13 @@
 # is in the module we ship.
 name: Host packages
 
+# Runs on the version tag, not on the push to release, so the archive
+# lands on the tag the rez release already made rather than needing a
+# second one of its own. Waiting for the tag also keeps this out of a race
+# with the workflow that creates it.
 on:
   push:
-    branches: [release]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -141,9 +145,12 @@ jobs:
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: hosts_v${{ steps.version.outputs.version }}
-          name: nxt for Maya, Unreal and Blender ${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          name: nxt ${{ steps.version.outputs.version }}
           files: nxt_editor/build/nxt_${{ steps.version.outputs.version }}.zip
+          # Adding to whatever the release on this tag already says
+          # rather than replacing it.
+          append_body: true
           body: |
             nxt and nxt_editor for every host, in one archive. Each folder
             inside is ready to install; use the one for your host.
