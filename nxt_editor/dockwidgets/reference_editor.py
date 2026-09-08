@@ -453,8 +453,16 @@ class ReferenceEditor(QtWidgets.QDialog):
         if not directory:
             return path
         try:
-            relative = os.path.relpath(path, directory).replace(os.path.sep,
-                                                                '/')
+            # Through the symlinks first. A file picker hands back the path
+            # the user walked, which can reach the same directory as the
+            # layer by another name: /var against /private/var on macOS is
+            # the everyday one. Compared as written they look like
+            # different places, so a file sitting right beside the layer
+            # was stored as an absolute path, which pins the graph to the
+            # machine it was added on.
+            relative = os.path.relpath(os.path.realpath(path),
+                                       os.path.realpath(directory))
+            relative = relative.replace(os.path.sep, '/')
         except ValueError:
             # Different drive on Windows.
             return path
