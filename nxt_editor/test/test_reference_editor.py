@@ -154,6 +154,18 @@ class ReferenceEditorDialog(Fixture, unittest.TestCase):
         stored = dialog.as_stored(os.path.join(self.tmp, 'a.nxt'))
         self.assertEqual('a.nxt', stored)
 
+    def test_a_path_reaching_the_layer_by_another_name(self):
+        # A picker hands back the path that was walked, which can reach the
+        # layer's own directory by a different route. On macOS that is
+        # /var against /private/var and it happens every time; anywhere
+        # else a symlink or a doubled back path does it. Compared as
+        # written they look like different places, and the file beside the
+        # layer gets stored absolute, pinning the graph to this machine.
+        _model, dialog = self.dialog([])
+        roundabout = os.path.join(self.tmp, 'sub', os.pardir, 'a.nxt')
+        os.mkdir(os.path.join(self.tmp, 'sub'))
+        self.assertEqual('a.nxt', dialog.as_stored(roundabout))
+
     def test_a_file_elsewhere_is_stored_whole(self):
         _model, dialog = self.dialog([])
         far = tempfile.mkdtemp(prefix='nxt_far_')
