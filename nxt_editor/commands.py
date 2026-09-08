@@ -1710,7 +1710,18 @@ class SetLayerReferences(NxtCommand):
         target = self.model.target_layer
         return getattr(target, 'real_path', None)
 
-    def _settle(self, removed, was_targeting):
+    def _display_path(self):
+        """Which layer the graph is being looked at through.
+
+        The comp is built from this one, so it matters more than the
+        target: left pointing at a layer that is gone, the graph on screen
+        is composited from the wrong place in the stack and keeps showing
+        nodes from layers that are no longer loaded.
+        """
+        display = self.model.display_layer
+        return getattr(display, 'real_path', None)
+
+    def _settle(self, removed, was_targeting, was_displaying=None):
         """Put the model back on its feet after layers have come and gone.
 
         Applying rebuilds every referenced layer, including the ones that
@@ -1729,14 +1740,27 @@ class SetLayerReferences(NxtCommand):
         The layer manager rebuilds on layer_removed, and has to be told
         about every layer that went, not only the ones that came.
         """
-        self.model.update_comp_layer(rebuild=True)
+        # Which layers exist has changed, so say so before anything else.
+        # The layer tree rebuilds on these and lets go of the indices it
+        # was holding; everything below can make a view repaint, and a
+        # repaint against the old shape reaches for layers that are gone.
+        for real_path in removed:
+            self.model.layer_removed.emit(real_path)
+        self.model.layer_added.emit(self.layer_path)
+        # Rebuild through the display layer rather than through the comp.
+        # update_comp_layer builds from the comp's own index, and once
+        # layers have come and gone that index points somewhere else in
+        # the stack, so the graph gets composited from the wrong place and
+        # keeps nodes belonging to layers that are no longer loaded.
+        # Everything downstream, the build view included, reads that comp.
+        display = None
+        if was_displaying:
+            display = self.model.lookup_layer(was_displaying)
+        self.model.set_display_layer(display or self.stage.top_layer)
         if was_targeting and self.model.lookup_layer(was_targeting):
             self.model.set_target_layer(was_targeting)
         else:
             self.model.set_target_layer(LAYERS.TOP)
-        for real_path in removed:
-            self.model.layer_removed.emit(real_path)
-        self.model.layer_added.emit(self.layer_path)
 
     def _apply_and_settle(self, references):
         """Apply the references, and settle the model whatever happens.
@@ -1753,11 +1777,12 @@ class SetLayerReferences(NxtCommand):
         applying went badly, so what is on screen is what is loaded.
         """
         was_targeting = self._target_path()
+        was_displaying = self._display_path()
         self._removed = []
         try:
             self._apply(references)
         finally:
-            self._settle(self._removed, was_targeting)
+            self._settle(self._removed, was_targeting, was_displaying)
 
     @processing
     def redo(self):
