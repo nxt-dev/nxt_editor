@@ -57,6 +57,37 @@ def make_resources(qrc_path=None, result_path=None):
         return
 
 
+def resources_are_stale(qrc_path=None, result_path=None):
+    """Whether the generated resources are older than the qrc listing them.
+
+    The generated module is not in the repo and is built on first import.
+    That alone never rebuilds it again, so an icon added to the qrc after
+    someone's first launch simply never appears for them, with nothing
+    said. Comparing the two timestamps is what makes a new resource reach
+    a working copy that already has a generated module.
+    """
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    if not qrc_path:
+        qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
+    if not result_path:
+        result_path = os.path.join(this_dir, 'qresources.py')
+    if not os.path.isfile(result_path):
+        return True
+    if not os.path.isfile(qrc_path):
+        return False
+    return os.path.getmtime(qrc_path) > os.path.getmtime(result_path)
+
+
+if resources_are_stale():
+    try:
+        make_resources()
+    except Exception:
+        # Worth going on without: the resources that are already built
+        # still work, and only whatever was added since is missing. Losing
+        # an icon is better than refusing to open the editor.
+        logger.warning('Could not rebuild the resources, so anything added '
+                       'to the qrc since they were last built will be '
+                       'missing', exc_info=True)
 try:
     from nxt_editor import qresources
 except ImportError:
