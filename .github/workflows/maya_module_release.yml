@@ -1,7 +1,7 @@
 # Build nxt and nxt_editor into per-host packages and publish them.
 #
 # Upstream's release.yml publishes to PyPI, which is the right shape for a
-# python package and the wrong one for Maya: an artist needs a folder with a
+# python package and the wrong one for a DCC: an artist needs a folder with a
 # .mod file in it, not a pip install. This produces that instead.
 #
 # The assembly itself is build/make_maya_plugin.nxt, which already knows how to
@@ -10,14 +10,19 @@
 # workflow's job is to give that graph the two source trees and to publish what
 # it produces.
 #
-# Runs against OUR forks rather than nxt-dev's, so a change we make to either
-# is in the module we ship.
+# nxt comes from the released rez package rather than from a checkout of the
+# other repository. That is what removes the need for a secret: GITHUB_TOKEN
+# only reaches the repository a workflow runs in, so reading squarebit-studios/
+# nxt, which is private, used to need a personal token that somebody owns and
+# has to rotate. Taking it from rez needs nothing, and packages what was
+# actually released rather than whatever is at the tip of that repository's
+# release branch.
 name: Host packages
 
-# Runs on the version tag, not on the push to release, so the archive
-# lands on the tag the rez release already made rather than needing a
-# second one of its own. Waiting for the tag also keeps this out of a race
-# with the workflow that creates it.
+# Runs on the version tag, not on the push to release, so the archive lands on
+# the tag the rez release already made rather than needing a second one of its
+# own. Waiting for the tag also keeps this out of a race with the workflow that
+# creates it, and means nxt_core has been released by the time this resolves.
 on:
   push:
     tags: ['v*']
@@ -26,9 +31,22 @@ on:
 jobs:
   build:
     # Pinned to this fork. Upstream releases through PyPI and should not start
-    # publishing Maya modules because a fork added a workflow.
+    # publishing host packages because a fork added a workflow.
     if: github.repository == 'squarebit-studios/nxt_editor'
-    runs-on: ubuntu-latest
+    # macOS only, the same as the tests: the Windows runner is not set up to
+    # resolve these yet. A zip does not care which one builds it.
+    runs-on: [self-hosted, macOS]
+
+    # Publishing the release uses the built in token, which is read only by
+    # default in this org. This is the whole of what it needs; it is scoped to
+    # this repository and there is nothing to set up.
+    permissions:
+      contents: write
+
+    defaults:
+      run:
+        # A login shell, so rez is on PATH. Same as the org's other workflows.
+        shell: bash -leo pipefail {0}
 
     steps:
       - name: Checkout nxt_editor
@@ -36,120 +54,102 @@ jobs:
         with:
           path: nxt_editor
 
-      # The packaging graph expects nxt to sit BESIDE nxt_editor - it reaches
-      # for ../nxt/nxt - which actions/checkout cannot do, since it refuses to
-      # write outside the workspace. Cloning by hand can.
-      # squarebit-studios/nxt is private, and GITHUB_TOKEN is scoped to this
-      # repository only, so a token that can read it has to be provided. Said
-      # plainly here because the alternative is an opaque git auth failure that
-      # reads like a network problem.
-      - name: Check for a token that can read nxt
+      # The packaging graph reaches for ../nxt/nxt, beside the repository.
+      # This puts the released package there. rez is asked where nxt is rather
+      # than a path being guessed, so it keeps working wherever the packages
+      # live.
+      - name: Put the released nxt beside it
         run: |
-          if [ -z "${{ secrets.GH_PAT }}" ]; then
-            echo "::error::GH_PAT is not set on this repository. It needs a token with read access to squarebit-studios/nxt, which is private."
+          NXT_DIR=$(rez-env nxt_core -- python -c \
+            "import os, nxt; print(os.path.dirname(os.path.abspath(nxt.__file__)))")
+          echo "released nxt: $NXT_DIR"
+          rm -rf nxt && mkdir -p nxt
+          cp -R "$NXT_DIR" nxt/nxt
+          rez-env nxt_core -- python -c \
+            "import json; d=json.load(open('nxt/nxt/version.json'))['API']; \
+             print('packaging nxt_core %s.%s.%s' % (d['MAJOR'], d['MINOR'], d['PATCH']))"
+
+      - name: Read the version, and check the tag agrees
+        id: version
+        working-directory: nxt_editor
+        run: |
+          VERSION=$(python3 -c \
+            "import json; d=json.load(open('nxt_editor/version.json'))['EDITOR']; \
+             print('%s.%s.%s' % (d['MAJOR'], d['MINOR'], d['PATCH']))")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$VERSION" != "$TAG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version.json ($VERSION). Refusing to publish a package that says one thing and hangs off a tag saying another."
             exit 1
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building host packages at $VERSION"
 
-      - name: Checkout nxt beside it
-        run: |
-          git clone --depth 1 --branch release \
-            "https://x-access-token:${{ secrets.GH_PAT }}@github.com/squarebit-studios/nxt.git" \
-            nxt
-
-      - name: Install Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: Install nxt
-        run: |
-          python -m pip install --upgrade pip
-          pip install ./nxt
-          pip install ./nxt_editor
-
-      # src=local uses the checkouts above instead of cloning from nxt-dev over
-      # SSH, which is what the graph does by default and which has no key here.
       - name: Build the Maya module
         working-directory: nxt_editor
         run: |
-          python -m nxt.cli -vv exec build/make_maya_plugin.nxt \
+          rez-env nxt_core -- python -m nxt.cli -vv exec build/make_maya_plugin.nxt \
             -s /make_module_folder \
             -p /.src local
 
       - name: Build the Unreal plugin
         working-directory: nxt_editor
         run: |
-          python -m nxt.cli -vv exec build/make_unreal_plugin.nxt \
+          rez-env nxt_core -- python -m nxt.cli -vv exec build/make_unreal_plugin.nxt \
             -s /make_plugin
 
-      # Blender has an integration but no packaging graph, so it is assembled
-      # here: the addon plus both packages beside it, which is all a Blender
-      # addon folder is. Kept in the workflow rather than invented as a graph,
-      # so if a real one is written upstream this step simply goes away.
       - name: Build the Blender addon
         working-directory: nxt_editor
         run: |
-          set -e
           ADDON=build/nxt_blender
           rm -rf "$ADDON" && mkdir -p "$ADDON"
           cp nxt_editor/integration/blender/nxt_blender.py "$ADDON/__init__.py"
           cp nxt_editor/integration/blender/README.md "$ADDON/" || true
           cp -r nxt_editor "$ADDON/nxt_editor"
           cp -r ../nxt/nxt "$ADDON/nxt"
-          rm -rf "$ADDON"/*/__pycache__ "$ADDON"/*/*/__pycache__ || true
+          find "$ADDON" \( -name '__pycache__' -o -name '.mypy_cache' \) \
+            -prune -exec rm -rf {} + || true
           echo "blender addon contents:" && ls "$ADDON"
 
-      - name: Read the version
-        id: version
+      - name: Package them together
         working-directory: nxt_editor
         run: |
-          VERSION=$(python -c "from nxt_editor.integration import plugin_version; print(plugin_version())")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building host packages at $VERSION"
-
-      # Fails loudly rather than publishing an empty archive: a graph that runs
-      # green but writes nothing is the failure worth catching here.
-      - name: Check the Maya module was built
-        working-directory: nxt_editor
-        run: |
-          test -f build/nxt_maya/nxt.mod || { echo "no nxt.mod in build/nxt_maya"; exit 1; }
-          test -d build/nxt_maya/scripts/nxt || { echo "nxt core missing"; exit 1; }
-          test -d build/nxt_maya/scripts/nxt_editor || { echo "nxt_editor missing"; exit 1; }
-          echo "module contents:"
-          ls build/nxt_maya
-
-      # One archive per host, named so the store can tell them apart: the
-      # deploy picks each out of the release by matching the host in the name.
-      # One archive for every host. They share nxt and the editor - about
-      # 76 MB of identical bytes - so three separate downloads would ship that
-      # three times to someone installing one of them. The guide covers which
-      # folder to use where.
-      - name: Zip them together
-        working-directory: nxt_editor/build
-        run: |
-          set -e
           V="${{ steps.version.outputs.version }}"
-          STAGE="nxt_$V"
+          STAGE="build/nxt_$V"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
           for host in maya unreal blender; do
-            if [ -d "nxt_$host" ]; then
-              mv "nxt_$host" "$STAGE/$host"
+            if [ -d "build/nxt_$host" ]; then
+              mv "build/nxt_$host" "$STAGE/$host"
               echo "included $host"
             else
-              echo "no nxt_$host built"
+              echo "::warning::no nxt_$host was built"
             fi
           done
-          zip -qr "nxt_${V}.zip" "$STAGE"
+          # Every host, or it is not the archive it claims to be.
+          for host in maya unreal blender; do
+            if [ ! -d "$STAGE/$host" ]; then
+              echo "::error::$host is missing from the archive"
+              exit 1
+            fi
+          done
+          # The Maya package fetches Qt.py while it builds. A fetch that
+          # quietly returned something else once shipped a module fourteen
+          # bytes long, so it is worth a look before this goes out.
+          QT="$STAGE/maya/scripts/Qt/__init__.py"
+          if [ ! -s "$QT" ] || [ "$(wc -c < "$QT")" -lt 10000 ]; then
+            echo "::error::$QT is missing or too small to be Qt.py"
+            exit 1
+          fi
+          (cd build && zip -qr "nxt_$V.zip" "nxt_$V")
           echo "packaged nxt_${V}.zip"
 
-      - name: Publish the release
+      - name: Publish onto the version tag
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: nxt ${{ steps.version.outputs.version }}
           files: nxt_editor/build/nxt_${{ steps.version.outputs.version }}.zip
-          # Adding to whatever the release on this tag already says
-          # rather than replacing it.
+          # Adding to whatever the release on this tag already says rather
+          # than replacing it.
           append_body: true
           body: |
             nxt and nxt_editor for every host, in one archive. Each folder
@@ -160,7 +160,7 @@ jobs:
             - **unreal/** - drop it into your project's `Plugins` folder.
             - **blender/** - install it as an addon.
 
-            Built from squarebit-studios/nxt@release and
-            squarebit-studios/nxt_editor@release.
+            Built from squarebit-studios/nxt_editor at this tag, with the
+            nxt_core that rez resolves for it.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
