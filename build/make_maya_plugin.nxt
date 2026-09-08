@@ -130,18 +130,17 @@
         },
         "/make_module_folder/make_resources": {
             "code": [
-                "import subprocess",
-                "result_path = '${../copy_source.source_folder}/ui/resources.py'",
-                "result_pyc = result_path + 'c'",
-                "qrc_path = '${../copy_source.source_folder}/ui/resources/resources.qrc'",
-                "if os.path.isfile(result_path):",
-                "    os.remove(result_path)",
-                "    print('removed old {}'.format(result_path))",
-                "if os.path.isfile(result_pyc):",
-                "    os.remove(result_pyc)",
-                "    print('removed old {}'.format(result_pyc))",
-                "print('generating nxt resources from {} to {}'.format(qrc_path, result_path))",
-                "subprocess.call(['pyside2-rcc', qrc_path, '-o', result_path])"
+                "# Nothing to do. Left in place rather than deleted so the execution order",
+                "# around it is untouched.",
+                "#",
+                "# This regenerated ui/resources.py from a .qrc with pyside2-rcc. Both ends",
+                "# of that are gone: the resources are compiled into the committed",
+                "# qresources.py now, nothing imports ui.resources, and the attribute it",
+                "# read - copy_source.source_folder - does not exist on that node, so the",
+                "# path resolved to '/ui/resources/resources.qrc' and the step failed on",
+                "# every build. It also made pyside2-rcc a build dependency for a file the",
+                "# module does not contain.",
+                "print('resources are compiled into qresources.py; nothing to generate')"
             ]
         },
         "/make_module_folder/populate_mod_template": {
@@ -162,19 +161,32 @@
         },
         "/make_module_folder/qt_py": {
             "code": [
-                "import requests",
+                "# Qt.py, shipped with the module rather than fetched while building it.",
+                "#",
+                "# This used to download it from mottosso/Qt.py@master. That branch no",
+                "# longer exists, so the request answered 404 and the fourteen bytes",
+                "# '404: Not Found' were written out as Qt/__init__.py - a SyntaxError the",
+                "# moment anything imports Qt, which took the host's other tools down with",
+                "# it rather than failing on its own.",
+                "#",
+                "# A build should not depend on somebody else's default branch name. The",
+                "# copy in build/vendor is a released version and is what ships.",
+                "#",
+                "# Shaped as a package rather than a module so it stays out of Maya's",
+                "# plugin list, which is what the original was doing too.",
+                "import shutil",
                 "",
-                "result = requests.get(\"https://raw.githubusercontent.com/mottosso/Qt.py/master/Qt.py\")",
+                "source = '${path::vendor/Qt.py}'",
+                "target = '${mod_folder}/scripts/Qt/__init__.py'",
                 "",
-                "# Making qt.py into a differently shaped module so it doesn't display in plugin list.",
-                "os.makedirs('${mod_folder}/scripts/Qt')",
+                "os.makedirs(os.path.dirname(target), exist_ok=True)",
+                "shutil.copyfile(source, target)",
                 "",
-                "with open('${mod_folder}/scripts/Qt/__init__.py', 'w+') as fp:",
-                "    if isinstance(result.content, str):",
-                "        fp.write(result.content)",
-                "    else:",
-                "        fp.write(result.content.decode())",
-                ""
+                "# Cheap, and it is exactly the check whose absence shipped a broken",
+                "# package: whatever lands here has to at least be Python.",
+                "import py_compile",
+                "py_compile.compile(target, doraise=True)",
+                "print('vendored Qt.py ({} bytes)'.format(os.path.getsize(target)))"
             ]
         }
     }
