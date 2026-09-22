@@ -1348,7 +1348,25 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.setTextCursor(cursor)
         self.set_completion_shortcuts(True)
 
+    # Keys that belong to the completion popup while it is up. Return and
+    # Tab take what is highlighted, Escape and Shift+Tab put the list
+    # away. See keyPressEvent for why they have to be handed over.
+    COMPLETION_KEYS = (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter,
+                       QtCore.Qt.Key_Tab, QtCore.Qt.Key_Backtab,
+                       QtCore.Qt.Key_Escape)
+
     def keyPressEvent(self, event):
+        if (self.completer.popup().isVisible()
+                and event.key() in self.COMPLETION_KEYS):
+            # Qt offers each key to this widget before the completer gets
+            # to act on it, and takes the widget accepting it as the whole
+            # answer. A plain text edit accepts Return, so pressing it on
+            # a highlighted completion put a new line in the code and the
+            # completer never heard about it: the list vanished and what
+            # was chosen was never written. Ignoring it is what says the
+            # popup should have it.
+            event.ignore()
+            return
         super(NxtCodeEditor, self).keyPressEvent(event)
         if self.isReadOnly():
             return
