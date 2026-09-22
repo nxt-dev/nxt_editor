@@ -163,6 +163,10 @@ class LayerTreeView(QtWidgets.QTreeView):
             menu.addAction(self.actions.open_source_action)
             self.actions.remove_layer_action.setData(layer)
             menu.addAction(self.actions.remove_layer_action)
+        # Every layer can be reloaded, the top one included: it is a file
+        # somebody else can have saved since this one was opened.
+        self.actions.reload_source_action.setData(layer)
+        menu.addAction(self.actions.reload_source_action)
         menu.addSeparator()
         self.actions.change_color_action.setData(layer)
         menu.addAction(self.actions.change_color_action)
@@ -237,6 +241,7 @@ class LayerModel(QtCore.QAbstractItemModel):
         self.stage_model.layer_alias_changed.connect(self.on_alias_changed)
         self.stage_model.layer_added.connect(self.reset)
         self.stage_model.layer_removed.connect(self.reset)
+        self.stage_model.layers_restacked.connect(self.reset)
         self.stage_model.selection_changed.connect(self.on_selection_changed)
         self.stage_model.effected_layers.signal.connect(self.on_command)
         # Layers that indices point at, kept alive for as long as the

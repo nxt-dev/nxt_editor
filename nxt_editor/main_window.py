@@ -41,6 +41,7 @@ from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
     NxtFileDialog,
     NxtWarningDialog,
+    ReloadSourceDialog,
     UnsavedLayersDialogue,
     UnsavedChangesMessage,
 )
@@ -579,12 +580,16 @@ QCheckBox::indicator {
         tab_index = self.open_files_tab_widget.count()
         self.open_files[model.uid] = {"stage": stage, "model": model, "view": view}
         self.open_files_tab_widget.addTab(view, stage._name)
+        # These have to be hooked up whether or not this tab is the one
+        # being shown. A file opened during startup is not shown, and
+        # used to end up with a model that never told the window its
+        # colors had changed, for as long as the session lasted.
+        model.layer_color_changed.connect(self.update_target_color)
+        model.target_layer_changed.connect(self.update_target_color)
+        model.comp_layer_changed.connect(self.update_target_color)
         if update:
             self.open_files_tab_widget.setCurrentIndex(tab_index)
             self.layer_manager.set_stage_model(model)
-            model.layer_color_changed.connect(self.update_target_color)
-            model.target_layer_changed.connect(self.update_target_color)
-            model.comp_layer_changed.connect(self.update_target_color)
             self.update_target_color()
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
@@ -661,6 +666,27 @@ QCheckBox::indicator {
         dialog = ReferenceEditor(self.model, layer_path=layer_path,
                                  parent=self)
         return bool(dialog.exec_())
+
+    def reload_layer_source(self, layer=None):
+        """Re-read a layer, and what it references, from disk.
+
+        :param layer: layer to reload, defaults to the one being targeted
+        :return: whether anything was reloaded
+        :rtype: bool
+        """
+        if not self.model:
+            return False
+        layer = layer or self.model.target_layer
+        if layer is None:
+            return False
+        layers = ReloadSourceDialog.get_layers(self.model, layer, parent=self)
+        if not layers:
+            return False
+        self.set_waiting_cursor(True)
+        try:
+            return self.model.reload_layers([l.real_path for l in layers])
+        finally:
+            self.set_waiting_cursor(False)
 
     def save_layer(self, layer=None):
         if not layer:
@@ -820,6 +846,15 @@ QCheckBox::indicator {
         self.last_focused_start = 0
         if uid in self.open_files.keys():
             model = self.open_files[uid]["model"]
+            # A graph opened into a background tab has not been composited
+            # or drawn yet. Selecting the tab is what asks for that, and
+            # it only ever happens once per graph: the dock widgets below
+            # are handed a graph that is ready to be described.
+            self.set_waiting_cursor(True)
+            try:
+                view.ensure_drawn()
+            finally:
+                self.set_waiting_cursor(False)
             layer_path = model.get_layer_path(model.top_layer)
             title = model.get_layer_alias(layer_path)
             self.open_files_tab_widget.setTabText(tab_index, title)
@@ -887,6 +922,8 @@ QCheckBox::indicator {
         self.view_actions.implicit_action.blockSignals(False)
 
     def update_target_color(self):
+        if not self.model:
+            return
         disp_layer = self.model.display_layer
         color = self.model.get_layer_color(disp_layer)
 
@@ -1217,6 +1254,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.file_menu.addMenu(self.load_recent_menu)
         self.file_menu.addAction(self.layer_actions.save_layer_action)
         self.file_menu.addAction(self.layer_actions.save_layer_as_action)
+        # Beside saving, because it is the other direction of the same
+        # thing: what is on disk and what is in memory, and which wins.
+        self.file_menu.addAction(self.layer_actions.reload_source_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.layer_actions.save_all_layers_action)
         self.file_menu.addSeparator()
