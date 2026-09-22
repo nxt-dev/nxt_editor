@@ -532,6 +532,23 @@ class LayerActions(NxtActionContainer):
             clear_action_data(self.actions())
             self.main_window.open_source(layer)
         self.open_source_action.triggered.connect(open_source)
+        # Reload source
+        self.reload_source_action = NxtAction(text='Reload Source...',
+                                              parent=self)
+        self.reload_source_action.setAutoRepeat(False)
+        self.reload_source_action.setData(None)
+        self.reload_source_action.setToolTip('Re-read this layer and what '
+                                             'it references from disk')
+        self.reload_source_action.setWhatsThis(
+            'Re-read a layer, and as much of what it references as you '
+            'choose, from disk, and composite the graph again. Anything '
+            'unsaved in a reloaded layer is lost, and it can be undone.')
+
+        def reload_source():
+            layer = self.reload_source_action.data()
+            clear_action_data(self.actions())
+            self.main_window.reload_layer_source(layer)
+        self.reload_source_action.triggered.connect(reload_source)
         # Change color
         self.change_color_action = NxtAction(text='Change Color',
                                              parent=self)
@@ -694,6 +711,7 @@ class LayerActions(NxtActionContainer):
                                      self.save_layer_as_action,
                                      self.save_all_layers_action,
                                      self.open_source_action,
+                                     self.reload_source_action,
                                      self.mute_layer_action,
                                      self.solo_layer_action,
                                      self.change_color_action,

@@ -41,6 +41,7 @@ from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
     NxtFileDialog,
     NxtWarningDialog,
+    ReloadSourceDialog,
     UnsavedLayersDialogue,
     UnsavedChangesMessage,
 )
@@ -666,6 +667,27 @@ QCheckBox::indicator {
                                  parent=self)
         return bool(dialog.exec_())
 
+    def reload_layer_source(self, layer=None):
+        """Re-read a layer, and what it references, from disk.
+
+        :param layer: layer to reload, defaults to the one being targeted
+        :return: whether anything was reloaded
+        :rtype: bool
+        """
+        if not self.model:
+            return False
+        layer = layer or self.model.target_layer
+        if layer is None:
+            return False
+        layers = ReloadSourceDialog.get_layers(self.model, layer, parent=self)
+        if not layers:
+            return False
+        self.set_waiting_cursor(True)
+        try:
+            return self.model.reload_layers([l.real_path for l in layers])
+        finally:
+            self.set_waiting_cursor(False)
+
     def save_layer(self, layer=None):
         if not layer:
             layer = self.model.target_layer
@@ -1232,6 +1254,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.file_menu.addMenu(self.load_recent_menu)
         self.file_menu.addAction(self.layer_actions.save_layer_action)
         self.file_menu.addAction(self.layer_actions.save_layer_as_action)
+        # Beside saving, because it is the other direction of the same
+        # thing: what is on disk and what is in memory, and which wins.
+        self.file_menu.addAction(self.layer_actions.reload_source_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.layer_actions.save_all_layers_action)
         self.file_menu.addSeparator()
