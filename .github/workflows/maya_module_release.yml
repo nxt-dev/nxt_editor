@@ -131,9 +131,10 @@ jobs:
               exit 1
             fi
           done
-          # The Maya package fetches Qt.py while it builds. A fetch that
-          # quietly returned something else once shipped a module fourteen
-          # bytes long, so it is worth a look before this goes out.
+          # The Maya package ships a vendored Qt.py. It used to fetch one,
+          # and a fetch that quietly returned something else shipped a
+          # module fourteen bytes long, so whatever landed there is still
+          # worth a look before this goes out.
           QT="$STAGE/maya/scripts/Qt/__init__.py"
           if [ ! -s "$QT" ] || [ "$(wc -c < "$QT")" -lt 10000 ]; then
             echo "::error::$QT is missing or too small to be Qt.py"
