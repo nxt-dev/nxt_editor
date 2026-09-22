@@ -1266,18 +1266,38 @@ class StageModel(QtCore.QObject):
         return self.copy_nodes(node_paths, cut=True, layer=layer)
 
     def paste_nodes(self, pos=None, parent_path=None, layer=None):
+        """Paste whatever nodes are on the clipboard into the graph.
+
+        A paste is one edit however many nodes it brought in, so it goes on
+        the undo stack as one thing. Pasting five nodes and changing your
+        mind used to take five undos, and each one of the first four left
+        the graph in a state nobody had ever asked for.
+
+        :return: paths of the nodes that were pasted
+        :rtype: list
+        """
         node_load_data = []
         try:
             node_load_data = clean_json.load(json.loads(self.clipboard.text(),
                                                         object_hook=clean_json._byteify))
         except ValueError:
             pass
-
+        if not node_load_data:
+            return []
         pos = pos or [0.0, 0.0]
-        for node_data in node_load_data:
-            node_path, data = list(node_data.items())[0]
-            name = nxt_path.node_name_from_node_path(node_path)
-            if node_path and name:
+        pasted = []
+        # A single node is already a single command; wrapping it would only
+        # bury the name of what was pasted under a macro.
+        as_macro = len(node_load_data) > 1
+        if as_macro:
+            msg = 'Paste {} nodes'.format(len(node_load_data))
+            self.undo_stack.beginMacro(msg)
+        try:
+            for node_data in node_load_data:
+                node_path, data = list(node_data.items())[0]
+                name = nxt_path.node_name_from_node_path(node_path)
+                if not (node_path and name):
+                    continue
                 implied_pp = nxt_path.get_parent_path(node_path)
                 root = nxt_path.get_root_path(node_path)
                 new_root = root + '_pasted'
@@ -1292,12 +1312,21 @@ class StageModel(QtCore.QObject):
                                               data=data,
                                               parent_path=pp,
                                               pos=pos, layer=layer)
-                if new_node_path:
-                    self._set_node_pos(new_node_path, pos, layer=layer)
-                    pos = [pos[0] + 20, pos[1] + 20]
-
-                    self.update_comp_layer()
-                    self.node_added.emit(new_node_path)
+                if not new_node_path:
+                    continue
+                self._set_node_pos(new_node_path, pos, layer=layer)
+                pos = [pos[0] + 20, pos[1] + 20]
+                pasted += [new_node_path]
+        finally:
+            if as_macro:
+                self.undo_stack.endMacro()
+        if not pasted:
+            return []
+        self.update_comp_layer()
+        for new_node_path in pasted:
+            self.node_added.emit(new_node_path)
+        self.selection = pasted
+        return pasted
 
     def get_node_attr_names(self, node_path, layer=None):
         layer = layer or self.target_layer
