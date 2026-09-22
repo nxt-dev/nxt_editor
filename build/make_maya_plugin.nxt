@@ -91,13 +91,28 @@
         },
         "/make_module_folder/clean_up": {
             "code": [
-                "if os.path.isdir('D:/Projects/nxt_editor/build/nxt-src'):",
+                "# Whatever a local checkout picked up that has no business shipping.",
+                "# A build on a build machine never has these; a build on a working",
+                "# machine does, and they went straight into the module.",
+                "junk = ('__pycache__', '.mypy_cache', '.pytest_cache')",
+                "removed = 0",
+                "for root, dirs, files in os.walk('${mod_folder}'):",
+                "    for name in list(dirs):",
+                "        if name in junk:",
+                "            shutil.rmtree(os.path.join(root, name), ignore_errors=True)",
+                "            dirs.remove(name)",
+                "            removed += 1",
+                "print('removed {} cache folder(s) from the module'.format(removed))",
+                "",
+                "# The clone only exists when building from a fetched source. This",
+                "# checked a path on somebody's D: drive, so it never ran anywhere else.",
+                "if os.path.isdir('${src_clone}'):",
                 "    try:",
                 "        shutil.rmtree('${src_clone}')",
-                "    except:",
+                "    except Exception:",
                 "        print('!' * 79)",
-                "        print('Failed to delete soruce clone, do so by hand!')",
-                "        print(' '* 3 + '${src_clone}')"
+                "        print('Failed to delete source clone, do so by hand!')",
+                "        print(' ' * 3 + '${src_clone}')"
             ]
         },
         "/make_module_folder/copy_source": {

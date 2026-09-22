@@ -32,6 +32,27 @@ WIDGET_TYPES = ['window', 'tab', 'panel', 'gridLayout', 'button', 'menuItem',
 RECOMP_PREF = user_dir.USER_PREF.RECOMP_PREF
 
 
+class WindowPage(object):
+    """The workflow tools built for one graph.
+
+    The dock is shared by every tab but what it builds belongs to one
+    graph, so each graph gets a page of its own. A page that goes to the
+    back is hidden rather than thrown away, and remembers where it was
+    scrolled to and which of its tabs were open, so coming back to it is
+    a matter of showing it again.
+    """
+
+    def __init__(self, widget, layout):
+        self.widget = widget
+        self.layout = layout
+        # The comp this page was built from. Anything else means the
+        # graph has moved on and the page has to be built again.
+        self.generation = None
+        self.window_node_path = None
+        self.scroll = 0
+        self.state_data = {}
+
+
 class WidgetBuilder(DockWidgetBase):
 
     WINDOW_TITLE_ATTR = 'window_title'
@@ -55,9 +76,17 @@ class WidgetBuilder(DockWidgetBase):
         self.window_title = None
 
         # state attributes
+        # Points at the page on show; each graph keeps its own, see
+        # WindowPage.
         self.widget_state_data = {}
         self.tab_widgets = []
         self.scroll_pos = 0
+        # One page per graph, keyed by model uid. Building a window means
+        # walking a whole graph looking for widget nodes, which is not
+        # something to do again every time somebody flips between two
+        # tabs, so a page is hidden rather than thrown away.
+        self._pages = {}
+        self._page = None
 
         # main layout
         self.main = QtWidgets.QWidget(parent=self)
@@ -95,11 +124,13 @@ class WidgetBuilder(DockWidgetBase):
         self.scroll_widget = QtWidgets.QWidget(self.window_frame)
         self.scroll_area.setWidget(self.scroll_widget)
 
-        self.scroll_layout = QtWidgets.QVBoxLayout(self.scroll_widget)
-        self.scroll_layout.setContentsMargins(0, 0, 4, 0)
-        self.scroll_layout.setSpacing(4)
-        self.scroll_layout.setAlignment(QtCore.Qt.AlignTop)
-        self.scroll_widget.setLayout(self.scroll_layout)
+        # Holds the pages. A hidden page is left out of the layout, so the
+        # graphs that are not in front take up no room.
+        self.pages_layout = QtWidgets.QVBoxLayout(self.scroll_widget)
+        self.pages_layout.setContentsMargins(0, 0, 0, 0)
+        self.pages_layout.setSpacing(0)
+        self.pages_layout.setAlignment(QtCore.Qt.AlignTop)
+        self.scroll_widget.setLayout(self.pages_layout)
         # Context menu
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.context_menu)
@@ -114,15 +145,93 @@ class WidgetBuilder(DockWidgetBase):
         menu.addAction(self.main_window.execute_actions.wt_recomp_action)
         menu.popup(QtGui.QCursor.pos())
 
-    def show(self):
-        super(WidgetBuilder, self).show()
+    def showEvent(self, event):
+        # Becoming visible is not something this dock is always told
+        # about: a main window showing its docks does not call show() on
+        # them, and neither does a dock tab being clicked. Without this
+        # the workflow tools sat empty from startup until an edit
+        # happened to announce itself.
+        super(WidgetBuilder, self).showEvent(event)
+        self.refresh_window()
+
+    def refresh_window(self):
+        """Put the current graph's window up, building it only if needed."""
+        if not self.stage_model:
+            self.window_frame.hide()
+            return
+        page = self._pages.get(self.stage_model.uid)
+        generation = self.stage_model.comp_generation
+        if page is not None and page.generation == generation:
+            self.show_page(page)
+            return
+        self.tab_widgets = []
         self.update_window()
 
     def set_stage_model(self, stage_model):
+        """Put another graph's workflow tools in front.
+
+        A graph whose page is already built and whose comp has not moved
+        on since gets that page put back up as it was, scroll position
+        and open tabs and all. Only a graph this dock has never shown,
+        or one that has been edited since it last did, is walked again.
+        """
+        self.stash_page()
         super(WidgetBuilder, self).set_stage_model(stage_model)
-        if self.stage_model:
-            self.tab_widgets = []
-            self.update_window()
+        self.forget_closed_models()
+        self.refresh_window()
+
+    def stash_page(self):
+        """Put the page on show away, remembering where it was scrolled."""
+        if self._page is None:
+            return
+        self._page.scroll = self.scroll_area.verticalScrollBar().value()
+        self._page.widget.hide()
+        self._page = None
+
+    def forget_closed_models(self):
+        """Throw away the pages of graphs that are no longer open."""
+        open_uids = set(self.main_window.open_files)
+        for uid in list(self._pages):
+            if uid in open_uids:
+                continue
+            page = self._pages.pop(uid)
+            page.widget.setParent(None)
+            page.widget.deleteLater()
+
+    def show_page(self, page):
+        """Put a built page in front, as it was left.
+
+        :param page: the page to show
+        :type page: WindowPage
+        """
+        self.stash_page()
+        self._page = page
+        self.widget_state_data = page.state_data
+        self.window_node_path = page.window_node_path
+        page.widget.show()
+        self.window_frame.show()
+        self.setWindowTitle(self.get_window_title() or self.default_title)
+        self.scroll_area.verticalScrollBar().setValue(page.scroll)
+
+    def current_page(self):
+        """The page for the graph on show, made if it does not exist yet.
+
+        :rtype: WindowPage
+        """
+        uid = self.stage_model.uid
+        page = self._pages.get(uid)
+        if page is None:
+            widget = QtWidgets.QWidget(self.scroll_widget)
+            layout = QtWidgets.QVBoxLayout(widget)
+            layout.setContentsMargins(0, 0, 4, 0)
+            layout.setSpacing(4)
+            layout.setAlignment(QtCore.Qt.AlignTop)
+            widget.setLayout(layout)
+            widget.hide()
+            self.pages_layout.addWidget(widget)
+            page = WindowPage(widget, layout)
+            self._pages[uid] = page
+        return page
 
     def set_stage_model_connections(self, model, connect):
         self.model_signal_connections = [
@@ -139,6 +248,7 @@ class WidgetBuilder(DockWidgetBase):
     def on_stage_model_destroyed(self):
         super(WidgetBuilder, self).on_stage_model_destroyed()
         self.tab_widgets = []
+        self.stash_page()
         self.window_frame.hide()
 
     def build_widgets(self, node_path, layout):
@@ -280,15 +390,36 @@ class WidgetBuilder(DockWidgetBase):
     def update_window(self, changed_paths=None):
         if self.updating:
             return
+        if not self.stage_model:
+            self.window_frame.hide()
+            return
         if not self.isVisible():
+            # Whatever changed, nobody is looking at it. Mark what was
+            # built for this graph as out of date rather than building it
+            # for nobody, so that the dock coming back builds it again
+            # instead of putting up what the graph used to be.
+            page = self._pages.get(self.stage_model.uid)
+            if page is not None:
+                page.generation = None
             return
 
+        page = self.current_page()
+        self.widget_state_data = page.state_data
         self.window_node_path = self.get_window_node_path()
+        page.window_node_path = self.window_node_path
         if not self.window_node_path:
+            # This graph has no window to show. Mark the page as built
+            # from this comp all the same, so that flipping back to the
+            # tab does not go looking for one all over again.
+            page.generation = self.stage_model.comp_generation
             self.window_frame.hide()
             return
 
         update = False if changed_paths else True
+        if page.generation is None:
+            # This page has never been built, so there is nothing on it
+            # to keep whatever the changed paths say.
+            update = True
         if not isinstance(changed_paths, Iterable):
             changed_paths = []
         for path in changed_paths:
@@ -304,15 +435,30 @@ class WidgetBuilder(DockWidgetBase):
                     update = True
                     break
         if not update:
+            self.show_page(page)
             return
         self.updating = True
+        try:
+            self.rebuild_page(page)
+        finally:
+            # A graph that throws halfway through building its widgets
+            # used to leave this set, and the dock never updated again
+            # for the rest of the session.
+            self.updating = False
+
+    def rebuild_page(self, page):
+        """Throw away a page's widgets and build them from the graph again.
+
+        :param page: the page to build into
+        :type page: WindowPage
+        """
         # window title
         title = self.get_window_title()
         self.setWindowTitle(title or self.default_title)
 
         # remove existing widgets
-        while self.scroll_layout.count():
-            child = self.scroll_layout.itemAt(0)
+        while page.layout.count():
+            child = page.layout.itemAt(0)
             if child.widget():
                 c = child.widget()
                 c.setParent(None)
@@ -320,9 +466,10 @@ class WidgetBuilder(DockWidgetBase):
                 del c
 
         # build widgets
-        self.build_widgets(self.window_node_path, self.scroll_layout)
+        self.build_widgets(self.window_node_path, page.layout)
         self.set_window_style()
-        self.window_frame.show()
+        page.generation = self.stage_model.comp_generation
+        self.show_page(page)
 
         # add context menu
         ContextMenu(stage_model=self.stage_model,
@@ -330,7 +477,6 @@ class WidgetBuilder(DockWidgetBase):
                     widget=self.window_frame,
                     items=None,
                     parent=self)
-        self.updating = False
 
     def set_window_style(self):
         background_color = self.stage_model.get_node_attr_value(
