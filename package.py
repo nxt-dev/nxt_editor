@@ -28,7 +28,7 @@ requires = [
     "python-3.11+<3.14",
     "Qt.py<3",
     "PySide6-6+<6.12",
-    "nxt_core-0.20+<1.0",
+    "nxt_core-0.21+<1.0",
 ]
 
 private_build_requires = []
