@@ -166,12 +166,24 @@
                 }
             },
             "code": [
-                "from nxt_editor.integration import plugin_version",
+                "import json",
+                "",
+                "# Read from the file rather than by importing nxt_editor. This graph",
+                "# can run where nxt is but Qt is not, and nxt_editor",
+                "# imports Qt the moment it is touched, so the import threw and took",
+                "# the rest of the build with it: the .mod kept its <VERSION>",
+                "# placeholder and the steps after this never ran.",
+                "version_file = '${../copy_source.editor_script_src}/version.json'",
+                "with open(version_file, 'r') as fp:",
+                "    editor = json.load(fp)['EDITOR']",
+                "version = '{MAJOR}.{MINOR}.{PATCH}'.format(**editor)",
+                "",
                 "with open('${mod_file}', 'r') as fp:",
                 "    content = fp.read()",
-                "content = content.replace('<VERSION>', plugin_version())",
+                "content = content.replace('<VERSION>', version)",
                 "with open('${mod_file}', 'w') as fp:",
-                "    fp.write(content)"
+                "    fp.write(content)",
+                "print('nxt.mod version set to {}'.format(version))"
             ]
         },
         "/make_module_folder/qt_py": {
