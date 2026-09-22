@@ -144,6 +144,10 @@ jobs:
           echo "packaged nxt_${V}.zip"
 
       - name: Publish onto the version tag
+        # Only when there is a tag to publish onto. Running this by hand
+        # on a branch is how the archive gets checked without a release
+        # being made, and it used to make one named after the branch.
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
