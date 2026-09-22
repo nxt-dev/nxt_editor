@@ -61,6 +61,10 @@ class StageModel(QtCore.QObject):
     layer_lock_changed = QtCore.Signal(str)  # Layer path whose locked changed
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
+    # Which layers are loaded, or the order they stack in, changed.
+    # Order decides whose opinion wins, so a reorder is a change
+    # even though the same layers are loaded.
+    layers_restacked = QtCore.Signal()
     layer_saved = QtCore.Signal(str)  # Layer path that was just saved
     nodes_changed = QtCore.Signal(tuple)
     attrs_changed = QtCore.Signal(tuple)
@@ -649,6 +653,39 @@ class StageModel(QtCore.QObject):
         if not cmd.changed():
             return False
         self.undo_stack.push(cmd)
+        return True
+
+    def get_reference_dependencies(self, layer):
+        """A layer and everything it pulls in, as deep as it goes.
+
+        What a layer contributes to the graph is its own file plus every
+        file it references, so this is the list of files behind it.
+
+        :param layer: layer to start from
+        :return: the layer first, then its references depth first
+        :rtype: list
+        """
+        if layer is None:
+            return []
+        return self.stage.reference_dependencies(layer)
+
+    def reload_layers(self, layer_paths):
+        """Re-read layers from disk and composite the graph again.
+
+        Unsaved work on these layers is thrown away, which is what
+        reloading means; asking about that belongs to whoever offers it.
+        It goes on the undo stack all the same, and undoing puts back
+        what was in memory rather than reading the file a second time.
+
+        :param layer_paths: real paths of the layers to reload
+        :type layer_paths: list
+        :return: whether a reload was asked for
+        :rtype: bool
+        """
+        layer_paths = [p for p in layer_paths if self.lookup_layer(p)]
+        if not layer_paths:
+            return False
+        self.undo_stack.push(ReloadLayers(layer_paths, self))
         return True
 
     def get_layer_colors(self, layer_list):

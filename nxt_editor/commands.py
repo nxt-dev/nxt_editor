@@ -1625,6 +1625,133 @@ class ReferenceLayer(NxtCommand):
         self.setText("Added reference to {}".format(self.real_path))
 
 
+class ReloadLayers(NxtCommand):
+    """Re-read layers from disk, replacing what is in memory.
+
+    Reloading throws away unsaved work on the layers it is given; that is
+    what it is for. What it replaces is kept, so this can be undone: the
+    undo puts back exactly what each layer held, without going near the
+    file, which by then may have changed again.
+
+    A file that has come to reference something else since it was
+    opened brings that with it, so which layers are loaded and the order
+    they stack in can both change here.
+    """
+
+    def __init__(self, layer_paths, model):
+        """
+        :param layer_paths: real paths of the layers to reload
+        :type layer_paths: list
+        """
+        super(ReloadLayers, self).__init__(model)
+        self.model = model
+        self.stage = model.stage
+        self.layer_paths = list(layer_paths)
+        # What the layers held before, filled in by the first redo.
+        self.stash = {}
+        # Which of them were unsaved before, so undoing a reload leaves
+        # them marked the way they were.
+        self.was_unsaved = []
+
+    def _layers(self):
+        """The layers to reload that are still in the stage.
+
+        By file rather than by layer: a file referenced from two places
+        is loaded twice and is two layers in the stack, each holding its
+        own copy of it. Refreshing one and not the other would leave the
+        graph composited from that file as it was and as it is at once.
+        """
+        wanted = set(self.layer_paths)
+        layers = [l for l in self.stage._sub_layers if l.real_path in wanted]
+        for layer_path in wanted:
+            if not any(l.real_path == layer_path for l in layers):
+                logger.warning('Cannot reload "{}", it is no longer '
+                               'loaded'.format(layer_path))
+        return layers
+
+    def _stack(self):
+        """Which layers are loaded, in the order they stack."""
+        return [l.real_path for l in self.stage._sub_layers]
+
+    def _settle(self, reloaded, was_stacked):
+        """Put the model back on its feet after layers have changed.
+
+        Which layers are loaded can have changed, so the layer tree is
+        told to start over before anything else happens: it hands out
+        indices that point straight at layer objects, and a repaint
+        against the old shape reaches for layers that are gone.
+
+        Every node in the reloaded layers is a different object now, so
+        the graph is composited and redrawn whole rather than by parts.
+        Building through the display layer is what keeps a graph being
+        looked at through a reference showing that reference.
+
+        :param reloaded: real paths of the layers that were reloaded
+        :param was_stacked: real paths of the layers that were loaded
+            before, in the order they stacked
+        """
+        is_stacked = self._stack()
+        for real_path in set(was_stacked) - set(is_stacked):
+            self.model.layer_removed.emit(real_path)
+        for real_path in set(is_stacked) - set(was_stacked):
+            self.model.layer_added.emit(real_path)
+        if is_stacked != was_stacked:
+            # Catches the rest: the same layers stacked in a different
+            # order, which changes whose opinion wins and which row
+            # each one is on.
+            self.model.layers_restacked.emit()
+        loaded = self.stage._sub_layers
+        if self.model.target_layer not in loaded:
+            self.model.set_target_layer(LAYERS.TOP)
+        display = self.model.display_layer
+        if display not in loaded:
+            display = self.stage.top_layer
+        self.model.set_display_layer(display)
+        # A file says what a layer is called, what color it is and
+        # whether it is muted or soloed, so any of those can have come
+        # back different and the layer tree is showing the old ones.
+        still_loaded = tuple(p for p in reloaded if p in is_stacked)
+        for layer_path in still_loaded:
+            self.model.layer_alias_changed.emit(layer_path)
+            self.model.layer_color_changed.emit(layer_path)
+        self.model.layer_mute_changed.emit(still_loaded)
+        self.model.layer_solo_changed.emit(still_loaded)
+
+    @processing
+    def redo(self):
+        layers = self._layers()
+        if not layers:
+            self.setText('Reloaded nothing')
+            return
+        was_stacked = self._stack()
+        self.stash = self.stage.reload_layers(layers)
+        reloaded = list(self.stash)
+        self.was_unsaved = [p for p in reloaded
+                            if p in self.model.effected_layers]
+        for layer_path in self.was_unsaved:
+            # What is in memory is what is on disk again, so whatever was
+            # unsaved about it is gone rather than still pending.
+            self.model.effected_layers.remove(layer_path)
+        self._settle(reloaded, was_stacked)
+        if len(self.layer_paths) == 1 and self.layer_paths[0] in reloaded:
+            aliases = self.model.get_layer_alias(self.layer_paths[0])
+        else:
+            aliases = '{} layers'.format(len(self.layer_paths))
+        self.setText('Reloaded {}'.format(aliases))
+
+    @processing
+    def undo(self):
+        if not self.stash:
+            return
+        was_stacked = self._stack()
+        layers = [l for l in self.stage._sub_layers
+                  if l.real_path in self.stash]
+        self.stage.reload_layers(layers, source=self.stash)
+        for layer_path in self.was_unsaved:
+            self.model.effected_layers.add(layer_path)
+        self._settle(list(self.stash), was_stacked)
+
+
 class SetLayerReferences(NxtCommand):
     """Replace the whole list of references a layer holds.
 
