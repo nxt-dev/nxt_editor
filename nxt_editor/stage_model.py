@@ -3123,14 +3123,15 @@ class StageModel(QtCore.QObject):
 
         :param node_paths: list of node paths
         :param rt_layer: CompLayer (must have self.runtime set to True)
-        :param safe_exec: If True the rt layer is validated against the comp
+        :param safe_exec: If True a cached runtime layer that cannot run
+            these nodes is thrown away and built again rather than run
         :return: CompLayer (the runtime layer that ran)
         """
         if not node_paths:
             logger.error("No node paths specified for execution")
             return
         self.about_to_execute.emit(True)
-        self.setup_build(node_paths, rt_layer=rt_layer)
+        self.setup_build(node_paths, rt_layer=rt_layer, safe_exec=safe_exec)
         self.resume_build()
         return rt_layer
 
@@ -3149,11 +3150,16 @@ class StageModel(QtCore.QObject):
             self.process_events()
         if t.raised_exception:
             if isinstance(t.raised_exception, InvalidNodeError):
-                details = ("To resolve this try navigating to "
-                           "'Execute > Clear cache'. \n\n"
-                           "This error is raised when layers"
-                           " are muted or nodes are deleted and then execute "
-                           "is called without clearing the cache.")
+                details = ("A build runs against the graph as it was when "
+                           "the build started. A node that is not there is "
+                           "usually one that was deleted, or one in a layer "
+                           "that was muted, while the build was running."
+                           "\n\n"
+                           "A cache left over from an earlier run is "
+                           "cleared and built again on its own when it "
+                           "does not know every node in the build, so this "
+                           "is not that. 'Execute > Clear cache' is worth "
+                           "trying anyway if the graph looks right.")
                 NxtWarningDialog.show_message(text='NXT attempted to execute '
                                                    'an invalid node!',
                                               info=str(t.raised_exception),
@@ -3234,7 +3240,39 @@ class StageModel(QtCore.QObject):
             return False
         return True
 
-    def setup_build(self, node_paths, rt_layer=None):
+    def runtime_layer_can_run(self, rt_layer, node_paths):
+        """Whether a cached runtime layer still knows these nodes.
+
+        The cache is a snapshot of the graph, taken when it was built and
+        kept on purpose: running a node again in the same interpreter is
+        what makes the workflow buttons quick. A node moved, renamed or
+        deleted since is not in that snapshot, and running against it
+        gets as far as the missing node before giving up.
+
+        :param rt_layer: cached runtime layer, or None
+        :param node_paths: the nodes about to be run
+        :type node_paths: list
+        :return: bool
+        """
+        if rt_layer is None:
+            return False
+        for node_path in node_paths:
+            if rt_layer.lookup(node_path) is None:
+                logger.debug('"{}" is not in the cached graph'
+                             ''.format(node_path))
+                return False
+        return True
+
+    def setup_build(self, node_paths, rt_layer=None, safe_exec=True):
+        """Get ready to run the given nodes.
+
+        :param node_paths: nodes to run, in order
+        :type node_paths: list
+        :param rt_layer: runtime layer to run in, built if not given
+        :param safe_exec: If True a cached runtime layer that cannot run
+            these nodes is thrown away and built again rather than run
+        :type safe_exec: bool
+        """
         # Reset once_sec_timer vars
         self.build_start_time = time.time()
         self.build_paused_time = .0
@@ -3243,6 +3281,17 @@ class StageModel(QtCore.QObject):
         self.current_build_order = node_paths
         self.build_changed.emit(node_paths)
         self.refresh_exec_framing_from_pref()
+        stale_cache = (rt_layer is not None and safe_exec
+                       and not self.runtime_layer_can_run(rt_layer,
+                                                          node_paths))
+        if stale_cache:
+            # Nothing has run yet, so clearing the cache here costs the
+            # person a rebuild. Letting it run would cost them a build
+            # that stops part way through, at whichever node had moved,
+            # with the work before it already done.
+            logger.info('The cache does not know every node in this build, '
+                        'so it has been cleared and built again.')
+            rt_layer = None
         if self.use_cmd_port:
             # TODO: Only run this if we actually have to
             self.update_remote_comp()
