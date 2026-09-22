@@ -64,7 +64,12 @@ class ReloadingSource(unittest.TestCase):
         # closing a window with unsaved layers asks a question nothing
         # here can answer.
         self.model.effected_layers.clear()
+        # close() only hides it; the widget tree is finished with here
+        # rather than left for whatever collects next.
         self.win.close()
+        app.processEvents()
+        self.win.deleteLater()
+        app.processEvents()
         self.win = None
         os.chdir(self.cwd)
         shutil.rmtree(self.tmp, ignore_errors=True)

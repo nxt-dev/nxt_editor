@@ -74,7 +74,12 @@ class SelectingATab(unittest.TestCase):
         app.processEvents()
 
     def tearDown(self):
+        # close() only hides it; the widget tree is finished with here
+        # rather than left for whatever collects next.
         self.win.close()
+        app.processEvents()
+        self.win.deleteLater()
+        app.processEvents()
         self.win = None
         os.chdir(self.cwd)
         shutil.rmtree(self.tmp, ignore_errors=True)
