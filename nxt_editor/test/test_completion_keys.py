@@ -47,6 +47,20 @@ TAKE_IT = (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter, QtCore.Qt.Key_Tab)
 LEAVE_IT = (QtCore.Qt.Key_Escape, QtCore.Qt.Key_Backtab)
 
 
+def close_window(window):
+    """Finish with a window, rather than leaving it to the collector.
+
+    close() only hides it, and dropping the last reference leaves the
+    whole widget tree to be freed at whatever unrelated moment something
+    else collects. A completion popup that outlives its window segfaults
+    when that happens, a long way from the test that made it.
+    """
+    window.close()
+    app.processEvents()
+    window.deleteLater()
+    app.processEvents()
+
+
 def key_event(key):
     return QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier)
 
@@ -94,8 +108,9 @@ class WhatTheEditorDoesWithAKey(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        cls.editor.hide_completions()
         cls.ce.stage_model.effected_layers.clear()
-        cls.win.close()
+        close_window(cls.win)
         cls.win = None
 
     def setUp(self):
@@ -233,8 +248,11 @@ class TakingOneForReal(unittest.TestCase):
         app.processEvents()
 
     def tearDown(self):
+        # The popup is a window of its own. Left up, it outlives the one
+        # it belongs to and is freed later, somewhere else.
+        self.editor.hide_completions()
         self.ce.stage_model.effected_layers.clear()
-        self.win.close()
+        close_window(self.win)
         self.win = None
         restore_prefs(self.saved)
 

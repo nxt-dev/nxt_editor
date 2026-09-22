@@ -195,7 +195,8 @@ class WidgetBuilder(DockWidgetBase):
             if uid in open_uids:
                 continue
             page = self._pages.pop(uid)
-            page.widget.setParent(None)
+            # Asked for, not orphaned first: a parentless widget waiting
+            # to be deleted is a top level window for as long as it waits.
             page.widget.deleteLater()
 
     def show_page(self, page):
