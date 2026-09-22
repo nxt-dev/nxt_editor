@@ -105,7 +105,12 @@ class StageModel(QtCore.QObject):
         self._data_state = DATA_STATE.RESOLVED
         self._implicit_connections = True
         # graph layers
-        self._comp_layer = stage.build_stage()
+        # Compositing is the expensive part of opening a graph, and a graph
+        # sitting in a tab nobody has selected has nobody to show it to. The
+        # comp is built the first time something asks for it instead, see
+        # the comp_layer property.
+        self._comp_layer = None
+        self._comp_generation = 0
         self._target_layer = stage.top_layer
         self._display_layer = stage.top_layer
         # selection
@@ -460,7 +465,34 @@ class StageModel(QtCore.QObject):
 
     @property
     def comp_layer(self):
+        """The composited graph, built the first time it is asked for.
+
+        Opening a file no longer pays for a comp nothing has looked at yet.
+        Whatever needs the graph first -- usually its tab being selected --
+        pays for it, and everything after that gets the same one back until
+        an edit replaces it.
+        """
+        if self._comp_layer is None:
+            self._comp_layer = self.stage.build_stage(
+                from_idx=self._display_layer.layer_idx())
+            self._comp_generation += 1
         return self._comp_layer
+
+    @property
+    def comp_is_built(self):
+        """Whether a comp exists, without building one to find out."""
+        return self._comp_layer is not None
+
+    @property
+    def comp_generation(self):
+        """Counter that ticks every time the comp changes.
+
+        Anything that derives work from the comp can remember this number
+        and tell, without comparing graphs, whether what it cached still
+        stands. Switching back to a tab nobody has touched then costs a
+        comparison rather than a rebuild.
+        """
+        return self._comp_generation
 
     @property
     def display_layer(self):
@@ -488,11 +520,27 @@ class StageModel(QtCore.QObject):
             if self.comp_layer.lookup(node_path):
                 safe_selection += [node_path]
         self.selection = safe_selection
+        self._comp_generation += 1
         self.comp_layer_changed.emit(dirty)
         self.processing.emit(False)
 
     def update_comp_layer(self, rebuild=False, dirty=()):
         self.set_comp_layer(self.comp_layer, rebuild, dirty)
+
+    def announce_comp_changed(self, dirty=()):
+        """Say the comp changed without building a new one.
+
+        The stage keeps the comp's nodes right as it edits them, so there
+        is nothing to rebuild; what is missing is anyone being told. The
+        build view and the workflow tools listen for the comp changing
+        rather than for nodes changing, so without this they carry on
+        describing a graph that has moved on.
+        """
+        if self._comp_layer is None:
+            # Nothing has looked at this graph yet, so there is nothing
+            # showing it that could have gone stale.
+            return
+        self.set_comp_layer(self._comp_layer, rebuild=False, dirty=dirty)
 
     @property
     def target_layer(self):

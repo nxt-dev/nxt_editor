@@ -123,6 +123,10 @@ class StageView(QtWidgets.QGraphicsView):
         self._connection_graphics = []
         self._attr_concerns = {}
         self.prev_build_focus_path = None
+        # A tab nobody has selected has nobody to show a graph to, so the
+        # scene is left empty until the view is first put in front of
+        # somebody. See ensure_drawn.
+        self._drawn = False
 
         # local attributes
         self.show_grid = user_prefs.get(USER_PREF.SHOW_GRID, True)
@@ -147,8 +151,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.frame_items.connect(self.frame_nodes)
         self.model.collapse_changed.connect(self.handle_collapse_changed)
 
-        # initialize the view
-        self.update_view()
+        # The view is drawn when it is first shown, not here: see
+        # ensure_drawn.
 
         # HUD
         self.hud_layout = QtWidgets.QGridLayout(self)
@@ -242,7 +246,44 @@ class StageView(QtWidgets.QGraphicsView):
         if self.model:
             return self.model.implicit_connections
 
+    @property
+    def is_drawn(self):
+        """Whether this view has drawn its graph yet."""
+        return self._drawn
+
+    def ensure_drawn(self):
+        """Draw the graph if this view has never shown it.
+
+        Called when the view is put in front of somebody. Opening a file
+        no longer draws a scene and composites a graph that is sitting in
+        a tab nobody has looked at; the tab being selected pays for that,
+        once. After that the view keeps its scene and the model keeps its
+        comp, so coming back to the tab costs nothing -- anything edited
+        in between was drawn as it happened.
+
+        :return: whether this call did the drawing
+        :rtype: bool
+        """
+        if self._drawn:
+            return False
+        self._drawn = True
+        self.update_view()
+        # The comp this graph has just been drawn from is the first one
+        # anybody has seen of it, and a comp that failed is worth saying
+        # so about here rather than only when the next edit lands.
+        self.failure_check()
+        return True
+
+    def showEvent(self, event):
+        # Selecting a tab shows its view, and so does showing the window
+        # for the first time. Either way this is the moment the graph has
+        # somebody to be drawn for.
+        super(StageView, self).showEvent(event)
+        self.ensure_drawn()
+
     def failure_check(self, *args):
+        if not self._drawn:
+            return
         if self.model.comp_layer.failure and not self.main_window.in_startup:
             info = ('There was a critical error when building the comp.\n'
                     'Please check your output window for more details as to\n'
@@ -256,6 +297,11 @@ class StageView(QtWidgets.QGraphicsView):
         :param dirty: List or Tuple of dirty node paths
         :return: None
         """
+        if not self._drawn:
+            # There is nothing drawn to update, and drawing only the dirty
+            # part now would leave the rest of the graph missing. The whole
+            # graph is drawn when the tab is first selected.
+            return
         start = time.time()
         # The signal layer_color_changed somehow passes its layer to this
         # function. Until we clean up signals this accounts for the wrong
@@ -1165,6 +1211,9 @@ class StageView(QtWidgets.QGraphicsView):
         return None
 
     def on_model_selection_changed(self, new_selection):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         # The map draws selection live, outside its cached node blocks, so
         # it needs its corner repainted. Selection changes otherwise only
         # repaint the nodes involved.
@@ -1201,6 +1250,9 @@ class StageView(QtWidgets.QGraphicsView):
                 logger.error("Cannot find item to select: " + str(path))
 
     def handle_nodes_changed(self, node_paths):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         updated_paths = []
         roots_hit = set()
         new_nodes = []
@@ -1252,6 +1304,9 @@ class StageView(QtWidgets.QGraphicsView):
         :param attr_paths: Tuple of attr paths /node.attr
         :return: None
         """
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         start = time.time()
         attr_map = {}
         for attr_path in attr_paths[:]:
@@ -1281,6 +1336,9 @@ class StageView(QtWidgets.QGraphicsView):
         logger.debug("Time to update attrs: " + update_time + "ms")
 
     def handle_node_move(self, node_path, pos):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         node_item = self.get_node_graphic(node_path)
         if node_item:
             node_item.setPos(pos[0], pos[1])
@@ -1295,6 +1353,9 @@ class StageView(QtWidgets.QGraphicsView):
         self.do_animations = state
 
     def handle_collapse_changed(self, node_paths):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         while self._animating:
             QtWidgets.QApplication.processEvents()
         og_do_anims = self.do_animations

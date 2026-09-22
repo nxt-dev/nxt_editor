@@ -54,6 +54,12 @@ class BuildView(DockWidgetBase):
 
         self.pre_exec_start = ''
         self.in_running_mode = False
+        self.build_model = None
+        # One dock serves every tab, so what it was showing for a graph has
+        # to be kept somewhere while another graph is in front of it.
+        # Keyed by model uid.
+        self._starts_by_model = {}  # uid -> start box text
+        self._order_cache = {}  # uid -> (cache key, execution order)
 
     def make_build_controls(self):
         """Assemble a Layout of build controls including a combo box and
@@ -195,18 +201,41 @@ class BuildView(DockWidgetBase):
     def set_stage_model(self, model):
         """Overload of dock widget base to disconnect previous model before
         changing and connect to new one after.
+
+        The start point somebody chose belongs to their graph, not to this
+        dock, so it is put away when their tab goes to the back and taken
+        out again when it comes forward. Switching tabs used to blank the
+        box, which emptied the build and read as the dock having given up.
         """
+        outgoing = self.stage_model
+        if outgoing is not None:
+            start = self.starts_combo.currentText()
+            self._starts_by_model[outgoing.uid] = start
         super(BuildView, self).set_stage_model(model)
+        self._forget_closed_models()
         if not self.stage_model:
             return
         self.build_model = BuildModel(self.stage_model)
         self.build_table.setModel(self.build_model)
         self.main_widget.setEnabled(True)
-        self.starts_combo.setEditText('')
+        # on_starts_changed keeps whatever is in the box when it still means
+        # something, so putting this back first is what restores it.
+        remembered = self._starts_by_model.get(self.stage_model.uid, '')
+        self.starts_combo.blockSignals(True)
+        self.starts_combo.setEditText(remembered)
+        self.starts_combo.blockSignals(False)
         self.on_starts_changed(self.stage_model.get_start_nodes())
         self.on_executing_changed(self.stage_model.executing)
         self.on_model_focus_changed(self.stage_model.node_focus)
         return
+
+    def _forget_closed_models(self):
+        """Drop what was remembered for graphs that are no longer open."""
+        open_uids = set(self.main_window.open_files)
+        for remembered in (self._starts_by_model, self._order_cache):
+            for uid in list(remembered):
+                if uid not in open_uids:
+                    remembered.pop(uid)
 
     def set_stage_model_connections(self, model, connect):
         self.model_signal_connections = [
@@ -253,6 +282,7 @@ class BuildView(DockWidgetBase):
 
     def on_stage_model_destroyed(self):
         super(BuildView, self).on_stage_model_destroyed()
+        self.build_model = None
         self.build_table.setModel(None)
         self.main_widget.setEnabled(False)
 
@@ -269,6 +299,11 @@ class BuildView(DockWidgetBase):
         """Dump current build table is and rebuild it based on start combo.
         """
         # t0 = time.time()
+        if not self.stage_model or not self.build_model:
+            # The combo box goes on emitting while the dock is being handed
+            # from one graph to the next, and between the two there is no
+            # graph to describe.
+            return
         current_start = self.starts_combo.currentText()
         self.build_model.nodes = self.get_start_exec_order(current_start)
         # t1 = time.time()
@@ -277,10 +312,38 @@ class BuildView(DockWidgetBase):
     def get_start_exec_order(self, start):
         """Returns the execute order from given start.
 
+        Walking a big graph for its execution order is not cheap, and the
+        answer only changes when the graph or the selection does. What was
+        worked out last time is kept per graph, so that coming back to a
+        tab nobody has touched reads the answer off a shelf rather than
+        walking the graph again.
+
         :param start: [description]
         :type start: [type]
         :return: [description]
         :rtype: [type]
+        """
+        if start == STARTS.RUNNING:
+            # A running build moves under us, so there is nothing to keep.
+            return self.stage_model.current_build_order
+        key = (start, self.stage_model.comp_generation,
+               tuple(self.stage_model.get_selected_nodes()))
+        cached = self._order_cache.get(self.stage_model.uid)
+        if cached and cached[0] == key:
+            # A copy, so that what is kept stays the answer whatever the
+            # table does with the list it is given.
+            return list(cached[1])
+        exec_order = list(self._walk_start_exec_order(start) or [])
+        self._order_cache[self.stage_model.uid] = (key, exec_order)
+        return list(exec_order)
+
+    def _walk_start_exec_order(self, start):
+        """Work out the execution order from a start box value.
+
+        :param start: text from the start box
+        :type start: str
+        :return: node paths in execution order
+        :rtype: list
         """
         # NOTE Duplicates some code from stage model, because it can't answer
         # the questions I needed to know. Implementations should merge someday
@@ -288,8 +351,6 @@ class BuildView(DockWidgetBase):
             return []
         if start == nxt_path.WORLD:
             return []
-        if start == STARTS.RUNNING:
-            return self.stage_model.current_build_order
         if start not in DEFAULT_STARTS:
             # Must be an attempt at a literal node path
             if not self.stage_model.node_exists(start):
@@ -324,14 +385,37 @@ class BuildView(DockWidgetBase):
         if real_starts:
             self.starts_combo.addItems(real_starts)
         self.starts_combo.addItems(DEFAULT_STARTS)
-        # Sometimes keep previous start point.
-        if self.starts_combo.count() == len(DEFAULT_STARTS):
-            self.starts_combo.setEditText('')
-        elif prev_value != '':
+        # Keep what was in the box when it still describes a build, so that
+        # a start point being added -- or a tab coming back to the front --
+        # does not empty out a build somebody was reading. A typed node
+        # path counts, even though the graph has no start points at all.
+        if self.start_is_usable(prev_value, real_starts):
             self.starts_combo.setEditText(prev_value)
-        else:
+        elif real_starts:
             self.starts_combo.setEditText(real_starts[0])
+        else:
+            self.starts_combo.setEditText('')
         self.refresh_build_table()
+
+    def start_is_usable(self, start, real_starts):
+        """Whether a start box value still names a build we can show.
+
+        :param start: text from the start box
+        :type start: str
+        :param real_starts: start point paths the graph has
+        :return: bool
+        """
+        if not start:
+            return False
+        if start in DEFAULT_STARTS or start in real_starts:
+            return True
+        if start == STARTS.RUNNING:
+            # The box says this while a build is running, and the build
+            # running is not something to be talked out of.
+            return True
+        if not self.stage_model:
+            return False
+        return self.stage_model.node_exists(start)
 
     def on_model_focus_changed(self, new_focus):
         """When startpoint is concnered with selection, refresh table for
