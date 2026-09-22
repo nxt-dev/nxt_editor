@@ -180,6 +180,7 @@ class AddNode(NxtCommand):
         dirty_nodes += [self.node_path]
         self.undo_effected_layer(self.layer_path)
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
+        self.model.announce_comp_changed()
         self.model.selection = self.prev_selection
 
     @processing
@@ -196,6 +197,7 @@ class AddNode(NxtCommand):
         self.model._set_node_pos(node_path=self.node_path, pos=self.pos,
                                  layer=layer)
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
+        self.model.announce_comp_changed()
         self.model.selection = [self.node_path]
         self.redo_effected_layer(layer.real_path)
         self.setText('Added node: {}'.format(self.node_path))
@@ -269,6 +271,7 @@ class DeleteNode(NxtCommand):
             self.model.update_comp_layer(rebuild=True)
         else:
             self.model.nodes_changed.emit(dirty_set)
+            self.model.announce_comp_changed()
 
     @processing
     def redo(self):
@@ -334,7 +337,7 @@ class DeleteNode(NxtCommand):
         # build view listens for the comp layer changing rather than for
         # nodes changing. Without this the deleted node stayed in the build,
         # looking like a ghost of something that no longer exists.
-        self.model.update_comp_layer(rebuild=False)
+        self.model.announce_comp_changed()
         self.redo_effected_layer(layer.real_path)
         self.setText("Delete node: {}".format(self.node_path))
 
