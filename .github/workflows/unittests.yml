@@ -28,7 +28,10 @@ jobs:
       # what the package allows are covered. 3.12 is allowed but no host
       # uses it, and there is no macOS python-3.12 rez package to test on.
       python_versions: '[ "3.11", "3.13" ]'
-      # macOS only. On the windows runner rez-env exits immediately with no
-      # resolve output, and reports its package cache directory missing, so
-      # that machine is not set up to resolve these yet.
+      # macOS only, by choice. The windows runner resolves fine (the missing
+      # package cache it reports is only a warning), but its rez repository
+      # is not the one releases go to: the mac runner releases into a
+      # Dropbox rez folder that had stopped syncing to the windows machines,
+      # which then lacked nxt_core 0.19+ and the python 3.13 test packages.
+      # Once that folder syncs, adding the windows runner here should work.
       runners: '[ [ "self-hosted", "macOS" ] ]'
