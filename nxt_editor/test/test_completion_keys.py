@@ -23,7 +23,7 @@ import sys
 import unittest
 
 # External
-from Qt import QtCore, QtGui, QtTest, QtWidgets
+from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from nxt_editor import user_dir
@@ -63,6 +63,19 @@ def close_window(window):
 
 def key_event(key):
     return QtGui.QKeyEvent(QtCore.QEvent.KeyPress, key, QtCore.Qt.NoModifier)
+
+
+def key_click(widget, key):
+    """Press and release a key on a widget, the way QTest.keyClick does.
+
+    QtTest is not used because Maya's PySide6 does not ship it, and these
+    tests are meant to run under a host's python as well as a plain one.
+    Sending the events goes through the completer's event filter on the
+    popup exactly as typing does.
+    """
+    for kind in (QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease):
+        QtWidgets.QApplication.sendEvent(
+            widget, QtGui.QKeyEvent(kind, key, QtCore.Qt.NoModifier))
 
 
 def restore_prefs(saved):
@@ -260,11 +273,11 @@ class TakingOneForReal(unittest.TestCase):
         popup = self.editor.completer.popup()
         model = self.editor.completer.completionModel()
         self.assertTrue(popup.isVisible(), 'nothing to drive')
-        QtTest.QTest.keyClick(popup, QtCore.Qt.Key_Down)
+        key_click(popup, QtCore.Qt.Key_Down)
         app.processEvents()
         chosen = model.data(popup.currentIndex())
         self.assertTrue(chosen, 'nothing was highlighted to take')
-        QtTest.QTest.keyClick(popup, QtCore.Qt.Key_Return)
+        key_click(popup, QtCore.Qt.Key_Return)
         app.processEvents()
         last_line = self.editor.toPlainText().split('\n')[-1]
         self.assertEqual(chosen, last_line,
