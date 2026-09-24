@@ -257,7 +257,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.refresh_log_button()
 
         self.logger = logging.getLogger("nxt")
-        self.logger.addHandler(StatusBarHandler(self.status_bar))
+        self.status_bar_handler = StatusBarHandler(self.status_bar)
+        self.logger.addHandler(self.status_bar_handler)
 
         self.state_last_hidden = None
         # TODO set and load default geometry
@@ -1023,6 +1024,8 @@ QCheckBox::indicator {
             user_dir.editor_cache[state_key] = str(property_state)
 
         nxt_log.stop_session_log(self.nxt.log_file)
+        # The nxt logger is process wide; see OutputLog.detach_from_logging.
+        self.logger.removeHandler(self.status_bar_handler)
         # Close our dock widgets.
         for child in self.children():
             if isinstance(child, DockWidgetBase):

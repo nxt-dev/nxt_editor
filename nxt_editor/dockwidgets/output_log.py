@@ -420,9 +420,34 @@ class OutputLog(DockWidgetBase):
         link = link.toString()
         model.select_and_frame(link)
 
+    def detach_from_logging(self):
+        """Stop the nxt logger writing into this log.
+
+        The logger is process wide and outlives the window. Left attached,
+        every window ever opened keeps a handler on it, and once one is
+        deleted the next message is written into freed widgets, which
+        corrupts the heap rather than raising anything.
+
+        The std streams are not unwrapped here. With two windows open each
+        wraps the other's wrapper, so putting back what one found would
+        take the other's away too.
+        """
+        visual_handler = getattr(self, 'visual_handler', None)
+        if visual_handler is not None:
+            logging.getLogger('nxt').removeHandler(visual_handler)
+
+    def showEvent(self, event):
+        # Back after a close, which detached it.
+        visual_handler = getattr(self, 'visual_handler', None)
+        nxt_logger = logging.getLogger('nxt')
+        if visual_handler is not None and                 visual_handler not in nxt_logger.handlers:
+            nxt_logger.addHandler(visual_handler)
+        super(OutputLog, self).showEvent(event)
+
     def closeEvent(self, event):
         if self.log_watcher:
             self.log_watcher.requestInterruption()
+        self.detach_from_logging()
         super(OutputLog, self).closeEvent(event)
 
 
