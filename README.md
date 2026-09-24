@@ -17,7 +17,7 @@
 ![Maya2026](https://img.shields.io/badge/maya-2026-37A5CC?logo=autodeskmaya&logoColor=37A5CC)
 ![Maya2027](https://img.shields.io/badge/maya-2027-37A5CC?logo=autodeskmaya&logoColor=37A5CC)
 ![Blender](https://img.shields.io/badge/blender-4.2%2B-E87D0D?logo=blender&logoColor=white)
-![Unreal](https://img.shields.io/badge/unreal-5.5%20--%205.8-0E1128?logo=unrealengine&logoColor=white)
+![Unreal](https://img.shields.io/badge/unreal-5.4%20--%205.8-0E1128?logo=unrealengine&logoColor=white)
 
 # NXT Editor
 
