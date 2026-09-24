@@ -45,11 +45,15 @@ pauses while it downloads.
 For machines without internet access, install it once somewhere shared and
 point `NXT_QT_DEPS` at it:
 
-    <blender python> -m pip install --target <shared>/py311 "pyside6-essentials>=6,<6.12"
+    <blender 5 python> -m pip install --target <shared>/py313 "pyside6-essentials>=6,<6.12"
+    <blender 4 python> -m pip install --target <shared>/py311-crt14.29 "pyside6-essentials>=6,<6.11"
 
-The folder name is the python version (`py311` for Blender 4.2 to 4.5,
-`py313` for 5.x), because PySide6 only loads in the python it was
-installed for.
+The folder is named for the python version, because PySide6 only loads in
+the python it was installed for: `py313` for Blender 5. Blender 4.2 to 4.5
+on Windows also ship an older Microsoft C++ runtime, which PySide6 6.11
+crashes on as soon as Qt loads, so they get PySide6 6.10 in a folder of
+their own, `py311-crt14.29`. Install Qt picks the right one by itself; the
+names only matter when installing by hand.
 
 Graphs still run without Qt. Only the editor window needs it, so
 **Run Graph** works in any Blender.
