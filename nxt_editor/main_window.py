@@ -55,7 +55,6 @@ from nxt.constants import (
 )
 from nxt.remote.client import NxtClient
 import nxt.remote.contexts
-from nxt_editor import qresources
 
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -1405,9 +1404,6 @@ class MenuBar(QtWidgets.QMenuBar):
         url = "https://github.com/nxt-dev/nxt_editor"
         github_action.triggered.connect(partial(webbrowser.open_new, url))
         self.help_menu.addSeparator()
-        del_resources = self.help_menu.addAction("Clear UI Icon Cache")
-        del_resources.triggered.connect(self.delete_resources_pyc)
-        self.help_menu.addSeparator()
         # Secret Menu
         self.secret_menu = self.help_menu.addMenu("Developer Options")
         self.secret_menu.setTearOffEnabled(True)
@@ -1514,38 +1510,6 @@ class MenuBar(QtWidgets.QMenuBar):
         message_box.setStandardButtons(message_box.StandardButton.Close)
         message_box.setIcon(message_box.Icon.Information)
         message_box.exec_()
-
-    @staticmethod
-    def delete_resources_pyc():
-        ui_dir = os.path.dirname(__file__)
-        resources_file = os.path.join(ui_dir, "qresources.py").replace(os.sep, "/")
-        resources_file_c = os.path.join(ui_dir, "qresources.pyc").replace(os.sep, "/")
-        success = False
-        if os.path.isfile(resources_file):
-            try:
-                os.remove(resources_file)
-                success = True
-            except:
-                logger.exception(
-                    'Failed to delete "{}" please do so '
-                    "manually.".format(resources_file)
-                )
-        if os.path.isfile(resources_file_c):
-            try:
-                os.remove(resources_file_c)
-                success = True
-            except:
-                logger.exception(
-                    'Failed to delete "{}" please do so '
-                    "manually.".format(resources_file_c)
-                )
-                success = False
-
-        if success:
-            logger.info("Cleared UI icon cache, please restart nxt.")
-        from . import make_resources
-
-        make_resources()
 
     def __test_print(self):
         """prints a simple message for output log debug"""
