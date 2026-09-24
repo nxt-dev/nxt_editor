@@ -93,22 +93,16 @@ jobs:
 
       - name: Build the Unreal plugin
         working-directory: nxt_editor
+        # The plugin carries nxt, nxt_editor and Qt.py in Content/Python.
         run: |
           rez-env nxt_core -- python -m nxt.cli -vv exec build/make_unreal_plugin.nxt \
             -s /make_plugin
 
       - name: Build the Blender addon
         working-directory: nxt_editor
+        # Produces build/nxt_blender.zip, which is what Blender installs.
         run: |
-          ADDON=build/nxt_blender
-          rm -rf "$ADDON" && mkdir -p "$ADDON"
-          cp nxt_editor/integration/blender/nxt_blender.py "$ADDON/__init__.py"
-          cp nxt_editor/integration/blender/README.md "$ADDON/" || true
-          cp -r nxt_editor "$ADDON/nxt_editor"
-          cp -r ../nxt/nxt "$ADDON/nxt"
-          find "$ADDON" \( -name '__pycache__' -o -name '.mypy_cache' \) \
-            -prune -exec rm -rf {} + || true
-          echo "blender addon contents:" && ls "$ADDON"
+          python3 build/make_blender_addon.py ../nxt/nxt
 
       - name: Package them together
         working-directory: nxt_editor
@@ -116,30 +110,40 @@ jobs:
           V="${{ steps.version.outputs.version }}"
           STAGE="build/nxt_$V"
           rm -rf "$STAGE" && mkdir -p "$STAGE"
-          for host in maya unreal blender; do
-            if [ -d "build/nxt_$host" ]; then
-              mv "build/nxt_$host" "$STAGE/$host"
-              echo "included $host"
-            else
-              echo "::warning::no nxt_$host was built"
+          mv build/nxt_maya "$STAGE/maya"
+          mv build/nxt_unreal "$STAGE/unreal"
+          mkdir -p "$STAGE/blender"
+          mv build/nxt_blender.zip "$STAGE/blender/"
+          cp nxt_editor/integration/blender/README.md "$STAGE/blender/"
+
+          # Every host carries its own nxt, nxt_editor and Qt.py, or it
+          # cannot load: Blender and Unreal ship no Qt.py at all. The
+          # editor's icons and styles are read from resources/ at startup,
+          # so the qrc and what it lists have to be there too.
+          unzip -q "$STAGE/blender/nxt_blender.zip" -d build/check_blender
+          fail=0
+          for dir in "$STAGE/maya/scripts" "$STAGE/unreal/Content/Python" \
+                     build/check_blender/nxt_blender/lib; do
+            for f in nxt/__init__.py nxt_editor/__init__.py \
+                     nxt_editor/qt_resources.py \
+                     nxt_editor/resources/resources.qrc Qt/__init__.py; do
+              if [ ! -s "$dir/$f" ]; then
+                echo "::error::$dir/$f is missing"
+                fail=1
+              fi
+            done
+            if [ -e "$dir/nxt_editor/qresources.py" ]; then
+              echo "::error::$dir/nxt_editor/qresources.py is rcc output from an old build and should not ship"
+              fail=1
+            fi
+            if [ -s "$dir/Qt/__init__.py" ] && \
+               [ "$(wc -c < "$dir/Qt/__init__.py")" -lt 10000 ]; then
+              echo "::error::$dir/Qt/__init__.py is too small to be Qt.py"
+              fail=1
             fi
           done
-          # Every host, or it is not the archive it claims to be.
-          for host in maya unreal blender; do
-            if [ ! -d "$STAGE/$host" ]; then
-              echo "::error::$host is missing from the archive"
-              exit 1
-            fi
-          done
-          # The Maya package ships a vendored Qt.py. It used to fetch one,
-          # and a fetch that quietly returned something else shipped a
-          # module fourteen bytes long, so whatever landed there is still
-          # worth a look before this goes out.
-          QT="$STAGE/maya/scripts/Qt/__init__.py"
-          if [ ! -s "$QT" ] || [ "$(wc -c < "$QT")" -lt 10000 ]; then
-            echo "::error::$QT is missing or too small to be Qt.py"
-            exit 1
-          fi
+          rm -rf build/check_blender
+          [ "$fail" = 0 ] || exit 1
           (cd build && zip -qr "nxt_$V.zip" "nxt_$V")
           echo "packaged nxt_${V}.zip"
 
@@ -163,7 +167,12 @@ jobs:
             - **maya/** - point `MAYA_MODULE_PATH` at it, or drop it into your
               Maya modules directory.
             - **unreal/** - drop it into your project's `Plugins` folder.
-            - **blender/** - install it as an addon.
+            - **blender/** - install `nxt_blender.zip` from Edit >
+              Preferences > Add-ons > Install from Disk.
+
+            Blender and Unreal have no Qt of their own. The first time,
+            use the nxt menu's **Install Qt (PySide6)**, or set
+            `NXT_QT_DEPS` to a folder where PySide6 is already installed.
 
             Built from squarebit-studios/nxt_editor at this tag, with the
             nxt_core that rez resolves for it.

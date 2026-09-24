@@ -1,22 +1,24 @@
 """nxt in Blender, from a menu -- the Blender counterpart of nxt_maya.
 
-Install: Edit > Preferences > Add-ons > Install, pick this file, tick it.
-An **NXT** menu appears in the top bar, the same place the Maya plugin puts
-its "nxt" menu, offering Open Editor, Run Graph, and Reload Code.
+Install: Edit > Preferences > Add-ons > Install from Disk, pick the
+``nxt_blender.zip`` from the release, tick it. An **NXT** menu appears in
+the top bar, the same place the Maya plugin puts its "nxt" menu.
 
-**Why this is an add-on and not just a script.** All the hard parts already
-work in ``nxt_blender_launch.py`` at the dev root: finding a Qt binding
-Blender does not ship, and pumping Qt's event loop from Blender's, without
-which the editor window paints once and then ignores everything. This does
-not reimplement any of that. It loads that module and puts its functions on
-a menu, so nothing has to be pasted into the Scripting workspace.
+**What it runs.** The release add-on carries nxt, nxt_editor and Qt.py in
+its ``lib`` folder and uses those. With nothing bundled -- this file
+installed on its own, which is how it is developed -- it uses the repos
+under ``SB_DEV_ROOT`` instead, the same ones ``nxt_blender_launch.py``
+does.
 
-**Loading the launcher opens a window, by design.** That module ends with
-``if __name__ == '__main__' or True:`` so that pasting it into a text block
-runs it. Importing it therefore launches the editor, which is exactly what
-"Open Editor" wants the first time and not what anything else wants -- so
-the first Open Editor loads it and every later call goes through
-``launch_nxt`` instead.
+**Qt.** Blender ships no Qt and the editor is a Qt application, so PySide6
+has to be installed once; the menu offers to do it, into a folder outside
+Blender (see ``nxt_editor/integration/qt_deps.py``). Graphs run without
+it. Only the editor window needs it.
+
+**Blender owns the event loop.** Maya is a Qt application already, so an
+nxt window just joins its loop. Blender knows nothing about Qt, so a timer
+hands Qt a slice of Blender's loop while an editor is open; without it
+the window paints once and then ignores everything.
 
 **Reload Code is not a convenience.** Blender caches modules for the life
 of the session, so editing ``core/blender/*.py`` and running a graph again
@@ -25,6 +27,7 @@ nothing, and it has cost real time. The menu marks the loaded code stale
 when it no longer matches the files.
 """
 import hashlib
+import importlib
 import importlib.util
 import json
 import os
@@ -36,52 +39,207 @@ from bpy_extras.io_utils import ImportHelper
 bl_info = {
     "name": "NXT for Blender",
     "author": "Squarebit Studios",
-    "version": (0, 1, 0),
+    "version": (0, 2, 0),
     "blender": (4, 2, 0),
     "location": "Top bar > NXT",
     "description": "Open the nxt editor and run graphs inside Blender",
     "category": "System",
 }
 
-#: Where the repos live. Overridden by ``SB_DEV_ROOT``.
+#: Where the release add-on keeps nxt, nxt_editor and Qt.py.
+BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
+
+#: Where the repos live when nothing is bundled. Overridden by
+#: ``SB_DEV_ROOT``.
 DEV_ROOT = os.environ.get("SB_DEV_ROOT",
                           r"C:/Users/walte/Documents/dev/squarebit")
 
-#: The launcher that knows how to get Qt running inside Blender.
-LAUNCHER = os.path.join(DEV_ROOT, "nxt_blender_launch.py")
-
-#: The module name it is loaded under, so it is loaded only once.
-LAUNCHER_MODULE = "nxt_blender_launch"
+#: How often to let Qt do its work, in seconds. Small enough that typing
+#: feels immediate, large enough that Blender is not spending its life in
+#: there.
+PUMP_INTERVAL = 0.02
 
 #: Remembered so the menu can offer the last graph again.
 LAST_GRAPH = ""
 
+#: Live editor windows, so the pump knows when to stop and a reload does
+#: not pull the module out from under one.
+__NXT_WINDOWS__ = []
+__PUMPING__ = [False]
 
-def launcher(load=True):
-    """The launch module, loading it on first use.
 
-    :param load: load it if it is not loaded. False only ever looks.
-    :type load: bool
-    :return: the module, or ``None``.
+def is_bundled():
+    """Whether this is the release add-on, carrying its own nxt.
+
+    :return: True when ``lib`` has nxt_editor in it.
+    :rtype: bool
+    """
+    return os.path.isdir(os.path.join(BUNDLED_DIR, "nxt_editor"))
+
+
+def _source_dirs():
+    """The folders nxt, nxt_editor and Qt.py are imported from.
+
+    :return: paths to put on ``sys.path``, first wins.
+    :rtype: list[str]
+    """
+    if is_bundled():
+        return [BUNDLED_DIR]
+    return [os.path.join(DEV_ROOT, "nxt"),
+            os.path.join(DEV_ROOT, "nxt_editor"),
+            # Qt.py, for a Blender that has none of its own.
+            os.path.join(DEV_ROOT, "nxt_dev_deps")]
+
+
+def _put_first(path):
+    """Put a path at the front of sys.path, however it got there before.
+
+    :param path: the folder.
+    :type path: str
+    :return: None
+    :rtype: None
+    """
+    for existing in list(sys.path):
+        if os.path.normcase(os.path.abspath(existing)) == \
+                os.path.normcase(os.path.abspath(path)):
+            sys.path.remove(existing)
+    sys.path.insert(0, path)
+
+
+def _paths():
+    """Put nxt, nxt_editor, Qt.py and core on ``sys.path``.
+
+    :return: None
+    :rtype: None
+    """
+    for path in reversed(_source_dirs()):
+        if os.path.isdir(path):
+            _put_first(path)
+    # core is Squarebit's own graph code. It is optional: graphs that do not
+    # use it run without it.
+    core = os.path.join(DEV_ROOT, "core")
+    if os.path.isdir(core) and core not in sys.path:
+        sys.path.insert(0, core)
+
+
+def qt_deps():
+    """nxt_editor's Qt installer, loaded by path.
+
+    Loaded that way because importing anything under nxt_editor imports Qt,
+    which is the thing that may not be there yet.
+
+    :return: the module, or ``None`` when nxt_editor cannot be found.
     :rtype: module | None
     """
-    found = sys.modules.get(LAUNCHER_MODULE)
-    if found is not None or not load:
+    found = sys.modules.get("nxt_qt_deps")
+    if found is not None:
         return found
-    if not os.path.isfile(LAUNCHER):
+    for root in _source_dirs():
+        path = os.path.join(root, "nxt_editor", "integration", "qt_deps.py")
+        if os.path.isfile(path):
+            break
+    else:
         return None
-    spec = importlib.util.spec_from_file_location(LAUNCHER_MODULE, LAUNCHER)
+    spec = importlib.util.spec_from_file_location("nxt_qt_deps", path)
     module = importlib.util.module_from_spec(spec)
-    sys.modules[LAUNCHER_MODULE] = module
-    try:
-        # This RUNS the launcher, which opens an editor window. See the
-        # module docstring: that is what its trailing guard does, and it
-        # is why only Open Editor is allowed to be the thing that loads it.
-        spec.loader.exec_module(module)
-    except Exception:
-        del sys.modules[LAUNCHER_MODULE]
-        raise
+    spec.loader.exec_module(module)
+    sys.modules["nxt_qt_deps"] = module
     return module
+
+
+def has_qt():
+    """Make PySide6 importable if it is installed anywhere nxt looks.
+
+    :return: whether it is.
+    :rtype: bool
+    """
+    _paths()
+    deps = qt_deps()
+    if deps is None:
+        return False
+    if not is_bundled():
+        # The dev launcher's install, beside the repos.
+        dev = os.path.join(DEV_ROOT, "nxt_dev_deps",
+                           "py%d%d" % sys.version_info[:2])
+        if os.path.isdir(dev) and dev not in sys.path:
+            sys.path.append(dev)
+    return deps.add_to_path()
+
+
+def _live_windows():
+    """The editor windows still open, forgetting the closed ones.
+
+    :return: the open windows.
+    :rtype: list
+    """
+    alive = []
+    for window in __NXT_WINDOWS__:
+        try:
+            if window.isVisible():
+                alive.append(window)
+        except RuntimeError:
+            # Qt already deleted it.
+            pass
+    __NXT_WINDOWS__[:] = alive
+    return alive
+
+
+def _start_pump():
+    """Give Qt a slice of Blender's event loop while a window is open.
+
+    :return: None
+    :rtype: None
+    """
+    if __PUMPING__[0]:
+        return
+    from Qt import QtWidgets
+
+    def pump():
+        app = QtWidgets.QApplication.instance()
+        if app is None or not _live_windows():
+            # Nothing left to drive, so stop asking to be called.
+            __PUMPING__[0] = False
+            return None
+        app.processEvents()
+        return PUMP_INTERVAL
+
+    bpy.app.timers.register(pump, persistent=True)
+    __PUMPING__[0] = True
+
+
+def launch_nxt(graph=None):
+    """Open an nxt editor window inside this Blender.
+
+    :param graph: optional .nxt file to open.
+    :type graph: str | None
+    :return: the editor window.
+    """
+    from nxt.constants import NXT_DCC_ENV_VAR
+    import nxt_editor
+    from Qt import QtWidgets
+    os.environ[NXT_DCC_ENV_VAR] = "blender"
+    if QtWidgets.QApplication.instance() is None:
+        # Blender has no QApplication of its own to join.
+        nxt_editor._new_qapp()
+    window = nxt_editor.show_new_editor([graph] if graph else None)
+    window.show()
+    __NXT_WINDOWS__.append(window)
+    _start_pump()
+    return window
+
+
+def close_nxt():
+    """Close every window this add-on opened. The pump stops with them.
+
+    :return: None
+    :rtype: None
+    """
+    while __NXT_WINDOWS__:
+        window = __NXT_WINDOWS__.pop()
+        try:
+            window.close()
+        except RuntimeError:
+            pass
 
 
 def source_hash():
@@ -130,37 +288,84 @@ class NXT_OT_open_editor(bpy.types.Operator):
     bl_options = {"REGISTER"}
 
     def execute(self, context):
-        """Open a window, loading the launcher the first time.
+        """Open a window, when Qt is there to open it with.
 
         :param context: Blender's context.
         :type context: bpy.types.Context
         :return: the operator result.
         :rtype: set
         """
-        if not os.path.isfile(LAUNCHER):
+        if qt_deps() is None:
             self.report({"ERROR"},
-                        "No launcher at {}. Set SB_DEV_ROOT.".format(
-                            LAUNCHER))
+                        "nxt_editor not found in {}. Reinstall the add-on, "
+                        "or set SB_DEV_ROOT.".format(
+                            " or ".join(_source_dirs())))
             return {"CANCELLED"}
-
-        already = launcher(load=False) is not None
+        if not has_qt():
+            print(qt_deps().install_instructions())
+            self.report({"ERROR"},
+                        "Blender has no Qt. Use NXT > Install Qt (PySide6), "
+                        "or see the system console")
+            return {"CANCELLED"}
         try:
-            module = launcher()
+            launch_nxt()
         except Exception as error:              # noqa: BLE001
             self.report({"ERROR"},
                         "{} -- see the system console".format(error))
             raise
-        if already:
-            # Loading it opened one; any window after that is asked for.
-            module.launch_nxt()
-        elif not module.check_qt_binding():
-            # It prints the exact pip line to the console rather than
-            # installing anything into Blender by itself.
-            self.report({"ERROR"},
-                        "Blender has no Qt binding -- the console has the "
-                        "command to install PySide6")
-            return {"CANCELLED"}
         self.report({"INFO"}, "nxt editor open")
+        return {"FINISHED"}
+
+
+class NXT_OT_install_qt(bpy.types.Operator):
+    """Download PySide6 for the nxt editor, into a folder outside Blender.
+    Blender pauses while it installs"""
+
+    bl_idname = "nxt.install_qt"
+    bl_label = "Install Qt (PySide6)"
+    bl_options = {"REGISTER"}
+
+    @classmethod
+    def poll(cls, context):
+        """Only offered while there is no Qt.
+
+        :param context: Blender's context.
+        :type context: bpy.types.Context
+        :return: whether it is needed.
+        :rtype: bool
+        """
+        return qt_deps() is not None and not has_qt()
+
+    def invoke(self, context, event):
+        """Say what is about to happen before it does.
+
+        :param context: Blender's context.
+        :type context: bpy.types.Context
+        :param event: the triggering event.
+        :type event: bpy.types.Event
+        :return: the operator result.
+        :rtype: set
+        """
+        return context.window_manager.invoke_confirm(self, event)
+
+    def execute(self, context):
+        """pip install it.
+
+        :param context: Blender's context.
+        :type context: bpy.types.Context
+        :return: the operator result.
+        :rtype: set
+        """
+        deps = qt_deps()
+        print("nxt: installing PySide6 into {}".format(deps.deps_dir()))
+        try:
+            where = deps.install()
+        except RuntimeError as error:
+            print(error)
+            self.report({"ERROR"},
+                        "Installing PySide6 failed -- see the system console")
+            return {"CANCELLED"}
+        self.report({"INFO"}, "PySide6 installed to {}".format(where))
         return {"FINISHED"}
 
 
@@ -173,14 +378,14 @@ class NXT_OT_close_editor(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        """Only offered once the launcher is loaded.
+        """Only offered while there is a window to close.
 
         :param context: Blender's context.
         :type context: bpy.types.Context
         :return: whether there is anything to close.
         :rtype: bool
         """
-        return launcher(load=False) is not None
+        return bool(__NXT_WINDOWS__)
 
     def execute(self, context):
         """Close them.
@@ -190,7 +395,7 @@ class NXT_OT_close_editor(bpy.types.Operator):
         :return: the operator result.
         :rtype: set
         """
-        launcher(load=False).close_nxt()
+        close_nxt()
         self.report({"INFO"}, "nxt editor closed")
         return {"FINISHED"}
 
@@ -266,33 +471,13 @@ class NXT_OT_reload(bpy.types.Operator):
         :return: the operator result.
         :rtype: set
         """
-        module = launcher(load=False)
-        if module is None:
-            _paths()
-            dropped = _drop_core()
-        else:
-            dropped = module.reload_core()
+        _paths()
+        dropped = _drop_core()
+        _paths()
         _stamp()
         self.report({"INFO"}, "Forgot {} module(s); {}".format(
             dropped, nxt_report()))
         return {"FINISHED"}
-
-
-def _paths():
-    """Put nxt and core on ``sys.path`` for running graphs without Qt.
-
-    :return: None
-    :rtype: None
-    """
-    for name in ("nxt", "core"):
-        path = os.path.join(DEV_ROOT, name)
-        if os.path.isdir(path) and path not in sys.path:
-            sys.path.insert(0, path)
-
-
-#: Live editor windows, so a reload does not pull the
-#: module out from under one.
-__NXT_WINDOWS__ = []
 
 
 def nxt_report():
@@ -333,7 +518,7 @@ def nxt_report():
 
 
 def _drop_core():
-    """Forget the core modules AND nxt, when the launcher is not loaded.
+    """Forget the core modules AND nxt.
 
     ``nxt`` is dropped as well as ``core``. It used not to be, and that is
     a trap: Blender caches modules for the life of the session, so a
@@ -341,14 +526,14 @@ def _drop_core():
     Code. The graphs then stop resolving their nested references and the
     fault reads as a graph problem rather than a stale import.
 
-    ``nxt_editor`` is left alone when an editor window is open, because
-    dropping the module out from under a live Qt window crashes it.
+    ``nxt_editor`` and ``Qt`` are left alone when an editor window is open,
+    because dropping the module out from under a live Qt window crashes it.
 
     :return: how many were dropped.
     :rtype: int
     """
     roots = ["core", "nxt"]
-    if not __NXT_WINDOWS__:
+    if not _live_windows():
         roots.append("nxt_editor")
     names = [n for n in list(sys.modules)
              if any(n == r or n.startswith(r + ".") for r in roots)]
@@ -386,7 +571,7 @@ def _run(operator, graph, fresh):
     except ImportError as error:
         operator.report({"ERROR"},
                         "nxt is not importable from {}: {}".format(
-                            os.path.join(DEV_ROOT, "nxt"), error))
+                            " or ".join(_source_dirs()), error))
         return {"CANCELLED"}
 
     # Ask BEFORE anything is cleared, the way Maya's /init/new_scene does.
@@ -438,6 +623,8 @@ class NXT_MT_menu(bpy.types.Menu):
         layout = self.layout
         layout.operator(NXT_OT_open_editor.bl_idname, icon="NODETREE")
         layout.operator(NXT_OT_close_editor.bl_idname, icon="X")
+        if NXT_OT_install_qt.poll(context):
+            layout.operator(NXT_OT_install_qt.bl_idname, icon="IMPORT")
         layout.separator()
         layout.operator(NXT_OT_run_graph.bl_idname, icon="PLAY")
         layout.operator(NXT_OT_run_last.bl_idname, icon="FILE_REFRESH")
@@ -465,8 +652,8 @@ def _draw_menu(self, context):
     self.layout.menu(NXT_MT_menu.bl_idname)
 
 
-CLASSES = (NXT_OT_open_editor, NXT_OT_close_editor, NXT_OT_run_graph,
-           NXT_OT_run_last, NXT_OT_reload, NXT_MT_menu)
+CLASSES = (NXT_OT_open_editor, NXT_OT_install_qt, NXT_OT_close_editor,
+           NXT_OT_run_graph, NXT_OT_run_last, NXT_OT_reload, NXT_MT_menu)
 
 
 def register():
@@ -487,6 +674,7 @@ def unregister():
     :return: None
     :rtype: None
     """
+    close_nxt()
     bpy.types.TOPBAR_MT_editor_menus.remove(_draw_menu)
     for item in reversed(CLASSES):
         bpy.utils.unregister_class(item)
