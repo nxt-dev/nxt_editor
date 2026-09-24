@@ -70,15 +70,23 @@ class GlobalActionsComeBack(unittest.TestCase):
                         'Save Layer stayed greyed out')
 
     def test_hiding_the_editor_restores(self):
-        # Selecting a node with no code hides it, and it never gets a
-        # focus out to put things back.
+        # Selecting a node with no code hides the frame the editor sits
+        # in, and the editor never gets a focus out to put things back.
+        # Only something on screen can be hidden: in a window that was
+        # never shown no hide event is sent at all, and whether the actions
+        # came back then depended on the PySide6 version, not the editor.
+        code_frame = self.win.code_editor.code_frame
+        self.win.show()
+        code_frame.show()
+        app.processEvents()
+        self.assertTrue(self.editor.isVisible(), 'nothing on screen to hide')
         before = self.enabled()
         self.editor.suspend_global_actions()
-        self.editor.hide()
+        code_frame.hide()
         app.processEvents()
         self.assertEqual(before, self.enabled(),
                          'hiding the editor stranded the actions disabled')
-        self.editor.show()
+        code_frame.show()
 
     def test_restore_without_suspend_is_harmless(self):
         before = self.enabled()
