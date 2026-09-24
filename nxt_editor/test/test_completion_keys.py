@@ -24,6 +24,11 @@ import unittest
 
 # External
 from Qt import QtCore, QtGui, QtWidgets
+try:
+    from Qt import QtTest
+except ImportError:
+    # Maya's PySide6 does not ship it.
+    QtTest = None
 
 # Internal
 from nxt_editor import user_dir
@@ -66,16 +71,48 @@ def key_event(key):
 
 
 def key_click(widget, key):
-    """Press and release a key on a widget, the way QTest.keyClick does.
+    """Press and release a key on a widget.
 
-    QtTest is not used because Maya's PySide6 does not ship it, and these
-    tests are meant to run under a host's python as well as a plain one.
-    Sending the events goes through the completer's event filter on the
-    popup exactly as typing does.
+    QTest where there is one: on macOS the completer only treats a key as
+    typed when it arrives the way QTest delivers it. Maya's PySide6 has no
+    QtTest, so there the events are sent directly, which is what the
+    completer's event filter on the popup sees on Windows and Linux too.
     """
+    if QtTest is not None:
+        QtTest.QTest.keyClick(widget, key)
+        return
     for kind in (QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease):
         QtWidgets.QApplication.sendEvent(
             widget, QtGui.QKeyEvent(kind, key, QtCore.Qt.NoModifier))
+
+
+def make_active(window):
+    """Make a window the active one, so focus can be given inside it.
+
+    Offscreen on macOS a window never becomes active on its own, and
+    setFocus() in an inactive window does nothing: the keys then went to
+    whatever did have focus, the node graph, where Down moved the
+    selection and ended the edit being tested.
+    """
+    window.activateWindow()
+    set_active = getattr(QtWidgets.QApplication, 'setActiveWindow', None)
+    if set_active is not None:
+        set_active(window)
+    app.processEvents()
+
+
+def give_focus(widget):
+    """Focus a widget once its window has finished taking focus back.
+
+    A window that becomes active hands focus to whatever last had it,
+    which can arrive after a setFocus() made before it. So ask again
+    until it holds, for as long as that takes to settle.
+    """
+    for _ in range(20):
+        widget.setFocus()
+        app.processEvents()
+        if QtWidgets.QApplication.focusWidget() is widget:
+            return
 
 
 def restore_prefs(saved):
@@ -254,11 +291,17 @@ class TakingOneForReal(unittest.TestCase):
             action.setChecked(True)
         self.ce.stage_model.set_selection(['/inst_source1'])
         self.win.show()
-        self.win.activateWindow()
+        make_active(self.win)
+        # The dock layout comes back from the user's editor cache, which
+        # every earlier run on this machine has written to, and it can
+        # leave the code editor closed. Focus cannot go to a widget that
+        # is not on screen.
+        self.ce.show()
+        self.ce.raise_()
+        self.ce.code_frame.show()
         app.processEvents()
         arm(self.ce)
-        self.editor.setFocus()
-        app.processEvents()
+        give_focus(self.editor)
 
     def tearDown(self):
         # The popup is a window of its own. Left up, it outlives the one
@@ -272,6 +315,17 @@ class TakingOneForReal(unittest.TestCase):
     def test_down_then_return_writes_what_was_highlighted(self):
         popup = self.editor.completer.popup()
         model = self.editor.completer.completionModel()
+        self.assertTrue(self.editor.isVisible(), 'the editor is not on screen')
+        if (QtWidgets.QApplication.focusWidget() is not self.editor
+                and sys.platform == 'darwin'
+                and QtWidgets.QApplication.platformName() == 'offscreen'):
+            # Offscreen on macOS never makes a window active, so focus
+            # stays wherever it first landed and no key can reach the
+            # editor. Nothing here could pass or fail on its merits; with a
+            # window server, or on any other platform, it runs.
+            self.skipTest('offscreen on macOS cannot focus the editor')
+        self.assertIs(QtWidgets.QApplication.focusWidget(), self.editor,
+                      'the keys would go to something other than the editor')
         self.assertTrue(popup.isVisible(), 'nothing to drive')
         key_click(popup, QtCore.Qt.Key_Down)
         app.processEvents()
