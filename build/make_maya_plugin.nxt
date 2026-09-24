@@ -77,7 +77,6 @@
             "child_order": [
                 "copy_source",
                 "qt_py",
-                "make_resources",
                 "populate_mod_template",
                 "clean_up"
             ],
@@ -103,6 +102,13 @@
                 "            dirs.remove(name)",
                 "            removed += 1",
                 "print('removed {} cache folder(s) from the module'.format(removed))",
+                "",
+                "# rcc's output from older versions, which a working copy may still have.",
+                "# Nothing reads it now, and it is eleven megabytes.",
+                "stale = os.path.join('${mod_folder}', 'scripts', 'nxt_editor', 'qresources.py')",
+                "if os.path.isfile(stale):",
+                "    os.remove(stale)",
+                "    print('removed stale {}'.format(stale))",
                 "",
                 "# The clone only exists when building from a fetched source. This",
                 "# checked a path on somebody's D: drive, so it never ran anywhere else.",
@@ -141,21 +147,6 @@
                 "        shutil.rmtree('${src_clone}')",
                 "    execute(start='${clone_node}')",
                 "    shutil.copytree('${path::${src_clone}/nxt}', '${core_script_src}')"
-            ]
-        },
-        "/make_module_folder/make_resources": {
-            "code": [
-                "# Nothing to do. Left in place rather than deleted so the execution order",
-                "# around it is untouched.",
-                "#",
-                "# This regenerated ui/resources.py from a .qrc with pyside2-rcc. Both ends",
-                "# of that are gone: the resources are compiled into the committed",
-                "# qresources.py now, nothing imports ui.resources, and the attribute it",
-                "# read - copy_source.source_folder - does not exist on that node, so the",
-                "# path resolved to '/ui/resources/resources.qrc' and the step failed on",
-                "# every build. It also made pyside2-rcc a build dependency for a file the",
-                "# module does not contain.",
-                "print('resources are compiled into qresources.py; nothing to generate')"
             ]
         },
         "/make_module_folder/populate_mod_template": {

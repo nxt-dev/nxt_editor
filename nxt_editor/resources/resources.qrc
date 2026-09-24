@@ -240,6 +240,7 @@
         <file>styles/dark/rc/checkbox_checked_focus.png</file>
         <file>styles/dark/rc/checkbox_checked.png</file>
         <file>styles/dark/rc/checkbox_indeterminate.png</file>
+        <file>styles/dark/rc/checkbox_indeterminate_disabled.png</file>
         <file>styles/dark/rc/checkbox_indeterminate_focus.png</file>
         <file>styles/dark/rc/checkbox_unchecked_disabled.png</file>
         <file>styles/dark/rc/checkbox_unchecked_focus.png</file>
