@@ -11,6 +11,7 @@ also the only way to look at what they are doing.
 After each module, the windows the tests leave behind are kept rather
 than freed. See keep_windows.
 """
+import gc
 import os
 
 import pytest
@@ -46,11 +47,22 @@ def keep_windows():
 
 @pytest.fixture(autouse=True)
 def keep_windows_after_each_test():
-    """The same, after every test, without hiding anything: some classes
-    build one window in setUpClass and share it between their tests.
+    """The same, after every test, and out of the collector's reach.
+
+    Nothing is hidden here: some classes build one window in setUpClass
+    and share it between their tests.
+
+    Keeping the windows is not enough on its own. Every test also leaves
+    stage models, layer models and the command port threads they start,
+    with no Qt parent, and the collector freeing those from a test long
+    finished is as able to crash as a window is. gc.freeze() moves
+    everything that exists now out of its reach for good, so a later
+    gc.collect() only ever meets what that test made itself, which is
+    what the tests that call it are asking about.
     """
     yield
     _keep_all()
+    gc.freeze()
 
 
 def _keep_all():
