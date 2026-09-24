@@ -37,23 +37,41 @@
                 "uplugin_path": {
                     "type": "raw",
                     "value": "${file::${unreal_integration_dir}/nxt_unreal.uplugin}"
+                },
+                "editor_dir": {
+                    "type": "raw",
+                    "value": "${path::../nxt_editor}"
+                },
+                "core_dir": {
+                    "type": "raw",
+                    "value": "${path::../../nxt/nxt}"
+                },
+                "qt_py": {
+                    "type": "raw",
+                    "value": "${path::vendor/Qt.py}"
                 }
             },
             "code": [
                 "if os.path.exists('${result_dir}'):",
                 "    shutil.rmtree('${result_dir}')",
-                "shutil.copytree('${unreal_integration_dir}', '${result_dir}')",
+                "junk = shutil.ignore_patterns('__pycache__', '.mypy_cache', '.pytest_cache', '*.pyc', 'qresources.py*')",
+                "shutil.copytree('${unreal_integration_dir}', '${result_dir}', ignore=junk)",
                 "resources_dir = '${result_dir}/Resources'",
                 "os.makedirs(resources_dir)",
                 "target_icon_path = os.path.join(resources_dir, 'Icon128.png')",
                 "shutil.copyfile('${icon_path}', target_icon_path)",
-                "leftover_init = os.path.join(self.result_dir, '__init__.py')",
-                "leftover_pycache = os.path.join(self.result_dir, '__pycache__')",
-                "os.remove(leftover_init)",
-                "try:",
-                "    shutil.rmtree(leftover_pycache)",
-                "except:",
-                "    pass"
+                "# The launch module, which belongs to nxt_editor rather than the plugin.",
+                "os.remove(os.path.join('${result_dir}', '__init__.py'))",
+                "",
+                "# Unreal puts Content/Python on sys.path, so what the plugin runs goes",
+                "# there. It used to carry none of it and pip install nxt-editor from PyPI",
+                "# into the engine instead, which fetched whatever PyPI had rather than",
+                "# this build, and needed the internet and write access to the engine.",
+                "python_dir = os.path.join('${result_dir}', 'Content', 'Python')",
+                "shutil.copytree('${editor_dir}', os.path.join(python_dir, 'nxt_editor'), ignore=junk)",
+                "shutil.copytree('${core_dir}', os.path.join(python_dir, 'nxt'), ignore=junk)",
+                "os.makedirs(os.path.join(python_dir, 'Qt'))",
+                "shutil.copyfile('${qt_py}', os.path.join(python_dir, 'Qt', '__init__.py'))"
             ]
         }
     }

@@ -6,6 +6,11 @@
 .vscode/
 .idea
 docs/build/
-build/
+# What the build graphs produce, but not the graphs and scripts themselves.
+/build/*
+!/build/*.nxt
+!/build/*.py
+!/build/*.md
+!/build/vendor/
 site/
 nxt_editor/qresources.py*
