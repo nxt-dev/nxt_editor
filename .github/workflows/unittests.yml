@@ -34,4 +34,6 @@ jobs:
       # Dropbox rez folder that had stopped syncing to the windows machines,
       # which then lacked nxt_core 0.19+ and the python 3.13 test packages.
       # Once that folder syncs, adding the windows runner here should work.
+      # Keep its rez package cache, local packages and work folder on the
+      # E: drive when it is: C: on that machine has little room.
       runners: '[ [ "self-hosted", "macOS" ] ]'
