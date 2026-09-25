@@ -1787,6 +1787,12 @@ def nxt_execpthook(typ, value, tb):
     # have to make sure the exception is actually from nxt
     if "nxt" not in tb.tb_frame.f_code.co_filename:
         return og_excepthook(typ, value, tb)
+    # The dialog is modal, so it needs someone to answer it. With no editor
+    # on screen -- a host running graphs in batch, or after the editor has
+    # closed, since this hook outlives it -- it would wait forever, and the
+    # process with it.
+    if not _editor_on_screen():
+        return og_excepthook(typ, value, tb)
     logger.error("NXT encountered an Uncaught exception!")
     traceback.print_tb(tb)
     message = (
@@ -1803,6 +1809,14 @@ def nxt_execpthook(typ, value, tb):
     dialog = NxtWarningDialog("Uncaught Exception!", message, details)
     dialog.setStyleSheet(stylesheet)
     dialog.exec_()
+
+
+def _editor_on_screen():
+    app = QtWidgets.QApplication.instance()
+    if app is None or app.platformName() in ('offscreen', 'minimal'):
+        return False
+    return any(isinstance(w, MainWindow) and w.isVisible()
+               for w in app.topLevelWidgets())
 
 
 def catch_exceptions():
