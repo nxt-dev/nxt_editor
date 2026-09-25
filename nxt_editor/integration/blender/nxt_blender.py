@@ -6,9 +6,8 @@ the top bar, the same place the Maya plugin puts its "nxt" menu.
 
 **What it runs.** The release add-on carries nxt, nxt_editor and Qt.py in
 its ``lib`` folder and uses those. With nothing bundled -- this file
-installed on its own, which is how it is developed -- it uses the repos
-under ``SB_DEV_ROOT`` instead, the same ones ``nxt_blender_launch.py``
-does.
+installed on its own, which is how it is developed -- it uses the nxt
+and nxt_editor checkouts in the folder ``SB_DEV_ROOT`` names instead.
 
 **Qt.** Blender ships no Qt and the editor is a Qt application, so PySide6
 has to be installed once; the menu offers to do it, into a folder outside
@@ -49,10 +48,9 @@ bl_info = {
 #: Where the release add-on keeps nxt, nxt_editor and Qt.py.
 BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
 
-#: Where the repos live when nothing is bundled. Overridden by
-#: ``SB_DEV_ROOT``.
-DEV_ROOT = os.environ.get("SB_DEV_ROOT",
-                          r"C:/Users/walte/Documents/dev/squarebit")
+#: Where the nxt and nxt_editor checkouts live, for developing the add-on
+#: with nothing bundled. Only used when ``SB_DEV_ROOT`` is set.
+DEV_ROOT = os.environ.get("SB_DEV_ROOT", "")
 
 #: How often to let Qt do its work, in seconds. Small enough that typing
 #: feels immediate, large enough that Blender is not spending its life in
@@ -85,10 +83,17 @@ def _source_dirs():
     """
     if is_bundled():
         return [BUNDLED_DIR]
+    if not DEV_ROOT:
+        return []
     return [os.path.join(DEV_ROOT, "nxt"),
             os.path.join(DEV_ROOT, "nxt_editor"),
             # Qt.py, for a Blender that has none of its own.
             os.path.join(DEV_ROOT, "nxt_dev_deps")]
+
+
+def _where():
+    """Where nxt is looked for, to say so when it is not there."""
+    return " or ".join(_source_dirs()) or BUNDLED_DIR
 
 
 def _put_first(path):
@@ -115,10 +120,10 @@ def _paths():
     for path in reversed(_source_dirs()):
         if os.path.isdir(path):
             _put_first(path)
-    # core is Squarebit's own graph code. It is optional: graphs that do not
-    # use it run without it.
-    core = os.path.join(DEV_ROOT, "core")
-    if os.path.isdir(core) and core not in sys.path:
+    # A studio library of graph code, checked out beside nxt. Optional:
+    # graphs that do not use it run without it.
+    core = os.path.join(DEV_ROOT, "core") if DEV_ROOT else ""
+    if core and os.path.isdir(core) and core not in sys.path:
         sys.path.insert(0, core)
 
 
@@ -249,7 +254,7 @@ def source_hash():
     :rtype: str
     """
     folder = os.path.join(DEV_ROOT, "core", "core", "blender")
-    if not os.path.isdir(folder):
+    if not DEV_ROOT or not os.path.isdir(folder):
         return ""
     digest = hashlib.md5()
     for name in sorted(os.listdir(folder)):
@@ -298,8 +303,7 @@ class NXT_OT_open_editor(bpy.types.Operator):
         if qt_deps() is None:
             self.report({"ERROR"},
                         "nxt_editor not found in {}. Reinstall the add-on, "
-                        "or set SB_DEV_ROOT.".format(
-                            " or ".join(_source_dirs())))
+                        "or set SB_DEV_ROOT.".format(_where()))
             return {"CANCELLED"}
         if not has_qt():
             print(qt_deps().install_instructions())
@@ -571,7 +575,7 @@ def _run(operator, graph, fresh):
     except ImportError as error:
         operator.report({"ERROR"},
                         "nxt is not importable from {}: {}".format(
-                            " or ".join(_source_dirs()), error))
+                            _where(), error))
         return {"CANCELLED"}
 
     # Ask BEFORE anything is cleared, the way Maya's /init/new_scene does.
@@ -582,14 +586,16 @@ def _run(operator, graph, fresh):
         print("nxt: running {}".format(graph))
         Session().execute_graph(graph)
 
+    # A studio library can offer to ask before a build clears the scene.
+    # Used when it is there and has it; otherwise the graph just runs.
     try:
-        import core.blender.ui as sb_ui
+        from core.blender.ui import confirm_scene_build
     except ImportError:
-        sb_ui = None
+        confirm_scene_build = None
 
     try:
-        if sb_ui is not None:
-            sb_ui.confirm_scene_build(_build, label=os.path.basename(graph))
+        if confirm_scene_build is not None:
+            confirm_scene_build(_build, label=os.path.basename(graph))
         else:
             _build()
     except Exception as error:                  # noqa: BLE001

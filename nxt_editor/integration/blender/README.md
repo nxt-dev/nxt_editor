@@ -22,8 +22,9 @@ to be installed or put on a path.
 ## Developing it
 
 Installed on its own, as `nxt_blender.py`, it has nothing bundled and uses
-the repos under `SB_DEV_ROOT` instead (`C:/Users/walte/Documents/dev/squarebit`
-if that is not set), with Qt.py and PySide6 from `nxt_dev_deps` beside them.
+the `nxt` and `nxt_editor` checkouts in the folder `SB_DEV_ROOT` names, with
+Qt.py and PySide6 from an `nxt_dev_deps` folder beside them. Without
+`SB_DEV_ROOT` set it has nothing to run, and says so.
 `build/make_blender_addon.py` builds the release zip.
 
 # Usage
