@@ -28,9 +28,9 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/nxt-dev/nxt_editor",
     packages=setuptools.find_packages(),
-    # Unreal 5.5 to 5.8 and Maya 2025/2026 are 3.11, Maya 2027 is 3.13.
-    python_requires='>=3.11, <3.14',
-    install_requires=['nxt-core<1.0,>=0.14',
+    # Maya 2027 is 3.13, the newest the editor has been run on.
+    python_requires='>=3.9, <3.14',
+    install_requires=['nxt-core<1.0,>=0.21',
                       'qt.py<3',
                       'PySide6>=6,<7'
                       ],
