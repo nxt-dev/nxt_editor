@@ -13,6 +13,7 @@ and needed internet access and write access to the engine.
 Unreal ships no Qt, so PySide6 is installed once, into a folder outside the
 engine; the menu offers to do it. See nxt_editor/integration/qt_deps.py.
 """
+import functools
 import importlib.util
 import os
 import sys
@@ -20,6 +21,30 @@ import sys
 import unreal
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def fail_safe(func):
+    """Log and show what a menu command raised, rather than letting it
+    reach Unreal, where an exception from a menu can take the editor down.
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as error:
+            message = 'Error in {}: {}: {}'.format(
+                func.__name__, type(error).__name__, error)
+            unreal.log_error(message)
+            try:
+                unreal.EditorDialog.show_message(
+                    title='nxt error: {}'.format(func.__name__),
+                    message=message,
+                    message_type=unreal.AppMsgType.OK)
+            except Exception:
+                # Logged above, which is the most that can be done.
+                pass
+            return None
+    return wrapper
 
 
 def _put_first(path):
@@ -68,6 +93,7 @@ def is_nxt_available():
         return False
 
 
+@fail_safe
 def install_qt():
     deps = qt_deps()
     unreal.log('Installing PySide6 into {}'.format(deps.deps_dir()))
@@ -80,6 +106,12 @@ def install_qt():
             return
     unreal.log('PySide6 installed.')
     refresh_nxt_menu()
+
+
+@fail_safe
+def launch_nxt_editor():
+    from nxt_editor.integration.unreal import launch_nxt_in_ue
+    launch_nxt_in_ue()
 
 
 def _python_entry(name, label, command, tooltip=''):
@@ -96,8 +128,7 @@ def _python_entry(name, label, command, tooltip=''):
 def make_open_editor_entry():
     return _python_entry(
         'Open Editor', 'Open Editor',
-        'from nxt_editor.integration.unreal import launch_nxt_in_ue; '
-        'launch_nxt_in_ue()')
+        'import nxt_unreal_menu; nxt_unreal_menu.launch_nxt_editor()')
 
 
 def make_install_qt_entry():
