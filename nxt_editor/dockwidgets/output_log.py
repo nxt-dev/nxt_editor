@@ -555,15 +555,18 @@ class LogFilterButton(QtWidgets.QPushButton):
 
 
 class PythonConsoleLineEdit(QtWidgets.QLineEdit):
-    def __init__(self, locals={}):
+    def __init__(self, locals=None):
         super(PythonConsoleLineEdit, self).__init__('')
-        self.console = InteractiveConsole(locals, '<nxt console>')
+        self.console = InteractiveConsole(locals or {}, '<nxt console>')
         self.returnPressed.connect(self.on_return)
 
     def on_return(self):
-        need_more = self.console.push(self.text())
-        if not need_more:
-            self.clear()
+        try:
+            need_more = self.console.push(self.text())
+            if not need_more:
+                self.clear()
+        except:
+            pass
 
 
 class QtLogStreamHandler(nxt_log.LogRecordStreamHandler):
