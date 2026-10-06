@@ -1,7 +1,7 @@
 <div align="center">
 
-[![Unittests](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml?query=branch%3Adev)
 [![Release](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml/badge.svg?branch=release)](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml)
+[![Unittests](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml?query=branch%3Adev)
 
 [![Version](https://img.shields.io/badge/version-4.3.3-green?logo=rocket&logoColor=green)](https://github.com/nxt-dev/nxt_editor/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)&nbsp;&nbsp;
