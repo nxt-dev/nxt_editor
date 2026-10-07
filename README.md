@@ -14,6 +14,7 @@
 ![Python311](https://img.shields.io/badge/python-3.11-3776AB.svg?logo=python&logoColor=3776AB)
 ![Python312](https://img.shields.io/badge/python-3.12-3776AB.svg?logo=python&logoColor=3776AB)
 ![Python313](https://img.shields.io/badge/python-3.13-3776AB.svg?logo=python&logoColor=3776AB)
+![Python314](https://img.shields.io/badge/python-3.14-3776AB.svg?logo=python&logoColor=3776AB)
 
 ![Maya2025](https://img.shields.io/badge/maya-2025-37A5CC?logo=autodeskmaya&logoColor=37A5CC)
 ![Maya2026](https://img.shields.io/badge/maya-2026-37A5CC?logo=autodeskmaya&logoColor=37A5CC)
@@ -36,7 +37,7 @@ Only clone this repo if you're [contributing](CONTRIBUTING.md) to the NXT codeba
 <br>
 
 #### Requirements
-- Python [3.9](https://www.python.org/downloads/release/python-390/) to [3.13](https://www.python.org/downloads/release/python-3130/)
+- Python [3.9](https://www.python.org/downloads/release/python-390/) to [3.14](https://www.python.org/downloads/release/python-3140/)
 - We strongly recommend using a Python [virtual environment](https://docs.python.org/3/library/venv.html)
 
 *[Requirements for contributors](CONTRIBUTING.md#python-environment)*  
