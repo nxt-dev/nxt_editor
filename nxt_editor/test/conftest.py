@@ -8,6 +8,10 @@ told to render offscreen before anything creates a QApplication.
 Only under CI. On a workstation the tests use the real display, which is
 also the only way to look at what they are doing.
 
+They get a user directory of their own too. That has to be decided before
+nxt_editor is imported, which happens before this file runs, so it is in
+the conftest.py at the top of the repository.
+
 After each module, the windows the tests leave behind are kept rather
 than freed. See keep_windows.
 """

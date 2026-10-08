@@ -21,21 +21,30 @@ from nxt_editor.integration import qt_deps
 PY_TAG = 'py%d%d' % sys.version_info[:2]
 
 
+def current_runtime():
+    """As if the host had a current C++ runtime loaded, or none at all.
+
+    The tests about folder names are not about the runtime, and the python
+    running them may have loaded an older one, which adds a suffix.
+    """
+    return mock.patch.object(qt_deps, 'loaded_crt_version', lambda: None)
+
+
 class TestQtDeps(unittest.TestCase):
     def test_env_var_wins(self):
-        with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}):
+        with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}),                 current_runtime():
             self.assertEqual(qt_deps.deps_dir(),
                              os.path.join('/shared/qt', PY_TAG))
 
     def test_defaults_under_the_nxt_user_dir(self):
         env = {'NXT_USER_DIR': '/home/artist/nxt'}
-        with mock.patch.dict(os.environ, env):
+        with mock.patch.dict(os.environ, env), current_runtime():
             os.environ.pop('NXT_QT_DEPS', None)
             self.assertEqual(qt_deps.deps_dir(),
                              os.path.join('/home/artist/nxt', 'deps', PY_TAG))
 
     def test_installs_into_the_deps_dir_not_the_host(self):
-        with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}):
+        with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}),                 current_runtime():
             cmd = qt_deps.install_command()
         self.assertEqual(cmd[1:4], ['-m', 'pip', 'install'])
         self.assertIn('--target', cmd)
@@ -57,7 +66,8 @@ class TestQtDeps(unittest.TestCase):
         os.rmdir(tmp)
 
     def test_an_old_runtime_gets_its_own_folder_and_an_older_pyside(self):
-        with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}),                 mock.patch.object(qt_deps, 'loaded_crt_version',
+        with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}), \
+                mock.patch.object(qt_deps, 'loaded_crt_version',
                                   lambda: (14, 29, 30139)):
             self.assertEqual(qt_deps.deps_dir(),
                              os.path.join('/shared/qt', PY_TAG + '-crt14.29'))
@@ -68,7 +78,8 @@ class TestQtDeps(unittest.TestCase):
 
     def test_a_current_runtime_gets_the_usual_folder(self):
         for crt in ((14, 44, 35211), None):
-            with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}),                     mock.patch.object(qt_deps, 'loaded_crt_version',
+            with mock.patch.dict(os.environ, {'NXT_QT_DEPS': '/shared/qt'}), \
+                    mock.patch.object(qt_deps, 'loaded_crt_version',
                                       lambda: crt):
                 self.assertEqual(qt_deps.deps_dir(),
                                  os.path.join('/shared/qt', PY_TAG))
