@@ -738,6 +738,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.installEventFilter(self)
         # Needed to swap the cursor while hovering a token with Ctrl held
         self.viewport().setMouseTracking(True)
+        self._cursor_before_token = None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("text/plain"):
@@ -1905,9 +1906,11 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         body = body.strip()
         if not body:
             return None
-        for token_type in tokens.TOKENTYPE.ALL:
+        # file:: path:: contents:: and plugin tokens are not node refs
+        all_tokens = tuple(tokens.TOKENTYPE.ALL) + tuple(tokens.plugin_tokens)
+        for token_type in all_tokens:
             if token_type.prefix and body.startswith(token_type.prefix):
-                return None  # file:: path:: contents:: are not node refs
+                return None
         current = self.ce_widget.node_path
         start = current or nxt_path.WORLD
         if '.' in body:
@@ -1924,6 +1927,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         :param pos: QPoint in viewport coordinates
         :return: True if a node was selected
         """
+        if self.ce_widget.editing_active:
+            # Going to another node would accept the edit on the way out.
+            return False
         full, body = self.get_token_at(pos)
         if not full:
             return False
@@ -1941,14 +1947,24 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
     def show_token_tooltip(self, help_event):
         """Show the resolved value of the token under the mouse as a tooltip.
-        :param help_event: QHelpEvent
+
+        Only for tokens that read an attribute. Resolving file::, contents::
+        or a plugin token reads files or runs plugin code, which hovering
+        should not do.
+        :param help_event: QHelpEvent, in viewport coordinates
         :return: True if a tooltip was shown
         """
-        full, _ = self.get_token_at(help_event.pos())
+        full, body = self.get_token_at(help_event.pos())
         model = self.ce_widget.stage_model
-        if not full or model is None:
+        node_path = self.node_path_from_token_body(body) if full else None
+        if not node_path or model is None:
             QtWidgets.QToolTip.hideText()
             return False
+        if not model.node_exists(node_path):
+            QtWidgets.QToolTip.showText(
+                help_event.globalPos(),
+                '{}  ->  <no node at {}>'.format(full, node_path), self)
+            return True
         try:
             resolved = model.resolve(self.ce_widget.node_path, full)
         except Exception:
@@ -1961,11 +1977,14 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                                     '{}  ->  {}'.format(full, resolved), self)
         return True
 
-    def event(self, event):
+    def viewportEvent(self, event):
+        # Here rather than in event(): tooltip positions that reach the
+        # editor itself are in its own coordinates, which the line number
+        # gutter offsets from the text.
         if event.type() == QtCore.QEvent.ToolTip:
             if self.show_token_tooltip(event):
                 return True
-        return super(NxtCodeEditor, self).event(event)
+        return super(NxtCodeEditor, self).viewportEvent(event)
 
     def mousePressEvent(self, event):
         if (event.modifiers() & QtCore.Qt.ControlModifier and
@@ -1977,10 +1996,19 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
     def mouseMoveEvent(self, event):
         over_token = False
-        if event.modifiers() & QtCore.Qt.ControlModifier:
-            over_token = bool(self.get_token_at(event.pos())[0])
-        cursor = QtCore.Qt.PointingHandCursor if over_token else QtCore.Qt.IBeamCursor
-        self.viewport().setCursor(cursor)
+        if (event.modifiers() & QtCore.Qt.ControlModifier and
+                not self.ce_widget.editing_active):
+            full, body = self.get_token_at(event.pos())
+            over_token = bool(full and self.node_path_from_token_body(body))
+        viewport = self.viewport()
+        if over_token and self._cursor_before_token is None:
+            self._cursor_before_token = viewport.cursor().shape()
+            viewport.setCursor(QtCore.Qt.PointingHandCursor)
+        elif not over_token and self._cursor_before_token is not None:
+            # Put back whatever was showing, which is not always the
+            # I-beam: the editor shows an arrow until it is edited.
+            viewport.setCursor(self._cursor_before_token)
+            self._cursor_before_token = None
         super(NxtCodeEditor, self).mouseMoveEvent(event)
 
 
