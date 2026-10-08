@@ -41,6 +41,8 @@ setuptools.setup(
                        "integration/*",
                        "integration/*/*",
                        "integration/*/*/*",
+                       # Unreal keeps its python in Content/Python.
+                       "integration/*/*/*/*",
                        "resources/*",
                        "resources/*/*",
                        "resources/*/*/*",
