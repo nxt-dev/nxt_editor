@@ -31,7 +31,9 @@ setuptools.setup(
     python_requires='>=3.9, <3.15',
     install_requires=['nxt-core<1.0,>=0.21',
                       'qt.py<3',
-                      'PySide6>=6,<7'
+                      # The newest PySide6 the editor has been tested on,
+                      # the same as integration/qt_deps.py installs.
+                      'PySide6>=6,<6.12'
                       ],
     package_data={
         # covers text nxt files
