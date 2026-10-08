@@ -1351,6 +1351,10 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         cursor.setPosition(cursor.position() - len(prefix),
                            QtGui.QTextCursor.KeepAnchor)
         cursor.insertText(completion)
+        # ${ auto-paired a } that the completion brings its own of.
+        closer = completion[-1:]
+        if closer in ')]}' and self.char_after_cursor(cursor) == closer:
+            cursor.deleteChar()
         self.setTextCursor(cursor)
         self.set_completion_shortcuts(True)
 
@@ -1373,6 +1377,10 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             # popup should have it.
             event.ignore()
             return
+        if not self.isReadOnly() and self.handle_auto_pair(event):
+            event.accept()
+            self.hide_completions()
+            return
         super(NxtCodeEditor, self).keyPressEvent(event)
         if self.isReadOnly():
             return
@@ -1381,6 +1389,66 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             self.update_completions()
         elif self.completer.popup().isVisible():
             self.hide_completions()
+
+    def char_after_cursor(self, cursor=None):
+        cursor = cursor or self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col] if col < len(text) else ''
+
+    def char_before_cursor(self, cursor=None):
+        cursor = cursor or self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col - 1] if col > 0 else ''
+
+    def handle_auto_pair(self, event):
+        """Insert the matching closer for a bracket/quote, wrap the selection
+        in the pair, or step over a closer that is already there.
+        :param event: QKeyEvent
+        :return: True if the key was handled.
+        """
+        mods = event.modifiers()
+        # AltGr arrives as Ctrl+Alt on Windows, and is how [ and { are typed
+        # on many layouts, so only a lone Ctrl or Alt means a shortcut.
+        ctrl = bool(mods & QtCore.Qt.ControlModifier)
+        alt = bool(mods & QtCore.Qt.AltModifier)
+        if ctrl != alt:
+            return False
+        text = event.text()
+        if not text:
+            return False
+        cursor = self.textCursor()
+        close = self.AUTO_PAIRS.get(text)
+        # Wrap a selection first, quotes included.
+        if close is not None and cursor.hasSelection():
+            start, end = cursor.selectionStart(), cursor.selectionEnd()
+            inner = cursor.selection().toPlainText()
+            cursor.beginEditBlock()
+            cursor.insertText(text + inner + close)
+            cursor.endEditBlock()
+            cursor.setPosition(start + 1)
+            cursor.setPosition(end + 1, QtGui.QTextCursor.KeepAnchor)
+            self.setTextCursor(cursor)
+            return True
+        # Step over a closer that is already there instead of doubling it
+        if text in self.AUTO_PAIRS.values() and self.char_after_cursor() == text:
+            cursor.movePosition(QtGui.QTextCursor.Right)
+            self.setTextCursor(cursor)
+            return True
+        if close is None:
+            return False
+        if text in ("'", '"'):
+            before = self.char_before_cursor()
+            # Mid word (apostrophes, string prefixes) or the third quote of
+            # a triple quote: just type it.
+            if (before.isalnum() or before == text or
+                    self.char_after_cursor().isalnum()):
+                return False
+        cursor.insertText(text + close)
+        cursor.movePosition(QtGui.QTextCursor.Left)
+        self.setTextCursor(cursor)
+        return True
 
     def set_font_size(self, delta=0.0, default=False):
         if default:
@@ -2013,59 +2081,6 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             viewport.setCursor(self._cursor_before_token)
             self._cursor_before_token = None
         super(NxtCodeEditor, self).mouseMoveEvent(event)
-
-    def keyPressEvent(self, event):
-        plain = not (event.modifiers() & (QtCore.Qt.ControlModifier |
-                                          QtCore.Qt.AltModifier))
-        if plain and not self.isReadOnly() and self.handle_auto_pair(event):
-            event.accept()
-            return
-        super(NxtCodeEditor, self).keyPressEvent(event)
-
-    def char_after_cursor(self):
-        cursor = self.textCursor()
-        text = cursor.block().text()
-        col = cursor.positionInBlock()
-        return text[col] if col < len(text) else ''
-
-    def char_before_cursor(self):
-        cursor = self.textCursor()
-        text = cursor.block().text()
-        col = cursor.positionInBlock()
-        return text[col - 1] if col > 0 else ''
-
-    def handle_auto_pair(self, event):
-        """Insert the matching closer for a bracket/quote, wrap the selection
-        in the pair, or step over a closer that is already there.
-        :param event: QKeyEvent
-        :return: True if the key was handled.
-        """
-        text = event.text()
-        if not text:
-            return False
-        cursor = self.textCursor()
-        closers = set(self.AUTO_PAIRS.values())
-        # Step over an auto-inserted closer instead of doubling it
-        if (text in closers and not cursor.hasSelection() and
-                self.char_after_cursor() == text):
-            cursor.movePosition(QtGui.QTextCursor.Right)
-            self.setTextCursor(cursor)
-            return True
-        close = self.AUTO_PAIRS.get(text)
-        if close is None:
-            return False
-        # Don't pair quotes mid-word (apostrophes, string suffixes)
-        if text in ("'", '"'):
-            if (self.char_before_cursor().isalnum() or
-                    self.char_after_cursor().isalnum()):
-                return False
-        if cursor.hasSelection():
-            cursor.insertText(text + cursor.selectedText() + close)
-            return True
-        cursor.insertText(text + close)
-        cursor.movePosition(QtGui.QTextCursor.Left)
-        self.setTextCursor(cursor)
-        return True
 
 
 class NumberBar(QtWidgets.QWidget):
