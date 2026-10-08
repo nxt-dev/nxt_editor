@@ -116,12 +116,9 @@ class PythonHighlighter(QSyntaxHighlighter):
     def highlightBlock(self, text):
         """Apply syntax highlighting to the given block of text.
         """
-        # Nested tokens (${...${...}}) need one extra char highlighted.
-        # This is here because you can't do nested logic in regex
-        nested = 1 if text.count(tokens.TOKEN_PREFIX) > 1 else 0
         # Do other syntax formatting
         for expression, nth, formatting in self.rules:
-            extra = nested if expression.pattern() in self.special_patterns else 0
+            special = expression.pattern() in self.special_patterns
             # Iterate every match on the line, not just the first one
             iterator = expression.globalMatch(text)
             while iterator.hasNext():
@@ -130,8 +127,15 @@ class PythonHighlighter(QSyntaxHighlighter):
                 index = match.capturedStart(nth)
                 if index < 0:
                     continue
-                length = len(match.captured(nth))
-                self.setFormat(index, length + extra, formatting)
+                captured = match.captured(nth)
+                # A nested token (${...${...}}) needs one extra char
+                # highlighted, because you can't do nested logic in regex.
+                # Decided per match: a line with two tokens side by side is
+                # not nested, and would colour the char after each one.
+                extra = 0
+                if special and captured.count(tokens.TOKEN_PREFIX) > 1:
+                    extra = 1
+                self.setFormat(index, len(captured) + extra, formatting)
 
         self.setCurrentBlockState(0)
 
