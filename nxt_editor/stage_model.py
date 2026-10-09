@@ -40,7 +40,7 @@ class EXEC_FRAMING:
 
 
 class StageModel(QtCore.QObject):
-    destroy_cmd_port = QtCore.Signal(None)
+    destroy_cmd_port = QtCore.Signal()
     update_cache_dict = QtCore.Signal(dict)
     about_to_rename = QtCore.Signal()
     about_to_execute = QtCore.Signal(bool)
