@@ -182,3 +182,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
     The completion sources are toggled from **Options > Autocomplete**; see
     [Completion](reference.md#completion).
 
+    `Ctrl+click` on a `${}` token, which selects the node the token reads
+    from, is a mouse action rather than a shortcut, so it is not listed here;
+    see [Following tokens](reference.md#following-tokens).
+

@@ -5,11 +5,17 @@ nxt comes in two packages:
 | Package | What it is | Python |
 | :------ | :--------- | :----- |
 | [nxt-core](https://pypi.org/project/nxt-core/) | The graph engine. Loads, composites and executes graphs, with no UI. | 3.7 to 3.14 |
-| [nxt-editor](https://pypi.org/project/nxt-editor/) | The visual editor. Installs nxt-core with it. | 3.9 to 3.14, with PySide6 6.x |
+| [nxt-editor](https://pypi.org/project/nxt-editor/) | The visual editor. Installs nxt-core with it. | 3.9 to 3.14, with PySide6 6.x below 6.12 |
 
 The editor uses [Qt.py](https://github.com/mottosso/Qt.py) on top of
 PySide6, both of which pip installs for you. The same release runs on
 Windows, macOS and Linux; nothing is compiled per platform.
+
+!!! note "PySide6 6.12"
+    nxt-editor asks pip for a PySide6 below 6.12, because the editor has not
+    been tested on 6.12 yet. If another package
+    in the same environment needs PySide6 6.12 or newer, give nxt an
+    environment of its own.
 
 We strongly recommend installing into a Python
 [virtual environment](https://docs.python.org/3/library/venv.html).
@@ -20,6 +26,11 @@ To install the latest release from [PyPI](https://pypi.org/project/nxt-editor/):
 
 - Install
     - `pip install nxt-editor`
+    - Optionally, for richer code completion:
+      `pip install nxt-editor[completion]`. This adds
+      [jedi](https://github.com/davidhalter/jedi), which the
+      [Python Analysis](reference.md#python-analysis-with-jedi) completion
+      source uses. The editor works the same without it.
 - Launch the editor
     - `nxt ui`, or `nxt ui path/to/graph.nxt` to open a graph
 - Update
@@ -85,6 +96,43 @@ folder and put the `nxt.mod` somewhere on your Maya modules path.
 When the plugin is loaded there is an **nxt** menu in Maya's main menu bar.
 Choose **Open Editor** to get started.
 
+The plugin also adds an `nxt_ui` command, for shelf buttons and scripts.
+There is one editor at a time: when an editor is already open, `nxt_ui`
+uses it rather than opening a second one.
+
+| Flag | What it does |
+| :--- | :----------- |
+| *(none)* | Opens the editor, or, when one is already open, brings it to the front, restoring it if it was minimised. |
+| `-path`, `-p` | Opens a graph, as a new tab of the open editor or in a new editor. Can be given more than once. |
+| `-reload`, `-r` | Closes the editor and opens a fresh one. Closing asks about unsaved changes as usual; if you cancel, the reload stops with a warning and the editor stays open. |
+| `-close`, `-c` | Closes the editor. |
+
+In Python:
+
+```python
+from maya import cmds
+
+cmds.nxt_ui()
+cmds.nxt_ui(path=['C:/graphs/build.nxt', 'C:/graphs/publish.nxt'])
+cmds.nxt_ui(reload=True)
+cmds.nxt_ui(close=True)
+```
+
+In MEL:
+
+```
+nxt_ui;
+nxt_ui -p "C:/graphs/build.nxt" -p "C:/graphs/publish.nxt";
+nxt_ui -reload;
+nxt_ui -close;
+```
+
+!!! note "Older scripts"
+    Before these flags, `nxt_ui` took `close` (and `reload`) as a plain
+    argument: `cmds.nxt_ui('close')`. That still works, but prints a warning
+    that it is deprecated. Use `cmds.nxt_ui(close=True)` and
+    `cmds.nxt_ui(reload=True)` instead.
+
 ### Running a graph in Maya standalone
 
 nxt_editor ships a small command line script, `run_maya_graph.py`, that runs
@@ -113,8 +161,14 @@ To launch it from inside another graph, reference the builtin
 `sub_graphs.nxt` graph (**File > Reference Builtin Graph**) and instance its
 `/_maya_standalone_graph` node. Set `_graph_path` to the graph to run,
 `_maya_version` (or `_MAYA_LOCATION` / `_mayapy_exe` if Maya is not installed
-in the default Windows location) and, if needed, `_parameters`. Turn on
-`_wait` to make the build wait for Maya to finish before it continues.
+in the default Windows location) and, if needed, `_parameters` and
+`_start_node`. Turn on `_wait` to make the build wait for Maya to finish
+before it continues.
+
+`_start_node` is passed to `run_maya_graph.py` as `-s`. Its value is used as
+python, so write the node path as a string, for example `'/build_rig'`
+(`_graph_path` is written the same way). Leave it as `None` to run from the
+graph's own start point.
 
 ## Unreal
 

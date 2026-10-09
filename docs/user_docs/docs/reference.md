@@ -13,6 +13,20 @@ Property Editor, Code Editor, History View, Build View, Workflow Tools,
 Output Log and [Hotkey Editor](hotkeys.md). Closed docks come back from the
 **Window** menu.
 
+## Docks and layout
+
+![View > Reset Layout](images/view_reset_layout.png)
+
+- **Float a dock** by dragging its title bar or tab out of the window, or,
+  where several docks share a space as tabs, by double clicking its tab.
+- **Dock it again** by dragging it back over the window until a space opens
+  for it, or by double clicking its title bar, which returns it to where it
+  was docked last.
+- **View > Reset Layout** puts every dock back where a fresh install has
+  it, with its default size. It resets to the editor's own layout, not to
+  the one you left at the end of your last session. The layout you leave the
+  editor in is still remembered for next time.
+
 ## Stage View
 
 The stage view draws the composited graph for the open tab. Each tab is
@@ -77,6 +91,7 @@ editor's right click menu, with the line commands under **Line**.
 | Delete Line | `Ctrl+Shift+K` | |
 | Expand Selection | `Ctrl+D` | The word under the cursor, then the line, then everything |
 | Complete Word | `Ctrl+Space` | See [Completion](#completion) |
+| Go to a token's node | `Ctrl+click` | See [Following tokens](#following-tokens) |
 | Indent / Un-Indent Line | `Tab` / `Shift+Tab` | Works on several lines at once |
 | Comment Line | `Ctrl+/` | |
 | Execute Selection Locally | `Shift+Return` | |
@@ -124,6 +139,49 @@ Every use of the word under the cursor is highlighted, and so is the bracket
 next to the cursor together with its partner. A bracket without a partner is
 drawn in a warning colour.
 
+Syntax colouring applies to every match on a line, so a line with several
+tokens or strings has all of them coloured, not only the first.
+
+### Auto-pairing
+
+While you edit, brackets and quotes come in pairs:
+
+- Typing `(`, `[`, `{`, `"` or `'` adds the closing character after the
+  cursor, so typing `${` gives `${}` with the cursor inside.
+- Typing a closing character that is already right after the cursor steps
+  over it rather than adding a second one, so typing the closer yourself
+  out of habit does no harm.
+- With text selected, typing an opening bracket or a quote wraps the
+  selection in the pair, and the text stays selected.
+- A quote typed straight after a letter or digit, or before one, is just
+  typed, so apostrophes and string prefixes such as `f'` work as usual.
+  Typing `"""` gives exactly three quotes.
+- Keyboard layouts that type `[` and `{` with `AltGr` pair them too.
+- Accepting a token completion inside `${}` does not leave a spare `}`
+  behind.
+
+### Following tokens
+
+![Hovering a token shows its value](images/code_editor_token_hover.png)
+
+In Raw View (`Q`), where the code shows its `${}` tokens, the tokens can be
+inspected and followed:
+
+- **Hover** a token that reads an attribute, such as `${/settings.out_dir}`
+  or a local `${suffix}`, to see the value it resolves to in a tooltip. If
+  the token names a node that does not exist, the tooltip says so instead.
+  `${file::}`, `${contents::}`, `${path::}` and tokens added by plugins are
+  never resolved by hovering, because resolving them reads files or runs
+  plugin code.
+- **`Ctrl+click`** a token that reads an attribute of another node to select
+  that node in the graph and frame it. While `Ctrl` is held, the mouse
+  pointer turns into a pointing hand over a token you can follow. A token
+  that reads the node's own attribute stays where it is, and a token naming
+  a node that does not exist logs a warning.
+
+`Ctrl+click` does nothing while you are editing the code, so it can never
+take you to another node, and accept your edit on the way, by accident.
+
 ### Completion
 
 ![Completing names from an imported module](images/completion_modules.png)
@@ -133,16 +191,50 @@ arrow keys to choose one and `Enter` or `Tab` to insert it; `Esc` closes the
 list. With **Code Editor Autocomplete** on, the list also appears by itself
 once you have typed two characters of a word.
 
-Completions come from four sources:
+Completions come from six sources:
 
 | Source | What it offers |
 | :----- | :------------- |
 | Python Builtins | Python's keywords and builtins, such as `return` and `enumerate`. |
-| Imported Modules | Names inside the modules this compute imports: `os.pa` offers `os.path`, and `os.path.jo` offers `os.path.join`. Aliases such as `import numpy as np` are understood. Only modules named on the compute's own import lines are looked at, and a module that fails to import is skipped. |
-| Node Attributes And Tokens | The node's attributes written as `name`, `self.name` and `${name}`, plus `self`, `STAGE`, and the token prefixes nxt knows about, including any added by plugins: `${file::`, `${filelist::`, `${path::` and so on. |
+| Imported Modules | Names inside the modules this compute imports, and inside the modules the world node (`/`) imports, since every compute can use those: `os.pa` offers `os.path`, and `os.path.jo` offers `os.path.join`. Aliases such as `import numpy as np` are understood. Only modules named on import lines are looked at, and a module that fails to import is skipped. |
+| Node Attributes And Tokens | The node's attributes written as `name`, `self.name` and `${name}`; the names nxt gives every compute, `STAGE`, `self`, `w`, `execute`, `nxt_path`, `ExitNode`, `ExitGraph` and `types` (`nxt_path.` looks inside it); the token prefixes nxt knows about, including any added by plugins: `${file::`, `${filelist::`, `${path::` and so on; and [node paths](#node-paths-and-their-attributes) inside `${/`. |
 | Words In This Compute | Words already written in the compute, which catches your own variable names. |
+| Host Modules | The modules the host application already has loaded, under the names scripts usually give them, so they complete before any import line is written: `cmds`, `mc`, `mel`, `om`, `oma`, `omui`, `omr` and `pm` in Maya, `unreal` in Unreal, `bpy` in Blender, `pyfbsdk` in MotionBuilder and `pymxs` in 3ds Max. Only modules the host has already loaded are offered; nothing is imported for them. In the standalone editor there are none. |
+| Python Analysis (jedi) | Optional. Uses [jedi](https://github.com/davidhalter/jedi) to work out what a name is, so that after a dot it can complete what a call returns or what a variable holds. See [Python analysis with jedi](#python-analysis-with-jedi). |
 
 ![Completing tokens](images/completion_tokens.png)
+
+#### Node paths and their attributes
+
+![Completing another node's attributes](images/completion_node_attrs.png)
+
+Inside a token that starts with `${/`, completion offers the paths of the
+nodes in the graph (`${/settings`, `${/export/report`). Once a node path is
+followed by a dot, it offers that node's attributes as whole tokens, so
+choosing one writes `${/settings.out_dir}` complete with its closing brace.
+
+#### Python analysis with jedi
+
+![jedi completing a string's methods](images/completion_jedi.png)
+
+The other sources read names: they can complete `os.path.jo` because `os`
+is imported, but not what `os.path.join(...)` returns. jedi analyses the
+code, so after `path = os.path.join(out_dir, name)` it knows `path` is a
+string and offers `path.split` and `path.splitlines`.
+
+- It is optional. Install it with `pip install nxt-editor[completion]` (see
+  [Standalone Installation](install.md#standalone-installation)). Without
+  it, **Python Analysis (jedi)** is greyed out in the menu, and its
+  description says how to install it.
+- It is only asked after a dot. Bare names still come from the other
+  sources, so switching one of those off keeps its names out of the list.
+- It is asked once typing pauses, or straight away with `Ctrl+Space`. The
+  answer is kept while you type more of the same name.
+- It sees the world node's imports and the names nxt gives every compute.
+  `${}` tokens are read as plain strings, so a compute full of tokens can
+  still be analysed.
+- jedi is loaded the first time it is needed, not when the editor starts,
+  and keeps its cache in the nxt user directory.
 
 #### Autocomplete options
 
@@ -154,8 +246,9 @@ even to a list that is already open.
 
 - **Code Editor Autocomplete**: offer completions while you type. When it is
   off, completions only appear when you press `Ctrl+Space`.
-- **Python Builtins**, **Imported Modules**, **Node Attributes And Tokens**
-  and **Words In This Compute**: the sources described above.
+- **Python Builtins**, **Imported Modules**, **Node Attributes And Tokens**,
+  **Words In This Compute**, **Host Modules** and **Python Analysis (jedi)**:
+  the sources described above.
 
 ## Layer Manager
 
@@ -186,7 +279,9 @@ Two items on this menu change what a layer pulls in from disk:
   The folder button next to the field picks a file with a file browser
   instead. A picked file that sits next to the layer, or in a folder below
   it, is stored relative to the layer; anything else is stored as a full
-  path.
+  path. A relative path is looked for under your file roots before the
+  layer's folder, so check the resolved view if a root might hold a file of
+  the same name.
 - **+** adds an empty row and puts the cursor in the field, ready to type.
   An empty row that is never filled in is dropped. **-** removes the
   selected reference.
@@ -434,22 +529,38 @@ use [Reload Source](#reload-source).
 #### How references are found
 
 A reference is stored exactly as it was written, which is often only part of
-a path. When a graph is opened, nxt looks for each reference in this order
-and uses the first file it finds:
+a path. Environment variables (`$NAME`) and `~` in it are expanded first.
+Then:
 
-1. The path as written, with environment variables (`$NAME`) and `~`
-   expanded. A relative path is relative to the folder of the layer that
-   holds the reference, not to wherever the top graph lives.
-2. The path under each folder listed in the `NXT_FILE_ROOTS` environment
-   variable, in order. Separate the folders with `;` on Windows and `:` on
-   Linux and macOS.
+1. **An absolute path** is used as it is.
+2. **Anything else** is looked for under each folder listed in the
+   `NXT_FILE_ROOTS` environment variable, in order. Separate the folders
+   with `;` on Windows and `:` on Linux and macOS.
+3. If no root has it, it is looked for relative to the folder of the layer
+   that holds the reference. That is the layer's own folder, not the folder
+   of the top graph and not wherever the editor was started.
+
+The first file found is used. The same order is used when a graph is
+opened, when a reference is added in the editor, and by the Reference
+Editor's resolved view, so they always agree.
 
 For example, with `NXT_FILE_ROOTS=/projects/show_a;/projects/library`, the
 reference `lib/shared_steps.nxt` is found at
-`/projects/show_a/lib/shared_steps.nxt` if it exists there, and otherwise at
-`/projects/library/lib/shared_steps.nxt`. Because what is stored is the
-partial path, the same graph keeps working on another machine, or for
-another project, with different roots.
+`/projects/show_a/lib/shared_steps.nxt` if it exists there, otherwise at
+`/projects/library/lib/shared_steps.nxt`, and otherwise at
+`lib/shared_steps.nxt` in the referring layer's folder. Because what is
+stored is the partial path, the same graph keeps working on another
+machine, or for another project, with different roots.
+
+!!! note "A root wins over a file beside the layer"
+    Because the roots are tried first, a file under a root is used even when
+    a file of the same name sits next to the layer. This is deliberate: put
+    a folder holding your working copies first in `NXT_FILE_ROOTS`, and a
+    graph that references `rig_steps.nxt` picks up your working copy of
+    `rig_steps.nxt` instead of the published one beside it, without
+    changing the graph. Take the folder out of `NXT_FILE_ROOTS` to go back.
+    To always use one particular file, reference it by an absolute path, or
+    by a path built from an environment variable.
 
 The [Reference Editor](#reference-editor) shows where each reference
 resolves on this machine with its resolved toggle, and the tooltip on a row

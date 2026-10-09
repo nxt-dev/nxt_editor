@@ -27,8 +27,51 @@ rebound in the [Hotkey Editor](hotkeys.md#code-editor).
   the compute imports, the node's attributes and `${}` tokens, and words
   already in the compute. Each source can be switched on or off under
   **Options > Autocomplete**, along with suggestions while you type.
+- **Auto-pairing**: typing `(`, `[`, `{`, `"` or `'` adds the closing
+  character, typing a closer that is already there steps over it, and
+  typing an opener with text selected wraps the selection.
+- **Syntax highlighting** colours every match on a line. Before, a line
+  with two tokens or two strings only had the first one coloured.
 
 See [Code Editor](reference.md#code-editor).
+
+### Tokens you can hover and follow
+
+![Hovering a token shows its value](images/code_editor_token_hover.png)
+
+In Raw View (`Q`), hover a `${}` token in the code editor to see what it
+resolves to, and `Ctrl+click` a token that reads another node's attribute to
+select and frame that node in the graph. See
+[Following tokens](reference.md#following-tokens).
+
+### Completion that knows what a compute can use
+
+![Completing another node's attributes](images/completion_node_attrs.png)
+
+- What the world node imports completes in every node, because every
+  compute can use it.
+- The names nxt gives every compute complete without an import: `STAGE`,
+  `self`, `w`, `execute`, `nxt_path`, `ExitNode`, `ExitGraph` and `types`.
+- Inside `${/` the node paths in the graph complete, and after a node path's
+  dot its attributes, each as a whole token.
+- **Host Modules**, a new source: in Maya, `cmds`, `om`, `pm` and the other
+  usual short names complete before any import line is written, and so do
+  `unreal` in Unreal and `bpy` in Blender. Only modules the host has
+  already loaded are offered, so nothing is imported to complete them.
+- **Python Analysis (jedi)**, a new optional source: with
+  `pip install nxt-editor[completion]`, completion after a dot knows what a
+  call returns or a variable holds.
+
+See [Completion](reference.md#completion).
+
+### Docks
+
+- Double click a dock's tab, where docks are tabbed together, to float it.
+  Drag a floating dock back in, or double click its title bar to dock it
+  again.
+- **View > Reset Layout** puts every dock back where a fresh install has it.
+
+See [Docks and layout](reference.md#docks-and-layout).
 
 ### Editing layer references
 
@@ -87,9 +130,12 @@ See [Build View](reference.md#build-view).
 
 ## Host integrations
 
-- **Maya**: Maya 2025, 2026 and 2027 are supported. Graphs can be run in
-  Maya standalone from the command line with `run_maya_graph.py`, including a
-  start node and parameters. See [Maya](install.md#maya).
+- **Maya**: Maya 2025, 2026 and 2027 are supported. The `nxt_ui` command
+  takes `-path` to open graphs, `-close` and `-reload`, and reuses the editor
+  that is already open. Graphs can be run in Maya standalone from the
+  command line with `run_maya_graph.py`, including a start node and
+  parameters, and the builtin `_maya_standalone_graph` node now passes its
+  `_start_node` on. See [Maya](install.md#maya).
 - **Unreal**: a plugin for Unreal 5.4 to 5.8 that carries its own copy of nxt,
   nxt_editor and Qt.py, with an **nxt** menu and a one click
   **Install Qt (PySide6)**. See [Unreal](install.md#unreal).
@@ -105,14 +151,22 @@ See [Build View](reference.md#build-view).
 | Package | Python |
 | :------ | :----- |
 | nxt-core | 3.7 to 3.14 |
-| nxt-editor | 3.9 to 3.14 (PySide6 6.x) |
+| nxt-editor | 3.9 to 3.14 (PySide6 6.x, below 6.12) |
+
+PySide6 is held below 6.12 until the editor has been tested on it.
 
 ## Core (nxt_core 0.21)
 
 - **Faster compositing and execution.** Large graphs composite and build
   substantially faster, with identical results.
-- **References resolve relative to the layer that holds them**, then under
-  the folders in `NXT_FILE_ROOTS`. See
+- **One order for finding a reference, everywhere.** A reference written
+  as an absolute path is used as it is. Any other reference is looked for
+  under the folders in `NXT_FILE_ROOTS` first, and then relative to the
+  layer that holds it, never relative to wherever the editor was started.
+  A file under a root therefore wins over a file of the same name beside
+  the layer, which is what lets a working copy listed in `NXT_FILE_ROOTS`
+  stand in for the published one. Adding a reference in the editor now
+  finds the same file that opening the graph does. See
   [How references are found](reference.md#how-references-are-found).
 - **References that cannot be resolved are kept.** Previously a reference to
   a file that could not be found was dropped from the layer, and saving the

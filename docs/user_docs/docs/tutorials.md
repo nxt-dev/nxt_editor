@@ -134,6 +134,9 @@ built from two files.
    the list.
 4. Type `file_list.nxt`, or press the folder button and pick the file.
    The new row is drawn normally because the file is found next to the layer.
+   (Had a folder in `NXT_FILE_ROOTS` held a `file_list.nxt`, that one would
+   be used instead: roots are looked in before the layer's own folder. See
+   [How references are found](reference.md#how-references-are-found).)
    Type a path to a file that does not exist and the row turns red, with
    `1 could not be found` under the list.
 5. Press **OK**. The referenced layers are loaded and the graph is
@@ -170,7 +173,11 @@ Select a node with code, double click into the code editor, and try:
   chevron to replace them.
 - `Ctrl+G` to jump to a line.
 - `Ctrl+Space` after `os.` in a compute that imports `os`, or after `${`,
-  to see what completion offers.
+  to see what completion offers. After `${/` it offers the graph's node
+  paths, and after `${/some_node.` that node's attributes.
+- Leave editing (`Esc`), press `Q` for Raw View, and hover a `${}` token to
+  see its value. Hold `Ctrl` and click a token that reads another node's
+  attribute to jump to that node.
 
 See [Code Editor](reference.md#code-editor) for every shortcut.
 
