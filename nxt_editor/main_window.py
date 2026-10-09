@@ -238,9 +238,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
         self.setCorner(QtCore.Qt.BottomLeftCorner, QtCore.Qt.LeftDockWidgetArea)
         self.setTabPosition(QtCore.Qt.AllDockWidgetAreas, QtWidgets.QTabWidget.North)
-        # Snapshot the factory dock/toolbar layout before any saved state is
-        # restored, so reset_layout can always return to it
-        self.default_layout_state = self.saveState()
         # Qt creates dock tab bars lazily when docks get tabified, so watch
         # for them to support double clicking a tab to float its dock
         for dock in self.findChildren(DockWidgetBase):
@@ -276,6 +273,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.resizeDocks(
             [self.property_editor, self.code_editor], [400, 300], QtCore.Qt.Vertical
         )
+        # The factory layout, for reset_layout to return to. Taken once the
+        # docks have their default sizes, which a snapshot taken any earlier
+        # does not have, and before showEvent restores the saved layout.
+        self.default_layout_state = self.saveState()
 
         if filepath:
             self.load_file(filepath=filepath)
