@@ -107,7 +107,9 @@ class StageModel(QtCore.QObject):
         self.refresh_exec_framing_from_pref()
         # model states
         self._data_state = DATA_STATE.RESOLVED
-        self._implicit_connections = True
+        # Each tab has its own, starting from whatever was last chosen.
+        self._implicit_connections = user_dir.user_prefs.get(
+            user_dir.USER_PREF.SHOW_IMPLICIT, True)
         # graph layers
         # Compositing is the expensive part of opening a graph, and a graph
         # sitting in a tab nobody has selected has nobody to show it to. The
@@ -2838,7 +2840,7 @@ class StageModel(QtCore.QObject):
                 not ref_layer.real_path):
             logger.error('Unable to create layer above an unsaved layer!')
             return
-        base_dir = user_dir.USER_DIR
+        base_dir = user_dir.last_opened_dir()
         top_layer_path = self.top_layer.real_path
         if top_layer_path:
             base_dir = os.path.dirname(top_layer_path)

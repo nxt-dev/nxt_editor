@@ -1299,6 +1299,9 @@ class StageViewActions(NxtActionContainer):
         def toggle_lines():
             state = self.implicit_action.isChecked()
             self.main_window.view.toggle_implicit_connections(state)
+            # Remembered for the tabs opened after this one, and the next
+            # session, the way the grid is.
+            user_dir.user_prefs[user_dir.USER_PREF.SHOW_IMPLICIT] = state
 
         self.implicit_action = NxtAction(text='Toggle Implicit Connections',
                                          parent=self)
@@ -1307,7 +1310,8 @@ class StageViewActions(NxtActionContainer):
         self.implicit_action.setWhatsThis('Shows or hides the implicit '
                                           'connections for this tab.')
         self.implicit_action.setCheckable(True)
-        self.implicit_action.setChecked(True)
+        self.implicit_action.setChecked(user_dir.user_prefs.get(
+            user_dir.USER_PREF.SHOW_IMPLICIT, True))
         self.implicit_action.triggered.connect(toggle_lines)
         lines_icon = QtGui.QIcon()
         lines_icn_on = QtGui.QPixmap(
@@ -1905,7 +1909,8 @@ class CodeEditorActions(NxtActionContainer):
         self.replace_action.setWhatsThis('Search and replace in the code in '
                                          'this editor.')
         self.replace_action.setAutoRepeat(False)
-        self.replace_action.setShortcut('Ctrl+H')
+        # Ctrl+H, and Ctrl+R for anyone coming from PyCharm.
+        self.replace_action.setShortcuts(['Ctrl+H', 'Ctrl+R'])
         self.find_next_action = NxtAction('Find Next', parent=self)
         self.find_next_action.setWhatsThis('Jump to the next match.')
         self.find_next_action.setShortcut('F3')

@@ -624,15 +624,15 @@ QCheckBox::indicator {
         :rtype: bool
         """
         if not filepath:
-            # TODO: The dialog should register the last opened folder into the
-            #  user_dir and use that as the starting dir for file dialogs
-            #  that aren't intrinicly tied to a layers real_path
+            # Beside the graph that is open, or with nothing saved open,
+            # wherever a graph was last opened from.
             real_path = None
             try:
                 real_path = self.model.stage.top_layer.real_path
             except AttributeError:
                 pass
-            _dir = os.path.dirname(real_path or os.getcwd())
+            _dir = os.path.dirname(real_path) if real_path else \
+                user_dir.last_opened_dir()
             potential_path = NxtFileDialog.system_file_dialog(base_dir=_dir)
             if not potential_path:
                 logger.debug("No file selected to load.")
@@ -1358,6 +1358,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addAction(self.view_actions.implicit_action)
         self.view_menu.addAction(self.view_actions.grid_action)
         self.view_menu.addAction(self.view_actions.mini_map_action)
+        self.view_menu.addAction(self.view_actions.animation_action)
         self.view_menu.addSeparator()
         self.reset_layout_action = self.view_menu.addAction('Reset Layout')
         self.reset_layout_action.triggered.connect(

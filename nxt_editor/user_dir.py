@@ -134,6 +134,7 @@ class USER_PREF():
     CE_COMPLETE_JEDI = 'code_editor_complete_jedi'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
+    SHOW_IMPLICIT = 'show_implicit_connections'
     SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'
 
@@ -352,6 +353,24 @@ class LastOpenedHandler(PrefHandler):
             recents = recents[:MAX_RECENT_FILES]
         editor_cache[USER_PREF.RECENT_FILES] = recents
         return EDITOR_CACHE_PATH
+
+
+def last_opened_dir():
+    """The folder a graph was last opened from, for file dialogs to start
+    in when there is no saved graph to start beside.
+
+    :return: that folder, or the working directory when there is none
+    :rtype: str
+    """
+    try:
+        last = editor_cache.get(USER_PREF.RECENT_FILES, [])[0]
+    except (IndexError, TypeError, KeyError):
+        last = None
+    if last:
+        folder = os.path.dirname(last)
+        if os.path.isdir(folder):
+            return folder
+    return os.getcwd()
 
 
 class BreakpointsHandler(PrefHandler):
