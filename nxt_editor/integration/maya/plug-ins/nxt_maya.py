@@ -50,14 +50,7 @@ def about_menu(*args):
 
 
 def auto_reload(*args):
-    safe = True
-    global __NXT_INSTANCE__
-    if __NXT_INSTANCE__:
-        safe = __NXT_INSTANCE__.close()
-    if safe:
-        cmds.nxt_ui('reload')
-    else:
-        cmds.warning('Aborted reload!')
+    cmds.nxt_ui(reload=True)
 
 
 
@@ -104,34 +97,69 @@ class NxtUiCmd(om.MPxCommand):
     def cmdCreator():
         return NxtUiCmd()
 
+    # Before the flags, nxt_ui took 'close' as a plain argument, and shelves
+    # and pipeline tools written then still call it that way. Still accepted,
+    # with a warning pointing at the flag.
+    LEGACY_ARGS = ('close', 'reload')
+
     @staticmethod
     def syntaxCreator():
         syntax = om.MSyntax()
         syntax.addFlag(NxtUiCmd.kCloseFlag, NxtUiCmd.kCloseFlagLong)
-        syntax.addFlag(NxtUiCmd.kPathFlag, NxtUiCmd.kPathFlagLong, om.MSyntax.kString)
+        syntax.addFlag(NxtUiCmd.kPathFlag, NxtUiCmd.kPathFlagLong,
+                       om.MSyntax.kString)
         syntax.makeFlagMultiUse(NxtUiCmd.kPathFlag)
-        syntax.addFlag(NxtUiCmd.kReloadFlag, NxtUiCmd.kReloadFlagLong, om.MSyntax.kString)
-        
+        syntax.addFlag(NxtUiCmd.kReloadFlag, NxtUiCmd.kReloadFlagLong)
+        syntax.setObjectType(om.MSyntax.kStringObjects, 0, 1)
         return syntax
+
+    @staticmethod
+    def bring_to_front(window):
+        """Show an editor that is already open, however it was left.
+
+        :return: False when Qt has already deleted the window.
+        :rtype: bool
+        """
+        try:
+            if window.isMinimized():
+                window.showNormal()
+            elif window.isHidden():
+                window.show()
+            window.raise_()
+            window.activateWindow()
+        except RuntimeError:
+            return False
+        return True
 
     def doIt(self, args):
         global __NXT_INSTANCE__
         os.environ[NXT_DCC_ENV_VAR] = 'maya'
 
-        try:
-            parser = om.MArgParser(self.syntax(), args)
-        except RuntimeError:
-            raise RuntimeError(
-                "nxt_ui: invalid flag(s). Valid flags are -close/-c and "
-                "-path/-p.")
+        # Maya's own message says which flag it did not understand.
+        parser = om.MArgParser(self.syntax(), args)
+        legacy = [arg.lower() for arg in parser.getObjectStrings()]
+        for arg in legacy:
+            if arg not in NxtUiCmd.LEGACY_ARGS:
+                raise RuntimeError(
+                    "nxt_ui: unknown argument '{}'. Use -close/-c, "
+                    "-reload/-r or -path/-p.".format(arg))
+            cmds.warning("nxt_ui('{0}') is deprecated, use "
+                         "nxt_ui({0}=True)".format(arg))
 
-        if parser.isFlagSet(NxtUiCmd.kCloseFlag):
+        if parser.isFlagSet(NxtUiCmd.kCloseFlag) or 'close' in legacy:
             if __NXT_INSTANCE__:
                 __NXT_INSTANCE__.close()
             return
 
-        if parser.isFlagSet(NxtUiCmd.kReloadFlag):
-            pass
+        reloading = (parser.isFlagSet(NxtUiCmd.kReloadFlag)
+                     or 'reload' in legacy)
+        if reloading and __NXT_INSTANCE__:
+            # close() asks about unsaved changes first, and says whether
+            # the window actually closed.
+            if not __NXT_INSTANCE__.close():
+                cmds.warning('Aborted reload!')
+                return
+            __NXT_INSTANCE__ = None
 
         paths = []
         if parser.isFlagSet(NxtUiCmd.kPathFlag):
@@ -139,8 +167,11 @@ class NxtUiCmd(om.MPxCommand):
                 flag_args = parser.getFlagArgumentList(NxtUiCmd.kPathFlag, i)
                 paths.append(flag_args.asString(0))
 
-        if __NXT_INSTANCE__ and paths:
-            __NXT_INSTANCE__.raise_()
+        if __NXT_INSTANCE__ and not self.bring_to_front(__NXT_INSTANCE__):
+            # Qt deleted it without the close we listen for.
+            __NXT_INSTANCE__ = None
+        if __NXT_INSTANCE__:
+            # One editor at a time: open what was asked for in it, as tabs.
             for p in paths:
                 __NXT_INSTANCE__.load_file(p)
             return
