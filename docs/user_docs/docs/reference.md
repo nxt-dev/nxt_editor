@@ -541,8 +541,9 @@ Then:
    of the top graph and not wherever the editor was started.
 
 The first file found is used. The same order is used when a graph is
-opened, when a reference is added in the editor, and by the Reference
-Editor's resolved view, so they always agree.
+opened, when a reference is added in the editor, when a layer is reloaded
+with Reload Source, and by the Reference Editor's resolved view, so they
+always agree.
 
 For example, with `NXT_FILE_ROOTS=/projects/show_a;/projects/library`, the
 reference `lib/shared_steps.nxt` is found at
