@@ -47,6 +47,7 @@ Our releases are hosted on [PyPi](https://pypi.org/project/nxt-editor/).
 
 - Install:
     - `pip install nxt-editor`
+    - Optionally, for richer code completion: `pip install nxt-editor[completion]`
 - Launch:
     - `nxt ui`
 - Update:

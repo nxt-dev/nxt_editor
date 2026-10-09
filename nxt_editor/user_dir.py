@@ -130,6 +130,8 @@ class USER_PREF():
     CE_COMPLETE_MODULES = 'code_editor_complete_modules'
     CE_COMPLETE_NODE = 'code_editor_complete_node'
     CE_COMPLETE_DOCUMENT = 'code_editor_complete_document'
+    CE_COMPLETE_HOST = 'code_editor_complete_host'
+    CE_COMPLETE_JEDI = 'code_editor_complete_jedi'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
     SHOW_MINI_MAP = 'show_mini_map'

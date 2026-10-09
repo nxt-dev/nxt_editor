@@ -22,6 +22,7 @@ from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path, tokens
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
+from nxt_editor.dockwidgets import code_completion
 from nxt_editor.dockwidgets.code_overlays import (FindOverlay,
                                                   GotoLineOverlay)
 from nxt_editor.constants import FONTS
@@ -723,6 +724,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.completer.setCaseSensitivity(QtCore.Qt.CaseSensitive)
         self.completer.activated.connect(self.insert_completion)
         self.completer.popup().installEventFilter(self)
+        # jedi is asked once typing pauses rather than on every key, since
+        # a fresh question can take a moment.
+        self.jedi_timer = QtCore.QTimer(self)
+        self.jedi_timer.setSingleShot(True)
+        self.jedi_timer.setInterval(250)
+        self.jedi_timer.timeout.connect(self.ask_jedi)
         # The word list is rebuilt from the document, so it goes stale on
         # every edit. Rebuilding is deferred until a completion is asked for.
         self.textChanged.connect(self.invalidate_completion_words)
@@ -1170,7 +1177,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         :rtype: dict
         """
         found = {}
-        for match in self.IMPORT_RE.finditer(self.toPlainText()):
+        for match in self.IMPORT_RE.finditer(self.import_source()):
             module_name = match.group('mod') or match.group('from')
             if not module_name:
                 continue
@@ -1191,6 +1198,42 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             found[local_name] = module
         return found
 
+    def world_source(self):
+        """The world node's code, when this is another node.
+
+        The world node runs first, into the same globals every compute runs
+        with, so what it imports every node can use without importing again.
+        """
+        model = self.ce_widget.stage_model
+        node_path = self.ce_widget.node_path
+        if not model or not node_path or node_path == nxt_path.WORLD:
+            return ''
+        try:
+            return model.get_node_code_string(nxt_path.WORLD) or ''
+        except Exception:
+            return ''
+
+    def import_source(self):
+        """This compute, after the world node's."""
+        world = self.world_source()
+        code = self.toPlainText()
+        return world + '\n' + code if world else code
+
+    def completion_namespace(self):
+        """Names the compute can use without importing them itself.
+
+        :return: {name: object}, from each source that is switched on
+        :rtype: dict
+        """
+        namespace = {}
+        if self.completion_source_enabled('complete_node_action'):
+            namespace.update(code_completion.RUNTIME_GLOBALS)
+        if self.completion_source_enabled('complete_host_action'):
+            namespace.update(code_completion.host_modules())
+        if self.completion_source_enabled('complete_modules_action'):
+            namespace.update(self.imported_modules())
+        return namespace
+
     def module_completions(self, prefix):
         """Names reachable through a dotted prefix, like os.pa.
 
@@ -1198,11 +1241,10 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         :type prefix: str
         :rtype: list
         """
-        if '.' not in prefix or not self.completion_source_enabled(
-                'complete_modules_action'):
+        if '.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX):
             return []
         root, _, rest = prefix.partition('.')
-        module = self.imported_modules().get(root)
+        module = self.completion_namespace().get(root)
         if module is None:
             return []
         walked = root
@@ -1232,7 +1274,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             words.update(keyword.kwlist)
             words.update(dir(builtins))
         if self.completion_source_enabled('complete_node_action'):
-            words.update(('self', 'STAGE'))
+            words.update(code_completion.RUNTIME_GLOBALS)
             model = self.ce_widget.stage_model
             node_path = self.ce_widget.node_path
             if model and node_path:
@@ -1255,6 +1297,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             # The bare module names. What is inside them is resolved per
             # prefix, since dir() on everything imported would be huge.
             words.update(self.imported_modules())
+        if self.completion_source_enabled('complete_host_action'):
+            words.update(code_completion.host_modules())
         if self.completion_source_enabled('complete_document_action'):
             words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
                                     self.toPlainText()))
@@ -1265,7 +1309,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     # braces and colons, because a token is a word too: stopping at the $
     # meant ${fi offered the prefix "fi", which matches no token, which is
     # why only python builtins ever appeared.
-    PREFIX_CHARS = r'[A-Za-z0-9_.:${}]*$'
+    # Slashes too, but only inside a token, where they are a node path:
+    # anywhere else a slash is division and starts a new word.
+    PREFIX_CHARS = r'[A-Za-z0-9_.:${}/]*$'
 
     def completion_prefix(self):
         """The partial word in front of the cursor.
@@ -1275,7 +1321,95 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         cursor = self.textCursor()
         text = cursor.block().text()[:cursor.positionInBlock()]
         match = re.search(self.PREFIX_CHARS, text)
-        return match.group(0) if match else ''
+        prefix = match.group(0) if match else ''
+        if not prefix.startswith(tokens.TOKEN_PREFIX):
+            prefix = prefix.rpartition('/')[2]
+        return prefix
+
+    def token_completions(self, prefix):
+        """Node paths inside ${/, and a node's attributes after its dot.
+
+        ${/ offers every node path, and ${/some/node. offers that node's
+        attributes as whole tokens.
+
+        :param prefix: the partial word being typed
+        :type prefix: str
+        :rtype: list
+        """
+        start = tokens.TOKEN_PREFIX + nxt_path.WORLD
+        if (not prefix.startswith(start) or
+                not self.completion_source_enabled('complete_node_action')):
+            return []
+        model = self.ce_widget.stage_model
+        if not model:
+            return []
+        body = prefix[len(tokens.TOKEN_PREFIX):]
+        try:
+            if '.' in body:
+                node_path = body.rpartition('.')[0]
+                return [tokens.TOKEN_PREFIX + node_path + '.' + name
+                        + tokens.TOKEN_SUFFIX
+                        for name in model.get_node_attr_names(node_path)]
+            return [tokens.TOKEN_PREFIX + path
+                    for path in model.get_descendants(nxt_path.WORLD)]
+        except Exception:
+            logger.debug('No token completions for ' + prefix, exc_info=True)
+            return []
+
+    def jedi_question(self, prefix):
+        """Where jedi would be asked, and what its answer depends on.
+
+        Only after a dot, which is where jedi knows something the other
+        sources cannot: what a call returns, what a variable holds. Bare
+        names come from the sources that can each be switched off.
+
+        Asked at the start of the name being typed, so the answer is every
+        name that can go there and typing more of it only filters. The
+        answer depends on the code around that point, not on the name.
+
+        :return: (source, line, column, cache key, what goes before each
+            name), or None when jedi is not wanted here
+        """
+        if ('.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX) or
+                not self.completion_source_enabled('complete_jedi_action') or
+                not code_completion.JEDI.installed()):
+            return None
+        cursor = self.textCursor()
+        root, dot, name = prefix.rpartition('.')
+        position = cursor.position() - len(name)
+        text = self.toPlainText()
+        source = text[:position] + text[cursor.position():]
+        line = cursor.blockNumber() + 1
+        column = cursor.positionInBlock() - len(name)
+        key = (source, position, self.world_source())
+        return source, line, column, key, root + dot
+
+    def jedi_completions(self, prefix, ask=False):
+        """What jedi offers for the name being typed.
+
+        :param ask: work it out now if it is not already known, which is
+            what pausing or Ctrl+Space does. Otherwise only what is known.
+        :rtype: list
+        """
+        question = self.jedi_question(prefix)
+        if question is None:
+            return []
+        source, line, column, key, before = question
+        names = code_completion.JEDI.cached(key)
+        if names is None:
+            if not ask:
+                self.jedi_timer.start()
+                return []
+            names = code_completion.JEDI.complete(
+                source, line, column, self.completion_namespace(), key)
+        return [before + name for name in names]
+
+    def ask_jedi(self):
+        """Typing paused: ask jedi, and show what it says."""
+        if self.isReadOnly() or not self.hasFocus():
+            return
+        if self.jedi_completions(self.completion_prefix(), ask=True):
+            self.update_completions()
 
     def update_completions(self, force=False):
         """Offer completions for the word being typed.
@@ -1297,9 +1431,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             return
         if self.completion_words is None:
             self.completion_words = self.build_completion_words()
-        # Module contents depend on what is being typed, so they are worked
-        # out per prefix rather than kept in the cached list.
-        words = self.completion_words + self.module_completions(prefix)
+        # Module contents, node paths and what jedi says depend on what is
+        # being typed, so they are worked out per prefix rather than kept in
+        # the cached list.
+        words = (self.completion_words + self.module_completions(prefix)
+                 + self.token_completions(prefix)
+                 + self.jedi_completions(prefix, ask=force))
         model = QtCore.QStringListModel(sorted(set(words)), self.completer)
         self.completer.setModel(model)
         self.completer.setCompletionPrefix(prefix)
@@ -1385,7 +1522,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if self.isReadOnly():
             return
         typed = event.text()
-        if typed and (typed.isalnum() or typed in '_.'):
+        if typed and (typed.isalnum() or typed in '_./'):
             self.update_completions()
         elif self.completer.popup().isVisible():
             self.hide_completions()
