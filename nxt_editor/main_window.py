@@ -744,12 +744,15 @@ QCheckBox::indicator {
         if not save_path:
             return False
         self.set_waiting_cursor(True)
-        self.nxt.save_layer(layer, filepath=save_path)
-        user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = layer.real_path
+        # Opened in a new tab, the save is a copy and this tab keeps the
+        # original as it was, references included. Otherwise this layer
+        # becomes the new file.
+        self.nxt.save_layer(layer, filepath=save_path,
+                            as_copy=open_in_new_tab)
+        user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = save_path
         layer.filepath = old_path
         if open_in_new_tab:
             self.load_file(save_path)
-            layer.real_path = old_real_path
         elif layer is self.model.top_layer:
             tab_idx = self.open_files_tab_widget.currentIndex()
             self.open_files_tab_widget.setTabText(tab_idx, layer.alias)
