@@ -1368,6 +1368,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
         self.view_opt_menu.addAction(self.ce_actions.overlay_message_action)
+        self.view_opt_menu.addAction(self.ce_actions.show_data_state_action)
         self.view_opt_menu.addAction(self.app_actions.increase_font_size_action)
         self.view_opt_menu.addAction(self.app_actions.decrease_font_size_action)
         self.view_opt_menu.addAction(self.app_actions.reset_font_size_action)
