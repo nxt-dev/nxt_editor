@@ -36,7 +36,9 @@ class ReferenceMenus(unittest.TestCase):
 
     def setUp(self):
         self.cwd = os.getcwd()
-        self.tmp = tempfile.mkdtemp(prefix='nxt_ref_menus_')
+        # Resolved, since nxt writes resolved paths and a temp folder
+        # can have a short name on Windows.
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix='nxt_ref_menus_'))
         self.graph_dir = os.path.join(self.tmp, 'graph')
         self.far_dir = os.path.join(self.tmp, 'far')
         os.makedirs(self.graph_dir)

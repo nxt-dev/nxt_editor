@@ -35,7 +35,9 @@ class SaveAsElsewhere(unittest.TestCase):
 
     def setUp(self):
         self.cwd = os.getcwd()
-        self.tmp = tempfile.mkdtemp(prefix='nxt_save_as_ui_')
+        # Resolved, since nxt writes resolved paths and a temp folder
+        # can have a short name on Windows.
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix='nxt_save_as_ui_'))
         self.graph_dir = os.path.join(self.tmp, 'graph')
         self.copy_dir = os.path.join(self.tmp, 'copy')
         os.makedirs(self.graph_dir)
@@ -73,8 +75,8 @@ class SaveAsElsewhere(unittest.TestCase):
     def test_the_original_is_left_as_it_was(self):
         layer = self.save_as()
         self.assertEqual(['beside.nxt'], layer.get_references())
-        self.assertEqual(os.path.normcase(self.top),
-                         os.path.normcase(layer.real_path))
+        # The same file, however the temp folder happens to be spelled.
+        self.assertTrue(os.path.samefile(self.top, layer.real_path))
         layer.save()
         with open(self.top) as file_object:
             self.assertEqual(['beside.nxt'],

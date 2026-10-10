@@ -77,7 +77,9 @@ class LastOpenedFolder(unittest.TestCase):
 
     def setUp(self):
         self.saved = user_dir.editor_cache.get(user_dir.USER_PREF.RECENT_FILES)
-        self.tmp = tempfile.mkdtemp(prefix='nxt_last_opened_')
+        # Resolved, since nxt writes resolved paths and a temp folder
+        # can have a short name on Windows.
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix='nxt_last_opened_'))
 
     def tearDown(self):
         if self.saved is None:
