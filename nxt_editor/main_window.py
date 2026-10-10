@@ -59,6 +59,29 @@ import nxt.remote.contexts
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
+# Widget classes given the editor's font when the QApplication is nxt's own.
+WIDGETS_WITH_FONTS = (
+    "QMenuBar",
+    "QTabWidget",
+    "QMenu",
+    "QTableView",
+    "QLineEdit",
+    "QComboBox",
+    "QLabel",
+    "QPushButton",
+    "QTextEdit",
+    "QWidget",
+    "QListWidget",
+    "QTabelWidget",
+    "QTreeWidget",
+    "QSpinBox",
+    "QDoubleSpinBox",
+    "QCheckBox",
+)
+# Marks a widget inside a host whose font the editor set, and so keeps in
+# step with the font size.
+FONT_FOLLOWS_WINDOW = 'nxt_font_follows_window'
+
 
 class MainWindow(QtWidgets.QMainWindow):
     """The main window of the nxt UI. Includes the menu bar, tool bar, and dock widgets."""
@@ -405,29 +428,25 @@ class MainWindow(QtWidgets.QMainWindow):
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
         font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
-        app = QtWidgets.QApplication.instance()
-        app.setFont(font)
-
-        widgets_with_fonts = [
-            "QMenuBar",
-            "QTabWidget",
-            "QMenu",
-            "QTableView",
-            "QLineEdit",
-            "QComboBox",
-            "QLabel",
-            "QPushButton",
-            "QTextEdit",
-            "QWidget",
-            "QListWidget",
-            "QTabelWidget",
-            "QTreeWidget",
-            "QSpinBox",
-            "QDoubleSpinBox",
-            "QCheckBox",
-        ]
-        for widget in widgets_with_fonts:
-            app.setFont(font, widget)
+        if nxt_editor.owns_qapp():
+            app = QtWidgets.QApplication.instance()
+            app.setFont(font)
+            for widget in WIDGETS_WITH_FONTS:
+                app.setFont(font, widget)
+        else:
+            # A host's application font is the host's: setting it changes
+            # every widget in Maya too (#284, #304). So the font is set on
+            # the editor's own widgets instead. They do not all inherit it
+            # from the window: menus are windows of their own, and Qt gives
+            # classes such as QMenuBar a font from the platform. Widgets
+            # that chose their own font keep it.
+            self.setFont(font)
+            for widget in self.findChildren(QtWidgets.QWidget):
+                explicit = widget.testAttribute(QtCore.Qt.WA_SetFont)
+                if explicit and not widget.property(FONT_FOLLOWS_WINDOW):
+                    continue
+                widget.setFont(font)
+                widget.setProperty(FONT_FOLLOWS_WINDOW, True)
 
         new_cb_stylesheet = """
 QCheckBox::indicator {
@@ -439,8 +458,13 @@ QCheckBox::indicator {
             font_size * 1.5,
             font_size * 1.5,
         )
-        # List all checkboxes and update their style sheet.
-        for widget in QtWidgets.QApplication.allWidgets():
+        # Every checkbox when the application is nxt's own, otherwise the
+        # editor's checkboxes and not the host's.
+        if nxt_editor.owns_qapp():
+            widgets = QtWidgets.QApplication.allWidgets()
+        else:
+            widgets = self.findChildren(QtWidgets.QCheckBox)
+        for widget in widgets:
             if isinstance(widget, QtWidgets.QCheckBox):
                 widget.setStyleSheet(new_cb_stylesheet)
 
