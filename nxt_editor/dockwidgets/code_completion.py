@@ -149,7 +149,7 @@ class Jedi(object):
         """The names last worked out for `key`, or None."""
         return self._cache_names if key == self._cache_key else None
 
-    def complete(self, source, line, column, namespace, key):
+    def complete(self, source, line, column, namespace, key, fresh=False):
         """Names that can follow the cursor, as jedi sees the code.
 
         :param source: the whole compute
@@ -157,10 +157,12 @@ class Jedi(object):
         :param column: cursor column, starting at 0
         :param namespace: live names the compute can use without importing
         :param key: what the answer depends on, for the cache
+        :param fresh: ask again even if this spot was asked before, for
+            when something the code uses has changed, a reloaded module say
         :return: completed names, without the part before the last dot
         :rtype: list
         """
-        cached = self.cached(key)
+        cached = None if fresh else self.cached(key)
         if cached is not None:
             return cached
         jedi = self.module()

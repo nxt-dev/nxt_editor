@@ -1384,24 +1384,27 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         key = (source, position, self.world_source())
         return source, line, column, key, root + dot
 
-    def jedi_completions(self, prefix, ask=False):
+    def jedi_completions(self, prefix, ask=False, fresh=False):
         """What jedi offers for the name being typed.
 
         :param ask: work it out now if it is not already known, which is
             what pausing or Ctrl+Space does. Otherwise only what is known.
+        :param fresh: ask again even if this spot was asked before. Ctrl+Space
+            does, so a library reloaded since shows what it has now.
         :rtype: list
         """
         question = self.jedi_question(prefix)
         if question is None:
             return []
         source, line, column, key, before = question
-        names = code_completion.JEDI.cached(key)
+        names = None if fresh else code_completion.JEDI.cached(key)
         if names is None:
             if not ask:
                 self.jedi_timer.start()
                 return []
             names = code_completion.JEDI.complete(
-                source, line, column, self.completion_namespace(), key)
+                source, line, column, self.completion_namespace(), key,
+                fresh=fresh)
         return [before + name for name in names]
 
     def ask_jedi(self):
@@ -1436,7 +1439,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         # the cached list.
         words = (self.completion_words + self.module_completions(prefix)
                  + self.token_completions(prefix)
-                 + self.jedi_completions(prefix, ask=force))
+                 + self.jedi_completions(prefix, ask=force, fresh=force))
         model = QtCore.QStringListModel(sorted(set(words)), self.completer)
         self.completer.setModel(model)
         self.completer.setCompletionPrefix(prefix)

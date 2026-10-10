@@ -9,6 +9,7 @@ jedi, when it is installed, is asked once typing pauses or on Ctrl+Space,
 and what it says for one spot is kept while more of the name is typed.
 """
 # Builtin
+import gc
 import json
 import os
 import shutil
@@ -16,6 +17,7 @@ import sys
 import tempfile
 import types
 import unittest
+import weakref
 from unittest import mock
 
 # External
@@ -210,6 +212,51 @@ class CompletionNamespace(unittest.TestCase):
                                side_effect=AssertionError('asked again')):
             got = self.editor.jedi_completions('label.up')
         self.assertIn('label.upper', got)
+
+    @unittest.skipUnless(code_completion.Jedi.installed(), 'needs jedi')
+    def test_a_reloaded_library_is_not_kept_alive(self):
+        # A world node that hot reloads a library deletes it from
+        # sys.modules and imports it again. Completing on it must not keep
+        # the old one alive, or the reload never takes.
+        library = types.ModuleType('nxt_reload_probe')
+        library.make_arm = lambda: None
+        sys.modules['nxt_reload_probe'] = library
+        old = weakref.ref(library)
+        del library
+        try:
+            self.load("import nxt_reload_probe\nnxt_reload_probe.ma")
+            got = self.editor.jedi_completions('nxt_reload_probe.ma',
+                                               ask=True, fresh=True)
+            self.assertIn('nxt_reload_probe.make_arm', got)
+        finally:
+            sys.modules.pop('nxt_reload_probe', None)
+        self.load('x = ')
+        gc.collect()
+        self.assertIsNone(old(), 'completion kept the old library alive')
+
+    @unittest.skipUnless(code_completion.Jedi.installed(), 'needs jedi')
+    def test_ctrl_space_sees_what_a_reloaded_library_has_now(self):
+        first = types.ModuleType('nxt_reload_probe')
+        first.old_name = 1
+        sys.modules['nxt_reload_probe'] = first
+        try:
+            self.load("import nxt_reload_probe\nnxt_reload_probe.")
+            prefix = 'nxt_reload_probe.'
+            self.assertIn('nxt_reload_probe.old_name',
+                          self.editor.jedi_completions(prefix, ask=True,
+                                                       fresh=True))
+            # Asked again at the same spot without Ctrl+Space, the answer
+            # kept from before is used.
+            self.assertIn('nxt_reload_probe.old_name',
+                          self.editor.jedi_completions(prefix))
+            second = types.ModuleType('nxt_reload_probe')
+            second.new_name = 2
+            sys.modules['nxt_reload_probe'] = second
+            got = self.editor.jedi_completions(prefix, ask=True, fresh=True)
+            self.assertIn('nxt_reload_probe.new_name', got)
+            self.assertNotIn('nxt_reload_probe.old_name', got)
+        finally:
+            sys.modules.pop('nxt_reload_probe', None)
 
     @unittest.skipUnless(code_completion.Jedi.installed(), 'needs jedi')
     def test_jedi_can_be_switched_off(self):
