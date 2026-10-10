@@ -17,6 +17,7 @@ from nxt_editor.constants import FONTS
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.dialogs import NxtWarningDialog
+from nxt_editor.mini_map import MiniMap
 from nxt_editor.commands import *
 from nxt_editor import colors
 from .user_dir import USER_PREF, user_prefs
@@ -42,7 +43,10 @@ class StageView(QtWidgets.QGraphicsView):
     def __init__(self, model, parent=None):
         super(StageView, self).__init__(parent=parent)
         self.main_window = parent
-        self._do_anim_pref = user_prefs.get(USER_PREF.ANIMATION, True)
+        # Off by default. Every node animates separately, so opening a
+        # parent with a lot of children spends most of its time on the
+        # animation rather than on drawing the result.
+        self._do_anim_pref = user_prefs.get(USER_PREF.ANIMATION, False)
         self.do_animations = self._do_anim_pref
         self.once_sec_timer = QtCore.QTimer(self)
         self.once_sec_timer.timeout.connect(self.calculate_fps)
@@ -119,9 +123,17 @@ class StageView(QtWidgets.QGraphicsView):
         self._connection_graphics = []
         self._attr_concerns = {}
         self.prev_build_focus_path = None
+        # A tab nobody has selected has nobody to show a graph to, so the
+        # scene is left empty until the view is first put in front of
+        # somebody. See ensure_drawn.
+        self._drawn = False
 
         # local attributes
         self.show_grid = user_prefs.get(USER_PREF.SHOW_GRID, True)
+        self.show_mini_map = user_prefs.get(USER_PREF.SHOW_MINI_MAP, True)
+        # Drawn in drawForeground rather than being a child widget, see
+        # nxt_editor.mini_map.MiniMap.
+        self.mini_map = MiniMap(self)
         # connection attribute used when drawing connections
         self.potential_connection = None
 
@@ -139,8 +151,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.frame_items.connect(self.frame_nodes)
         self.model.collapse_changed.connect(self.handle_collapse_changed)
 
-        # initialize the view
-        self.update_view()
+        # The view is drawn when it is first shown, not here: see
+        # ensure_drawn.
 
         # HUD
         self.hud_layout = QtWidgets.QGridLayout(self)
@@ -166,6 +178,17 @@ class StageView(QtWidgets.QGraphicsView):
         if user_prefs.get(USER_PREF.FPS, True):
             self.hud_layout.addWidget(self.fps_label, 1, 3)
 
+        # mini map
+        # Anything that changes what the graph looks like invalidates the
+        # map's cached node blocks. Selection is deliberately left out, the
+        # map draws selection live rather than baking it into the cache.
+        self.model.comp_layer_changed.connect(self.mini_map.mark_dirty)
+        self.model.nodes_changed.connect(self.mini_map.mark_dirty)
+        self.model.node_moved.connect(self.mini_map.mark_dirty)
+        self.model.collapse_changed.connect(self.mini_map.mark_dirty)
+        self.model.layer_color_changed.connect(self.mini_map.mark_dirty)
+        self.toggle_mini_map(self.show_mini_map)
+
         self.SEL_ADD_MODIFIERS = QtCore.Qt.ShiftModifier | QtCore.Qt.ControlModifier
         self.SEL_TOGGLE_MODIFIERS = QtCore.Qt.KeyboardModifiers(QtCore.Qt.ShiftModifier)
         self.SEL_RMV_MODIFIERS = QtCore.Qt.KeyboardModifiers(QtCore.Qt.ControlModifier)
@@ -178,6 +201,7 @@ class StageView(QtWidgets.QGraphicsView):
     def drawForeground(self, painter, rect):
         super(StageView, self).drawForeground(painter, rect)
         self.frames += 1
+        self.mini_map.draw(painter)
 
     def focusInEvent(self, event):
         super(StageView, self).focusInEvent(event)
@@ -222,7 +246,44 @@ class StageView(QtWidgets.QGraphicsView):
         if self.model:
             return self.model.implicit_connections
 
+    @property
+    def is_drawn(self):
+        """Whether this view has drawn its graph yet."""
+        return self._drawn
+
+    def ensure_drawn(self):
+        """Draw the graph if this view has never shown it.
+
+        Called when the view is put in front of somebody. Opening a file
+        no longer draws a scene and composites a graph that is sitting in
+        a tab nobody has looked at; the tab being selected pays for that,
+        once. After that the view keeps its scene and the model keeps its
+        comp, so coming back to the tab costs nothing -- anything edited
+        in between was drawn as it happened.
+
+        :return: whether this call did the drawing
+        :rtype: bool
+        """
+        if self._drawn:
+            return False
+        self._drawn = True
+        self.update_view()
+        # The comp this graph has just been drawn from is the first one
+        # anybody has seen of it, and a comp that failed is worth saying
+        # so about here rather than only when the next edit lands.
+        self.failure_check()
+        return True
+
+    def showEvent(self, event):
+        # Selecting a tab shows its view, and so does showing the window
+        # for the first time. Either way this is the moment the graph has
+        # somebody to be drawn for.
+        super(StageView, self).showEvent(event)
+        self.ensure_drawn()
+
     def failure_check(self, *args):
+        if not self._drawn:
+            return
         if self.model.comp_layer.failure and not self.main_window.in_startup:
             info = ('There was a critical error when building the comp.\n'
                     'Please check your output window for more details as to\n'
@@ -236,6 +297,11 @@ class StageView(QtWidgets.QGraphicsView):
         :param dirty: List or Tuple of dirty node paths
         :return: None
         """
+        if not self._drawn:
+            # There is nothing drawn to update, and drawing only the dirty
+            # part now would leave the rest of the graph missing. The whole
+            # graph is drawn when the tab is first selected.
+            return
         start = time.time()
         # The signal layer_color_changed somehow passes its layer to this
         # function. Until we clean up signals this accounts for the wrong
@@ -295,6 +361,18 @@ class StageView(QtWidgets.QGraphicsView):
         else:
             self.show_grid = state
         self.update()
+
+    def toggle_mini_map(self, state=None):
+        if state is None:
+            self.show_mini_map = not self.show_mini_map
+        else:
+            self.show_mini_map = state
+        self.mini_map.set_visible(self.show_mini_map)
+        # Keep the HUD items clear of the map's corner.
+        bottom = 0
+        if self.show_mini_map:
+            bottom = MiniMap.HEIGHT + MiniMap.MARGIN
+        self.hud_layout.setContentsMargins(0, 0, 0, bottom)
 
     def frame_all(self):
         self.frame_rect(self.scene().itemsBoundingRect())
@@ -590,7 +668,12 @@ class StageView(QtWidgets.QGraphicsView):
     def drawBackground(self, painter, rect):
         super(StageView, self).drawBackground(painter, rect)
 
-        rect = self.sceneRect()
+        # Only the exposed area, clamped to the scene. Redrawing the whole
+        # scene rect meant every partial repaint, however small, drew the
+        # entire grid.
+        rect = rect.intersected(self.sceneRect())
+        if rect.isEmpty():
+            return
         painter.fillRect(rect, QtGui.QBrush(colors.GRAPH_BG_COLOR))
 
         left = int(rect.left()) - (int(rect.left()) % self.draw_grid_size)
@@ -689,6 +772,8 @@ class StageView(QtWidgets.QGraphicsView):
         super(StageView, self).keyReleaseEvent(event)
 
     def mousePressEvent(self, event):
+        if self.mini_map.handle_mouse_press(event):
+            return
         # capture initial click position which is used in the release event
         self._clicked_something_locked = False
         self._initial_click_pos = event.pos()
@@ -756,6 +841,8 @@ class StageView(QtWidgets.QGraphicsView):
         super(StageView, self).mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self.mini_map.handle_mouse_move(event):
+            return
         # rubber band action
         if self._rubber_band_origin is not None:
             self.rubber_band.show()
@@ -815,6 +902,8 @@ class StageView(QtWidgets.QGraphicsView):
             app.restoreOverrideCursor()
 
     def mouseReleaseEvent(self, event):
+        if self.mini_map.handle_mouse_release(event):
+            return
         was_just_zooming = self.zooming
         self.zooming = False
         if event.button() is self.zoom_button:
@@ -1122,6 +1211,13 @@ class StageView(QtWidgets.QGraphicsView):
         return None
 
     def on_model_selection_changed(self, new_selection):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
+        # The map draws selection live, outside its cached node blocks, so
+        # it needs its corner repainted. Selection changes otherwise only
+        # repaint the nodes involved.
+        self.mini_map.request_repaint()
         if not new_selection:
             self.scene().clearSelection()
             return
@@ -1154,6 +1250,9 @@ class StageView(QtWidgets.QGraphicsView):
                 logger.error("Cannot find item to select: " + str(path))
 
     def handle_nodes_changed(self, node_paths):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         updated_paths = []
         roots_hit = set()
         new_nodes = []
@@ -1205,6 +1304,9 @@ class StageView(QtWidgets.QGraphicsView):
         :param attr_paths: Tuple of attr paths /node.attr
         :return: None
         """
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         start = time.time()
         attr_map = {}
         for attr_path in attr_paths[:]:
@@ -1234,11 +1336,26 @@ class StageView(QtWidgets.QGraphicsView):
         logger.debug("Time to update attrs: " + update_time + "ms")
 
     def handle_node_move(self, node_path, pos):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         node_item = self.get_node_graphic(node_path)
         if node_item:
             node_item.setPos(pos[0], pos[1])
 
+    def set_animations(self, state):
+        """Turn node open and close animations on or off for this view.
+
+        :param state: True to animate
+        :type state: bool
+        """
+        self._do_anim_pref = state
+        self.do_animations = state
+
     def handle_collapse_changed(self, node_paths):
+        if not self._drawn:
+            # Nothing drawn to keep up with yet, see ensure_drawn.
+            return
         while self._animating:
             QtWidgets.QApplication.processEvents()
         og_do_anims = self.do_animations

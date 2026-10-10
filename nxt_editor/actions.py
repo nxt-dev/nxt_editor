@@ -11,6 +11,7 @@ from Qt import QtCore, QtGui, QtWidgets
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
 from nxt_editor import user_dir
+from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, finder, file_search
 
@@ -483,6 +484,22 @@ class LayerActions(NxtActionContainer):
             clear_action_data(self.actions())
             self.main_window.save_layer(layer)
         self.save_layer_action.triggered.connect(save_layer)
+        # Edit references
+        self.edit_references_action = NxtAction(text='Edit References...',
+                                                parent=self)
+        self.edit_references_action.setAutoRepeat(False)
+        self.edit_references_action.setData(None)
+        self.edit_references_action.setToolTip('Edit which layers this layer '
+                                               'references')
+        self.edit_references_action.setWhatsThis(
+            'Change what a layer references. Applying reloads the referenced '
+            'layers and recomposites; the layer is written when you save it.')
+
+        def edit_references():
+            layer = self.edit_references_action.data()
+            clear_action_data(self.actions())
+            self.main_window.edit_layer_references(layer)
+        self.edit_references_action.triggered.connect(edit_references)
         # Save as
         self.save_layer_as_action = NxtAction(text='Save Layer As',
                                               parent=self)
@@ -516,6 +533,23 @@ class LayerActions(NxtActionContainer):
             clear_action_data(self.actions())
             self.main_window.open_source(layer)
         self.open_source_action.triggered.connect(open_source)
+        # Reload source
+        self.reload_source_action = NxtAction(text='Reload Source...',
+                                              parent=self)
+        self.reload_source_action.setAutoRepeat(False)
+        self.reload_source_action.setData(None)
+        self.reload_source_action.setToolTip('Re-read this layer and what '
+                                             'it references from disk')
+        self.reload_source_action.setWhatsThis(
+            'Re-read a layer, and as much of what it references as you '
+            'choose, from disk, and composite the graph again. Anything '
+            'unsaved in a reloaded layer is lost, and it can be undone.')
+
+        def reload_source():
+            layer = self.reload_source_action.data()
+            clear_action_data(self.actions())
+            self.main_window.reload_layer_source(layer)
+        self.reload_source_action.triggered.connect(reload_source)
         # Change color
         self.change_color_action = NxtAction(text='Change Color',
                                              parent=self)
@@ -678,6 +712,7 @@ class LayerActions(NxtActionContainer):
                                      self.save_layer_as_action,
                                      self.save_all_layers_action,
                                      self.open_source_action,
+                                     self.reload_source_action,
                                      self.mute_layer_action,
                                      self.solo_layer_action,
                                      self.change_color_action,
@@ -686,7 +721,8 @@ class LayerActions(NxtActionContainer):
                                      self.new_layer_below_action,
                                      self.ref_layer_above_action,
                                      self.ref_layer_below_action,
-                                     self.remove_layer_action]
+                                     self.remove_layer_action,
+                                     self.edit_references_action]
 
 
 class NodeActions(NxtActionContainer):
@@ -1227,11 +1263,45 @@ class StageViewActions(NxtActionContainer):
         grid_icon.addPixmap(grid_icn_off, QtGui.QIcon.Normal,
                             QtGui.QIcon.Off)
         self.grid_action.setIcon(grid_icon)
+        # TOGGLE MINI MAP
+
+        def toggle_mini_map():
+            state = self.mini_map_action.isChecked()
+            self.main_window.view.toggle_mini_map(state)
+
+        self.mini_map_action = BoolUserPrefAction(
+            'Toggle Mini Map', user_dir.USER_PREF.SHOW_MINI_MAP,
+            default=True, parent=self)
+        self.mini_map_action.setShortcut('Ctrl+M')
+        self.mini_map_action.setToolTip('Show / Hide the Mini Map')
+        self.mini_map_action.setWhatsThis('Shows or hides the mini map in '
+                                          'the bottom right of the graph '
+                                          'for all tabs.')
+        self.mini_map_action.triggered.connect(toggle_mini_map)
+        # TOGGLE NODE ANIMATIONS
+
+        def toggle_animations():
+            state = self.animation_action.isChecked()
+            self.main_window.view.set_animations(state)
+
+        self.animation_action = BoolUserPrefAction(
+            'Animate Nodes', user_dir.USER_PREF.ANIMATION,
+            default=False, parent=self)
+        self.animation_action.setToolTip('Animate nodes opening and closing')
+        self.animation_action.setWhatsThis('When on, nodes slide and fade as '
+                                           'they open and close. Every node '
+                                           'is animated separately, so a '
+                                           'parent with a lot of children '
+                                           'takes noticeably longer to open.')
+        self.animation_action.triggered.connect(toggle_animations)
         # TOGGLE CONNECTION LINES
 
         def toggle_lines():
             state = self.implicit_action.isChecked()
             self.main_window.view.toggle_implicit_connections(state)
+            # Remembered for the tabs opened after this one, and the next
+            # session, the way the grid is.
+            user_dir.user_prefs[user_dir.USER_PREF.SHOW_IMPLICIT] = state
 
         self.implicit_action = NxtAction(text='Toggle Implicit Connections',
                                          parent=self)
@@ -1240,7 +1310,8 @@ class StageViewActions(NxtActionContainer):
         self.implicit_action.setWhatsThis('Shows or hides the implicit '
                                           'connections for this tab.')
         self.implicit_action.setCheckable(True)
-        self.implicit_action.setChecked(True)
+        self.implicit_action.setChecked(user_dir.user_prefs.get(
+            user_dir.USER_PREF.SHOW_IMPLICIT, True))
         self.implicit_action.triggered.connect(toggle_lines)
         lines_icon = QtGui.QIcon()
         lines_icn_on = QtGui.QPixmap(
@@ -1420,7 +1491,9 @@ class StageViewActions(NxtActionContainer):
                                      self.disp_local_attrs_action,
                                      self.disp_inst_attrs_action,
                                      self.disp_all_attrs_action,
-                                     self.grid_action, self.implicit_action,
+                                     self.grid_action, self.mini_map_action,
+                                     self.animation_action,
+                                     self.implicit_action,
                                      self.pick_walk_up_action,
                                      self.pick_walk_down_action,
                                      self.pick_walk_left_action,
@@ -1825,6 +1898,166 @@ class CodeEditorActions(NxtActionContainer):
         self.font_size_revert.setWhatsThis('Revert the code editor font size '
                                            'to default.')
         self.font_size_revert.setShortcut('Ctrl+0')
+        # find and replace, inside the code being edited. The graph wide
+        # find and replace dock also answers to Ctrl+F, but these are widget
+        # shortcuts, so they win while the code editor has focus.
+        self.find_action = NxtAction('Find In Code', parent=self)
+        self.find_action.setWhatsThis('Search the code in this editor.')
+        self.find_action.setAutoRepeat(False)
+        self.find_action.setShortcut('Ctrl+F')
+        self.replace_action = NxtAction('Replace In Code', parent=self)
+        self.replace_action.setWhatsThis('Search and replace in the code in '
+                                         'this editor.')
+        self.replace_action.setAutoRepeat(False)
+        # Ctrl+H, and Ctrl+R for anyone coming from PyCharm.
+        self.replace_action.setShortcuts(['Ctrl+H', 'Ctrl+R'])
+        self.find_next_action = NxtAction('Find Next', parent=self)
+        self.find_next_action.setWhatsThis('Jump to the next match.')
+        self.find_next_action.setShortcut('F3')
+        self.find_prev_action = NxtAction('Find Previous', parent=self)
+        self.find_prev_action.setWhatsThis('Jump to the previous match.')
+        self.find_prev_action.setShortcut('Shift+F3')
+        # navigation
+        self.goto_line_action = NxtAction('Go To Line', parent=self)
+        self.goto_line_action.setWhatsThis('Jump to a line number.')
+        self.goto_line_action.setAutoRepeat(False)
+        self.goto_line_action.setShortcut('Ctrl+G')
+        # line editing
+        self.duplicate_line = NxtAction('Duplicate Line', parent=self)
+        self.duplicate_line.setWhatsThis('Copy the selected line(s) below.')
+        self.duplicate_line.setShortcut('Ctrl+Shift+D')
+        self.move_line_up = NxtAction('Move Line Up', parent=self)
+        self.move_line_up.setWhatsThis('Swap the selected line(s) with the '
+                                       'line above.')
+        self.move_line_up.setShortcut('Alt+Up')
+        self.move_line_down = NxtAction('Move Line Down', parent=self)
+        self.move_line_down.setWhatsThis('Swap the selected line(s) with the '
+                                         'line below.')
+        self.move_line_down.setShortcut('Alt+Down')
+        self.delete_line = NxtAction('Delete Line', parent=self)
+        self.delete_line.setWhatsThis('Delete the selected line(s).')
+        self.delete_line.setShortcut('Ctrl+Shift+K')
+        self.expand_selection = NxtAction('Expand Selection', parent=self)
+        self.expand_selection.setWhatsThis('Grow the selection from the word '
+                                           'under the cursor, to the line, to '
+                                           'everything.')
+        self.expand_selection.setShortcut('Ctrl+D')
+        # completion
+        self.complete_action = NxtAction('Complete Word', parent=self)
+        self.complete_action.setWhatsThis('Offer completions for the word '
+                                          'being typed.')
+        self.complete_action.setAutoRepeat(False)
+        self.complete_action.setShortcut('Ctrl+Space')
+        self.autocomplete_action = NxtAction('Code Editor Autocomplete',
+                                             parent=self)
+        self.autocomplete_action.setWhatsThis('When on, completions are '
+                                              'offered as you type. Ctrl+Space '
+                                              'always offers them either way.')
+        self.autocomplete_action.setAutoRepeat(False)
+        self.autocomplete_action.setCheckable(True)
+        # On, like every other completion switch. The menu is the answer to
+        # what it does; a default that disagrees with the menu is just a
+        # second place to look.
+        state = user_dir.user_prefs.get(user_dir.USER_PREF.CE_AUTOCOMPLETE,
+                                        True)
+        self.autocomplete_action.setChecked(state)
+
+        def toggle_autocomplete():
+            new = self.autocomplete_action.isChecked()
+            user_dir.user_prefs[user_dir.USER_PREF.CE_AUTOCOMPLETE] = new
+
+        self.autocomplete_action.toggled.connect(toggle_autocomplete)
+
+        # What it is allowed to look at. Each source costs something
+        # different: python's own names are free, a module has to be
+        # introspected, and the words already written in the compute are
+        # noisy on a long one. Which of those is worth it is a matter of
+        # taste, so it is configurable rather than decided here.
+        self.complete_python_action = NxtAction('Python Builtins', parent=self)
+        self.complete_python_action.setCheckable(True)
+        self.complete_python_action.setWhatsThis(
+            "Python's keywords and builtins, such as return and enumerate.")
+
+        self.complete_modules_action = NxtAction('Imported Modules',
+                                                 parent=self)
+        self.complete_modules_action.setCheckable(True)
+        self.complete_modules_action.setWhatsThis(
+            'Names from modules this compute imports, so os. offers path, '
+            'listdir and the rest. Only modules the compute imports, read '
+            'from its import lines.')
+
+        self.complete_node_action = NxtAction('Node Attributes And Tokens',
+                                              parent=self)
+        self.complete_node_action.setCheckable(True)
+        self.complete_node_action.setWhatsThis(
+            "This node's attributes, as bare names, as self.name and as "
+            "${name}, plus the token prefixes nxt knows about.")
+
+        self.complete_document_action = NxtAction('Words In This Compute',
+                                                  parent=self)
+        self.complete_document_action.setCheckable(True)
+        self.complete_document_action.setWhatsThis(
+            'Words already written in this compute, which catches your own '
+            'variable names.')
+
+        self.complete_host_action = NxtAction('Host Modules', parent=self)
+        self.complete_host_action.setCheckable(True)
+        self.complete_host_action.setWhatsThis(
+            'Modules the host application already has loaded, by the names '
+            'scripts usually give them: cmds, om and pm in Maya, unreal in '
+            'Unreal, bpy in Blender. They complete before an import line is '
+            'written. Nothing is imported for them.')
+
+        self.complete_jedi_action = NxtAction('Python Analysis (jedi)',
+                                              parent=self)
+        self.complete_jedi_action.setCheckable(True)
+        if code_completion.JEDI.installed():
+            self.complete_jedi_action.setWhatsThis(
+                'Uses jedi to work out what a name is, so that after a dot '
+                'it can complete what a call returns or what a variable '
+                'holds. Asked when typing pauses, or with Ctrl+Space.')
+        else:
+            self.complete_jedi_action.setEnabled(False)
+            self.complete_jedi_action.setWhatsThis(
+                'Needs jedi, which is not installed for this python. '
+                'pip install nxt-editor[completion] adds it.')
+
+        self.completion_source_actions = (
+            (self.complete_python_action,
+             user_dir.USER_PREF.CE_COMPLETE_PYTHON, True),
+            (self.complete_modules_action,
+             user_dir.USER_PREF.CE_COMPLETE_MODULES, True),
+            (self.complete_node_action,
+             user_dir.USER_PREF.CE_COMPLETE_NODE, True),
+            (self.complete_document_action,
+             user_dir.USER_PREF.CE_COMPLETE_DOCUMENT, True),
+            (self.complete_host_action,
+             user_dir.USER_PREF.CE_COMPLETE_HOST, True),
+            (self.complete_jedi_action,
+             user_dir.USER_PREF.CE_COMPLETE_JEDI, True),
+        )
+
+        def make_source_toggle(action, pref_key, default):
+            action.setChecked(user_dir.user_prefs.get(pref_key, default))
+
+            def on_toggle():
+                user_dir.user_prefs[pref_key] = action.isChecked()
+                editor = getattr(self.main_window, 'code_editor', None)
+                if editor is None:
+                    return
+                code = editor.editor
+                # The word list is built from these, so it is stale now.
+                code.invalidate_completion_words()
+                if code.completer.popup().isVisible():
+                    # Turning a source off with the list on screen should
+                    # take it off the screen, not wait for the next
+                    # keystroke to agree with the menu.
+                    code.update_completions(force=True)
+
+            action.toggled.connect(on_toggle)
+
+        for source_action, pref, default in self.completion_source_actions:
+            make_source_toggle(source_action, pref, default)
         # accept edit
         self.accept_edit_action = NxtAction('Accept Code Edit', parent=self)
         self.accept_edit_action.setWhatsThis('Accept changes and commit them '
@@ -1912,8 +2145,21 @@ class CodeEditorActions(NxtActionContainer):
                                      self.font_size_revert,
                                      self.overlay_message_action,
                                      self.show_data_state_action,
+                                     self.autocomplete_action,
+                                     self.complete_python_action,
+                                     self.complete_modules_action,
+                                     self.complete_node_action,
+                                     self.complete_document_action,
                                      self.new_line, self.indent_line,
                                      self.unindent_line,
+                                     self.find_action, self.replace_action,
+                                     self.find_next_action,
+                                     self.find_prev_action,
+                                     self.goto_line_action,
+                                     self.duplicate_line,
+                                     self.move_line_up, self.move_line_down,
+                                     self.delete_line, self.expand_selection,
+                                     self.complete_action,
                                      self.run_line_global_action,
                                      self.run_line_local_action]
 

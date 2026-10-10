@@ -77,7 +77,6 @@
             "child_order": [
                 "copy_source",
                 "qt_py",
-                "make_resources",
                 "populate_mod_template",
                 "clean_up"
             ],
@@ -91,13 +90,35 @@
         },
         "/make_module_folder/clean_up": {
             "code": [
-                "if os.path.isdir('D:/Projects/nxt_editor/build/nxt-src'):",
+                "# Whatever a local checkout picked up that has no business shipping.",
+                "# A build on a build machine never has these; a build on a working",
+                "# machine does, and they went straight into the module.",
+                "junk = ('__pycache__', '.mypy_cache', '.pytest_cache')",
+                "removed = 0",
+                "for root, dirs, files in os.walk('${mod_folder}'):",
+                "    for name in list(dirs):",
+                "        if name in junk:",
+                "            shutil.rmtree(os.path.join(root, name), ignore_errors=True)",
+                "            dirs.remove(name)",
+                "            removed += 1",
+                "print('removed {} cache folder(s) from the module'.format(removed))",
+                "",
+                "# rcc's output from older versions, which a working copy may still have.",
+                "# Nothing reads it now, and it is eleven megabytes.",
+                "stale = os.path.join('${mod_folder}', 'scripts', 'nxt_editor', 'qresources.py')",
+                "if os.path.isfile(stale):",
+                "    os.remove(stale)",
+                "    print('removed stale {}'.format(stale))",
+                "",
+                "# The clone only exists when building from a fetched source. This",
+                "# checked a path on somebody's D: drive, so it never ran anywhere else.",
+                "if os.path.isdir('${src_clone}'):",
                 "    try:",
                 "        shutil.rmtree('${src_clone}')",
-                "    except:",
+                "    except Exception:",
                 "        print('!' * 79)",
-                "        print('Failed to delete soruce clone, do so by hand!')",
-                "        print(' '* 3 + '${src_clone}')"
+                "        print('Failed to delete source clone, do so by hand!')",
+                "        print(' ' * 3 + '${src_clone}')"
             ]
         },
         "/make_module_folder/copy_source": {
@@ -128,22 +149,6 @@
                 "    shutil.copytree('${path::${src_clone}/nxt}', '${core_script_src}')"
             ]
         },
-        "/make_module_folder/make_resources": {
-            "code": [
-                "import subprocess",
-                "result_path = '${../copy_source.source_folder}/ui/resources.py'",
-                "result_pyc = result_path + 'c'",
-                "qrc_path = '${../copy_source.source_folder}/ui/resources/resources.qrc'",
-                "if os.path.isfile(result_path):",
-                "    os.remove(result_path)",
-                "    print('removed old {}'.format(result_path))",
-                "if os.path.isfile(result_pyc):",
-                "    os.remove(result_pyc)",
-                "    print('removed old {}'.format(result_pyc))",
-                "print('generating nxt resources from {} to {}'.format(qrc_path, result_path))",
-                "subprocess.call(['pyside2-rcc', qrc_path, '-o', result_path])"
-            ]
-        },
         "/make_module_folder/populate_mod_template": {
             "attrs": {
                 "mod_file": {
@@ -152,29 +157,54 @@
                 }
             },
             "code": [
-                "# from nxt_maya import MAYA_PLUGIN_VERSION",
+                "import json",
+                "",
+                "# Read from the file rather than by importing nxt_editor. This graph",
+                "# can run where nxt is but Qt is not, and nxt_editor",
+                "# imports Qt the moment it is touched, so the import threw and took",
+                "# the rest of the build with it: the .mod kept its <VERSION>",
+                "# placeholder and the steps after this never ran.",
+                "version_file = '${../copy_source.editor_script_src}/version.json'",
+                "with open(version_file, 'r') as fp:",
+                "    editor = json.load(fp)['EDITOR']",
+                "version = '{MAJOR}.{MINOR}.{PATCH}'.format(**editor)",
+                "",
                 "with open('${mod_file}', 'r') as fp:",
                 "    content = fp.read()",
-                "content = content.replace('<VERSION>', '0.1.0')",
+                "content = content.replace('<VERSION>', version)",
                 "with open('${mod_file}', 'w') as fp:",
-                "    fp.write(content)"
+                "    fp.write(content)",
+                "print('nxt.mod version set to {}'.format(version))"
             ]
         },
         "/make_module_folder/qt_py": {
             "code": [
-                "import requests",
+                "# Qt.py, shipped with the module rather than fetched while building it.",
+                "#",
+                "# This used to download it from mottosso/Qt.py@master. That branch no",
+                "# longer exists, so the request answered 404 and the fourteen bytes",
+                "# '404: Not Found' were written out as Qt/__init__.py - a SyntaxError the",
+                "# moment anything imports Qt, which took the host's other tools down with",
+                "# it rather than failing on its own.",
+                "#",
+                "# A build should not depend on somebody else's default branch name. The",
+                "# copy in build/vendor is a released version and is what ships.",
+                "#",
+                "# Shaped as a package rather than a module so it stays out of Maya's",
+                "# plugin list, which is what the original was doing too.",
+                "import shutil",
                 "",
-                "result = requests.get(\"https://raw.githubusercontent.com/mottosso/Qt.py/master/Qt.py\")",
+                "source = '${path::vendor/Qt.py}'",
+                "target = '${mod_folder}/scripts/Qt/__init__.py'",
                 "",
-                "# Making qt.py into a differently shaped module so it doesn't display in plugin list.",
-                "os.makedirs('${mod_folder}/scripts/Qt')",
+                "os.makedirs(os.path.dirname(target), exist_ok=True)",
+                "shutil.copyfile(source, target)",
                 "",
-                "with open('${mod_folder}/scripts/Qt/__init__.py', 'w+') as fp:",
-                "    if isinstance(result.content, str):",
-                "        fp.write(result.content)",
-                "    else:",
-                "        fp.write(result.content.decode())",
-                ""
+                "# Cheap, and it is exactly the check whose absence shipped a broken",
+                "# package: whatever lands here has to at least be Python.",
+                "import py_compile",
+                "py_compile.compile(target, doraise=True)",
+                "print('vendored Qt.py ({} bytes)'.format(os.path.getsize(target)))"
             ]
         }
     }

@@ -5,6 +5,11 @@ scene assembly, and automation.
 
 *It’s code with layers with a nice way to see and change data.*
 
+!!! note "New in nxt_editor 4.3"
+    A code editor with find and replace and completion, a reference editor,
+    Reload Source, a mini map, and plugins for Maya, Unreal and Blender.
+    See [What's New](whats_new.md).
+
 ## Introduction
 
 The primary function of nxt is to visualize and automate programming tasks 
@@ -51,10 +56,8 @@ allow users to quickly jump to and correct erroneous values.
 - We currently do not support asynchronous execution in a single graph. Our 
 current focus is on lineal scripts.
 - We are [not visual programming](reference.md#design-philosophy), no for loop nodes sorry.
-- We currently do not support Python 3, however it is on the top of our
-priority list.
 
-|  |  |
-| :---: | :---: |
-| Concepts | Tutorials |
-| See [concepts](concepts.md) for a quick overview of nxt's core concepts. | See the [tutorials](tutorials.md) for a step by step walkthroughs |
+|  |  |  |
+| :---: | :---: | :---: |
+| Concepts | Tutorials | Installation |
+| See [concepts](concepts.md) for a quick overview of nxt's core concepts. | See the [tutorials](tutorials.md) for a step by step walkthroughs | nxt runs on Python 3.7 to 3.14, the editor on 3.9 to 3.14. See [installation](install.md) for standalone, Maya, Unreal and Blender. |

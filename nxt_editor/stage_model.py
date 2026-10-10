@@ -40,7 +40,7 @@ class EXEC_FRAMING:
 
 
 class StageModel(QtCore.QObject):
-    destroy_cmd_port = QtCore.Signal(None)
+    destroy_cmd_port = QtCore.Signal()
     update_cache_dict = QtCore.Signal(dict)
     about_to_rename = QtCore.Signal()
     about_to_execute = QtCore.Signal(bool)
@@ -61,6 +61,10 @@ class StageModel(QtCore.QObject):
     layer_lock_changed = QtCore.Signal(str)  # Layer path whose locked changed
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
+    # Which layers are loaded, or the order they stack in, changed.
+    # Order decides whose opinion wins, so a reorder is a change
+    # even though the same layers are loaded.
+    layers_restacked = QtCore.Signal()
     layer_saved = QtCore.Signal(str)  # Layer path that was just saved
     nodes_changed = QtCore.Signal(tuple)
     attrs_changed = QtCore.Signal(tuple)
@@ -103,9 +107,16 @@ class StageModel(QtCore.QObject):
         self.refresh_exec_framing_from_pref()
         # model states
         self._data_state = DATA_STATE.RESOLVED
-        self._implicit_connections = True
+        # Each tab has its own, starting from whatever was last chosen.
+        self._implicit_connections = user_dir.user_prefs.get(
+            user_dir.USER_PREF.SHOW_IMPLICIT, True)
         # graph layers
-        self._comp_layer = stage.build_stage()
+        # Compositing is the expensive part of opening a graph, and a graph
+        # sitting in a tab nobody has selected has nobody to show it to. The
+        # comp is built the first time something asks for it instead, see
+        # the comp_layer property.
+        self._comp_layer = None
+        self._comp_generation = 0
         self._target_layer = stage.top_layer
         self._display_layer = stage.top_layer
         # selection
@@ -460,7 +471,34 @@ class StageModel(QtCore.QObject):
 
     @property
     def comp_layer(self):
+        """The composited graph, built the first time it is asked for.
+
+        Opening a file no longer pays for a comp nothing has looked at yet.
+        Whatever needs the graph first -- usually its tab being selected --
+        pays for it, and everything after that gets the same one back until
+        an edit replaces it.
+        """
+        if self._comp_layer is None:
+            self._comp_layer = self.stage.build_stage(
+                from_idx=self._display_layer.layer_idx())
+            self._comp_generation += 1
         return self._comp_layer
+
+    @property
+    def comp_is_built(self):
+        """Whether a comp exists, without building one to find out."""
+        return self._comp_layer is not None
+
+    @property
+    def comp_generation(self):
+        """Counter that ticks every time the comp changes.
+
+        Anything that derives work from the comp can remember this number
+        and tell, without comparing graphs, whether what it cached still
+        stands. Switching back to a tab nobody has touched then costs a
+        comparison rather than a rebuild.
+        """
+        return self._comp_generation
 
     @property
     def display_layer(self):
@@ -488,11 +526,27 @@ class StageModel(QtCore.QObject):
             if self.comp_layer.lookup(node_path):
                 safe_selection += [node_path]
         self.selection = safe_selection
+        self._comp_generation += 1
         self.comp_layer_changed.emit(dirty)
         self.processing.emit(False)
 
     def update_comp_layer(self, rebuild=False, dirty=()):
         self.set_comp_layer(self.comp_layer, rebuild, dirty)
+
+    def announce_comp_changed(self, dirty=()):
+        """Say the comp changed without building a new one.
+
+        The stage keeps the comp's nodes right as it edits them, so there
+        is nothing to rebuild; what is missing is anyone being told. The
+        build view and the workflow tools listen for the comp changing
+        rather than for nodes changing, so without this they carry on
+        describing a graph that has moved on.
+        """
+        if self._comp_layer is None:
+            # Nothing has looked at this graph yet, so there is nothing
+            # showing it that could have gone stale.
+            return
+        self.set_comp_layer(self._comp_layer, rebuild=False, dirty=dirty)
 
     @property
     def target_layer(self):
@@ -547,6 +601,94 @@ class StageModel(QtCore.QObject):
             return
         cmd = SetLayerColor(color, layer_path, self)
         self.undo_stack.push(cmd)
+
+    def get_layer_references(self, layer_path):
+        """The references a layer holds, as stored.
+
+        Partial paths stay partial: what is stored is what resolves
+        through the file roots later, and rewriting them as absolute would
+        pin the graph to one machine.
+
+        :param layer_path: real path of the layer
+        :type layer_path: str
+        :rtype: list
+        """
+        layer = self.lookup_layer(layer_path)
+        return list(layer.get_references()) if layer else []
+
+    def get_editable_reference_layers(self):
+        """The layers whose references this session may edit.
+
+        The top layer, and any layer open below it. Editing a layer's
+        references rewrites that layer's file, so a layer that is not
+        open, or is locked, is not ours to change.
+
+        :return: layers, top first
+        :rtype: list
+        """
+        editable = []
+        for layer in self.stage._sub_layers:
+            if self.get_layer_locked(layer.real_path):
+                continue
+            editable += [layer]
+        return editable
+
+    def set_layer_references(self, layer_path, references):
+        """Replace the references a layer holds.
+
+        :param layer_path: real path of the layer to edit
+        :type layer_path: str
+        :param references: references in order, as they are to be stored
+        :type references: list
+        :return: whether anything changed
+        :rtype: bool
+        """
+        layer = self.lookup_layer(layer_path)
+        if layer is None:
+            logger.error('No layer at {}'.format(layer_path))
+            return False
+        if self.get_layer_locked(layer_path):
+            logger.warning('{} is locked'.format(layer.alias))
+            self.request_ding.emit()
+            return False
+        cmd = SetLayerReferences(layer_path, references, self)
+        if not cmd.changed():
+            return False
+        self.undo_stack.push(cmd)
+        return True
+
+    def get_reference_dependencies(self, layer):
+        """A layer and everything it pulls in, as deep as it goes.
+
+        What a layer contributes to the graph is its own file plus every
+        file it references, so this is the list of files behind it.
+
+        :param layer: layer to start from
+        :return: the layer first, then its references depth first
+        :rtype: list
+        """
+        if layer is None:
+            return []
+        return self.stage.reference_dependencies(layer)
+
+    def reload_layers(self, layer_paths):
+        """Re-read layers from disk and composite the graph again.
+
+        Unsaved work on these layers is thrown away, which is what
+        reloading means; asking about that belongs to whoever offers it.
+        It goes on the undo stack all the same, and undoing puts back
+        what was in memory rather than reading the file a second time.
+
+        :param layer_paths: real paths of the layers to reload
+        :type layer_paths: list
+        :return: whether a reload was asked for
+        :rtype: bool
+        """
+        layer_paths = [p for p in layer_paths if self.lookup_layer(p)]
+        if not layer_paths:
+            return False
+        self.undo_stack.push(ReloadLayers(layer_paths, self))
+        return True
 
     def get_layer_colors(self, layer_list):
         layers_colors = []
@@ -875,10 +1017,38 @@ class StageModel(QtCore.QObject):
         new_node_path = cmd.node_path
         return new_node_path
 
+    def delete_is_orphaning(self, node_path, layer):
+        """Whether deleting this node would leave its path behind as a ghost.
+
+        Deleting a node keeps its children by default, so the path it
+        occupied still has things hanging off it and comes back as an
+        implied node: drawn in the graph, listed in the build, and not
+        deletable, because nothing is there to delete. That is only the
+        right answer when another layer actually provides the node, in
+        which case the lower opinion should surface.
+
+        :param node_path: node about to be deleted
+        :type node_path: str
+        :param layer: layer it is being deleted from
+        :return: True when the descendants should go with it
+        :rtype: bool
+        """
+        if not layer.descendants(node_path, include_implied=True):
+            return False
+        others = [l for l in self.stage.get_layers_with_opinion(node_path)
+                  if l is not layer]
+        return not others
+
     def delete_nodes(self, node_paths=(), layer=None, recursive=False):
         if not node_paths:
             node_paths = self.selection
         layer = layer or self.target_layer
+        if not recursive:
+            # Taking the descendants is not really a separate mode when
+            # nothing else can fill the path; it is the difference between
+            # deleting the node and leaving a ghost of it.
+            recursive = any(self.delete_is_orphaning(p, layer)
+                            for p in node_paths)
         valid_nodes = []
         node_is_implied = False
         for node_path in node_paths:
@@ -1135,18 +1305,38 @@ class StageModel(QtCore.QObject):
         return self.copy_nodes(node_paths, cut=True, layer=layer)
 
     def paste_nodes(self, pos=None, parent_path=None, layer=None):
+        """Paste whatever nodes are on the clipboard into the graph.
+
+        A paste is one edit however many nodes it brought in, so it goes on
+        the undo stack as one thing. Pasting five nodes and changing your
+        mind used to take five undos, and each one of the first four left
+        the graph in a state nobody had ever asked for.
+
+        :return: paths of the nodes that were pasted
+        :rtype: list
+        """
         node_load_data = []
         try:
             node_load_data = clean_json.load(json.loads(self.clipboard.text(),
                                                         object_hook=clean_json._byteify))
         except ValueError:
             pass
-
+        if not node_load_data:
+            return []
         pos = pos or [0.0, 0.0]
-        for node_data in node_load_data:
-            node_path, data = list(node_data.items())[0]
-            name = nxt_path.node_name_from_node_path(node_path)
-            if node_path and name:
+        pasted = []
+        # A single node is already a single command; wrapping it would only
+        # bury the name of what was pasted under a macro.
+        as_macro = len(node_load_data) > 1
+        if as_macro:
+            msg = 'Paste {} nodes'.format(len(node_load_data))
+            self.undo_stack.beginMacro(msg)
+        try:
+            for node_data in node_load_data:
+                node_path, data = list(node_data.items())[0]
+                name = nxt_path.node_name_from_node_path(node_path)
+                if not (node_path and name):
+                    continue
                 implied_pp = nxt_path.get_parent_path(node_path)
                 root = nxt_path.get_root_path(node_path)
                 new_root = root + '_pasted'
@@ -1161,12 +1351,21 @@ class StageModel(QtCore.QObject):
                                               data=data,
                                               parent_path=pp,
                                               pos=pos, layer=layer)
-                if new_node_path:
-                    self._set_node_pos(new_node_path, pos, layer=layer)
-                    pos = [pos[0] + 20, pos[1] + 20]
-
-                    self.update_comp_layer()
-                    self.node_added.emit(new_node_path)
+                if not new_node_path:
+                    continue
+                self._set_node_pos(new_node_path, pos, layer=layer)
+                pos = [pos[0] + 20, pos[1] + 20]
+                pasted += [new_node_path]
+        finally:
+            if as_macro:
+                self.undo_stack.endMacro()
+        if not pasted:
+            return []
+        self.update_comp_layer()
+        for new_node_path in pasted:
+            self.node_added.emit(new_node_path)
+        self.selection = pasted
+        return pasted
 
     def get_node_attr_names(self, node_path, layer=None):
         layer = layer or self.target_layer
@@ -2641,7 +2840,7 @@ class StageModel(QtCore.QObject):
                 not ref_layer.real_path):
             logger.error('Unable to create layer above an unsaved layer!')
             return
-        base_dir = user_dir.USER_DIR
+        base_dir = user_dir.last_opened_dir()
         top_layer_path = self.top_layer.real_path
         if top_layer_path:
             base_dir = os.path.dirname(top_layer_path)
@@ -2963,14 +3162,15 @@ class StageModel(QtCore.QObject):
 
         :param node_paths: list of node paths
         :param rt_layer: CompLayer (must have self.runtime set to True)
-        :param safe_exec: If True the rt layer is validated against the comp
+        :param safe_exec: If True a cached runtime layer that cannot run
+            these nodes is thrown away and built again rather than run
         :return: CompLayer (the runtime layer that ran)
         """
         if not node_paths:
             logger.error("No node paths specified for execution")
             return
         self.about_to_execute.emit(True)
-        self.setup_build(node_paths, rt_layer=rt_layer)
+        self.setup_build(node_paths, rt_layer=rt_layer, safe_exec=safe_exec)
         self.resume_build()
         return rt_layer
 
@@ -2989,11 +3189,16 @@ class StageModel(QtCore.QObject):
             self.process_events()
         if t.raised_exception:
             if isinstance(t.raised_exception, InvalidNodeError):
-                details = ("To resolve this try navigating to "
-                           "'Execute > Clear cache'. \n\n"
-                           "This error is raised when layers"
-                           " are muted or nodes are deleted and then execute "
-                           "is called without clearing the cache.")
+                details = ("A build runs against the graph as it was when "
+                           "the build started. A node that is not there is "
+                           "usually one that was deleted, or one in a layer "
+                           "that was muted, while the build was running."
+                           "\n\n"
+                           "A cache left over from an earlier run is "
+                           "cleared and built again on its own when it "
+                           "does not know every node in the build, so this "
+                           "is not that. 'Execute > Clear cache' is worth "
+                           "trying anyway if the graph looks right.")
                 NxtWarningDialog.show_message(text='NXT attempted to execute '
                                                    'an invalid node!',
                                               info=str(t.raised_exception),
@@ -3074,7 +3279,39 @@ class StageModel(QtCore.QObject):
             return False
         return True
 
-    def setup_build(self, node_paths, rt_layer=None):
+    def runtime_layer_can_run(self, rt_layer, node_paths):
+        """Whether a cached runtime layer still knows these nodes.
+
+        The cache is a snapshot of the graph, taken when it was built and
+        kept on purpose: running a node again in the same interpreter is
+        what makes the workflow buttons quick. A node moved, renamed or
+        deleted since is not in that snapshot, and running against it
+        gets as far as the missing node before giving up.
+
+        :param rt_layer: cached runtime layer, or None
+        :param node_paths: the nodes about to be run
+        :type node_paths: list
+        :return: bool
+        """
+        if rt_layer is None:
+            return False
+        for node_path in node_paths:
+            if rt_layer.lookup(node_path) is None:
+                logger.debug('"{}" is not in the cached graph'
+                             ''.format(node_path))
+                return False
+        return True
+
+    def setup_build(self, node_paths, rt_layer=None, safe_exec=True):
+        """Get ready to run the given nodes.
+
+        :param node_paths: nodes to run, in order
+        :type node_paths: list
+        :param rt_layer: runtime layer to run in, built if not given
+        :param safe_exec: If True a cached runtime layer that cannot run
+            these nodes is thrown away and built again rather than run
+        :type safe_exec: bool
+        """
         # Reset once_sec_timer vars
         self.build_start_time = time.time()
         self.build_paused_time = .0
@@ -3083,6 +3320,17 @@ class StageModel(QtCore.QObject):
         self.current_build_order = node_paths
         self.build_changed.emit(node_paths)
         self.refresh_exec_framing_from_pref()
+        stale_cache = (rt_layer is not None and safe_exec
+                       and not self.runtime_layer_can_run(rt_layer,
+                                                          node_paths))
+        if stale_cache:
+            # Nothing has run yet, so clearing the cache here costs the
+            # person a rebuild. Letting it run would cost them a build
+            # that stops part way through, at whichever node had moved,
+            # with the work before it already done.
+            logger.info('The cache does not know every node in this build, '
+                        'so it has been cleared and built again.')
+            rt_layer = None
         if self.use_cmd_port:
             # TODO: Only run this if we actually have to
             self.update_remote_comp()

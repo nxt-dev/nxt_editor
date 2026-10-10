@@ -56,7 +56,6 @@ class DockWidgetBase(QDockWidget):
         # set graph model
         self.stage_model = graph_model
         self.model_signal_connections = []
-        self.topLevelChanged.connect(self.on_window_status_changed)
 
     def set_stage_model(self, stage_model):
         """Sets the stage model for docwidgets to use, also calls the
@@ -68,17 +67,6 @@ class DockWidgetBase(QDockWidget):
         self.stage_model = stage_model
         if self.stage_model:
             self.set_stage_model_connections(self.stage_model, True)
-
-    def on_window_status_changed(self, is_window):
-        if is_window:
-            flags = (
-                QtCore.Qt.Window |
-                QtCore.Qt.CustomizeWindowHint |
-                QtCore.Qt.WindowMinMaxButtonsHint |
-                QtCore.Qt.WindowCloseButtonHint
-            )
-            self.setWindowFlags(flags)
-            self.show()
 
     def set_stage_model_connections(self, model, connect):
         """Connect and disconnect signals from the docwidget.

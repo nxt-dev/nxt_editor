@@ -1,6 +1,7 @@
 # Built-in
 import copy
 import logging
+import os
 import time
 
 # External
@@ -9,6 +10,7 @@ from Qt.QtWidgets import QUndoCommand
 # Internal
 from nxt_editor import colors
 from nxt_editor import user_dir
+from nxt_editor.reference_paths import stored_reference_path
 from nxt import nxt_path
 from nxt.nxt_layer import LAYERS, SAVE_KEY
 from nxt.nxt_node import (INTERNAL_ATTRS, META_ATTRS, get_node_as_dict,
@@ -179,6 +181,7 @@ class AddNode(NxtCommand):
         dirty_nodes += [self.node_path]
         self.undo_effected_layer(self.layer_path)
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
+        self.model.announce_comp_changed()
         self.model.selection = self.prev_selection
 
     @processing
@@ -195,6 +198,7 @@ class AddNode(NxtCommand):
         self.model._set_node_pos(node_path=self.node_path, pos=self.pos,
                                  layer=layer)
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
+        self.model.announce_comp_changed()
         self.model.selection = [self.node_path]
         self.redo_effected_layer(layer.real_path)
         self.setText('Added node: {}'.format(self.node_path))
@@ -268,6 +272,7 @@ class DeleteNode(NxtCommand):
             self.model.update_comp_layer(rebuild=True)
         else:
             self.model.nodes_changed.emit(dirty_set)
+            self.model.announce_comp_changed()
 
     @processing
     def redo(self):
@@ -329,6 +334,11 @@ class DeleteNode(NxtCommand):
             fix_selection.remove(self.node_path)
             self.model.selection = fix_selection
         self.model.nodes_changed.emit(tuple(set(dirty_nodes)))
+        # delete_node keeps the comp layer's nodes right on its own, but the
+        # build view listens for the comp layer changing rather than for
+        # nodes changing. Without this the deleted node stayed in the build,
+        # looking like a ghost of something that no longer exists.
+        self.model.announce_comp_changed()
         self.redo_effected_layer(layer.real_path)
         self.setText("Delete node: {}".format(self.node_path))
 
@@ -352,6 +362,73 @@ class SetNodeAttributeData(NxtCommand):
         self.return_value = None
         self.prev_selection = model.selection
 
+    def name_change_needs_recomp(self, layer, comp, new_name):
+        """Whether renaming this node has to rebuild the whole stage.
+
+        A rename only changes what composites when another layer authors
+        the path, or something derives its own path from this one. The
+        stage already works that out to decide whether it can update the
+        comp layer in place, so ask it rather than assume the worst.
+
+        :param layer: SpecLayer the node is authored on
+        :param comp: CompLayer being displayed
+        :param new_name: name the node is being given
+        :type new_name: str
+        :rtype: bool
+        """
+        if not new_name:
+            return True
+        parent_path = nxt_path.get_parent_path(self.node_path)
+        new_path = nxt_path.join_node_paths(parent_path, new_name)
+        can_target, why = self.stage.can_rename_targeted(self.node_path,
+                                                         new_path, layer,
+                                                         comp)
+        if not can_target:
+            logger.debug('Rebuilding for rename of %s: %s'
+                         % (self.node_path, why))
+        return not can_target
+
+    # Attributes that change what the graph will do, rather than what a
+    # node looks like. The build view refreshes when the comp layer says it
+    # changed, not when nodes do, so a change to one of these has to say so
+    # or the build keeps describing the old execution order and has to be
+    # recomposited by hand.
+    BUILD_SHAPING_ATTRS = (INTERNAL_ATTRS.NAME,
+                           INTERNAL_ATTRS.ENABLED,
+                           INTERNAL_ATTRS.START_POINT,
+                           INTERNAL_ATTRS.EXECUTE_IN,
+                           INTERNAL_ATTRS.CHILD_ORDER,
+                           INTERNAL_ATTRS.INSTANCE_PATH,
+                           INTERNAL_ATTRS.PARENT_PATH)
+
+    def apply_comp_change(self, dirties):
+        """Tell the views what changed, rebuilding only if we have to.
+
+        These edits are already applied to the comp layer in place. What
+        is left is saying so: the graph listens for nodes changing, the
+        build view for the comp layer changing, and an edit that alters
+        the execution order has to reach both.
+        """
+        if self.recomp:
+            self.model.update_comp_layer(rebuild=True)
+            return
+        if self.attr_name == INTERNAL_ATTRS.NAME:
+            self.model.update_comp_layer(rebuild=False)
+            return
+        if (self.remove_attr or self.created_node_paths or
+                self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
+                                   INTERNAL_ATTRS.PARENT_PATH,
+                                   INTERNAL_ATTRS.ENABLED)):
+            self.model.nodes_changed.emit(dirties)
+        else:
+            changed_attrs = ()
+            for dirty in dirties:
+                changed_attrs += (nxt_path.make_attr_path(dirty,
+                                                          self.attr_name),)
+            self.model.attrs_changed.emit(changed_attrs)
+        if self.attr_name in self.BUILD_SHAPING_ATTRS:
+            self.model.update_comp_layer(rebuild=False)
+
     @processing
     def undo(self):
         start = time.time()
@@ -371,6 +448,11 @@ class SetNodeAttributeData(NxtCommand):
                 self.stage.delete_node_attr(n, self.attr_name)
                 dirties += comp.get_node_dirties(self.node_path)
             else:
+                if (self.attr_name == INTERNAL_ATTRS.NAME
+                        and not self.created_node_paths):
+                    prev_name = self.prev_data.get(META_ATTRS.VALUE)
+                    self.recomp = self.name_change_needs_recomp(layer, comp,
+                                                                prev_name)
                 result = self.stage.node_setattr_data(node=n,
                                                       attr=self.attr_name,
                                                       layer=layer, create=False,
@@ -385,16 +467,7 @@ class SetNodeAttributeData(NxtCommand):
         for dirty in dirties:
             attr_path = nxt_path.make_attr_path(dirty, self.attr_name)
             changed_attrs += (attr_path,)
-        if self.recomp:
-            self.model.update_comp_layer(rebuild=self.recomp)
-        else:
-            if (self.remove_attr or self.created_node_paths or
-                    self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
-                                       INTERNAL_ATTRS.PARENT_PATH,
-                                       INTERNAL_ATTRS.ENABLED)):
-                self.model.nodes_changed.emit(dirties)
-            else:
-                self.model.attrs_changed.emit(changed_attrs)
+        self.apply_comp_change(dirties)
         if not self.recomp:
             changed = tuple([self.node_path] + self.created_node_paths)
             self.model.nodes_changed.emit(changed)
@@ -442,6 +515,10 @@ class SetNodeAttributeData(NxtCommand):
         if not self.stage.node_attr_exists(node, self.attr_name):
             self.remove_attr = True
         if not created_node:
+            if self.attr_name == INTERNAL_ATTRS.NAME:
+                new_name = self.data.get(META_ATTRS.VALUE)
+                self.recomp = self.name_change_needs_recomp(layer, comp,
+                                                            new_name)
             self.return_value = self.stage.node_setattr_data(node,
                                                              self.attr_name,
                                                              layer=layer,
@@ -455,20 +532,7 @@ class SetNodeAttributeData(NxtCommand):
             # TODO: Some functions already calculated the dirty nodes,
             #  do we really need to do it again here?
             dirties += comp.get_node_dirties(self.node_path)
-        if self.recomp:
-            self.model.update_comp_layer(rebuild=self.recomp)
-        else:
-            if (self.remove_attr or self.created_node_paths or
-                    self.attr_name in (INTERNAL_ATTRS.INSTANCE_PATH,
-                                       INTERNAL_ATTRS.PARENT_PATH,
-                                       INTERNAL_ATTRS.ENABLED)):
-                self.model.nodes_changed.emit(dirties)
-            else:
-                changed_attrs = ()
-                for dirty in dirties:
-                    attr_path = nxt_path.make_attr_path(dirty, self.attr_name)
-                    changed_attrs += (attr_path,)
-                self.model.attrs_changed.emit(changed_attrs)
+        self.apply_comp_change(dirties)
         attr_path = nxt_path.make_attr_path(self.node_path, self.nice_attr_name)
         val = str(self.data.get(META_ATTRS.VALUE))
         self.setText("Set {} to {}".format(attr_path, val))
@@ -1456,6 +1520,18 @@ class SetLayerAlias(NxtCommand):
         self.setText("Set {} alias to {}".format(layer.filepath, self.alias))
 
 
+def stored_for(file_path, parent_layer):
+    """How a file picked from a menu is written into the layer above it.
+
+    The same rule the Reference Editor uses: relative when the file sits
+    beside that layer, whole otherwise, and whole when that layer has never
+    been saved and so has no folder to be relative to.
+    """
+    real_path = getattr(parent_layer, 'real_path', None)
+    layer_dir = os.path.dirname(real_path) if real_path else None
+    return stored_reference_path(file_path, layer_dir)
+
+
 class NewLayer(NxtCommand):
 
     """Add new layer"""
@@ -1503,7 +1579,8 @@ class NewLayer(NxtCommand):
                 break
         real_path = nxt_path.full_file_expand(self.file_path, start=self.chdir)
         layer_data = {"parent_layer": parent_layer,
-                      SAVE_KEY.FILEPATH: self.file_path,
+                      SAVE_KEY.FILEPATH: stored_for(self.file_path,
+                                                    parent_layer),
                       SAVE_KEY.REAL_PATH: real_path,
                       SAVE_KEY.COLOR: layer_color,
                       SAVE_KEY.ALIAS: self.file_name
@@ -1549,7 +1626,7 @@ class ReferenceLayer(NxtCommand):
             parent_layer = None
         layer_data = nxt_io.load_file_data(self.real_path)
         extra_data = {"parent_layer": parent_layer,
-                      "filepath": self.file_path,
+                      "filepath": stored_for(self.file_path, parent_layer),
                       "real_path": self.real_path,
                       "alias": layer_data['name']
                       }
@@ -1560,6 +1637,314 @@ class ReferenceLayer(NxtCommand):
         self.model.set_target_layer(self.real_path)
         self.model.layer_added.emit(self.real_path)
         self.setText("Added reference to {}".format(self.real_path))
+
+
+class ReloadLayers(NxtCommand):
+    """Re-read layers from disk, replacing what is in memory.
+
+    Reloading throws away unsaved work on the layers it is given; that is
+    what it is for. What it replaces is kept, so this can be undone: the
+    undo puts back exactly what each layer held, without going near the
+    file, which by then may have changed again.
+
+    A file that has come to reference something else since it was
+    opened brings that with it, so which layers are loaded and the order
+    they stack in can both change here.
+    """
+
+    def __init__(self, layer_paths, model):
+        """
+        :param layer_paths: real paths of the layers to reload
+        :type layer_paths: list
+        """
+        super(ReloadLayers, self).__init__(model)
+        self.model = model
+        self.stage = model.stage
+        self.layer_paths = list(layer_paths)
+        # What the layers held before, filled in by the first redo.
+        self.stash = {}
+        # Which of them were unsaved before, so undoing a reload leaves
+        # them marked the way they were.
+        self.was_unsaved = []
+
+    def _layers(self):
+        """The layers to reload that are still in the stage.
+
+        By file rather than by layer: a file referenced from two places
+        is loaded twice and is two layers in the stack, each holding its
+        own copy of it. Refreshing one and not the other would leave the
+        graph composited from that file as it was and as it is at once.
+        """
+        wanted = set(self.layer_paths)
+        layers = [l for l in self.stage._sub_layers if l.real_path in wanted]
+        for layer_path in wanted:
+            if not any(l.real_path == layer_path for l in layers):
+                logger.warning('Cannot reload "{}", it is no longer '
+                               'loaded'.format(layer_path))
+        return layers
+
+    def _stack(self):
+        """Which layers are loaded, in the order they stack."""
+        return [l.real_path for l in self.stage._sub_layers]
+
+    def _settle(self, reloaded, was_stacked):
+        """Put the model back on its feet after layers have changed.
+
+        Which layers are loaded can have changed, so the layer tree is
+        told to start over before anything else happens: it hands out
+        indices that point straight at layer objects, and a repaint
+        against the old shape reaches for layers that are gone.
+
+        Every node in the reloaded layers is a different object now, so
+        the graph is composited and redrawn whole rather than by parts.
+        Building through the display layer is what keeps a graph being
+        looked at through a reference showing that reference.
+
+        :param reloaded: real paths of the layers that were reloaded
+        :param was_stacked: real paths of the layers that were loaded
+            before, in the order they stacked
+        """
+        is_stacked = self._stack()
+        for real_path in set(was_stacked) - set(is_stacked):
+            self.model.layer_removed.emit(real_path)
+        for real_path in set(is_stacked) - set(was_stacked):
+            self.model.layer_added.emit(real_path)
+        if is_stacked != was_stacked:
+            # Catches the rest: the same layers stacked in a different
+            # order, which changes whose opinion wins and which row
+            # each one is on.
+            self.model.layers_restacked.emit()
+        loaded = self.stage._sub_layers
+        if self.model.target_layer not in loaded:
+            self.model.set_target_layer(LAYERS.TOP)
+        display = self.model.display_layer
+        if display not in loaded:
+            display = self.stage.top_layer
+        self.model.set_display_layer(display)
+        # A file says what a layer is called, what color it is and
+        # whether it is muted or soloed, so any of those can have come
+        # back different and the layer tree is showing the old ones.
+        still_loaded = tuple(p for p in reloaded if p in is_stacked)
+        for layer_path in still_loaded:
+            self.model.layer_alias_changed.emit(layer_path)
+            self.model.layer_color_changed.emit(layer_path)
+        self.model.layer_mute_changed.emit(still_loaded)
+        self.model.layer_solo_changed.emit(still_loaded)
+
+    @processing
+    def redo(self):
+        layers = self._layers()
+        if not layers:
+            self.setText('Reloaded nothing')
+            return
+        was_stacked = self._stack()
+        self.stash = self.stage.reload_layers(layers)
+        reloaded = list(self.stash)
+        self.was_unsaved = [p for p in reloaded
+                            if p in self.model.effected_layers]
+        for layer_path in self.was_unsaved:
+            # What is in memory is what is on disk again, so whatever was
+            # unsaved about it is gone rather than still pending.
+            self.model.effected_layers.remove(layer_path)
+        self._settle(reloaded, was_stacked)
+        if len(self.layer_paths) == 1 and self.layer_paths[0] in reloaded:
+            aliases = self.model.get_layer_alias(self.layer_paths[0])
+        else:
+            aliases = '{} layers'.format(len(self.layer_paths))
+        self.setText('Reloaded {}'.format(aliases))
+
+    @processing
+    def undo(self):
+        if not self.stash:
+            return
+        was_stacked = self._stack()
+        layers = [l for l in self.stage._sub_layers
+                  if l.real_path in self.stash]
+        self.stage.reload_layers(layers, source=self.stash)
+        for layer_path in self.was_unsaved:
+            self.model.effected_layers.add(layer_path)
+        self._settle(list(self.stash), was_stacked)
+
+
+class SetLayerReferences(NxtCommand):
+    """Replace the whole list of references a layer holds.
+
+    References are stored as written, so the list is strings, not layers:
+    a partial path stays partial and keeps resolving through roots the way
+    it did before. Nothing is written to disk here. This marks the layer
+    unsaved like any other edit, and saving the layer writes it.
+    """
+
+    def __init__(self, layer_path, references, model):
+        """
+        :param layer_path: real path of the layer being edited
+        :type layer_path: str
+        :param references: the references it should hold, in order, as
+            they are to be stored
+        :type references: list
+        """
+        super(SetLayerReferences, self).__init__(model)
+        self.model = model
+        self.stage = model.stage
+        self.layer_path = layer_path
+        self.new_references = list(references)
+        layer = model.lookup_layer(layer_path)
+        self.old_references = list(layer.get_references()) if layer else []
+
+    def changed(self):
+        """Whether this would do anything at all.
+
+        Order counts: references are a stack, so moving one is a change
+        even though the set is the same.
+        """
+        return self.new_references != self.old_references
+
+    def _apply(self, references):
+        """Put the layer's references where the list says.
+
+        :return: real paths of the layers taken out of the stage
+        :rtype: list
+        """
+        layer = self.model.lookup_layer(self.layer_path)
+        if layer is None:
+            logger.error('Cannot set references, no layer at %s'
+                         % self.layer_path)
+            return []
+        # Recorded on the command, so a throw partway through still leaves
+        # the caller able to say which layers went.
+        removed = self._removed = []
+        # Take the existing referenced layers out of the stage first. The
+        # ones still wanted come back below, reloaded, which is what makes
+        # a changed reference actually show up.
+        for ref_data in list(layer.sub_layers):
+            ref_layer = ref_data.get('layer')
+            if ref_layer is not None:
+                removed.append(ref_layer.real_path)
+                self.stage.remove_sublayer(ref_layer)
+        layer.sub_layers = []
+        layer.sub_layer_paths = []
+        layer_dir = ''
+        if layer.real_path:
+            layer_dir = os.path.dirname(layer.real_path)
+        insert_idx = layer.layer_idx() + 1
+        # new_sublayer puts each one at the front of the parent's list, so
+        # adding backwards is what leaves them in the order asked for.
+        for reference in reversed(references):
+            real_path, found = nxt_io.expand_reference_path(reference,
+                                                            layer_dir)
+            if not found:
+                # Keep it. A reference to something not on this machine is
+                # still the graph's intent, and dropping it silently would
+                # be worse than a layer that does not load.
+                layer.sub_layer_paths.insert(0, reference)
+                layer.sub_layers.insert(0, {SAVE_KEY.FILEPATH: reference})
+                logger.warning('Reference "%s" from %s was not found'
+                               % (reference, layer.alias))
+                continue
+            layer_data = nxt_io.load_file_data(real_path)
+            layer_data.update({'parent_layer': layer,
+                               SAVE_KEY.FILEPATH: reference,
+                               SAVE_KEY.REAL_PATH: real_path,
+                               'alias': layer_data.get('name')})
+            self.stage.new_sublayer(layer_data=layer_data, idx=insert_idx)
+        return removed
+
+    def _target_path(self):
+        """Where the target layer is, before we start moving layers about."""
+        target = self.model.target_layer
+        return getattr(target, 'real_path', None)
+
+    def _display_path(self):
+        """Which layer the graph is being looked at through.
+
+        The comp is built from this one, so it matters more than the
+        target: left pointing at a layer that is gone, the graph on screen
+        is composited from the wrong place in the stack and keeps showing
+        nodes from layers that are no longer loaded.
+        """
+        display = self.model.display_layer
+        return getattr(display, 'real_path', None)
+
+    def _settle(self, removed, was_targeting, was_displaying=None):
+        """Put the model back on its feet after layers have come and gone.
+
+        Applying rebuilds every referenced layer, including the ones that
+        are staying, because that is what makes the result identical to
+        opening a file that declares these references. The cost is that a
+        layer which is still there is not the same object it was, and the
+        model holds layer objects: the target is one. Left alone it points
+        at a layer that is not in the stage, and everything reaching for
+        the target then works on a layer outside the graph, which in a DCC
+        takes the application down rather than raising.
+
+        So the target is restored by path. It survives if its layer is
+        still referenced, whether or not it was rebuilt, and only falls
+        back to the top when the layer it named has really gone.
+
+        The layer manager rebuilds on layer_removed, and has to be told
+        about every layer that went, not only the ones that came.
+        """
+        # Which layers exist has changed, so say so before anything else.
+        # The layer tree rebuilds on these and lets go of the indices it
+        # was holding; everything below can make a view repaint, and a
+        # repaint against the old shape reaches for layers that are gone.
+        for real_path in removed:
+            self.model.layer_removed.emit(real_path)
+        self.model.layer_added.emit(self.layer_path)
+        # Rebuild through the display layer rather than through the comp.
+        # update_comp_layer builds from the comp's own index, and once
+        # layers have come and gone that index points somewhere else in
+        # the stack, so the graph gets composited from the wrong place and
+        # keeps nodes belonging to layers that are no longer loaded.
+        # Everything downstream, the build view included, reads that comp.
+        display = None
+        if was_displaying:
+            display = self.model.lookup_layer(was_displaying)
+        self.model.set_display_layer(display or self.stage.top_layer)
+        if was_targeting and self.model.lookup_layer(was_targeting):
+            self.model.set_target_layer(was_targeting)
+        else:
+            self.model.set_target_layer(LAYERS.TOP)
+
+    def _apply_and_settle(self, references):
+        """Apply the references, and settle the model whatever happens.
+
+        Applying takes every referenced layer out before putting the
+        wanted ones back, so a throw halfway leaves the stage holding
+        neither: the layers gone from the stack, and a comp still full of
+        their nodes because the rebuild never ran. One unreadable file
+        nested under a reference used to do exactly that to the whole
+        graph.
+
+        Whatever came back is what there is. Settling is about making the
+        model agree with the stage, and it has to happen even when
+        applying went badly, so what is on screen is what is loaded.
+        """
+        was_targeting = self._target_path()
+        was_displaying = self._display_path()
+        self._removed = []
+        try:
+            self._apply(references)
+        finally:
+            self._settle(self._removed, was_targeting, was_displaying)
+
+    @processing
+    def redo(self):
+        if not self.changed():
+            # Nothing to do, and saying so beats a recomp that changes
+            # nothing.
+            self.setText('References unchanged on {}'.format(self.layer_path))
+            return
+        self.redo_effected_layer(self.layer_path)
+        self._apply_and_settle(self.new_references)
+        self.setText('Set references on {}'.format(self.layer_path))
+
+    @processing
+    def undo(self):
+        if not self.changed():
+            return
+        self.undo_effected_layer(self.layer_path)
+        self._apply_and_settle(self.old_references)
 
 
 class RemoveLayer(ReferenceLayer):

@@ -1,5 +1,11 @@
 # Builtin
+import builtins
+import importlib
+import keyword
 import logging
+import re
+import sys
+from collections import OrderedDict
 from functools import partial
 
 # External
@@ -13,9 +19,12 @@ from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors, user_dir
 from nxt_editor.decorator_widgets import OpinionDots
-from nxt import DATA_STATE, nxt_path
+from nxt import DATA_STATE, nxt_path, tokens
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
+from nxt_editor.dockwidgets import code_completion
+from nxt_editor.dockwidgets.code_overlays import (FindOverlay,
+                                                  GotoLineOverlay)
 from nxt_editor.constants import FONTS
 import nxt_editor
 
@@ -102,6 +111,11 @@ class CodeEditor(DockWidgetBase):
         self.code_frame.setLayout(self.frame_layout)
 
         self.code_widget = QtWidgets.QWidget(self)
+        # Nothing painted here, so the strip the editor gives up when it
+        # shrinks kept whatever was drawn there last, which is how dragging
+        # the splitter smeared the editor's border across the top.
+        self.code_widget.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.code_widget.setStyleSheet('background-color: #3E3E3E;')
         self.frame_layout.addWidget(self.code_widget)
 
         self.code_layout = QtWidgets.QVBoxLayout()
@@ -116,6 +130,16 @@ class CodeEditor(DockWidgetBase):
         self.editor.cancel.connect(self.exit_editing)
         self.editor.accept.connect(self.accept_edit)
         self.code_layout.addWidget(self.editor)
+
+        # Panels that float over the code rather than taking a strip of the
+        # dock, so opening one never reflows what is being read. Children of
+        # the editor, so they follow it wherever the dock ends up.
+        self.find_widget = FindOverlay(self.editor, ce_widget=self)
+        self.goto_widget = GotoLineOverlay(self.editor, ce_widget=self)
+        self.editor.find_widget = self.find_widget
+        self.editor.goto_widget = self.goto_widget
+        self.editor.textChanged.connect(
+            self.find_widget.on_editor_text_changed)
 
         self.viewport = self.editor.viewport()
 
@@ -223,8 +247,26 @@ class CodeEditor(DockWidgetBase):
             style = 'background-color: #232323;'
         self.code_widget.setStyleSheet(style)
 
+    def sync_overlay_geometry(self):
+        """Keep the overlay sitting exactly on the editor.
+
+        It is a child of the editor and paints with no background of its
+        own, so any moment where it is larger than the editor leaves what
+        it drew behind. Driven only from this dock's resize it lagged the
+        editor for a frame on every step of a splitter drag, which is what
+        smeared the border across the top.
+        """
+        rect = self.editor.rect().marginsRemoved(QtCore.QMargins(3, 2, 2, 2))
+        if self.overlay_widget.geometry() != rect:
+            self.overlay_widget.setGeometry(rect)
+            self.overlay_widget.update()
+
     def resizeEvent(self, event):
-        self.overlay_widget.setGeometry(self.editor.rect().marginsRemoved(QtCore.QMargins(3, 2, 2, 2)))
+        self.sync_overlay_geometry()
+        # The editor draws its border with a stylesheet, and the strip it
+        # gives up when it shrinks belongs to this frame, which has nothing
+        # to paint there unless asked.
+        self.code_frame.update()
         return super(CodeEditor, self).resizeEvent(event)
 
     def set_stage_model(self, stage):
@@ -303,9 +345,7 @@ class CodeEditor(DockWidgetBase):
             self.code_frame.hide()
         elif self.code_frame.isHidden():
             self.code_frame.show()
-            rect = self.editor.rect().marginsRemoved(QtCore.QMargins(3, 2,
-                                                                     2, 2))
-            self.overlay_widget.setGeometry(rect)
+            self.sync_overlay_geometry()
 
     def display_details(self):
         if self.isTopLevel() and self.node_path:
@@ -472,10 +512,13 @@ class CodeEditor(DockWidgetBase):
         self.editor.verticalScrollBar().blockSignals(False)
         self.editor.verticalScrollBar().setValue(self.editor.prev_v_scroll_value)
         self.editing_active = True
+        self.find_widget.update_replace_enabled()
 
     def exit_editing(self):
         self.editor.setReadOnly(True)
         self.editing_active = False
+        self.editor.hide_completions()
+        self.find_widget.update_replace_enabled()
         self.cached_code_lines = []
         self.cached_code = ''
         self.set_represented_node()
@@ -524,6 +567,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     cancel = QtCore.Signal()
     accept = QtCore.Signal()
 
+    # Opening char -> closing char inserted automatically while editing
+    AUTO_PAIRS = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"}
+
     def __init__(self, show_line_numbers=True, highlight_current_line=True,
                  syntax_highlighter=None, indent='    ',
                  comment_character='#', parent=None):
@@ -548,6 +594,17 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.action_states = {}
         self.format_characters_on = False
         self.standard_menu = None
+        # Set by the CodeEditor dock once the overlays exist.
+        self.find_widget = None
+        self.goto_widget = None
+        # Highlights are kept as named layers and recombined, because
+        # setExtraSelections replaces the lot. Painted in this order, so
+        # later layers sit on top of earlier ones.
+        self.extra_selection_order = ('current_line', 'occurrences',
+                                      'find_matches', 'find_current',
+                                      'brackets')
+        self.extra_selection_layers = OrderedDict()
+        self.completion_words = None
         self.prev_v_scroll_value = 0
         self.prev_h_scroll_value = 0
         self.changed_lines = []
@@ -569,6 +626,24 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.ce_actions.font_bigger.triggered.connect(self.increase_font_size)
         self.ce_actions.font_smaller.triggered.connect(self.decrease_font_size)
         self.ce_actions.font_size_revert.triggered.connect(self.reset_font_size)
+        # find and replace
+        self.ce_actions.find_action.triggered.connect(self.open_find)
+        self.ce_actions.replace_action.triggered.connect(self.open_replace)
+        self.ce_actions.find_next_action.triggered.connect(self.find_next)
+        self.ce_actions.find_prev_action.triggered.connect(self.find_previous)
+        # navigation
+        self.ce_actions.goto_line_action.triggered.connect(self.goto_line)
+        # line editing
+        self.ce_actions.duplicate_line.triggered.connect(self.duplicate_lines)
+        self.ce_actions.move_line_up.triggered.connect(partial(self.move_lines,
+                                                               -1))
+        self.ce_actions.move_line_down.triggered.connect(partial(self.move_lines,
+                                                                 1))
+        self.ce_actions.delete_line.triggered.connect(self.delete_lines)
+        self.ce_actions.expand_selection.triggered.connect(self.expand_selection)
+        # completion
+        func = partial(self.update_completions, True)
+        self.ce_actions.complete_action.triggered.connect(func)
         self.run_line_local_act = self.ce_actions.run_line_local_action
         self.run_line_local_act.triggered.connect(partial(self.exec_selection,
                                                           False))
@@ -637,7 +712,31 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.current_line_highlight = highlight_current_line
         self.current_line_number = None
         self.current_line_color = QtGui.QColor('#181818')
-        self.cursorPositionChanged.connect(self.highlight_current_line)
+        self.occurrence_color = QtGui.QColor('#2E4451')
+        self.bracket_color = QtGui.QColor('#3F6079')
+        self.unmatched_bracket_color = QtGui.QColor('#7A3030')
+        self.cursorPositionChanged.connect(self.cursor_moved)
+
+        # completion
+        self.completer = QtWidgets.QCompleter([], self)
+        self.completer.setWidget(self)
+        self.completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
+        self.completer.setCaseSensitivity(QtCore.Qt.CaseSensitive)
+        self.completer.activated.connect(self.insert_completion)
+        self.completer.popup().installEventFilter(self)
+        # jedi is asked once typing pauses rather than on every key, since
+        # a fresh question can take a moment.
+        self.jedi_timer = QtCore.QTimer(self)
+        self.jedi_timer.setSingleShot(True)
+        self.jedi_timer.setInterval(250)
+        self.jedi_timer.timeout.connect(self.ask_jedi)
+        # The word list is rebuilt from the document, so it goes stale on
+        # every edit. Rebuilding is deferred until a completion is asked for.
+        self.textChanged.connect(self.invalidate_completion_words)
+        # Setting text does not move the cursor if it was already at the
+        # top, so without this a freshly opened node shows no current line
+        # highlight until something is clicked.
+        self.textChanged.connect(self.cursor_moved)
 
         # apply syntax highlighting
         self.syntax_highlighter = syntax_highlighter
@@ -647,6 +746,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         func = self.update_previous_scroll_positions
         self.verticalScrollBar().valueChanged.connect(func)
         self.installEventFilter(self)
+        # Needed to swap the cursor while hovering a token with Ctrl held
+        self.viewport().setMouseTracking(True)
+        self._cursor_before_token = None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("text/plain"):
@@ -719,6 +821,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             cr = self.contentsRect()
             rec = QtCore.QRect(cr.left(), cr.top(), self.number_bar.get_width(), cr.height())
             self.number_bar.setGeometry(rec)
+        for overlay in (self.find_widget, self.goto_widget):
+            if overlay is not None:
+                overlay.reposition()
+        # The dock resizing is not the only way this widget changes size.
+        if self.ce_widget is not None:
+            self.ce_widget.sync_overlay_geometry()
 
         QtWidgets.QPlainTextEdit.resizeEvent(self, *e)
 
@@ -735,19 +843,752 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         qss = code_style_factory(color, border, thickness=thickness)
         self.setStyleSheet(qss)
 
+    # -- highlight layers ---------------------------------------------
+
+    def set_extra_selection_layer(self, name, selections):
+        """Replace one named group of highlights and repaint them all.
+
+        setExtraSelections takes the whole list, so the current line, the
+        find matches and the bracket match would otherwise each wipe out
+        the others.
+
+        :param name: one of self.extra_selection_order
+        :type name: str
+        :param selections: QTextEdit.ExtraSelection list, may be empty
+        :type selections: list
+        """
+        self.extra_selection_layers[name] = selections or []
+        combined = []
+        for key in self.extra_selection_order:
+            combined += self.extra_selection_layers.get(key, [])
+        self.setExtraSelections(combined)
+
+    def cursor_moved(self):
+        self.highlight_current_line()
+        self.highlight_occurrences()
+        self.highlight_brackets()
+
     def highlight_current_line(self):
-        if self.current_line_highlight:
-            new_current_line_number = self.textCursor().blockNumber()
-            if new_current_line_number != self.current_line_number:
-                self.current_line_number = new_current_line_number
-                hi_selection = QtWidgets.QTextEdit.ExtraSelection()
-                hi_selection.format.setBackground(self.current_line_color)
-                hi_selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection, True)
-                hi_selection.cursor = self.textCursor()
-                hi_selection.cursor.clearSelection()
-                self.setExtraSelections([hi_selection])
+        if not self.current_line_highlight:
+            self.set_extra_selection_layer('current_line', [])
+            return
+        self.current_line_number = self.textCursor().blockNumber()
+        hi_selection = QtWidgets.QTextEdit.ExtraSelection()
+        hi_selection.format.setBackground(self.current_line_color)
+        hi_selection.format.setProperty(QtGui.QTextFormat.FullWidthSelection,
+                                        True)
+        hi_selection.cursor = self.textCursor()
+        hi_selection.cursor.clearSelection()
+        self.set_extra_selection_layer('current_line', [hi_selection])
+
+    def word_under_cursor(self):
+        """The identifier the cursor is inside or touching.
+
+        :return: (word, start position), or ('', -1)
+        :rtype: tuple
+        """
+        cursor = self.textCursor()
+        block_text = cursor.block().text()
+        column = cursor.positionInBlock()
+        start = column
+        while start > 0 and (block_text[start - 1].isalnum()
+                             or block_text[start - 1] == '_'):
+            start -= 1
+        end = column
+        while end < len(block_text) and (block_text[end].isalnum()
+                                         or block_text[end] == '_'):
+            end += 1
+        if end <= start:
+            return '', -1
+        return block_text[start:end], cursor.block().position() + start
+
+    def highlight_occurrences(self):
+        """Mark every other use of the word the cursor is on."""
+        word, _ = self.word_under_cursor()
+        if len(word) < 2 or word in keyword.kwlist:
+            self.set_extra_selection_layer('occurrences', [])
+            return
+        document = self.document()
+        text = self.toPlainText()
+        selections = []
+        pattern = r'\b' + re.escape(word) + r'\b'
+        for match in re.finditer(pattern, text):
+            selection = QtWidgets.QTextEdit.ExtraSelection()
+            selection.format.setBackground(self.occurrence_color)
+            cursor = QtGui.QTextCursor(document)
+            cursor.setPosition(match.start())
+            cursor.setPosition(match.end(), QtGui.QTextCursor.KeepAnchor)
+            selection.cursor = cursor
+            selections.append(selection)
+        if len(selections) < 2:
+            # The only use is the one being looked at, so there is nothing
+            # to point out.
+            selections = []
+        self.set_extra_selection_layer('occurrences', selections)
+
+    OPENING_BRACKETS = '([{'
+    CLOSING_BRACKETS = ')]}'
+
+    def highlight_brackets(self):
+        """Mark the bracket beside the cursor and its partner."""
+        text = self.toPlainText()
+        position = self.textCursor().position()
+        found = None
+        # Prefer the bracket the cursor sits just after, the way most
+        # editors behave, then the one it sits just before.
+        for probe in (position - 1, position):
+            if 0 <= probe < len(text) and text[probe] in (
+                    self.OPENING_BRACKETS + self.CLOSING_BRACKETS):
+                found = probe
+                break
+        if found is None:
+            self.set_extra_selection_layer('brackets', [])
+            return
+        partner = self.match_bracket(text, found)
+        positions = [found] if partner is None else [found, partner]
+        color = (self.unmatched_bracket_color if partner is None
+                 else self.bracket_color)
+        document = self.document()
+        selections = []
+        for pos in positions:
+            selection = QtWidgets.QTextEdit.ExtraSelection()
+            selection.format.setBackground(color)
+            cursor = QtGui.QTextCursor(document)
+            cursor.setPosition(pos)
+            cursor.setPosition(pos + 1, QtGui.QTextCursor.KeepAnchor)
+            selection.cursor = cursor
+            selections.append(selection)
+        self.set_extra_selection_layer('brackets', selections)
+
+    def match_bracket(self, text, position):
+        """Walk out from a bracket to find the one that closes it.
+
+        :param text: the whole document
+        :type text: str
+        :param position: index of the bracket to match
+        :type position: int
+        :return: index of the partner, or None if it is unbalanced
+        :rtype: int | None
+        """
+        char = text[position]
+        if char in self.OPENING_BRACKETS:
+            partner = self.CLOSING_BRACKETS[self.OPENING_BRACKETS.index(char)]
+            step, opening, closing = 1, char, partner
         else:
-            self.setExtraSelections([QtWidgets.QTextEdit.ExtraSelection()])
+            partner = self.OPENING_BRACKETS[self.CLOSING_BRACKETS.index(char)]
+            step, opening, closing = -1, partner, char
+        depth = 0
+        index = position
+        while 0 <= index < len(text):
+            if text[index] == opening:
+                depth += 1 if step == 1 else -1
+            elif text[index] == closing:
+                depth -= 1 if step == 1 else -1
+            if depth == 0:
+                return index
+            index += step
+        return None
+
+    # -- find and replace ----------------------------------------------
+
+    def open_find(self):
+        if self.find_widget:
+            self.find_widget.open_find()
+
+    def open_replace(self):
+        if self.find_widget:
+            self.find_widget.open_find(replace=True)
+
+    def find_next(self):
+        if self.find_widget:
+            self.find_widget.find_next()
+
+    def find_previous(self):
+        if self.find_widget:
+            self.find_widget.find_previous()
+
+    # -- navigation -----------------------------------------------------
+
+    def goto_line(self):
+        """Drop the line number panel from the top of the editor."""
+        if self.goto_widget:
+            self.goto_widget.open_goto()
+
+    def expand_selection(self):
+        """Grow the selection: word, then line, then everything."""
+        cursor = self.textCursor()
+        selected = cursor.selectedText()
+        if not selected:
+            word, start = self.word_under_cursor()
+            if word:
+                cursor.setPosition(start)
+                cursor.setPosition(start + len(word),
+                                   QtGui.QTextCursor.KeepAnchor)
+                self.setTextCursor(cursor)
+                return
+        line = cursor.block().text()
+        if selected and selected != line:
+            cursor.movePosition(QtGui.QTextCursor.StartOfBlock)
+            cursor.movePosition(QtGui.QTextCursor.EndOfBlock,
+                                QtGui.QTextCursor.KeepAnchor)
+            self.setTextCursor(cursor)
+            return
+        self.selectAll()
+
+    # -- line editing ----------------------------------------------------
+
+    def selected_block_range(self, cursor):
+        """First and last block numbers the given cursor covers.
+
+        :param cursor: QTextCursor to measure
+        :return: (first, last) block numbers
+        :rtype: tuple
+        """
+        document = self.document()
+        first = document.findBlock(cursor.selectionStart()).blockNumber()
+        last = document.findBlock(cursor.selectionEnd()).blockNumber()
+        return first, last
+
+    def duplicate_lines(self):
+        """Copy the selected line(s) in below themselves."""
+        if self.isReadOnly():
+            return
+        cursor = self.textCursor()
+        first, last = self.selected_block_range(cursor)
+        document = self.document()
+        lines = [document.findBlockByNumber(n).text()
+                 for n in range(first, last + 1)]
+        end_block = document.findBlockByNumber(last)
+        edit = QtGui.QTextCursor(document)
+        edit.beginEditBlock()
+        try:
+            edit.setPosition(end_block.position() + end_block.length() - 1)
+            edit.insertText('\n' + '\n'.join(lines))
+        finally:
+            edit.endEditBlock()
+
+    def move_lines(self, direction):
+        """Swap the selected line(s) with the line above or below.
+
+        :param direction: -1 for up, 1 for down
+        :type direction: int
+        """
+        if self.isReadOnly():
+            return
+        cursor = self.textCursor()
+        first, last = self.selected_block_range(cursor)
+        document = self.document()
+        target = first - 1 if direction < 0 else last + 1
+        if target < 0 or target >= document.blockCount():
+            return
+        moving = [document.findBlockByNumber(n).text()
+                  for n in range(first, last + 1)]
+        neighbour = document.findBlockByNumber(target).text()
+        if direction < 0:
+            new_lines = moving + [neighbour]
+            span_first, span_last = target, last
+        else:
+            new_lines = [neighbour] + moving
+            span_first, span_last = first, target
+        column = cursor.positionInBlock()
+        start_block = document.findBlockByNumber(span_first)
+        end_block = document.findBlockByNumber(span_last)
+        edit = QtGui.QTextCursor(document)
+        edit.beginEditBlock()
+        try:
+            edit.setPosition(start_block.position())
+            edit.setPosition(end_block.position() + end_block.length() - 1,
+                             QtGui.QTextCursor.KeepAnchor)
+            edit.insertText('\n'.join(new_lines))
+        finally:
+            edit.endEditBlock()
+        # Follow the lines to where they landed, so the shortcut can be
+        # held down to walk a block up or down the compute.
+        moved_first = first + direction
+        moved_last = last + direction
+        new_cursor = QtGui.QTextCursor(document)
+        landed = document.findBlockByNumber(moved_first)
+        new_cursor.setPosition(landed.position()
+                               + min(column, len(landed.text())))
+        if moved_last != moved_first:
+            end = document.findBlockByNumber(moved_last)
+            new_cursor.setPosition(end.position() + len(end.text()),
+                                   QtGui.QTextCursor.KeepAnchor)
+        self.setTextCursor(new_cursor)
+
+    def delete_lines(self):
+        """Remove the selected line(s) entirely."""
+        if self.isReadOnly():
+            return
+        cursor = self.textCursor()
+        first, last = self.selected_block_range(cursor)
+        document = self.document()
+        start_block = document.findBlockByNumber(first)
+        end_block = document.findBlockByNumber(last)
+        start = start_block.position()
+        end = end_block.position() + end_block.length()
+        limit = document.characterCount() - 1
+        if end > limit:
+            # The last line has no trailing newline of its own to remove,
+            # so take the one in front of it instead.
+            end = limit
+            start = max(0, start - 1)
+        edit = QtGui.QTextCursor(document)
+        edit.beginEditBlock()
+        try:
+            edit.setPosition(start)
+            edit.setPosition(end, QtGui.QTextCursor.KeepAnchor)
+            edit.removeSelectedText()
+        finally:
+            edit.endEditBlock()
+        self.setTextCursor(edit)
+
+    # -- completion -------------------------------------------------------
+
+    def invalidate_completion_words(self):
+        self.completion_words = None
+
+    # An import line, either shape, capturing the name the compute will
+    # actually use: "import os", "import os.path as p", "from os import x".
+    IMPORT_RE = re.compile(
+        r'^\s*(?:import\s+(?P<mod>[A-Za-z_][\w.]*)'
+        r'(?:\s+as\s+(?P<alias>[A-Za-z_]\w*))?'
+        r'|from\s+(?P<from>[A-Za-z_][\w.]*)\s+import\s+(?P<names>[^#\n]+))',
+        re.MULTILINE)
+
+    def completion_source_enabled(self, action_name):
+        """Whether one source of completions is switched on.
+
+        :param action_name: attribute on the code editor's actions
+        :type action_name: str
+        :rtype: bool
+        """
+        action = getattr(self.ce_actions, action_name, None)
+        return True if action is None else action.isChecked()
+
+    def imported_modules(self):
+        """The modules this compute imports, by the name it calls them.
+
+        Only what the compute asks for, and only if it can be imported
+        without complaint. Importing runs module level code, so this stays
+        with what the compute was going to import anyway when it runs.
+
+        :return: {name used in the code: module}
+        :rtype: dict
+        """
+        found = {}
+        for match in self.IMPORT_RE.finditer(self.import_source()):
+            module_name = match.group('mod') or match.group('from')
+            if not module_name:
+                continue
+            local_name = match.group('alias') or module_name.split('.')[0]
+            if match.group('mod') and not match.group('alias'):
+                # "import os.path" binds os, not os.path
+                module_name = module_name.split('.')[0]
+            if local_name in found:
+                continue
+            module = sys.modules.get(module_name)
+            if module is None:
+                try:
+                    module = importlib.import_module(module_name)
+                except Exception:
+                    logger.debug('No completions for %s, it would not import'
+                                 % module_name)
+                    continue
+            found[local_name] = module
+        return found
+
+    def world_source(self):
+        """The world node's code, when this is another node.
+
+        The world node runs first, into the same globals every compute runs
+        with, so what it imports every node can use without importing again.
+        """
+        model = self.ce_widget.stage_model
+        node_path = self.ce_widget.node_path
+        if not model or not node_path or node_path == nxt_path.WORLD:
+            return ''
+        try:
+            return model.get_node_code_string(nxt_path.WORLD) or ''
+        except Exception:
+            return ''
+
+    def import_source(self):
+        """This compute, after the world node's."""
+        world = self.world_source()
+        code = self.toPlainText()
+        return world + '\n' + code if world else code
+
+    def completion_namespace(self):
+        """Names the compute can use without importing them itself.
+
+        :return: {name: object}, from each source that is switched on
+        :rtype: dict
+        """
+        namespace = {}
+        if self.completion_source_enabled('complete_node_action'):
+            namespace.update(code_completion.RUNTIME_GLOBALS)
+        if self.completion_source_enabled('complete_host_action'):
+            namespace.update(code_completion.host_modules())
+        if self.completion_source_enabled('complete_modules_action'):
+            namespace.update(self.imported_modules())
+        return namespace
+
+    def module_completions(self, prefix):
+        """Names reachable through a dotted prefix, like os.pa.
+
+        :param prefix: the partial word being typed
+        :type prefix: str
+        :rtype: list
+        """
+        if '.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX):
+            return []
+        root, _, rest = prefix.partition('.')
+        module = self.completion_namespace().get(root)
+        if module is None:
+            return []
+        walked = root
+        # Follow the dots that are already complete, so os.path.jo looks
+        # inside os.path rather than os.
+        parts = rest.split('.')
+        for part in parts[:-1]:
+            module = getattr(module, part, None)
+            if module is None:
+                return []
+            walked += '.' + part
+        return ['%s.%s' % (walked, name) for name in dir(module)
+                if not name.startswith('_')]
+
+    def build_completion_words(self):
+        """Everything worth offering as a completion for this node.
+
+        Each source can be switched off on its own, because they are not
+        equally welcome: python's own names are noise to someone writing
+        mostly tokens, and the words already in a long compute are noise
+        to everyone.
+
+        :rtype: list
+        """
+        words = set()
+        if self.completion_source_enabled('complete_python_action'):
+            words.update(keyword.kwlist)
+            words.update(dir(builtins))
+        if self.completion_source_enabled('complete_node_action'):
+            words.update(code_completion.RUNTIME_GLOBALS)
+            model = self.ce_widget.stage_model
+            node_path = self.ce_widget.node_path
+            if model and node_path:
+                try:
+                    for name in model.get_node_attr_names(node_path):
+                        words.add(name)
+                        words.add('self.' + name)
+                        # How an attribute is written in a compute
+                        words.add(tokens.TOKEN_PREFIX + name
+                                  + tokens.TOKEN_SUFFIX)
+                except Exception:
+                    logger.debug('Could not read attrs for completion on '
+                                 + str(node_path), exc_info=True)
+            all_tokens = (tuple(tokens.TOKENTYPE.ALL)
+                          + tuple(tokens.plugin_tokens))
+            for token in all_tokens:
+                if token.prefix:
+                    words.add(tokens.TOKEN_PREFIX + token.prefix)
+        if self.completion_source_enabled('complete_modules_action'):
+            # The bare module names. What is inside them is resolved per
+            # prefix, since dir() on everything imported would be huge.
+            words.update(self.imported_modules())
+        if self.completion_source_enabled('complete_host_action'):
+            words.update(code_completion.host_modules())
+        if self.completion_source_enabled('complete_document_action'):
+            words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
+                                    self.toPlainText()))
+        return sorted(words)
+
+    # What a partial word can be made of. Dots, so self.na completes
+    # against attribute names rather than starting over at na. Dollars,
+    # braces and colons, because a token is a word too: stopping at the $
+    # meant ${fi offered the prefix "fi", which matches no token, which is
+    # why only python builtins ever appeared.
+    # Slashes too, but only inside a token, where they are a node path:
+    # anywhere else a slash is division and starts a new word.
+    PREFIX_CHARS = r'[A-Za-z0-9_.:${}/]*$'
+
+    def completion_prefix(self):
+        """The partial word in front of the cursor.
+
+        :rtype: str
+        """
+        cursor = self.textCursor()
+        text = cursor.block().text()[:cursor.positionInBlock()]
+        match = re.search(self.PREFIX_CHARS, text)
+        prefix = match.group(0) if match else ''
+        if not prefix.startswith(tokens.TOKEN_PREFIX):
+            prefix = prefix.rpartition('/')[2]
+        return prefix
+
+    def token_completions(self, prefix):
+        """Node paths inside ${/, and a node's attributes after its dot.
+
+        ${/ offers every node path, and ${/some/node. offers that node's
+        attributes as whole tokens.
+
+        :param prefix: the partial word being typed
+        :type prefix: str
+        :rtype: list
+        """
+        start = tokens.TOKEN_PREFIX + nxt_path.WORLD
+        if (not prefix.startswith(start) or
+                not self.completion_source_enabled('complete_node_action')):
+            return []
+        model = self.ce_widget.stage_model
+        if not model:
+            return []
+        body = prefix[len(tokens.TOKEN_PREFIX):]
+        try:
+            if '.' in body:
+                node_path = body.rpartition('.')[0]
+                return [tokens.TOKEN_PREFIX + node_path + '.' + name
+                        + tokens.TOKEN_SUFFIX
+                        for name in model.get_node_attr_names(node_path)]
+            return [tokens.TOKEN_PREFIX + path
+                    for path in model.get_descendants(nxt_path.WORLD)]
+        except Exception:
+            logger.debug('No token completions for ' + prefix, exc_info=True)
+            return []
+
+    def jedi_question(self, prefix):
+        """Where jedi would be asked, and what its answer depends on.
+
+        Only after a dot, which is where jedi knows something the other
+        sources cannot: what a call returns, what a variable holds. Bare
+        names come from the sources that can each be switched off.
+
+        Asked at the start of the name being typed, so the answer is every
+        name that can go there and typing more of it only filters. The
+        answer depends on the code around that point, not on the name.
+
+        :return: (source, line, column, cache key, what goes before each
+            name), or None when jedi is not wanted here
+        """
+        if ('.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX) or
+                not self.completion_source_enabled('complete_jedi_action') or
+                not code_completion.JEDI.installed()):
+            return None
+        cursor = self.textCursor()
+        root, dot, name = prefix.rpartition('.')
+        position = cursor.position() - len(name)
+        text = self.toPlainText()
+        source = text[:position] + text[cursor.position():]
+        line = cursor.blockNumber() + 1
+        column = cursor.positionInBlock() - len(name)
+        key = (source, position, self.world_source())
+        return source, line, column, key, root + dot
+
+    def jedi_completions(self, prefix, ask=False, fresh=False):
+        """What jedi offers for the name being typed.
+
+        :param ask: work it out now if it is not already known, which is
+            what pausing or Ctrl+Space does. Otherwise only what is known.
+        :param fresh: ask again even if this spot was asked before. Ctrl+Space
+            does, so a library reloaded since shows what it has now.
+        :rtype: list
+        """
+        question = self.jedi_question(prefix)
+        if question is None:
+            return []
+        source, line, column, key, before = question
+        names = None if fresh else code_completion.JEDI.cached(key)
+        if names is None:
+            if not ask:
+                self.jedi_timer.start()
+                return []
+            names = code_completion.JEDI.complete(
+                source, line, column, self.completion_namespace(), key,
+                fresh=fresh)
+        return [before + name for name in names]
+
+    def ask_jedi(self):
+        """Typing paused: ask jedi, and show what it says."""
+        if self.isReadOnly() or not self.hasFocus():
+            return
+        if self.jedi_completions(self.completion_prefix(), ask=True):
+            self.update_completions()
+
+    def update_completions(self, force=False):
+        """Offer completions for the word being typed.
+
+        :param force: show them even when the prefix is short or the
+            auto-complete preference is off, which is what Ctrl+Space does
+        :type force: bool
+        """
+        if self.isReadOnly():
+            self.hide_completions()
+            return
+        auto_on = self.ce_actions.autocomplete_action.isChecked()
+        if not force and not auto_on:
+            self.hide_completions()
+            return
+        prefix = self.completion_prefix()
+        if not force and len(prefix) < 2:
+            self.hide_completions()
+            return
+        if self.completion_words is None:
+            self.completion_words = self.build_completion_words()
+        # Module contents, node paths and what jedi says depend on what is
+        # being typed, so they are worked out per prefix rather than kept in
+        # the cached list.
+        words = (self.completion_words + self.module_completions(prefix)
+                 + self.token_completions(prefix)
+                 + self.jedi_completions(prefix, ask=force, fresh=force))
+        model = QtCore.QStringListModel(sorted(set(words)), self.completer)
+        self.completer.setModel(model)
+        self.completer.setCompletionPrefix(prefix)
+        if not self.completer.completionCount():
+            self.hide_completions()
+            return
+        if (self.completer.completionCount() == 1
+                and self.completer.currentCompletion() == prefix):
+            # Already typed out in full, so there is nothing to offer.
+            self.hide_completions()
+            return
+        popup = self.completer.popup()
+        popup.setFont(self.font())
+        popup.setCurrentIndex(self.completer.completionModel().index(0, 0))
+        rect = self.cursorRect()
+        width = (popup.sizeHintForColumn(0)
+                 + popup.verticalScrollBar().sizeHint().width() + 12)
+        rect.setWidth(width)
+        self.set_completion_shortcuts(False)
+        self.completer.complete(rect)
+
+    def hide_completions(self):
+        if self.completer.popup().isVisible():
+            self.completer.popup().hide()
+        self.set_completion_shortcuts(True)
+
+    def set_completion_shortcuts(self, enabled):
+        """Free up the keys the completion popup needs, and give them back.
+
+        Return, Tab and Esc are bound to editor actions, and a QAction
+        shortcut is consumed before the completer ever sees the key. While
+        the popup is up those actions stand down, so it can be driven the
+        way every other completion popup is.
+
+        :param enabled: True to give the keys back to the editor
+        :type enabled: bool
+        """
+        for action in (self.ce_actions.new_line,
+                       self.ce_actions.indent_line,
+                       self.ce_actions.unindent_line,
+                       self.ce_actions.accept_edit_action,
+                       self.ce_actions.cancel_edit_action):
+            action.setEnabled(enabled)
+
+    def insert_completion(self, completion):
+        """Swap the typed prefix for the completion that was chosen."""
+        prefix = self.completion_prefix()
+        cursor = self.textCursor()
+        cursor.setPosition(cursor.position() - len(prefix),
+                           QtGui.QTextCursor.KeepAnchor)
+        cursor.insertText(completion)
+        # ${ auto-paired a } that the completion brings its own of.
+        closer = completion[-1:]
+        if closer in ')]}' and self.char_after_cursor(cursor) == closer:
+            cursor.deleteChar()
+        self.setTextCursor(cursor)
+        self.set_completion_shortcuts(True)
+
+    # Keys that belong to the completion popup while it is up. Return and
+    # Tab take what is highlighted, Escape and Shift+Tab put the list
+    # away. See keyPressEvent for why they have to be handed over.
+    COMPLETION_KEYS = (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter,
+                       QtCore.Qt.Key_Tab, QtCore.Qt.Key_Backtab,
+                       QtCore.Qt.Key_Escape)
+
+    def keyPressEvent(self, event):
+        if (self.completer.popup().isVisible()
+                and event.key() in self.COMPLETION_KEYS):
+            # Qt offers each key to this widget before the completer gets
+            # to act on it, and takes the widget accepting it as the whole
+            # answer. A plain text edit accepts Return, so pressing it on
+            # a highlighted completion put a new line in the code and the
+            # completer never heard about it: the list vanished and what
+            # was chosen was never written. Ignoring it is what says the
+            # popup should have it.
+            event.ignore()
+            return
+        if not self.isReadOnly() and self.handle_auto_pair(event):
+            event.accept()
+            self.hide_completions()
+            return
+        super(NxtCodeEditor, self).keyPressEvent(event)
+        if self.isReadOnly():
+            return
+        typed = event.text()
+        if typed and (typed.isalnum() or typed in '_./'):
+            self.update_completions()
+        elif self.completer.popup().isVisible():
+            self.hide_completions()
+
+    def char_after_cursor(self, cursor=None):
+        cursor = cursor or self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col] if col < len(text) else ''
+
+    def char_before_cursor(self, cursor=None):
+        cursor = cursor or self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col - 1] if col > 0 else ''
+
+    def handle_auto_pair(self, event):
+        """Insert the matching closer for a bracket/quote, wrap the selection
+        in the pair, or step over a closer that is already there.
+        :param event: QKeyEvent
+        :return: True if the key was handled.
+        """
+        mods = event.modifiers()
+        # AltGr arrives as Ctrl+Alt on Windows, and is how [ and { are typed
+        # on many layouts, so only a lone Ctrl or Alt means a shortcut.
+        ctrl = bool(mods & QtCore.Qt.ControlModifier)
+        alt = bool(mods & QtCore.Qt.AltModifier)
+        if ctrl != alt:
+            return False
+        text = event.text()
+        if not text:
+            return False
+        cursor = self.textCursor()
+        close = self.AUTO_PAIRS.get(text)
+        # Wrap a selection first, quotes included.
+        if close is not None and cursor.hasSelection():
+            start, end = cursor.selectionStart(), cursor.selectionEnd()
+            inner = cursor.selection().toPlainText()
+            cursor.beginEditBlock()
+            cursor.insertText(text + inner + close)
+            cursor.endEditBlock()
+            cursor.setPosition(start + 1)
+            cursor.setPosition(end + 1, QtGui.QTextCursor.KeepAnchor)
+            self.setTextCursor(cursor)
+            return True
+        # Step over a closer that is already there instead of doubling it
+        if text in self.AUTO_PAIRS.values() and self.char_after_cursor() == text:
+            cursor.movePosition(QtGui.QTextCursor.Right)
+            self.setTextCursor(cursor)
+            return True
+        if close is None:
+            return False
+        if text in ("'", '"'):
+            before = self.char_before_cursor()
+            # Mid word (apostrophes, string prefixes) or the third quote of
+            # a triple quote: just type it.
+            if (before.isalnum() or before == text or
+                    self.char_after_cursor().isalnum()):
+                return False
+        cursor.insertText(text + close)
+        cursor.movePosition(QtGui.QTextCursor.Left)
+        self.setTextCursor(cursor)
+        return True
 
     def set_font_size(self, delta=0.0, default=False):
         if default:
@@ -762,18 +1603,41 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.prev_v_scroll_value = self.verticalScrollBar().value()
         self.prev_h_scroll_value = self.horizontalScrollBar().value()
 
-    def focusInEvent(self, event):
-        # I don't know why the event filter isn't stopping these actions so
-        # I'm just forcing them to be disabled while we're typing.
-        self.action_states = {}
+    def suspend_global_actions(self):
+        """Stand the main window's actions down while typing goes on here.
+
+        The event filter does not stop them, so they are disabled outright.
+        Suspending twice would record the already disabled states as if
+        they were the real ones, and restoring would then leave the whole
+        main window greyed out: Save Layer among them, with no way back
+        short of restarting. The find and go to line fields suspend on
+        their own focus as well, so that second call is a normal thing to
+        happen, not a bug to guard against elsewhere.
+        """
+        if self.action_states:
+            return
         for a in self.ce_widget.main_window.get_global_actions():
             self.action_states[a] = a.isEnabled()
             a.setEnabled(False)
+
+    def restore_global_actions(self):
+        for a, state in self.action_states.items():
+            a.setEnabled(state)
+        self.action_states = {}
+
+    def hideEvent(self, event):
+        # Losing focus is not the only way to stop typing here. Being
+        # hidden, by selecting a node with no code or closing the tab,
+        # leaves the actions disabled with nothing left to re-enable them.
+        self.restore_global_actions()
+        super(NxtCodeEditor, self).hideEvent(event)
+
+    def focusInEvent(self, event):
+        self.suspend_global_actions()
         super(NxtCodeEditor, self).focusInEvent(event)
 
     def focusOutEvent(self, event):
-        for a, state in self.action_states.items():
-            a.setEnabled(state)
+        self.restore_global_actions()
         if self.standard_menu:
             if self.standard_menu.isVisible():
                 return QtWidgets.QPlainTextEdit.focusOutEvent(self, event)
@@ -811,10 +1675,32 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.standard_menu.insertAction(self.standard_menu.actions()[1],
                                         self.ce_actions.revert_code_action)
 
+        self.standard_menu.addSeparator()
+        self.standard_menu.addAction(self.ce_actions.find_action)
+        self.standard_menu.addAction(self.ce_actions.replace_action)
+        self.standard_menu.addAction(self.ce_actions.goto_line_action)
+        edit_menu = self.standard_menu.addMenu('Line')
+        edit_menu.addAction(self.ce_actions.duplicate_line)
+        edit_menu.addAction(self.ce_actions.move_line_up)
+        edit_menu.addAction(self.ce_actions.move_line_down)
+        edit_menu.addAction(self.ce_actions.delete_line)
+        edit_menu.addAction(self.ce_actions.expand_selection)
+        edit_menu.setEnabled(not self.isReadOnly())
+
         self.standard_menu.exec_(event.globalPos())
 
     def eventFilter(self, widget, event):
         if not isinstance(event, QtCore.QEvent):
+            return False
+        # QAbstractScrollArea filters its own viewport, so this runs during
+        # construction as well, before there is a completer to ask about.
+        completer = getattr(self, 'completer', None)
+        if completer is not None and widget is completer.popup():
+            # The popup can go away without us: Escape and clicking outside
+            # are both handled inside QCompleter. Whatever closed it, the
+            # editor wants Return, Tab and Esc back.
+            if event.type() == QtCore.QEvent.Type.Hide:
+                self.set_completion_shortcuts(True)
             return False
         if event.type() == QtCore.QEvent.Type.ShortcutOverride:
             return True
@@ -1207,6 +2093,135 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                                                    self.ce_widget.node_path,
                                                    globally=globally)
 
+    def get_token_at(self, pos):
+        """Find the (non-nested) ${...} token under a viewport position.
+        :param pos: QPoint in viewport coordinates
+        :return: tuple of (full_token_str, token_body) or (None, None)
+        """
+        cursor = self.cursorForPosition(pos)
+        line = cursor.block().text()
+        col = cursor.positionInBlock()
+        for match in re.finditer(r'\$\{[^{}]*\}', line):
+            if match.start() <= col <= match.end():
+                full = match.group(0)
+                return full, tokens.get_token_content(full)
+        return None, None
+
+    def node_path_from_token_body(self, body):
+        """Resolve a token body to an absolute node path if it names one.
+        A bare ``${attr}`` (no '.' and no '/') is a local attribute, so it
+        resolves to the current node.
+        :param body: string content of a ${} token
+        :return: node path string or None
+        """
+        body = body.strip()
+        if not body:
+            return None
+        # file:: path:: contents:: and plugin tokens are not node refs
+        all_tokens = tuple(tokens.TOKENTYPE.ALL) + tuple(tokens.plugin_tokens)
+        for token_type in all_tokens:
+            if token_type.prefix and body.startswith(token_type.prefix):
+                return None
+        current = self.ce_widget.node_path
+        start = current or nxt_path.WORLD
+        if '.' in body:
+            node_part = body.rpartition('.')[0]
+            if not node_part:
+                return current  # '.attr' is the current node
+            return nxt_path.expand_relative_node_path(node_part, start)
+        if nxt_path.NODE_SEP in body:
+            return nxt_path.expand_relative_node_path(body, start)
+        return current
+
+    def goto_token_definition(self, pos):
+        """Ctrl+click handler: select and frame the node a token references.
+        :param pos: QPoint in viewport coordinates
+        :return: True if a node was selected
+        """
+        if self.ce_widget.editing_active:
+            # Going to another node would accept the edit on the way out.
+            return False
+        full, body = self.get_token_at(pos)
+        if not full:
+            return False
+        model = self.ce_widget.stage_model
+        node_path = self.node_path_from_token_body(body)
+        if not node_path or model is None:
+            return False
+        if node_path == self.ce_widget.node_path:
+            return False  # local attr, nowhere to go
+        if not model.node_exists(node_path):
+            logger.warning("Cannot navigate: '{}' not found".format(node_path))
+            return False
+        model.select_and_frame(node_path)
+        return True
+
+    def show_token_tooltip(self, help_event):
+        """Show the resolved value of the token under the mouse as a tooltip.
+
+        Only for tokens that read an attribute. Resolving file::, contents::
+        or a plugin token reads files or runs plugin code, which hovering
+        should not do.
+        :param help_event: QHelpEvent, in viewport coordinates
+        :return: True if a tooltip was shown
+        """
+        full, body = self.get_token_at(help_event.pos())
+        model = self.ce_widget.stage_model
+        node_path = self.node_path_from_token_body(body) if full else None
+        if not node_path or model is None:
+            QtWidgets.QToolTip.hideText()
+            return False
+        if not model.node_exists(node_path):
+            QtWidgets.QToolTip.showText(
+                help_event.globalPos(),
+                '{}  ->  <no node at {}>'.format(full, node_path), self)
+            return True
+        try:
+            resolved = model.resolve(self.ce_widget.node_path, full)
+        except Exception:
+            logger.exception('Token resolve failed for tooltip')
+            QtWidgets.QToolTip.hideText()
+            return False
+        if resolved is None:
+            resolved = '<unresolved>'
+        QtWidgets.QToolTip.showText(help_event.globalPos(),
+                                    '{}  ->  {}'.format(full, resolved), self)
+        return True
+
+    def viewportEvent(self, event):
+        # Here rather than in event(): tooltip positions that reach the
+        # editor itself are in its own coordinates, which the line number
+        # gutter offsets from the text.
+        if event.type() == QtCore.QEvent.ToolTip:
+            if self.show_token_tooltip(event):
+                return True
+        return super(NxtCodeEditor, self).viewportEvent(event)
+
+    def mousePressEvent(self, event):
+        if (event.modifiers() & QtCore.Qt.ControlModifier and
+                event.button() == QtCore.Qt.LeftButton):
+            if self.goto_token_definition(event.pos()):
+                event.accept()
+                return
+        super(NxtCodeEditor, self).mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        over_token = False
+        if (event.modifiers() & QtCore.Qt.ControlModifier and
+                not self.ce_widget.editing_active):
+            full, body = self.get_token_at(event.pos())
+            over_token = bool(full and self.node_path_from_token_body(body))
+        viewport = self.viewport()
+        if over_token and self._cursor_before_token is None:
+            self._cursor_before_token = viewport.cursor().shape()
+            viewport.setCursor(QtCore.Qt.PointingHandCursor)
+        elif not over_token and self._cursor_before_token is not None:
+            # Put back whatever was showing, which is not always the
+            # I-beam: the editor shows an arrow until it is edited.
+            viewport.setCursor(self._cursor_before_token)
+            self._cursor_before_token = None
+        super(NxtCodeEditor, self).mouseMoveEvent(event)
+
 
 class NumberBar(QtWidgets.QWidget):
     """class that defines textEditor numberBar"""
@@ -1374,6 +2389,13 @@ def code_style_factory(color='', border='solid', thickness=(2, 2, 2)):
         
                             QPlainTextEdit:focus{
                                 %s;
+                            }
+
+                            QToolTip {
+                                color: #f0f0f0;
+                                background-color: #2b2b2b;
+                                border: 1px solid #5a5a5a;
+                                padding: 3px;
                             }
                             '''
     return code_edit_default_style % tuple(lines)

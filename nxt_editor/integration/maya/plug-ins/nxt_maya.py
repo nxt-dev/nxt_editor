@@ -23,6 +23,8 @@ from nxt import nxt_log
 from nxt_editor.constants import NXT_WEBSITE
 from nxt.constants import NXT_DCC_ENV_VAR
 
+from nxt_editor.integration import plugin_version
+
 logger = logging.getLogger('nxt')
 CREATED_UI = []
 global __NXT_INSTANCE__
@@ -30,34 +32,26 @@ __NXT_INSTANCE__ = None
 
 
 class MAYA_PLUGIN_VERSION(object):
-    # TODO: Where/if to track these
-    # with open(version_file, 'r') as f:
-    #     version_data = json.load(f)
-    # plugin_v_data = version_data['MAYA_PLUGIN']
-    plugin_v_data = {'MAJOR': 0,
-                     'MINOR': 1,
-                     'PATCH': 0}
-    MAJOR = plugin_v_data['MAJOR']
-    MINOR = plugin_v_data['MINOR']
-    PATCH = plugin_v_data['PATCH']
-    VERSION_TUPLE = (MAJOR, MINOR, PATCH)
-    VERSION_STR = '.'.join(str(v) for v in VERSION_TUPLE)
+    # The plugin ships with the editor, so it reports the editor's version
+    # rather than a second number nobody remembers to bump. It used to be
+    # hardcoded to 0.1.0 and had drifted years behind.
+    VERSION_STR = plugin_version() or '0.0.0'
+    VERSION_TUPLE = tuple(int(part) for part in VERSION_STR.split('.'))
+    MAJOR, MINOR, PATCH = VERSION_TUPLE
     VERSION = VERSION_STR
+
+def open_editor(*args):
+    cmds.nxt_ui()
 
 
 def about_menu(*args):
     webbrowser.open_new(NXT_WEBSITE)
 
 
+
 def auto_reload(*args):
-    safe = True
-    global __NXT_INSTANCE__
-    if __NXT_INSTANCE__:
-        safe = __NXT_INSTANCE__.close()
-    if safe:
-        cmds.nxt_ui('reload')
-    else:
-        cmds.warning('Aborted reload!')
+    cmds.nxt_ui(reload=True)
+
 
 
 def enable_cmd_port(enable):
@@ -92,22 +86,99 @@ def create_remote_context(*args):
 class NxtUiCmd(om.MPxCommand):
     cmd_name = "nxt_ui"
 
+    kCloseFlag = '-c'
+    kCloseFlagLong = '-close'
+    kReloadFlag = '-r'
+    kReloadFlagLong = '-reload'
+    kPathFlag = '-p'
+    kPathFlagLong = '-path'
+
     @staticmethod
     def cmdCreator():
         return NxtUiCmd()
 
+    # Before the flags, nxt_ui took 'close' as a plain argument, and shelves
+    # and pipeline tools written then still call it that way. Still accepted,
+    # with a warning pointing at the flag.
+    LEGACY_ARGS = ('close', 'reload')
+
+    @staticmethod
+    def syntaxCreator():
+        syntax = om.MSyntax()
+        syntax.addFlag(NxtUiCmd.kCloseFlag, NxtUiCmd.kCloseFlagLong)
+        syntax.addFlag(NxtUiCmd.kPathFlag, NxtUiCmd.kPathFlagLong,
+                       om.MSyntax.kString)
+        syntax.makeFlagMultiUse(NxtUiCmd.kPathFlag)
+        syntax.addFlag(NxtUiCmd.kReloadFlag, NxtUiCmd.kReloadFlagLong)
+        syntax.setObjectType(om.MSyntax.kStringObjects, 0, 1)
+        return syntax
+
+    @staticmethod
+    def bring_to_front(window):
+        """Show an editor that is already open, however it was left.
+
+        :return: False when Qt has already deleted the window.
+        :rtype: bool
+        """
+        try:
+            if window.isMinimized():
+                window.showNormal()
+            elif window.isHidden():
+                window.show()
+            window.raise_()
+            window.activateWindow()
+        except RuntimeError:
+            return False
+        return True
+
     def doIt(self, args):
         global __NXT_INSTANCE__
         os.environ[NXT_DCC_ENV_VAR] = 'maya'
-        if args:
-            string_args = []
-            for arg in range(len(args)):
-                string_args += [args.asString(arg)]
-            if 'close' in string_args:
-                if __NXT_INSTANCE__:
-                    __NXT_INSTANCE__.close()
+
+        # Maya's own message says which flag it did not understand.
+        parser = om.MArgParser(self.syntax(), args)
+        legacy = [arg.lower() for arg in parser.getObjectStrings()]
+        for arg in legacy:
+            if arg not in NxtUiCmd.LEGACY_ARGS:
+                raise RuntimeError(
+                    "nxt_ui: unknown argument '{}'. Use -close/-c, "
+                    "-reload/-r or -path/-p.".format(arg))
+            cmds.warning("nxt_ui('{0}') is deprecated, use "
+                         "nxt_ui({0}=True)".format(arg))
+
+        if parser.isFlagSet(NxtUiCmd.kCloseFlag) or 'close' in legacy:
+            if __NXT_INSTANCE__:
+                __NXT_INSTANCE__.close()
+            return
+
+        reloading = (parser.isFlagSet(NxtUiCmd.kReloadFlag)
+                     or 'reload' in legacy)
+        if reloading and __NXT_INSTANCE__:
+            # close() asks about unsaved changes first, and says whether
+            # the window actually closed.
+            if not __NXT_INSTANCE__.close():
+                cmds.warning('Aborted reload!')
                 return
-        nxt_win = nxt_editor.show_new_editor()
+            __NXT_INSTANCE__ = None
+
+        paths = []
+        if parser.isFlagSet(NxtUiCmd.kPathFlag):
+            for i in range(parser.numberOfFlagUses(NxtUiCmd.kPathFlag)):
+                flag_args = parser.getFlagArgumentList(NxtUiCmd.kPathFlag, i)
+                paths.append(flag_args.asString(0))
+
+        if __NXT_INSTANCE__ and not self.bring_to_front(__NXT_INSTANCE__):
+            # Qt deleted it without the close we listen for.
+            __NXT_INSTANCE__ = None
+        if __NXT_INSTANCE__:
+            # One editor at a time: open what was asked for in it, as tabs.
+            for p in paths:
+                __NXT_INSTANCE__.load_file(p)
+            return
+
+        nxt_win = nxt_editor.show_new_editor(paths=paths or None)
+        __NXT_INSTANCE__ = nxt_win
+        
         if 'win32' in sys.platform:
             # gives nxt it's own entry on taskbar
             nxt_win.setWindowFlags(QtCore.Qt.Window)
@@ -131,21 +202,27 @@ class NxtUiCmd(om.MPxCommand):
             if model:
                 model.process_events()
         cb_id = om.MCommandMessage.addCommandOutputCallback(log_callback, None)
-        sj = cmds.scriptJob(e=["quitApplication", "cmds.nxt_ui('close')"],
+        sj = cmds.scriptJob(e=["quitApplication", "cmds.nxt_ui(close=True)"],
                             protected=True)
         nxt_win.output_log.unwrap_std_streams()
 
         def remove_callback():
+            global __NXT_INSTANCE__
+        
             om.MCommandMessage.removeCallback(cb_id)
+        
             try:
                 cmds.scriptJob(kill=sj, force=True)
             except RuntimeError:
-                # During a real close it will try to kill the job while its
-                # running. Maybe we should just block the signal?
                 pass
+        
+            if __NXT_INSTANCE__ is nxt_win:
+                __NXT_INSTANCE__ = None
+
         nxt_win.close_signal.connect(remove_callback)
+
         nxt_win.show()
-        __NXT_INSTANCE__ = nxt_win
+
 
 
 # PLUGIN BOILERPLATE #
@@ -159,7 +236,7 @@ def initializePlugin(plugin):
     # Commands
     # TODO promote to for loop if building multiple commands(same for uninit)
     try:
-        pluginFn.registerCommand(NxtUiCmd.cmd_name, NxtUiCmd.cmdCreator)
+        pluginFn.registerCommand(NxtUiCmd.cmd_name, NxtUiCmd.cmdCreator, NxtUiCmd.syntaxCreator)
     except Exception:
         logger.exception("Failed to register: {}".format(NxtUiCmd.cmd_name))
         raise
@@ -167,7 +244,7 @@ def initializePlugin(plugin):
     maya_window = mel.eval('$_=$gMainWindow')
     nxt_menu = cmds.menu('nxt', parent=maya_window, tearOff=True)
     CREATED_UI.append(nxt_menu)
-    cmds.menuItem('Open Editor', command=cmds.nxt_ui, parent=nxt_menu)
+    cmds.menuItem('Open Editor', command=open_editor, parent=nxt_menu)
     cmds.menuItem('Create Maya Context', command=create_remote_context,
                   parent=nxt_menu)
     # cmds.menuItem('Open Command Port', command=enable_cmd_port,

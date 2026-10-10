@@ -15,7 +15,40 @@ from nxt.session import Session
 path_logger = logging.getLogger(nxt_path.__name__)
 path_logger.propagate = False
 
-app = QtWidgets.QApplication(sys.argv)
+# Only one application may exist, and another test module may have
+# already made it.
+app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+
+
+class SelectingANodeFocusesIt(unittest.TestCase):
+    """What the property and code editors follow.
+
+    PySide6 6.12 builds a broken signal from QtCore.Signal(None), and a
+    class declaring one stops delivering its other signals: the model's
+    own selection_changed never reached update_node_focus, so selecting a
+    node left both editors empty.
+    """
+
+    def test_selecting_a_node_focuses_it(self):
+        os.chdir(os.path.dirname(__file__))
+        stage = Session().load_file(filepath="StageInheritTest.nxt")
+        model = stage_model.StageModel(stage)
+        model.set_selection(['/parent_node'])
+        self.assertEqual('/parent_node', model.node_focus)
+
+    def test_no_signal_is_declared_with_none(self):
+        # Signal() is how a signal without arguments is declared.
+        package = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        offenders = []
+        for folder, _dirs, files in os.walk(package):
+            for name in files:
+                if not name.endswith('.py') or name == 'test_stage_model.py':
+                    continue
+                path = os.path.join(folder, name)
+                with open(path, encoding='utf-8') as file_object:
+                    if 'Signal(None)' in file_object.read():
+                        offenders.append(os.path.relpath(path, package))
+        self.assertEqual([], offenders)
 
 
 class NodeLocalAndInheritAttributes(unittest.TestCase):

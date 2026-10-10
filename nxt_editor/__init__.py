@@ -35,33 +35,11 @@ class StringSignaler(QtCore.QObject):
     signal = QtCore.Signal(str)
 
 
-def make_resources(qrc_path=None, result_path=None):
-    import subprocess
-    this_dir = os.path.dirname(os.path.realpath(__file__))
-    if not qrc_path:
-        qrc_path = os.path.join(this_dir, 'resources/resources.qrc')
-    if not result_path:
-        result_path = os.path.join(this_dir, 'qresources.py')
-    msg = 'First launch nxt resource generation from {} to {}'
-    logger.info(msg.format(qrc_path, result_path))
-
-    args = [qrc_path, '-o', result_path, '-g', 'python']
-    try:
-        subprocess.call(['pyside6-rcc'] + args)
-    except:
-        raise Exception("Failed to generate UI resources using PySide rcc!"
-                        " Reinstalling PySide6 may fix the problem. If you "
-                        "know how to use rcc please build from: \"{}\" and "
-                        "output to \"{}\"".format(qrc_path, result_path))
-    else:
-        return
-
-
-try:
-    from nxt_editor import qresources
-except ImportError:
-    make_resources()
-    from nxt_editor import qresources
+# The icons, fonts and styles behind the editor's ":" paths. Read from
+# resources/ and registered in memory rather than compiled with rcc; see
+# qt_resources for why.
+from nxt_editor import qt_resources
+qt_resources.register()
 
 
 def _new_qapp():

@@ -1,7 +1,28 @@
 import os
 import sys
+import json
 import subprocess
 import importlib
+
+# The DCC plugins carry the editor's version. constants.py already reads it,
+# but that module imports Qt, and the drag installer runs before anything is
+# on the path, so read it here with nothing but the standard library.
+VERSION_FILE = os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), 'version.json')
+
+
+def plugin_version():
+    """The version the DCC plugins report, taken from version.json.
+
+    :return: "4.1.0" style string, or "" if the file cannot be read
+    :rtype: str
+    """
+    try:
+        with open(VERSION_FILE, 'r') as file_object:
+            editor = json.load(file_object)['EDITOR']
+        return '{MAJOR}.{MINOR}.{PATCH}'.format(**editor)
+    except (IOError, OSError, ValueError, KeyError):
+        return ''
 
 
 class NxtIntegration(object):

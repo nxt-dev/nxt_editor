@@ -110,27 +110,32 @@ class PythonHighlighter(QSyntaxHighlighter):
         for (pat, index, fmt) in special_rules:
             self.rules.append((QRegExp(pat), index, fmt))
             self.special_rules.append((QRegExp(pat), index, fmt))
+        # Pattern strings of the special (token) rules, for nested detection
+        self.special_patterns = set(pat for (pat, _, _) in special_rules)
 
     def highlightBlock(self, text):
         """Apply syntax highlighting to the given block of text.
         """
         # Do other syntax formatting
-        for rule in self.rules:
-            expression, nth, formatting = rule
-            match = expression.match(text)
-            index = match.capturedStart()
-            # This is here because you can't do nested logic in regex
-            nested = 0
-            if rule in self.special_rules:
-                if text.count(tokens.TOKEN_PREFIX) > 1:
-                    nested = 1
-
-            while index >= 0:
+        for expression, nth, formatting in self.rules:
+            special = expression.pattern() in self.special_patterns
+            # Iterate every match on the line, not just the first one
+            iterator = expression.globalMatch(text)
+            while iterator.hasNext():
+                match = iterator.next()
                 # We actually want the index of the nth match
                 index = match.capturedStart(nth)
-                length = len(match.captured(nth))
-                self.setFormat(index, length + nested, formatting)
-                index = match.capturedStart(text)
+                if index < 0:
+                    continue
+                captured = match.captured(nth)
+                # A nested token (${...${...}}) needs one extra char
+                # highlighted, because you can't do nested logic in regex.
+                # Decided per match: a line with two tokens side by side is
+                # not nested, and would colour the char after each one.
+                extra = 0
+                if special and captured.count(tokens.TOKEN_PREFIX) > 1:
+                    extra = 1
+                self.setFormat(index, len(captured) + extra, formatting)
 
         self.setCurrentBlockState(0)
 

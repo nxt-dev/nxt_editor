@@ -491,7 +491,13 @@ class UnsavedLayersDialogue(QtWidgets.QDialog):
             item.setForeground(QtGui.QBrush(QtCore.Qt.white))
             parent_item.appendRow(item)
             for lay_dict in layer.sub_layers:
-                r_add(stage_model, lay_dict['layer'], item, dirty)
+                # A reference that could not be resolved is kept on the
+                # layer with no layer behind it. There is nothing to show
+                # for it here, and nothing to save either.
+                sub_layer = lay_dict.get('layer')
+                if sub_layer is None:
+                    continue
+                r_add(stage_model, sub_layer, item, dirty)
         for s_m in stage_models:
             r_add(s_m, s_m.top_layer, model, s_m.get_unsaved_changes())
         return model
@@ -510,6 +516,164 @@ class UnsavedLayersDialogue(QtWidgets.QDialog):
         for unsaved_layer in layers_to_save:
             self.main_window.save_layer(unsaved_layer)
         self.done(QtWidgets.QDialog.Accepted)
+
+
+class ReloadSourceDialog(QtWidgets.QDialog):
+    """Pick which of a layer's files to re-read from disk.
+
+    A layer is rarely one file. What it contributes to the graph is its
+    own file plus every file it references, as deep as those go, so the
+    whole chain is offered and all of it is checked: somebody asking for
+    the latest of a layer usually means the latest of what it is built
+    from too. Unchecking is for the times they do not.
+
+    One row per file, however many references reach it, because what a
+    row decides is whether that file is read again. The rows are indented
+    to show how the references run.
+
+    Reloading throws away unsaved work on a layer, so the rows that have
+    any say so.
+    """
+
+    @classmethod
+    def get_layers(cls, stage_model, layer, parent=None):
+        """Ask which of a layer's files to reload.
+
+        :param stage_model: model the layer belongs to
+        :param layer: layer that was asked to reload
+        :param parent: widget to parent the dialog to
+        :return: the layers to reload, empty if there was nothing to ask
+            about or the question was declined
+        :rtype: list
+        """
+        inst = cls(stage_model, layer, parent=parent)
+        if not inst.rows:
+            logger.error('Nothing to reload: "{}" has never been '
+                         'saved'.format(layer.get_alias()))
+            return []
+        if inst.exec_() != QtWidgets.QDialog.Accepted:
+            return []
+        return inst.checked_layers()
+
+    def __init__(self, stage_model, layer, parent=None):
+        super(ReloadSourceDialog, self).__init__(parent=parent)
+        self.stage_model = stage_model
+        self.setWindowTitle('Reload Source')
+        self.main_layout = QtWidgets.QVBoxLayout()
+        self.setLayout(self.main_layout)
+
+        alias = layer.get_alias()
+        message = ('Re-read the checked files from disk and composite '
+                   '"{}" again.\nAnything unsaved in a checked layer '
+                   'is lost.'.format(alias))
+        self.main_layout.addWidget(QtWidgets.QLabel(message))
+
+        self.layer_list = QtWidgets.QListWidget()
+        no_selection = QtWidgets.QAbstractItemView.NoSelection
+        self.layer_list.setSelectionMode(no_selection)
+        self.layer_list.itemChanged.connect(self.on_item_changed)
+        self.main_layout.addWidget(self.layer_list)
+
+        self.rows = []
+        self.populate(layer)
+
+        # A toggle rather than two buttons: there is one thing being
+        # asked here, whether the lot is wanted, and it reads its own
+        # answer back.
+        self.check_all_button = QtWidgets.QPushButton()
+        self.check_all_button.setCheckable(True)
+        self.check_all_button.setChecked(True)
+        self.check_all_button.toggled.connect(self.on_check_all_toggled)
+
+        self.response_layout = QtWidgets.QHBoxLayout()
+        self.response_layout.addWidget(self.check_all_button)
+        self.response_layout.addStretch()
+        self.cancel_button = QtWidgets.QPushButton('Cancel')
+        self.cancel_button.released.connect(self.reject)
+        self.response_layout.addWidget(self.cancel_button)
+        self.reload_button = QtWidgets.QPushButton('Reload Checked')
+        self.reload_button.setDefault(True)
+        self.reload_button.released.connect(self.accept)
+        self.response_layout.addWidget(self.reload_button)
+        self.main_layout.addLayout(self.response_layout)
+        self.refresh_check_all()
+        self.resize(420, 320)
+
+    def populate(self, layer):
+        """Fill the list with the layer and everything it references.
+
+        :param layer: layer that was asked to reload
+        """
+        unsaved = self.stage_model.get_unsaved_changes()
+        depths = {id(layer): 0}
+        listed = []
+        for dependency in self.stage_model.get_reference_dependencies(layer):
+            real_path = dependency.real_path
+            if not real_path or not os.path.isfile(str(real_path)):
+                # Nothing on disk to go and get.
+                continue
+            if real_path in listed:
+                # A file referenced from two places is loaded twice, and
+                # is two layers. What a row decides is whether that file
+                # is read again, which is one question however many
+                # layers came out of it.
+                continue
+            listed += [real_path]
+            depth = depths.get(id(dependency), 0)
+            for sub_layer_data in dependency.sub_layers:
+                sub_layer = sub_layer_data.get('layer')
+                if sub_layer is not None:
+                    depths.setdefault(id(sub_layer), depth + 1)
+            text = '    ' * depth + dependency.get_alias()
+            if dependency in unsaved:
+                text += '  (unsaved changes)'
+            item = QtWidgets.QListWidgetItem(text)
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.Checked)
+            item.setToolTip(str(real_path))
+            item.setData(QtCore.Qt.UserRole, real_path)
+            color_code = self.stage_model.get_layer_color(dependency)
+            item.setForeground(QtGui.QBrush(QtGui.QColor(color_code)))
+            self.layer_list.addItem(item)
+            self.rows += [(item, dependency)]
+
+    def on_check_all_toggled(self, checked):
+        """Put every row where the toggle says."""
+        state = QtCore.Qt.Checked if checked else QtCore.Qt.Unchecked
+        self.layer_list.blockSignals(True)
+        for item, _ in self.rows:
+            item.setCheckState(state)
+        self.layer_list.blockSignals(False)
+        self.refresh_check_all()
+
+    def on_item_changed(self, item):
+        """A row was checked or unchecked by hand."""
+        self.refresh_check_all()
+
+    def refresh_check_all(self):
+        """Make the toggle say what it would do, and what it did.
+
+        It follows the rows rather than leading them, so unchecking the
+        last row by hand leaves a button that offers to check them all
+        rather than one still claiming everything is checked.
+        """
+        all_checked = all(i.checkState() == QtCore.Qt.Checked
+                          for i, _ in self.rows)
+        self.check_all_button.blockSignals(True)
+        self.check_all_button.setChecked(all_checked)
+        self.check_all_button.blockSignals(False)
+        text = 'Uncheck All' if all_checked else 'Check All'
+        self.check_all_button.setText(text)
+        self.reload_button.setEnabled(
+            any(i.checkState() == QtCore.Qt.Checked for i, _ in self.rows))
+
+    def checked_layers(self):
+        """The layers whose rows are checked.
+
+        :rtype: list
+        """
+        return [layer for item, layer in self.rows
+                if item.checkState() == QtCore.Qt.Checked]
 
 
 class UnsavedChangesMessage(QtWidgets.QMessageBox):

@@ -124,8 +124,18 @@ class USER_PREF():
     ANIMATION = 'animation'
     SHOW_DBL_CLICK_MSG = 'show_double_click_message'
     SHOW_CE_DATA_STATE = 'show_code_editor_data_state'
+    CE_AUTOCOMPLETE = 'code_editor_autocomplete'
+    # What the code editor offers completions from, each on its own
+    CE_COMPLETE_PYTHON = 'code_editor_complete_python'
+    CE_COMPLETE_MODULES = 'code_editor_complete_modules'
+    CE_COMPLETE_NODE = 'code_editor_complete_node'
+    CE_COMPLETE_DOCUMENT = 'code_editor_complete_document'
+    CE_COMPLETE_HOST = 'code_editor_complete_host'
+    CE_COMPLETE_JEDI = 'code_editor_complete_jedi'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
+    SHOW_IMPLICIT = 'show_implicit_connections'
+    SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'
 
 
@@ -152,6 +162,7 @@ class PrefFile(dict):
         """
         self.path = path
         self.handlers = handlers if handlers else {}
+        self._stamp = None
         if os.path.isfile(self.path):
             self.read()
         else:
@@ -172,6 +183,22 @@ class PrefFile(dict):
             self.handlers.pop(pref_key)
         except KeyError:
             pass
+
+    def file_stamp(self):
+        """
+        Identity of `self.path` right now, or None if it isn't there.
+
+        Prefs are re-read on every dictionary access, so a single editor
+        redraw can parse the same small file a thousand times. Subclass
+        `read` implementations compare this against `self._stamp` and skip
+        the parse when the file has not moved. Our own `write` changes the
+        file, so the next read picks it up like any other edit.
+        """
+        try:
+            stat = os.stat(self.path)
+        except OSError:
+            return None
+        return stat.st_mtime_ns, stat.st_size
 
     def write(self):
         """
@@ -226,7 +253,10 @@ class JsonPref(PrefFile):
 
     def read(self):
         contents = {}
-        if not os.path.isfile(self.path):
+        stamp = self.file_stamp()
+        if stamp is None:
+            return
+        if stamp == self._stamp:
             return
         try:
             with open(self.path, 'r') as fp:
@@ -244,6 +274,7 @@ class JsonPref(PrefFile):
             broken_files[self.path] = times_hit
         self.clear()
         self.update(contents)
+        self._stamp = stamp
 
 
 class PicklePref(PrefFile):
@@ -255,7 +286,10 @@ class PicklePref(PrefFile):
 
     def read(self):
         contents = {}
-        if not os.path.isfile(self.path):
+        stamp = self.file_stamp()
+        if stamp is None:
+            return
+        if stamp == self._stamp:
             return
         try:
             with open(self.path, 'r+b') as fp:
@@ -277,6 +311,7 @@ class PicklePref(PrefFile):
             broken_files[self.path] = times_hit
         self.clear()
         self.update(contents)
+        self._stamp = self.file_stamp()
 
 
 class PrefHandler(object):
@@ -318,6 +353,24 @@ class LastOpenedHandler(PrefHandler):
             recents = recents[:MAX_RECENT_FILES]
         editor_cache[USER_PREF.RECENT_FILES] = recents
         return EDITOR_CACHE_PATH
+
+
+def last_opened_dir():
+    """The folder a graph was last opened from, for file dialogs to start
+    in when there is no saved graph to start beside.
+
+    :return: that folder, or the working directory when there is none
+    :rtype: str
+    """
+    try:
+        last = editor_cache.get(USER_PREF.RECENT_FILES, [])[0]
+    except (IndexError, TypeError, KeyError):
+        last = None
+    if last:
+        folder = os.path.dirname(last)
+        if os.path.isdir(folder):
+            return folder
+    return os.getcwd()
 
 
 class BreakpointsHandler(PrefHandler):

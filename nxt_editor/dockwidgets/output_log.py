@@ -420,9 +420,34 @@ class OutputLog(DockWidgetBase):
         link = link.toString()
         model.select_and_frame(link)
 
+    def detach_from_logging(self):
+        """Stop the nxt logger writing into this log.
+
+        The logger is process wide and outlives the window. Left attached,
+        every window ever opened keeps a handler on it, and once one is
+        deleted the next message is written into freed widgets, which
+        corrupts the heap rather than raising anything.
+
+        The std streams are not unwrapped here. With two windows open each
+        wraps the other's wrapper, so putting back what one found would
+        take the other's away too.
+        """
+        visual_handler = getattr(self, 'visual_handler', None)
+        if visual_handler is not None:
+            logging.getLogger('nxt').removeHandler(visual_handler)
+
+    def showEvent(self, event):
+        # Back after a close, which detached it.
+        visual_handler = getattr(self, 'visual_handler', None)
+        nxt_logger = logging.getLogger('nxt')
+        if visual_handler is not None and                 visual_handler not in nxt_logger.handlers:
+            nxt_logger.addHandler(visual_handler)
+        super(OutputLog, self).showEvent(event)
+
     def closeEvent(self, event):
         if self.log_watcher:
             self.log_watcher.requestInterruption()
+        self.detach_from_logging()
         super(OutputLog, self).closeEvent(event)
 
 
@@ -530,15 +555,18 @@ class LogFilterButton(QtWidgets.QPushButton):
 
 
 class PythonConsoleLineEdit(QtWidgets.QLineEdit):
-    def __init__(self, locals={}):
+    def __init__(self, locals=None):
         super(PythonConsoleLineEdit, self).__init__('')
-        self.console = InteractiveConsole(locals, '<nxt console>')
+        self.console = InteractiveConsole(locals or {}, '<nxt console>')
         self.returnPressed.connect(self.on_return)
 
     def on_return(self):
-        need_more = self.console.push(self.text())
-        if not need_more:
-            self.clear()
+        try:
+            need_more = self.console.push(self.text())
+            if not need_more:
+                self.clear()
+        except:
+            pass
 
 
 class QtLogStreamHandler(nxt_log.LogRecordStreamHandler):
