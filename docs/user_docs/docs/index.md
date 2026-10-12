@@ -5,7 +5,7 @@ scene assembly, and automation.
 
 *It’s code with layers with a nice way to see and change data.*
 
-!!! note "New in nxt_editor 4.3"
+!!! note "New in nxt_editor 4.4"
     A code editor with find and replace and completion, a reference editor,
     Reload Source, a mini map, and plugins for Maya, Unreal and Blender.
     See [What's New](whats_new.md).

@@ -2138,6 +2138,13 @@ class CodeEditorActions(NxtActionContainer):
 
         self.overlay_message_action.toggled.connect(toggle_dbl_click_msg)
 
+        def toggle_data_state():
+            new = self.show_data_state_action.isChecked()
+            user_dir.user_prefs[user_dir.USER_PREF.SHOW_CE_DATA_STATE] = new
+            self.main_window.code_editor.overlay_widget.update()
+
+        self.show_data_state_action.toggled.connect(toggle_data_state)
+
         self.action_display_order = [self.copy_resolved_action,
                                      self.localize_code_action,
                                      self.revert_code_action,
