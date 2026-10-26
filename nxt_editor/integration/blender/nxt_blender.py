@@ -150,10 +150,31 @@ def _paths():
         if os.path.isdir(path):
             _put_first(path)
     # A studio library of graph code, checked out beside nxt. Optional:
-    # graphs that do not use it run without it.
+    # graphs that do not use it run without it. Only the fallback: when
+    # the environment already provides core (a rez resolve, dev or not),
+    # that one is used, so a prod gig never runs a developer's checkout.
+    if _core_dir():
+        return
     core = os.path.join(DEV_ROOT, "core") if DEV_ROOT else ""
     if core and os.path.isdir(core) and core not in sys.path:
         sys.path.insert(0, core)
+
+
+def _core_dir():
+    """The ``core`` package folder that an import would load, if any.
+
+    Found without importing it, so asking does not load stale code.
+
+    :return: the package folder, or "".
+    :rtype: str
+    """
+    try:
+        spec = importlib.util.find_spec("core")
+    except (ImportError, ValueError):
+        return ""
+    if spec is None or not spec.submodule_search_locations:
+        return ""
+    return os.path.abspath(list(spec.submodule_search_locations)[0])
 
 
 def qt_deps():
@@ -282,8 +303,9 @@ def source_hash():
     :return: a short hash, or empty when there is nothing to read.
     :rtype: str
     """
-    folder = os.path.join(DEV_ROOT, "core", "core", "blender")
-    if not DEV_ROOT or not os.path.isdir(folder):
+    core = _core_dir()
+    folder = os.path.join(core, "blender") if core else ""
+    if not folder or not os.path.isdir(folder):
         return ""
     digest = hashlib.md5()
     for name in sorted(os.listdir(folder)):
