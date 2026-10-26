@@ -52,6 +52,13 @@ def commands():
             "{root}/python/nxt_editor/integration/maya/plug-ins"
         )
 
+    # The NXT menu in Blender. Blender only reads PYTHONPATH when started
+    # with --python-use-system-env, which the studio blender launcher does.
+    # The add-on file comes from the build in dev too; its nxt_editor comes
+    # from PYTHONPATH, so dev edits to the editor are still picked up.
+    if "blender" in resolve:
+        env.BLENDER_SYSTEM_SCRIPTS.append("{root}/blender")
+
 
 # A script rather than a shell one liner, so the build behaves the same on
 # Windows as on the macOS and Linux runners.

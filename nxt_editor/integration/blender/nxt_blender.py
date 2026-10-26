@@ -5,9 +5,11 @@ Install: Edit > Preferences > Add-ons > Install from Disk, pick the
 the top bar, the same place the Maya plugin puts its "nxt" menu.
 
 **What it runs.** The release add-on carries nxt, nxt_editor and Qt.py in
-its ``lib`` folder and uses those. With nothing bundled -- this file
-installed on its own, which is how it is developed -- it uses the nxt
-and nxt_editor checkouts in the folder ``SB_DEV_ROOT`` names instead.
+its ``lib`` folder and uses those. With nothing bundled it uses an
+nxt_editor that is already importable -- the rez package puts this add-on
+on ``BLENDER_SYSTEM_SCRIPTS`` and nxt on PYTHONPATH -- and failing that the
+nxt and nxt_editor checkouts in the folder ``SB_DEV_ROOT`` names, which is
+how it is developed.
 
 **Qt.** Blender ships no Qt and the editor is a Qt application, so PySide6
 has to be installed once; the menu offers to do it, into a folder outside
@@ -75,14 +77,41 @@ def is_bundled():
     return os.path.isdir(os.path.join(BUNDLED_DIR, "nxt_editor"))
 
 
+def _installed_dir():
+    """The folder an already importable nxt_editor lives in, if any.
+
+    This is how the rez package delivers it: the studio launcher starts
+    Blender with ``--python-use-system-env``, so PYTHONPATH already carries
+    nxt, nxt_editor, Qt.py and PySide6. Found without importing, because
+    importing nxt_editor imports Qt.
+
+    :return: the folder holding the ``nxt_editor`` package, or "".
+    :rtype: str
+    """
+    try:
+        spec = importlib.util.find_spec("nxt_editor")
+    except (ImportError, ValueError):
+        return ""
+    if spec is None or not spec.submodule_search_locations:
+        return ""
+    package_dir = list(spec.submodule_search_locations)[0]
+    return os.path.dirname(os.path.abspath(package_dir))
+
+
 def _source_dirs():
     """The folders nxt, nxt_editor and Qt.py are imported from.
+
+    In order: the release add-on's own copy, an nxt_editor already on
+    ``sys.path`` (the rez package), then the ``SB_DEV_ROOT`` checkouts.
 
     :return: paths to put on ``sys.path``, first wins.
     :rtype: list[str]
     """
     if is_bundled():
         return [BUNDLED_DIR]
+    installed = _installed_dir()
+    if installed:
+        return [installed]
     if not DEV_ROOT:
         return []
     return [os.path.join(DEV_ROOT, "nxt"),
