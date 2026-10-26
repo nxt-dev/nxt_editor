@@ -58,6 +58,15 @@ def commands():
     # from PYTHONPATH, so dev edits to the editor are still picked up.
     if "blender" in resolve:
         env.BLENDER_SYSTEM_SCRIPTS.append("{root}/blender")
+        # Blender ships no Qt, but the blender package asks for .dcc_pyside,
+        # which tells rez's PySide6 to stay off PYTHONPATH (the rule for
+        # Maya, which brings its own). Put rez's PySide6 back so the editor
+        # opens without a separate Qt install.
+        if "dcc_pyside" in ephemerals:
+            for qt in ("shiboken6", "PySide6_Essentials", "PySide6_Addons",
+                       "PySide6"):
+                if qt in resolve:
+                    env.PYTHONPATH.append(resolve[qt].root + "/python")
 
 
 # A script rather than a shell one liner, so the build behaves the same on
