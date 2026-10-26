@@ -15,6 +15,15 @@ SOURCE = os.path.dirname(os.path.abspath(__file__))
 PYTHON_DIRS = ["nxt_editor"]
 # nxt_editor ships no command line tools, so nothing lands at the root.
 ROOT_DIRS = []
+# Single files copied to <root>/<destination>. The Blender add-on goes in a
+# startup folder that package.py puts on BLENDER_SYSTEM_SCRIPTS: Blender
+# calls register() on every module there at launch, so the NXT menu is
+# there whenever nxt_editor is in the resolve, without touching the user's
+# saved add-on preferences.
+ROOT_FILES = [
+    ("nxt_editor/integration/blender/nxt_blender.py",
+     "blender/startup/nxt_blender.py"),
+]
 
 IGNORE = shutil.ignore_patterns(
     "__pycache__", "*.pyc", "*.pyo", ".mypy_cache", ".pytest_cache",
@@ -45,6 +54,14 @@ def copy_tree(source, destination):
     print("  %s -> %s" % (os.path.basename(source), destination))
 
 
+def copy_file(source, destination):
+    parent = os.path.dirname(destination)
+    if not os.path.isdir(parent):
+        os.makedirs(parent)
+    shutil.copy2(source, destination)
+    print("  %s -> %s" % (os.path.basename(source), destination))
+
+
 def main():
     root = destination_root()
     print("building into %s" % root)
@@ -54,6 +71,8 @@ def main():
         source = os.path.join(SOURCE, name)
         if os.path.isdir(source):
             copy_tree(source, os.path.join(root, name))
+    for source, destination in ROOT_FILES:
+        copy_file(os.path.join(SOURCE, source), os.path.join(root, destination))
     return 0
 
 
