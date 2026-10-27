@@ -160,7 +160,7 @@
                 "import json",
                 "",
                 "# Read from the file rather than by importing nxt_editor. This graph",
-                "# runs in a rez-env nxt_core, which has no Qt in it, and nxt_editor",
+                "# can run where nxt is but Qt is not, and nxt_editor",
                 "# imports Qt the moment it is touched, so the import threw and took",
                 "# the rest of the build with it: the .mod kept its <VERSION>",
                 "# placeholder and the steps after this never ran.",

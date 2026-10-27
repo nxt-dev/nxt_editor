@@ -13,6 +13,18 @@ logger = logging.getLogger('nxt.nxt_editor')
 
 LOGGER_NAME = logger.name
 
+# Set on a QApplication nxt made itself, as opposed to a host's.
+OWN_APP_PROPERTY = 'nxt_owns_app'
+
+
+def owns_qapp():
+    """True when the running QApplication is nxt's own, so the editor may
+    set application wide state such as the font. False inside a host such
+    as Maya, where that state belongs to the host.
+    """
+    app = QtWidgets.QApplication.instance()
+    return bool(app and app.property(OWN_APP_PROPERTY))
+
 
 class DIRECTIONS:
     UP = 'up'
@@ -53,6 +65,9 @@ def _new_qapp():
     app.setEffectEnabled(QtCore.Qt.UI_AnimateCombo, False)
     if create_new:
         app = app(sys.argv)
+        # The application is nxt's own, so it can have nxt's font. Never
+        # on a host's application (#284).
+        app.setProperty(OWN_APP_PROPERTY, True)
     style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
     style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
     stream = QtCore.QTextStream(style_file)

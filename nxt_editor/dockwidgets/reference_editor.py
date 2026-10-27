@@ -32,6 +32,7 @@ from Qt import QtCore, QtWidgets, QtGui
 # Internal
 import nxt_editor
 from nxt import nxt_io
+from nxt_editor.reference_paths import stored_reference_path
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -443,32 +444,9 @@ class ReferenceEditor(QtWidgets.QDialog):
     def as_stored(self, path):
         """How a chosen file should be written into the layer.
 
-        Relative to the layer when it sits alongside it, which is what
-        keeps a graph portable. Anything else is stored whole; making a
-        path relative across drives or out of a root would be worse than
-        being explicit.
+        See nxt_editor.reference_paths.stored_reference_path.
         """
-        path = path.replace(os.path.sep, '/')
-        directory = self.layer_dir()
-        if not directory:
-            return path
-        try:
-            # Through the symlinks first. A file picker hands back the path
-            # the user walked, which can reach the same directory as the
-            # layer by another name: /var against /private/var on macOS is
-            # the everyday one. Compared as written they look like
-            # different places, so a file sitting right beside the layer
-            # was stored as an absolute path, which pins the graph to the
-            # machine it was added on.
-            relative = os.path.relpath(os.path.realpath(path),
-                                       os.path.realpath(directory))
-            relative = relative.replace(os.path.sep, '/')
-        except ValueError:
-            # Different drive on Windows.
-            return path
-        if relative.startswith('..'):
-            return path
-        return relative
+        return stored_reference_path(path, self.layer_dir())
 
     def remove_reference(self):
         row = self.list.currentRow()

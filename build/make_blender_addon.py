@@ -5,11 +5,10 @@
 The zip is what Blender's Install from Disk takes. Inside it is one folder,
 nxt_blender, holding the add-on and, under lib/, everything it runs:
 nxt, nxt_editor and Qt.py. It used to ship nxt and nxt_editor loose
-beside an add-on that never looked at them, and reached for repos on the
-developer's own drive instead, so it only worked on that one machine.
+beside an add-on that never looked at them.
 
-Needs nothing but python. nxt defaults to ../nxt/nxt, beside this
-repository, which is where the release workflow puts it.
+Needs nothing but python. nxt defaults to ../nxt/nxt, a checkout of nxt
+beside this repository.
 """
 import os
 import py_compile

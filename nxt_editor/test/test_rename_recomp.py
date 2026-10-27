@@ -25,9 +25,8 @@ from nxt_editor.commands import RenameNode
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
-# The targeted rename lives in nxt_core. Under rez these tests run against
-# the released core, so they sit out until a core carrying it is released
-# rather than failing for something this repo cannot fix.
+# The targeted rename lives in nxt_core. Against an older released core
+# these sit out rather than failing for something this repo cannot fix.
 from nxt.stage import Stage  # noqa: E402
 
 HAS_TARGETED_RENAME = hasattr(Stage, 'can_rename_targeted')

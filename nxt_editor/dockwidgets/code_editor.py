@@ -22,6 +22,7 @@ from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path, tokens
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
+from nxt_editor.dockwidgets import code_completion
 from nxt_editor.dockwidgets.code_overlays import (FindOverlay,
                                                   GotoLineOverlay)
 from nxt_editor.constants import FONTS
@@ -566,6 +567,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     cancel = QtCore.Signal()
     accept = QtCore.Signal()
 
+    # Opening char -> closing char inserted automatically while editing
+    AUTO_PAIRS = {'(': ')', '[': ']', '{': '}', '"': '"', "'": "'"}
+
     def __init__(self, show_line_numbers=True, highlight_current_line=True,
                  syntax_highlighter=None, indent='    ',
                  comment_character='#', parent=None):
@@ -720,6 +724,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.completer.setCaseSensitivity(QtCore.Qt.CaseSensitive)
         self.completer.activated.connect(self.insert_completion)
         self.completer.popup().installEventFilter(self)
+        # jedi is asked once typing pauses rather than on every key, since
+        # a fresh question can take a moment.
+        self.jedi_timer = QtCore.QTimer(self)
+        self.jedi_timer.setSingleShot(True)
+        self.jedi_timer.setInterval(250)
+        self.jedi_timer.timeout.connect(self.ask_jedi)
         # The word list is rebuilt from the document, so it goes stale on
         # every edit. Rebuilding is deferred until a completion is asked for.
         self.textChanged.connect(self.invalidate_completion_words)
@@ -736,6 +746,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         func = self.update_previous_scroll_positions
         self.verticalScrollBar().valueChanged.connect(func)
         self.installEventFilter(self)
+        # Needed to swap the cursor while hovering a token with Ctrl held
+        self.viewport().setMouseTracking(True)
+        self._cursor_before_token = None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasFormat("text/plain"):
@@ -1164,7 +1177,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         :rtype: dict
         """
         found = {}
-        for match in self.IMPORT_RE.finditer(self.toPlainText()):
+        for match in self.IMPORT_RE.finditer(self.import_source()):
             module_name = match.group('mod') or match.group('from')
             if not module_name:
                 continue
@@ -1185,6 +1198,42 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             found[local_name] = module
         return found
 
+    def world_source(self):
+        """The world node's code, when this is another node.
+
+        The world node runs first, into the same globals every compute runs
+        with, so what it imports every node can use without importing again.
+        """
+        model = self.ce_widget.stage_model
+        node_path = self.ce_widget.node_path
+        if not model or not node_path or node_path == nxt_path.WORLD:
+            return ''
+        try:
+            return model.get_node_code_string(nxt_path.WORLD) or ''
+        except Exception:
+            return ''
+
+    def import_source(self):
+        """This compute, after the world node's."""
+        world = self.world_source()
+        code = self.toPlainText()
+        return world + '\n' + code if world else code
+
+    def completion_namespace(self):
+        """Names the compute can use without importing them itself.
+
+        :return: {name: object}, from each source that is switched on
+        :rtype: dict
+        """
+        namespace = {}
+        if self.completion_source_enabled('complete_node_action'):
+            namespace.update(code_completion.RUNTIME_GLOBALS)
+        if self.completion_source_enabled('complete_host_action'):
+            namespace.update(code_completion.host_modules())
+        if self.completion_source_enabled('complete_modules_action'):
+            namespace.update(self.imported_modules())
+        return namespace
+
     def module_completions(self, prefix):
         """Names reachable through a dotted prefix, like os.pa.
 
@@ -1192,11 +1241,10 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         :type prefix: str
         :rtype: list
         """
-        if '.' not in prefix or not self.completion_source_enabled(
-                'complete_modules_action'):
+        if '.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX):
             return []
         root, _, rest = prefix.partition('.')
-        module = self.imported_modules().get(root)
+        module = self.completion_namespace().get(root)
         if module is None:
             return []
         walked = root
@@ -1226,7 +1274,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             words.update(keyword.kwlist)
             words.update(dir(builtins))
         if self.completion_source_enabled('complete_node_action'):
-            words.update(('self', 'STAGE'))
+            words.update(code_completion.RUNTIME_GLOBALS)
             model = self.ce_widget.stage_model
             node_path = self.ce_widget.node_path
             if model and node_path:
@@ -1249,6 +1297,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             # The bare module names. What is inside them is resolved per
             # prefix, since dir() on everything imported would be huge.
             words.update(self.imported_modules())
+        if self.completion_source_enabled('complete_host_action'):
+            words.update(code_completion.host_modules())
         if self.completion_source_enabled('complete_document_action'):
             words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
                                     self.toPlainText()))
@@ -1259,7 +1309,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     # braces and colons, because a token is a word too: stopping at the $
     # meant ${fi offered the prefix "fi", which matches no token, which is
     # why only python builtins ever appeared.
-    PREFIX_CHARS = r'[A-Za-z0-9_.:${}]*$'
+    # Slashes too, but only inside a token, where they are a node path:
+    # anywhere else a slash is division and starts a new word.
+    PREFIX_CHARS = r'[A-Za-z0-9_.:${}/]*$'
 
     def completion_prefix(self):
         """The partial word in front of the cursor.
@@ -1269,7 +1321,98 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         cursor = self.textCursor()
         text = cursor.block().text()[:cursor.positionInBlock()]
         match = re.search(self.PREFIX_CHARS, text)
-        return match.group(0) if match else ''
+        prefix = match.group(0) if match else ''
+        if not prefix.startswith(tokens.TOKEN_PREFIX):
+            prefix = prefix.rpartition('/')[2]
+        return prefix
+
+    def token_completions(self, prefix):
+        """Node paths inside ${/, and a node's attributes after its dot.
+
+        ${/ offers every node path, and ${/some/node. offers that node's
+        attributes as whole tokens.
+
+        :param prefix: the partial word being typed
+        :type prefix: str
+        :rtype: list
+        """
+        start = tokens.TOKEN_PREFIX + nxt_path.WORLD
+        if (not prefix.startswith(start) or
+                not self.completion_source_enabled('complete_node_action')):
+            return []
+        model = self.ce_widget.stage_model
+        if not model:
+            return []
+        body = prefix[len(tokens.TOKEN_PREFIX):]
+        try:
+            if '.' in body:
+                node_path = body.rpartition('.')[0]
+                return [tokens.TOKEN_PREFIX + node_path + '.' + name
+                        + tokens.TOKEN_SUFFIX
+                        for name in model.get_node_attr_names(node_path)]
+            return [tokens.TOKEN_PREFIX + path
+                    for path in model.get_descendants(nxt_path.WORLD)]
+        except Exception:
+            logger.debug('No token completions for ' + prefix, exc_info=True)
+            return []
+
+    def jedi_question(self, prefix):
+        """Where jedi would be asked, and what its answer depends on.
+
+        Only after a dot, which is where jedi knows something the other
+        sources cannot: what a call returns, what a variable holds. Bare
+        names come from the sources that can each be switched off.
+
+        Asked at the start of the name being typed, so the answer is every
+        name that can go there and typing more of it only filters. The
+        answer depends on the code around that point, not on the name.
+
+        :return: (source, line, column, cache key, what goes before each
+            name), or None when jedi is not wanted here
+        """
+        if ('.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX) or
+                not self.completion_source_enabled('complete_jedi_action') or
+                not code_completion.JEDI.installed()):
+            return None
+        cursor = self.textCursor()
+        root, dot, name = prefix.rpartition('.')
+        position = cursor.position() - len(name)
+        text = self.toPlainText()
+        source = text[:position] + text[cursor.position():]
+        line = cursor.blockNumber() + 1
+        column = cursor.positionInBlock() - len(name)
+        key = (source, position, self.world_source())
+        return source, line, column, key, root + dot
+
+    def jedi_completions(self, prefix, ask=False, fresh=False):
+        """What jedi offers for the name being typed.
+
+        :param ask: work it out now if it is not already known, which is
+            what pausing or Ctrl+Space does. Otherwise only what is known.
+        :param fresh: ask again even if this spot was asked before. Ctrl+Space
+            does, so a library reloaded since shows what it has now.
+        :rtype: list
+        """
+        question = self.jedi_question(prefix)
+        if question is None:
+            return []
+        source, line, column, key, before = question
+        names = None if fresh else code_completion.JEDI.cached(key)
+        if names is None:
+            if not ask:
+                self.jedi_timer.start()
+                return []
+            names = code_completion.JEDI.complete(
+                source, line, column, self.completion_namespace(), key,
+                fresh=fresh)
+        return [before + name for name in names]
+
+    def ask_jedi(self):
+        """Typing paused: ask jedi, and show what it says."""
+        if self.isReadOnly() or not self.hasFocus():
+            return
+        if self.jedi_completions(self.completion_prefix(), ask=True):
+            self.update_completions()
 
     def update_completions(self, force=False):
         """Offer completions for the word being typed.
@@ -1291,9 +1434,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             return
         if self.completion_words is None:
             self.completion_words = self.build_completion_words()
-        # Module contents depend on what is being typed, so they are worked
-        # out per prefix rather than kept in the cached list.
-        words = self.completion_words + self.module_completions(prefix)
+        # Module contents, node paths and what jedi says depend on what is
+        # being typed, so they are worked out per prefix rather than kept in
+        # the cached list.
+        words = (self.completion_words + self.module_completions(prefix)
+                 + self.token_completions(prefix)
+                 + self.jedi_completions(prefix, ask=force, fresh=force))
         model = QtCore.QStringListModel(sorted(set(words)), self.completer)
         self.completer.setModel(model)
         self.completer.setCompletionPrefix(prefix)
@@ -1345,6 +1491,10 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         cursor.setPosition(cursor.position() - len(prefix),
                            QtGui.QTextCursor.KeepAnchor)
         cursor.insertText(completion)
+        # ${ auto-paired a } that the completion brings its own of.
+        closer = completion[-1:]
+        if closer in ')]}' and self.char_after_cursor(cursor) == closer:
+            cursor.deleteChar()
         self.setTextCursor(cursor)
         self.set_completion_shortcuts(True)
 
@@ -1367,14 +1517,78 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             # popup should have it.
             event.ignore()
             return
+        if not self.isReadOnly() and self.handle_auto_pair(event):
+            event.accept()
+            self.hide_completions()
+            return
         super(NxtCodeEditor, self).keyPressEvent(event)
         if self.isReadOnly():
             return
         typed = event.text()
-        if typed and (typed.isalnum() or typed in '_.'):
+        if typed and (typed.isalnum() or typed in '_./'):
             self.update_completions()
         elif self.completer.popup().isVisible():
             self.hide_completions()
+
+    def char_after_cursor(self, cursor=None):
+        cursor = cursor or self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col] if col < len(text) else ''
+
+    def char_before_cursor(self, cursor=None):
+        cursor = cursor or self.textCursor()
+        text = cursor.block().text()
+        col = cursor.positionInBlock()
+        return text[col - 1] if col > 0 else ''
+
+    def handle_auto_pair(self, event):
+        """Insert the matching closer for a bracket/quote, wrap the selection
+        in the pair, or step over a closer that is already there.
+        :param event: QKeyEvent
+        :return: True if the key was handled.
+        """
+        mods = event.modifiers()
+        # AltGr arrives as Ctrl+Alt on Windows, and is how [ and { are typed
+        # on many layouts, so only a lone Ctrl or Alt means a shortcut.
+        ctrl = bool(mods & QtCore.Qt.ControlModifier)
+        alt = bool(mods & QtCore.Qt.AltModifier)
+        if ctrl != alt:
+            return False
+        text = event.text()
+        if not text:
+            return False
+        cursor = self.textCursor()
+        close = self.AUTO_PAIRS.get(text)
+        # Wrap a selection first, quotes included.
+        if close is not None and cursor.hasSelection():
+            start, end = cursor.selectionStart(), cursor.selectionEnd()
+            inner = cursor.selection().toPlainText()
+            cursor.beginEditBlock()
+            cursor.insertText(text + inner + close)
+            cursor.endEditBlock()
+            cursor.setPosition(start + 1)
+            cursor.setPosition(end + 1, QtGui.QTextCursor.KeepAnchor)
+            self.setTextCursor(cursor)
+            return True
+        # Step over a closer that is already there instead of doubling it
+        if text in self.AUTO_PAIRS.values() and self.char_after_cursor() == text:
+            cursor.movePosition(QtGui.QTextCursor.Right)
+            self.setTextCursor(cursor)
+            return True
+        if close is None:
+            return False
+        if text in ("'", '"'):
+            before = self.char_before_cursor()
+            # Mid word (apostrophes, string prefixes) or the third quote of
+            # a triple quote: just type it.
+            if (before.isalnum() or before == text or
+                    self.char_after_cursor().isalnum()):
+                return False
+        cursor.insertText(text + close)
+        cursor.movePosition(QtGui.QTextCursor.Left)
+        self.setTextCursor(cursor)
+        return True
 
     def set_font_size(self, delta=0.0, default=False):
         if default:
@@ -1879,6 +2093,135 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                                                    self.ce_widget.node_path,
                                                    globally=globally)
 
+    def get_token_at(self, pos):
+        """Find the (non-nested) ${...} token under a viewport position.
+        :param pos: QPoint in viewport coordinates
+        :return: tuple of (full_token_str, token_body) or (None, None)
+        """
+        cursor = self.cursorForPosition(pos)
+        line = cursor.block().text()
+        col = cursor.positionInBlock()
+        for match in re.finditer(r'\$\{[^{}]*\}', line):
+            if match.start() <= col <= match.end():
+                full = match.group(0)
+                return full, tokens.get_token_content(full)
+        return None, None
+
+    def node_path_from_token_body(self, body):
+        """Resolve a token body to an absolute node path if it names one.
+        A bare ``${attr}`` (no '.' and no '/') is a local attribute, so it
+        resolves to the current node.
+        :param body: string content of a ${} token
+        :return: node path string or None
+        """
+        body = body.strip()
+        if not body:
+            return None
+        # file:: path:: contents:: and plugin tokens are not node refs
+        all_tokens = tuple(tokens.TOKENTYPE.ALL) + tuple(tokens.plugin_tokens)
+        for token_type in all_tokens:
+            if token_type.prefix and body.startswith(token_type.prefix):
+                return None
+        current = self.ce_widget.node_path
+        start = current or nxt_path.WORLD
+        if '.' in body:
+            node_part = body.rpartition('.')[0]
+            if not node_part:
+                return current  # '.attr' is the current node
+            return nxt_path.expand_relative_node_path(node_part, start)
+        if nxt_path.NODE_SEP in body:
+            return nxt_path.expand_relative_node_path(body, start)
+        return current
+
+    def goto_token_definition(self, pos):
+        """Ctrl+click handler: select and frame the node a token references.
+        :param pos: QPoint in viewport coordinates
+        :return: True if a node was selected
+        """
+        if self.ce_widget.editing_active:
+            # Going to another node would accept the edit on the way out.
+            return False
+        full, body = self.get_token_at(pos)
+        if not full:
+            return False
+        model = self.ce_widget.stage_model
+        node_path = self.node_path_from_token_body(body)
+        if not node_path or model is None:
+            return False
+        if node_path == self.ce_widget.node_path:
+            return False  # local attr, nowhere to go
+        if not model.node_exists(node_path):
+            logger.warning("Cannot navigate: '{}' not found".format(node_path))
+            return False
+        model.select_and_frame(node_path)
+        return True
+
+    def show_token_tooltip(self, help_event):
+        """Show the resolved value of the token under the mouse as a tooltip.
+
+        Only for tokens that read an attribute. Resolving file::, contents::
+        or a plugin token reads files or runs plugin code, which hovering
+        should not do.
+        :param help_event: QHelpEvent, in viewport coordinates
+        :return: True if a tooltip was shown
+        """
+        full, body = self.get_token_at(help_event.pos())
+        model = self.ce_widget.stage_model
+        node_path = self.node_path_from_token_body(body) if full else None
+        if not node_path or model is None:
+            QtWidgets.QToolTip.hideText()
+            return False
+        if not model.node_exists(node_path):
+            QtWidgets.QToolTip.showText(
+                help_event.globalPos(),
+                '{}  ->  <no node at {}>'.format(full, node_path), self)
+            return True
+        try:
+            resolved = model.resolve(self.ce_widget.node_path, full)
+        except Exception:
+            logger.exception('Token resolve failed for tooltip')
+            QtWidgets.QToolTip.hideText()
+            return False
+        if resolved is None:
+            resolved = '<unresolved>'
+        QtWidgets.QToolTip.showText(help_event.globalPos(),
+                                    '{}  ->  {}'.format(full, resolved), self)
+        return True
+
+    def viewportEvent(self, event):
+        # Here rather than in event(): tooltip positions that reach the
+        # editor itself are in its own coordinates, which the line number
+        # gutter offsets from the text.
+        if event.type() == QtCore.QEvent.ToolTip:
+            if self.show_token_tooltip(event):
+                return True
+        return super(NxtCodeEditor, self).viewportEvent(event)
+
+    def mousePressEvent(self, event):
+        if (event.modifiers() & QtCore.Qt.ControlModifier and
+                event.button() == QtCore.Qt.LeftButton):
+            if self.goto_token_definition(event.pos()):
+                event.accept()
+                return
+        super(NxtCodeEditor, self).mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        over_token = False
+        if (event.modifiers() & QtCore.Qt.ControlModifier and
+                not self.ce_widget.editing_active):
+            full, body = self.get_token_at(event.pos())
+            over_token = bool(full and self.node_path_from_token_body(body))
+        viewport = self.viewport()
+        if over_token and self._cursor_before_token is None:
+            self._cursor_before_token = viewport.cursor().shape()
+            viewport.setCursor(QtCore.Qt.PointingHandCursor)
+        elif not over_token and self._cursor_before_token is not None:
+            # Put back whatever was showing, which is not always the
+            # I-beam: the editor shows an arrow until it is edited.
+            viewport.setCursor(self._cursor_before_token)
+            self._cursor_before_token = None
+        super(NxtCodeEditor, self).mouseMoveEvent(event)
+
 
 class NumberBar(QtWidgets.QWidget):
     """class that defines textEditor numberBar"""
@@ -2046,6 +2389,13 @@ def code_style_factory(color='', border='solid', thickness=(2, 2, 2)):
         
                             QPlainTextEdit:focus{
                                 %s;
+                            }
+
+                            QToolTip {
+                                color: #f0f0f0;
+                                background-color: #2b2b2b;
+                                border: 1px solid #5a5a5a;
+                                padding: 3px;
                             }
                             '''
     return code_edit_default_style % tuple(lines)

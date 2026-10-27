@@ -51,6 +51,13 @@ def write_graph(path, name, references=(), node_names=()):
 class IndicesKeepTheirLayersAlive(unittest.TestCase):
 
     def setUp(self):
+        # These tests collect garbage to see what is left alive. Whatever
+        # earlier tests left behind is moved out of the collector's reach
+        # first: freeing an old window from here crashes Qt, and on Linux
+        # python 3.14 it did, in QUndoStack::clear. conftest.py does this
+        # after every test under pytest, but CI runs the suite through
+        # unittest, where conftest is never read.
+        gc.freeze()
         self.cwd = os.getcwd()
         self.tmp = tempfile.mkdtemp(prefix='nxt_idx_')
         write_graph(os.path.join(self.tmp, 'a.nxt'), 'a',
