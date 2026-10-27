@@ -10,6 +10,7 @@ from Qt.QtWidgets import QUndoCommand
 # Internal
 from nxt_editor import colors
 from nxt_editor import user_dir
+from nxt_editor.reference_paths import stored_reference_path
 from nxt import nxt_path
 from nxt.nxt_layer import LAYERS, SAVE_KEY
 from nxt.nxt_node import (INTERNAL_ATTRS, META_ATTRS, get_node_as_dict,
@@ -1519,6 +1520,18 @@ class SetLayerAlias(NxtCommand):
         self.setText("Set {} alias to {}".format(layer.filepath, self.alias))
 
 
+def stored_for(file_path, parent_layer):
+    """How a file picked from a menu is written into the layer above it.
+
+    The same rule the Reference Editor uses: relative when the file sits
+    beside that layer, whole otherwise, and whole when that layer has never
+    been saved and so has no folder to be relative to.
+    """
+    real_path = getattr(parent_layer, 'real_path', None)
+    layer_dir = os.path.dirname(real_path) if real_path else None
+    return stored_reference_path(file_path, layer_dir)
+
+
 class NewLayer(NxtCommand):
 
     """Add new layer"""
@@ -1566,7 +1579,8 @@ class NewLayer(NxtCommand):
                 break
         real_path = nxt_path.full_file_expand(self.file_path, start=self.chdir)
         layer_data = {"parent_layer": parent_layer,
-                      SAVE_KEY.FILEPATH: self.file_path,
+                      SAVE_KEY.FILEPATH: stored_for(self.file_path,
+                                                    parent_layer),
                       SAVE_KEY.REAL_PATH: real_path,
                       SAVE_KEY.COLOR: layer_color,
                       SAVE_KEY.ALIAS: self.file_name
@@ -1612,7 +1626,7 @@ class ReferenceLayer(NxtCommand):
             parent_layer = None
         layer_data = nxt_io.load_file_data(self.real_path)
         extra_data = {"parent_layer": parent_layer,
-                      "filepath": self.file_path,
+                      "filepath": stored_for(self.file_path, parent_layer),
                       "real_path": self.real_path,
                       "alias": layer_data['name']
                       }

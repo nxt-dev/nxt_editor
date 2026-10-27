@@ -25,10 +25,9 @@ from nxt_editor import stage_model
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
-# Resolving a reference the way loading does lives in nxt_core. Under rez
-# these run against the released core, so they sit out until a core
-# carrying it is released rather than failing for something this repo
-# cannot fix.
+# Resolving a reference the way loading does lives in nxt_core. Against an
+# older released core these sit out rather than failing for something this
+# repo cannot fix.
 from nxt import nxt_io  # noqa: E402
 
 HAS_REF_EXPAND = hasattr(nxt_io, 'expand_reference_path')

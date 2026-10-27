@@ -1,12 +1,16 @@
 """Test setup that has to happen before any test module is imported.
 
-These tests build real widgets, and the studio runners have no window
-server to give them: a self hosted runner runs as a service, on macOS and
+These tests build real widgets, and a CI runner often has no window
+server to give them: one that runs as a service has none, on macOS and
 Windows as much as on Linux. Qt aborts rather than falling back, so it is
 told to render offscreen before anything creates a QApplication.
 
 Only under CI. On a workstation the tests use the real display, which is
 also the only way to look at what they are doing.
+
+They get a user directory of their own too. That has to be decided before
+nxt_editor is imported, which happens before this file runs, so it is in
+the conftest.py at the top of the repository.
 
 After each module, the windows the tests leave behind are kept rather
 than freed. See keep_windows.

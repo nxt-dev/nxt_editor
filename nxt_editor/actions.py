@@ -11,6 +11,7 @@ from Qt import QtCore, QtGui, QtWidgets
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
 from nxt_editor import user_dir
+from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, finder, file_search
 
@@ -1298,6 +1299,9 @@ class StageViewActions(NxtActionContainer):
         def toggle_lines():
             state = self.implicit_action.isChecked()
             self.main_window.view.toggle_implicit_connections(state)
+            # Remembered for the tabs opened after this one, and the next
+            # session, the way the grid is.
+            user_dir.user_prefs[user_dir.USER_PREF.SHOW_IMPLICIT] = state
 
         self.implicit_action = NxtAction(text='Toggle Implicit Connections',
                                          parent=self)
@@ -1306,7 +1310,8 @@ class StageViewActions(NxtActionContainer):
         self.implicit_action.setWhatsThis('Shows or hides the implicit '
                                           'connections for this tab.')
         self.implicit_action.setCheckable(True)
-        self.implicit_action.setChecked(True)
+        self.implicit_action.setChecked(user_dir.user_prefs.get(
+            user_dir.USER_PREF.SHOW_IMPLICIT, True))
         self.implicit_action.triggered.connect(toggle_lines)
         lines_icon = QtGui.QIcon()
         lines_icn_on = QtGui.QPixmap(
@@ -1904,7 +1909,8 @@ class CodeEditorActions(NxtActionContainer):
         self.replace_action.setWhatsThis('Search and replace in the code in '
                                          'this editor.')
         self.replace_action.setAutoRepeat(False)
-        self.replace_action.setShortcut('Ctrl+H')
+        # Ctrl+H, and Ctrl+R for anyone coming from PyCharm.
+        self.replace_action.setShortcuts(['Ctrl+H', 'Ctrl+R'])
         self.find_next_action = NxtAction('Find Next', parent=self)
         self.find_next_action.setWhatsThis('Jump to the next match.')
         self.find_next_action.setShortcut('F3')
@@ -1994,6 +2000,28 @@ class CodeEditorActions(NxtActionContainer):
             'Words already written in this compute, which catches your own '
             'variable names.')
 
+        self.complete_host_action = NxtAction('Host Modules', parent=self)
+        self.complete_host_action.setCheckable(True)
+        self.complete_host_action.setWhatsThis(
+            'Modules the host application already has loaded, by the names '
+            'scripts usually give them: cmds, om and pm in Maya, unreal in '
+            'Unreal, bpy in Blender. They complete before an import line is '
+            'written. Nothing is imported for them.')
+
+        self.complete_jedi_action = NxtAction('Python Analysis (jedi)',
+                                              parent=self)
+        self.complete_jedi_action.setCheckable(True)
+        if code_completion.JEDI.installed():
+            self.complete_jedi_action.setWhatsThis(
+                'Uses jedi to work out what a name is, so that after a dot '
+                'it can complete what a call returns or what a variable '
+                'holds. Asked when typing pauses, or with Ctrl+Space.')
+        else:
+            self.complete_jedi_action.setEnabled(False)
+            self.complete_jedi_action.setWhatsThis(
+                'Needs jedi, which is not installed for this python. '
+                'pip install nxt-editor[completion] adds it.')
+
         self.completion_source_actions = (
             (self.complete_python_action,
              user_dir.USER_PREF.CE_COMPLETE_PYTHON, True),
@@ -2003,6 +2031,10 @@ class CodeEditorActions(NxtActionContainer):
              user_dir.USER_PREF.CE_COMPLETE_NODE, True),
             (self.complete_document_action,
              user_dir.USER_PREF.CE_COMPLETE_DOCUMENT, True),
+            (self.complete_host_action,
+             user_dir.USER_PREF.CE_COMPLETE_HOST, True),
+            (self.complete_jedi_action,
+             user_dir.USER_PREF.CE_COMPLETE_JEDI, True),
         )
 
         def make_source_toggle(action, pref_key, default):
@@ -2105,6 +2137,13 @@ class CodeEditorActions(NxtActionContainer):
             self.main_window.code_editor.overlay_widget.update()
 
         self.overlay_message_action.toggled.connect(toggle_dbl_click_msg)
+
+        def toggle_data_state():
+            new = self.show_data_state_action.isChecked()
+            user_dir.user_prefs[user_dir.USER_PREF.SHOW_CE_DATA_STATE] = new
+            self.main_window.code_editor.overlay_widget.update()
+
+        self.show_data_state_action.toggled.connect(toggle_data_state)
 
         self.action_display_order = [self.copy_resolved_action,
                                      self.localize_code_action,

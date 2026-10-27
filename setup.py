@@ -30,10 +30,17 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     # Unreal 5.5 to 5.8 and Maya 2025/2026 are 3.11, Maya 2027 is 3.13.
     python_requires='>=3.11, <3.14',
-    install_requires=['nxt-core<1.0,>=0.14',
+    install_requires=['nxt-core<1.0,>=0.21',
                       'qt.py<3',
-                      'PySide6>=6,<7'
+                      # The newest PySide6 the editor has been tested on,
+                      # the same as integration/qt_deps.py installs.
+                      'PySide6>=6,<6.12'
                       ],
+    extras_require={
+        # Richer code completion: what a call returns, what a variable
+        # holds. The editor works without it.
+        'completion': ['jedi>=0.19,<0.21'],
+    },
     package_data={
         # covers text nxt files
         "": ["*.nxt"],
@@ -42,6 +49,8 @@ setuptools.setup(
                        "integration/*",
                        "integration/*/*",
                        "integration/*/*/*",
+                       # Unreal keeps its python in Content/Python.
+                       "integration/*/*/*/*",
                        "resources/*",
                        "resources/*/*",
                        "resources/*/*/*",

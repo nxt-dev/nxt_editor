@@ -59,6 +59,29 @@ import nxt.remote.contexts
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
+# Widget classes given the editor's font when the QApplication is nxt's own.
+WIDGETS_WITH_FONTS = (
+    "QMenuBar",
+    "QTabWidget",
+    "QMenu",
+    "QTableView",
+    "QLineEdit",
+    "QComboBox",
+    "QLabel",
+    "QPushButton",
+    "QTextEdit",
+    "QWidget",
+    "QListWidget",
+    "QTabelWidget",
+    "QTreeWidget",
+    "QSpinBox",
+    "QDoubleSpinBox",
+    "QCheckBox",
+)
+# Marks a widget inside a host whose font the editor set, and so keeps in
+# step with the font size.
+FONT_FOLLOWS_WINDOW = 'nxt_font_follows_window'
+
 
 class MainWindow(QtWidgets.QMainWindow):
     """The main window of the nxt UI. Includes the menu bar, tool bar, and dock widgets."""
@@ -238,6 +261,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
         self.setCorner(QtCore.Qt.BottomLeftCorner, QtCore.Qt.LeftDockWidgetArea)
         self.setTabPosition(QtCore.Qt.AllDockWidgetAreas, QtWidgets.QTabWidget.North)
+        # Qt creates dock tab bars lazily when docks get tabified, so watch
+        # for them to support double clicking a tab to float its dock
+        for dock in self.findChildren(DockWidgetBase):
+            dock.dockLocationChanged.connect(self.install_dock_tab_filters)
+            dock.topLevelChanged.connect(self.install_dock_tab_filters)
 
         # status bar
         self.status_bar = QtWidgets.QStatusBar()
@@ -268,6 +296,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.resizeDocks(
             [self.property_editor, self.code_editor], [400, 300], QtCore.Qt.Vertical
         )
+        # The factory layout, for reset_layout to return to. Taken once the
+        # docks have their default sizes, which a snapshot taken any earlier
+        # does not have, and before showEvent restores the saved layout.
+        self.default_layout_state = self.saveState()
 
         if filepath:
             self.load_file(filepath=filepath)
@@ -396,29 +428,25 @@ class MainWindow(QtWidgets.QMainWindow):
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
         font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
-        app = QtWidgets.QApplication.instance()
-        app.setFont(font)
-
-        widgets_with_fonts = [
-            "QMenuBar",
-            "QTabWidget",
-            "QMenu",
-            "QTableView",
-            "QLineEdit",
-            "QComboBox",
-            "QLabel",
-            "QPushButton",
-            "QTextEdit",
-            "QWidget",
-            "QListWidget",
-            "QTabelWidget",
-            "QTreeWidget",
-            "QSpinBox",
-            "QDoubleSpinBox",
-            "QCheckBox",
-        ]
-        for widget in widgets_with_fonts:
-            app.setFont(font, widget)
+        if nxt_editor.owns_qapp():
+            app = QtWidgets.QApplication.instance()
+            app.setFont(font)
+            for widget in WIDGETS_WITH_FONTS:
+                app.setFont(font, widget)
+        else:
+            # A host's application font is the host's: setting it changes
+            # every widget in Maya too (#284, #304). So the font is set on
+            # the editor's own widgets instead. They do not all inherit it
+            # from the window: menus are windows of their own, and Qt gives
+            # classes such as QMenuBar a font from the platform. Widgets
+            # that chose their own font keep it.
+            self.setFont(font)
+            for widget in self.findChildren(QtWidgets.QWidget):
+                explicit = widget.testAttribute(QtCore.Qt.WA_SetFont)
+                if explicit and not widget.property(FONT_FOLLOWS_WINDOW):
+                    continue
+                widget.setFont(font)
+                widget.setProperty(FONT_FOLLOWS_WINDOW, True)
 
         new_cb_stylesheet = """
 QCheckBox::indicator {
@@ -430,8 +458,13 @@ QCheckBox::indicator {
             font_size * 1.5,
             font_size * 1.5,
         )
-        # List all checkboxes and update their style sheet.
-        for widget in QtWidgets.QApplication.allWidgets():
+        # Every checkbox when the application is nxt's own, otherwise the
+        # editor's checkboxes and not the host's.
+        if nxt_editor.owns_qapp():
+            widgets = QtWidgets.QApplication.allWidgets()
+        else:
+            widgets = self.findChildren(QtWidgets.QCheckBox)
+        for widget in widgets:
             if isinstance(widget, QtWidgets.QCheckBox):
                 widget.setStyleSheet(new_cb_stylesheet)
 
@@ -615,15 +648,15 @@ QCheckBox::indicator {
         :rtype: bool
         """
         if not filepath:
-            # TODO: The dialog should register the last opened folder into the
-            #  user_dir and use that as the starting dir for file dialogs
-            #  that aren't intrinicly tied to a layers real_path
+            # Beside the graph that is open, or with nothing saved open,
+            # wherever a graph was last opened from.
             real_path = None
             try:
                 real_path = self.model.stage.top_layer.real_path
             except AttributeError:
                 pass
-            _dir = os.path.dirname(real_path or os.getcwd())
+            _dir = os.path.dirname(real_path) if real_path else \
+                user_dir.last_opened_dir()
             potential_path = NxtFileDialog.system_file_dialog(base_dir=_dir)
             if not potential_path:
                 logger.debug("No file selected to load.")
@@ -735,12 +768,15 @@ QCheckBox::indicator {
         if not save_path:
             return False
         self.set_waiting_cursor(True)
-        self.nxt.save_layer(layer, filepath=save_path)
-        user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = layer.real_path
+        # Opened in a new tab, the save is a copy and this tab keeps the
+        # original as it was, references included. Otherwise this layer
+        # becomes the new file.
+        self.nxt.save_layer(layer, filepath=save_path,
+                            as_copy=open_in_new_tab)
+        user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = save_path
         layer.filepath = old_path
         if open_in_new_tab:
             self.load_file(save_path)
-            layer.real_path = old_real_path
         elif layer is self.model.top_layer:
             tab_idx = self.open_files_tab_widget.currentIndex()
             self.open_files_tab_widget.setTabText(tab_idx, layer.alias)
@@ -960,8 +996,39 @@ QCheckBox::indicator {
             if isinstance(widget.parent(), NxtCodeEditor):
                 self.code_editor.update_code_is_local()
                 self.code_editor.enter_editing()
+            elif isinstance(widget, QtWidgets.QTabBar):
+                return self.float_dock_from_tab(widget, event.pos())
 
         return False
+
+    def float_dock_from_tab(self, tab_bar, pos):
+        """Float the dock widget whose tab sits at `pos` in `tab_bar`.
+        :param tab_bar: QTabBar of a dock area owned by this window
+        :param pos: QPoint click position local to the tab bar
+        :return: True if a dock was floated
+        """
+        index = tab_bar.tabAt(pos)
+        if index == -1:
+            return False
+        title = tab_bar.tabText(index)
+        for dock in self.findChildren(DockWidgetBase):
+            if dock.windowTitle() == title:
+                dock.setFloating(True)
+                dock.raise_()
+                return True
+        return False
+
+    def install_dock_tab_filters(self, *args):
+        """Defer a tick so Qt has (re)built its internal dock tab bars."""
+        QtCore.QTimer.singleShot(0, self.scan_dock_tab_bars)
+
+    def scan_dock_tab_bars(self):
+        """Filter the dock area tab bars so tab double clicks reach
+        eventFilter. Qt creates them lazily when docks get tabified.
+        """
+        for tab_bar in self.findChildren(QtWidgets.QTabBar):
+            if tab_bar.parent() is self:
+                tab_bar.installEventFilter(self)
 
     def show(self):
         """Centering after the window is shown because the center is based on the window's size."""
@@ -969,7 +1036,13 @@ QCheckBox::indicator {
         super(MainWindow, self).show()
         self.center_view()
 
+    def reset_layout(self):
+        """Restore all dock widgets and toolbars to the default layout."""
+        self.restoreState(self.default_layout_state)
+        self.state_last_hidden = None
+
     def showEvent(self, event):
+        self.install_dock_tab_filters()
         if self.state_last_hidden:
             self.restoreState(self.state_last_hidden)
             super(MainWindow, self).showEvent(event)
@@ -1309,11 +1382,17 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addAction(self.view_actions.implicit_action)
         self.view_menu.addAction(self.view_actions.grid_action)
         self.view_menu.addAction(self.view_actions.mini_map_action)
+        self.view_menu.addAction(self.view_actions.animation_action)
+        self.view_menu.addSeparator()
+        self.reset_layout_action = self.view_menu.addAction('Reset Layout')
+        self.reset_layout_action.triggered.connect(
+            self.main_window.reset_layout)
         self.view_opt_menu = self.view_menu.addMenu("Options")
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
         self.view_opt_menu.addAction(self.ce_actions.overlay_message_action)
+        self.view_opt_menu.addAction(self.ce_actions.show_data_state_action)
         self.view_opt_menu.addAction(self.app_actions.increase_font_size_action)
         self.view_opt_menu.addAction(self.app_actions.decrease_font_size_action)
         self.view_opt_menu.addAction(self.app_actions.reset_font_size_action)

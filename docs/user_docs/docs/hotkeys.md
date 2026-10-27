@@ -1,3 +1,7 @@
+# Hotkeys
+
+Every action below can be given a new shortcut in the Hotkey Editor (**Window > Hotkey Editor**).
+
 ## Application Actions
 |        Name         |                   What's this                   |      Tool tip       |   Shortcut   |
 | :------------------ | :---------------------------------------------: | :------------------ | :----------: |
@@ -43,6 +47,8 @@
 | Display All Attrs           |  Display local, instanced, and inherited attributes   | Display All Attrs                |      3      |
 | Toggle Grid                 |         Shows or hides the grid for all tabs.         | Show / Hide the Grid             |   Ctrl+;    |
 | Toggle Implicit Connections | Shows or hides the implicit connections for this tab. | Show / Hide Implicit Connections |   Ctrl+L    |
+| Toggle Mini Map             | Shows or hides the mini map in the bottom right of the graph for all tabs. | Show / Hide the Mini Map |   Ctrl+M    |
+| Animate Nodes               | When on, nodes slide and fade as they open and close. Off by default. | Animate nodes opening and closing |             |
 | Pick walk up                |                                                       | Pick walk up                     |     Up      |
 | Pick walk down              |                                                       | Pick walk down                   |    Down     |
 | Pick walk left              |                                                       | Pick walk left                   |    Left     |
@@ -60,6 +66,8 @@
 | Save Layer As          |                                 | Save Layer As          | Ctrl+Shift+S |
 | Save All Layers        |                                 | Save All Layers        |              |
 | Open Source            |  Open target layer in new tab.  | Open Source            | Ctrl+Shift+O |
+| Reload Source...       | Re-read a layer, and as much of what it references as you choose, from disk, and composite the graph again. | Re-read this layer and what it references from disk | |
+| Edit References...     | Change what a layer references. Applying reloads the referenced layers and recomposites; the layer is written when you save it. | Edit which layers this layer references | |
 | Toggle Layer Mute      |                                 | Toggle Layer Mute      |      M       |
 | Toggle Layer Solo      |                                 | Toggle Layer Solo      |      S       |
 | Change Color           |                                 | Change Color           |              |
@@ -154,4 +162,27 @@
 | Comment Line               |                             Comment the selected line(s).                              | Comment Line               |      Ctrl+/       |
 | Accept Code Edit           |                      Accept changes and commit them to the node.                       | Accept Code Edit           |       Enter       |
 | Cancel Code Edit           |                              Discard changes to the code.                              | Cancel Code Edit           |        Esc        |
+| Find In Code               | Search the code in this editor. | Find In Code | Ctrl+F |
+| Replace In Code            | Search and replace in the code in this editor. | Replace In Code | Ctrl+H |
+| Find Next                  | Jump to the next match. | Find Next | F3 |
+| Find Previous              | Jump to the previous match. | Find Previous | Shift+F3 |
+| Go To Line                 | Jump to a line number. | Go To Line | Ctrl+G |
+| Duplicate Line             | Copy the selected line(s) below. | Duplicate Line | Ctrl+Shift+D |
+| Move Line Up               | Swap the selected line(s) with the line above. | Move Line Up | Alt+Up |
+| Move Line Down             | Swap the selected line(s) with the line below. | Move Line Down | Alt+Down |
+| Delete Line                | Delete the selected line(s). | Delete Line | Ctrl+Shift+K |
+| Expand Selection           | Grow the selection from the word under the cursor, to the line, to everything. | Expand Selection | Ctrl+D |
+| Complete Word              | Offer completions for the word being typed. | Complete Word | Ctrl+Space |
+| Code Editor Autocomplete   | When on, completions are offered as you type. Ctrl+Space always offers them either way. | Code Editor Autocomplete | |
+
+!!! note "Code editor shortcuts win while it has focus"
+    The code editor's shortcuts only apply while the code editor has focus, and while it does they take
+    precedence: `Ctrl+F`, `Ctrl+G` and `Ctrl+D` find in code, go to a line and expand the selection there,
+    and open the graph wide find, toggle grid snapping and duplicate nodes everywhere else.
+    The completion sources are toggled from **Options > Autocomplete**; see
+    [Completion](reference.md#completion).
+
+    `Ctrl+click` on a `${}` token, which selects the node the token reads
+    from, is a mouse action rather than a shortcut, so it is not listed here;
+    see [Following tokens](reference.md#following-tokens).
 
