@@ -17,7 +17,7 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import user_dir
+from nxt_editor import file_browser, user_dir
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
 from nxt_editor.stage_view import StageView
@@ -790,6 +790,16 @@ QCheckBox::indicator {
             layer = self.model.display_layer
         self.load_file(layer.real_path)
 
+    def show_layer_in_file_browser(self, layer=None):
+        """Open the OS file browser on the file a layer is saved in. Defaults
+        to the target layer, the one the File menu saves.
+        """
+        if not self.model:
+            return
+        if not layer:
+            layer = self.model.target_layer
+        file_browser.show_in_file_browser(layer.real_path)
+
     def find_startpoint(self):
         """Cycles through start points"""
         if not self.model:
@@ -1332,6 +1342,8 @@ class MenuBar(QtWidgets.QMenuBar):
         # Beside saving, because it is the other direction of the same
         # thing: what is on disk and what is in memory, and which wins.
         self.file_menu.addAction(self.layer_actions.reload_source_action)
+        self.file_menu.addAction(
+            self.layer_actions.show_in_file_browser_action)
         self.file_menu.addSeparator()
         self.file_menu.addAction(self.layer_actions.save_all_layers_action)
         self.file_menu.addSeparator()

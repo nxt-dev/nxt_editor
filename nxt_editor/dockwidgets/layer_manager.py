@@ -167,6 +167,13 @@ class LayerTreeView(QtWidgets.QTreeView):
         # somebody else can have saved since this one was opened.
         self.actions.reload_source_action.setData(layer)
         menu.addAction(self.actions.reload_source_action)
+        # A layer that has never been saved has no file to show. The action
+        # is shared with the File menu, so it is enabled again afterwards.
+        show_action = self.actions.show_in_file_browser_action
+        show_action.setData(layer)
+        show_action.setEnabled(bool(layer.real_path))
+        menu.aboutToHide.connect(lambda: show_action.setEnabled(True))
+        menu.addAction(show_action)
         menu.addSeparator()
         self.actions.change_color_action.setData(layer)
         menu.addAction(self.actions.change_color_action)
