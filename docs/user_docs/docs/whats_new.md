@@ -3,6 +3,12 @@
 This page summarises what is new in **nxt_editor 4.4** and **nxt_core 0.21**.
 Each item links to the part of the docs that explains it in full.
 
+## nxt_editor 4.4.2
+
+- **[Show in Explorer](reference.md#show-in-explorer)** on a layer's right
+  click menu opens the folder it is saved in, with its file selected:
+  Explorer on Windows, the Finder on a Mac, the file manager on Linux.
+
 ## nxt_editor 4.4.1
 
 - **Maya's fonts are left alone again.** Opening the editor in Maya no

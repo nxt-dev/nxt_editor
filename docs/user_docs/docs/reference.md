@@ -323,6 +323,16 @@ layers can appear, disappear or change order. Reloading is one step on the
 undo stack, and undoing it puts back exactly what each layer held before,
 without reading the files again.
 
+### Show in Explorer
+
+**Show in Explorer** opens the folder a layer is saved in, with the layer's
+file selected. On a Mac it is called **Reveal in Finder** and opens the
+Finder; on Linux it is **Show in File Manager**. It is on every layer's
+right click menu, and in the **File** menu, where it acts on the target
+layer. A layer that has never been saved has no file to show, so the item is
+greyed out. If the file has been moved or deleted, the nearest folder that
+still exists is opened instead.
+
 ## Build View
 
 ![The build view](images/build_view_find.png)
