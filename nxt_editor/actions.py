@@ -13,7 +13,7 @@ from nxt_editor.constants import NXT_WEBSITE
 from nxt_editor import user_dir
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
-from nxt_editor import colors, finder, file_search
+from nxt_editor import colors, finder, file_search, file_browser
 
 logger = logging.getLogger('nxt')
 
@@ -550,6 +550,23 @@ class LayerActions(NxtActionContainer):
             clear_action_data(self.actions())
             self.main_window.reload_layer_source(layer)
         self.reload_source_action.triggered.connect(reload_source)
+        # Show in the file browser
+        self.show_in_file_browser_action = NxtAction(
+            text=file_browser.ACTION_TEXT, parent=self)
+        self.show_in_file_browser_action.setAutoRepeat(False)
+        self.show_in_file_browser_action.setData(None)
+        self.show_in_file_browser_action.setToolTip('Open the folder this '
+                                                    'layer is saved in')
+        self.show_in_file_browser_action.setWhatsThis(
+            'Open the folder a layer is saved in, in Explorer, the Finder or '
+            "the file manager, with the layer's file selected.")
+
+        def show_in_file_browser():
+            layer = self.show_in_file_browser_action.data()
+            clear_action_data(self.actions())
+            self.main_window.show_layer_in_file_browser(layer)
+        self.show_in_file_browser_action.triggered.connect(
+            show_in_file_browser)
         # Change color
         self.change_color_action = NxtAction(text='Change Color',
                                              parent=self)
@@ -713,6 +730,7 @@ class LayerActions(NxtActionContainer):
                                      self.save_all_layers_action,
                                      self.open_source_action,
                                      self.reload_source_action,
+                                     self.show_in_file_browser_action,
                                      self.mute_layer_action,
                                      self.solo_layer_action,
                                      self.change_color_action,
