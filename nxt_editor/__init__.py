@@ -53,6 +53,27 @@ class StringSignaler(QtCore.QObject):
 from nxt_editor import qt_resources
 qt_resources.register()
 
+STYLESHEET = ':styles/styles/dark/dark.qss'
+
+
+def stylesheet():
+    """The editor's dark stylesheet, as text.
+
+    str() of the QByteArray Qt reads gives a bytes literal in PySide6,
+    "b'...'" with its line breaks escaped, which Qt cannot parse.
+    Standalone that went unseen because the application has the sheet
+    too, but in a host such as Maya the editor's
+    widgets have only their own, so they lost its padding and the workflow
+    tools their rounded buttons.
+    """
+    style_file = QtCore.QFile(STYLESHEET)
+    if not style_file.open(QtCore.QFile.ReadOnly):
+        return ''
+    try:
+        return bytes(style_file.readAll()).decode('utf-8')
+    finally:
+        style_file.close()
+
 
 def _new_qapp():
     app = QtWidgets.QApplication.instance()
@@ -68,10 +89,7 @@ def _new_qapp():
         # The application is nxt's own, so it can have nxt's font. Never
         # on a host's application (#284).
         app.setProperty(OWN_APP_PROPERTY, True)
-    style_file = QtCore.QFile(':styles/styles/dark/dark.qss')
-    style_file.open(QtCore.QFile.ReadOnly | QtCore.QFile.Text)
-    stream = QtCore.QTextStream(style_file)
-    app.setStyleSheet(stream.readAll())
+    app.setStyleSheet(stylesheet())
     pixmap = QtGui.QPixmap(':icons/icons/nxt.svg')
     app.setWindowIcon(QtGui.QIcon(pixmap))
     return app
