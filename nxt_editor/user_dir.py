@@ -137,6 +137,18 @@ class USER_PREF():
     SHOW_IMPLICIT = 'show_implicit_connections'
     SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'
+    # The AI assistant, off until a user turns it on. Keys and sign ins
+    # are not kept here, see nxt_editor.ai.secret_store.
+    AI_ENABLED = 'ai_assistant_enabled'
+    AI_PROVIDER = 'ai_assistant_provider'
+    AI_MODELS = 'ai_assistant_models'
+    AI_AUTH = 'ai_assistant_auth'
+    AI_INCLUDE_SELECTION = 'ai_assistant_include_selection'
+    AI_ALLOW_EDITS = 'ai_assistant_allow_edits'
+    AI_OPENAI_HOST_ID = 'ai_assistant_openai_host_id'
+    AI_OPENAI_CLIENT_ID = 'ai_assistant_openai_client_id'
+    AI_LOCAL_URL = 'ai_assistant_local_url'
+    AI_CLAUDE_CODE_PATH = 'ai_assistant_claude_code_path'
 
 
 class EDITOR_CACHE():

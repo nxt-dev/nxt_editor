@@ -105,6 +105,8 @@ class LayerMenus(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.win.close()
+        cls.win.deleteLater()
+        app.processEvents()
         cls.win = None
 
     def test_the_file_menu_has_it(self):

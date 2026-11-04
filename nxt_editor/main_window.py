@@ -18,6 +18,7 @@ from Qt import QtCore
 # Internal
 import nxt_editor
 from nxt_editor import file_browser, user_dir
+from nxt_editor.ai import providers as ai_providers
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
 from nxt_editor.stage_view import StageView
@@ -33,6 +34,7 @@ from nxt_editor.dockwidgets import (
     WidgetBuilder,
     BuildView,
     FindRepDockWidget,
+    AiAssistant,
 )
 from nxt_editor.dockwidgets.output_log import FileTailingThread, QtLogStreamHandler
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
@@ -255,6 +257,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # workflow tools
         self.workflow_tools = WidgetBuilder(parent=self)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.workflow_tools)
+
+        # AI assistant, opt in. Made either way so the saved layout has a
+        # place for it, but hidden while the assistant is off.
+        self.ai_assistant = AiAssistant(parent=self)
+        self.ai_assistant.open_settings.connect(self.open_ai_settings)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.ai_assistant)
+        self.ai_assistant.hide()
+        self.ai_settings_dialog = None
 
         self.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
         self.setCorner(QtCore.Qt.BottomLeftCorner, QtCore.Qt.LeftDockWidgetArea)
@@ -909,6 +919,7 @@ QCheckBox::indicator {
             self.workflow_tools.set_stage_model(model)
             self.build_view.set_stage_model(model)
             self.find_rep.set_stage_model(model)
+            self.ai_assistant.set_stage_model(model)
             self.output_log.set_stage_model(model)
             self.update_target_color()
             logger.debug("Successfully set up new tab.")
@@ -1049,6 +1060,26 @@ QCheckBox::indicator {
         self.restoreState(self.default_layout_state)
         self.state_last_hidden = None
 
+    def open_ai_settings(self):
+        """Options > AI Assistant."""
+        from nxt_editor.ai.settings_dialog import AiSettingsDialog
+        if self.ai_settings_dialog is None:
+            self.ai_settings_dialog = AiSettingsDialog(parent=self)
+            self.ai_settings_dialog.enabled_changed.connect(
+                self.on_ai_enabled_changed)
+            self.ai_settings_dialog.settings_changed.connect(
+                self.ai_assistant.refresh_providers)
+        self.ai_settings_dialog.show()
+        self.ai_settings_dialog.raise_()
+
+    def on_ai_enabled_changed(self, enabled):
+        if enabled:
+            self.ai_assistant.refresh_providers()
+            self.ai_assistant.show()
+            self.ai_assistant.raise_()
+        else:
+            self.ai_assistant.close()
+
     def showEvent(self, event):
         self.install_dock_tab_filters()
         if self.state_last_hidden:
@@ -1063,6 +1094,8 @@ QCheckBox::indicator {
         saved_geo = user_dir.editor_cache.get(geo_key)
         if saved_geo:
             self.restoreGeometry(QtCore.QByteArray(saved_geo))
+        if not ai_providers.is_enabled():
+            self.ai_assistant.hide()
         state_key = user_dir.EDITOR_CACHE.NODE_PROPERTY_STATE
         property_state = user_dir.editor_cache.get(state_key)
         if property_state:
@@ -1439,6 +1472,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.app_actions.output_log_action.setData(parent.output_log)
         self.app_actions.hotkey_editor_action.setData(parent.hotkey_editor)
         self.app_actions.workflow_tools_action.setData(parent.workflow_tools)
+        self.app_actions.ai_assistant_action.setData(parent.ai_assistant)
 
         # window menu
         self.window_menu = self.addMenu("Window")
@@ -1453,6 +1487,7 @@ class MenuBar(QtWidgets.QMenuBar):
             self.app_actions.output_log_action,
             self.app_actions.hotkey_editor_action,
             self.app_actions.workflow_tools_action,
+            self.app_actions.ai_assistant_action,
         ]
         self.populate_window_menu()
         # Remote Menu
@@ -1469,6 +1504,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
         self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
+        self.options_menu.addAction(self.app_actions.ai_settings_action)
         self.options_view_sub = self.options_menu.addMenu("View")
         self.options_view_sub.setTearOffEnabled(True)
         self.options_view_sub.addActions(self.view_opt_menu.actions())
@@ -1538,6 +1574,9 @@ class MenuBar(QtWidgets.QMenuBar):
     def populate_window_menu(self):
         self.window_menu.clear()
         for action in self.window_menu_actions:
+            if (action is self.app_actions.ai_assistant_action and
+                    not ai_providers.is_enabled()):
+                continue
             widget = action.data()
             action.setChecked(widget.isVisible())
             self.window_menu.addAction(action)
