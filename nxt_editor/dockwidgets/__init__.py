@@ -8,3 +8,4 @@ from nxt_editor.dockwidgets.output_log import OutputLog
 from nxt_editor.dockwidgets.property_editor import PropertyEditor
 from nxt_editor.dockwidgets.widget_builder import WidgetBuilder
 from nxt_editor.dockwidgets.find_rep import FindRepDockWidget
+from nxt_editor.dockwidgets.ai_assistant import AiAssistant
