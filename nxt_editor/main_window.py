@@ -162,9 +162,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setWindowIcon(self.app_icon)
 
         # set style sheet
-        style_file = QtCore.QFile(":styles/styles/dark/dark.qss")
-        style_file.open(QtCore.QFile.ReadOnly)
-        self.stylesheet = str(style_file.readAll())
+        self.stylesheet = nxt_editor.stylesheet()
         self.setStyleSheet(self.stylesheet)
         self.setFont(FONTS.default_font())
 
@@ -1894,9 +1892,7 @@ def nxt_execpthook(typ, value, tb):
     # TODO: Get the last few lines from the session log and put them here
     details = "".join(traceback.format_exception(typ, value, tb))
     logger.exception(details)
-    style_file = QtCore.QFile(":styles/styles/dark/dark.qss")
-    style_file.open(QtCore.QFile.ReadOnly)
-    stylesheet = str(style_file.readAll())
+    stylesheet = nxt_editor.stylesheet()
     dialog = NxtWarningDialog("Uncaught Exception!", message, details)
     dialog.setStyleSheet(stylesheet)
     dialog.exec_()
