@@ -1512,6 +1512,7 @@ class StageModel(QtCore.QObject):
 
     def rename_node_attr(self, node_path, attr_name, new_attr_name, layer=None):
         layer_path = self.get_layer_path(layer, fallback=LAYERS.TARGET)
+        layer = self.lookup_layer(layer_path)
         node = layer.lookup(node_path)
         attr_exists = self.stage.node_attr_exists(node, attr_name)
         if not node or not attr_exists:
