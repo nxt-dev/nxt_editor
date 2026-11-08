@@ -360,6 +360,25 @@ class AppActions(NxtActionContainer):
         self.workflow_tools_action.setWhatsThis('Workflow tools dock widget.')
         self.available_without_model.append(self.workflow_tools_action)
 
+        # AI assistant, only in the Window menu once it is turned on
+        self.ai_assistant_action = NxtAction(text='AI Assistant',
+                                             parent=self)
+        self.ai_assistant_action.setCheckable(True)
+        self.ai_assistant_action.setShortcutContext(context)
+        self.ai_assistant_action.setWhatsThis('Chat with Claude, OpenAI or '
+                                              'Grok about the graph.')
+        self.available_without_model.append(self.ai_assistant_action)
+
+        self.ai_settings_action = NxtAction(text='AI Assistant...',
+                                            parent=self)
+        self.ai_settings_action.setWhatsThis(
+            'Turn the AI assistant on or off, sign in to providers and '
+            'save API keys.')
+        self.ai_settings_action.triggered.connect(
+            self.main_window.open_ai_settings)
+        self.ai_settings_action.setShortcutContext(context)
+        self.available_without_model.append(self.ai_settings_action)
+
         def find_node():
             if not self.main_window.model:
                 return
@@ -458,6 +477,8 @@ class AppActions(NxtActionContainer):
                                      self.output_log_action,
                                      self.hotkey_editor_action,
                                      self.workflow_tools_action,
+                                     self.ai_assistant_action,
+                                     self.ai_settings_action,
                                      self.toggle_ding_action,
                                      self.clear_logs_action,
                                      self.close_action]

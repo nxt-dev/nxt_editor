@@ -249,10 +249,12 @@ class DeleteNode(NxtCommand):
             self.model._add_start_node(self.node_path, layer)
         # restore layer data
         pos = self.node_data.get('pos')
+        touched = [layer.real_path]
         if pos:
             self.model.top_layer.positions[self.node_path] = pos
             # This might be a bug? We don't touch the top layer in redo...
-            self.undo_effected_layer(self.stage.top_layer.real_path)
+            if self.stage.top_layer.real_path not in touched:
+                touched.append(self.stage.top_layer.real_path)
         attr_display = self.node_data.get('attr_display')
         if attr_display is not None:
             self.model._set_attr_display_state(self.node_path, attr_display)
@@ -267,7 +269,11 @@ class DeleteNode(NxtCommand):
         self.model.selection = self.prev_selection
         # Fixme: Does not account for rebuilding proxy nodes for the dirty nodes
         dirty_set = tuple(set(dirty))
-        self.undo_effected_layer(self.layer_path)
+        # Once per layer: a second call finds the layer just put back to
+        # saved and takes that as the undo changing it, so the layer
+        # stayed striped after the delete was undone.
+        for layer_path in touched:
+            self.undo_effected_layer(layer_path)
         if dirty_set != (self.node_path,):
             self.model.update_comp_layer(rebuild=True)
         else:
@@ -346,6 +352,10 @@ class DeleteNode(NxtCommand):
 class SetNodeAttributeData(NxtCommand):
 
     """Set attribute value"""
+
+    # Whether undo and redo mark the layer as changed. A command that runs
+    # them the other way round marks the layer itself.
+    marks_layer = True
 
     def __init__(self, node_path, attr_name, data, model, layer_path):
         super(SetNodeAttributeData, self).__init__(model)
@@ -433,7 +443,8 @@ class SetNodeAttributeData(NxtCommand):
     def undo(self):
         start = time.time()
         layer = self.model.lookup_layer(self.layer_path)
-        self.undo_effected_layer(layer.real_path)
+        if self.marks_layer:
+            self.undo_effected_layer(layer.real_path)
         comp = self.model.comp_layer
         dirties = [self.node_path]
         # delete any created nodes
@@ -480,7 +491,8 @@ class SetNodeAttributeData(NxtCommand):
         created_node = False
         self.prev_selection = self.model.selection
         layer = self.model.lookup_layer(self.layer_path)
-        self.redo_effected_layer(layer.real_path)
+        if self.marks_layer:
+            self.redo_effected_layer(layer.real_path)
         comp = self.model.comp_layer
         self.remove_attr = False
         self.created_node_paths = []
@@ -925,6 +937,7 @@ class RevertExecPath(SetNodeAttributeValue):
                                              model, layer_path)
 
     def redo(self):
+        super(RevertExecPath, self).redo()
         self.setText("Revert exec input on {}".format(self.node_path))
 
 
@@ -1141,6 +1154,11 @@ class AddAttribute(SetNodeAttributeData):
 class DeleteAttribute(AddAttribute):
 
     """Delete attribute on a node"""
+
+    # Deleting runs adding backwards, and the layer bookkeeping run
+    # backwards marked the layer and then unmarked it again, so taking an
+    # attribute off left the layer looking saved.
+    marks_layer = False
 
     def __init__(self, node_path, attr_name, model, layer_path):
         super(DeleteAttribute, self).__init__(node_path, attr_name, None,
