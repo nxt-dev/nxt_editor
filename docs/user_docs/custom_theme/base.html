@@ -18,9 +18,7 @@
 
       {%- block styles %}
         <link href="{{ 'css/bootstrap.css'|url }}" rel="stylesheet">
-        <link href="{{ 'css/fontawesome.min.css'|url }}" rel="stylesheet">
-        <link href="{{ 'css/solid.min.css'|url }}" rel="stylesheet">
-        <link href="{{ 'css/brands.min.css'|url }}" rel="stylesheet">
+        <link href="{{ 'css/font-awesome.css'|url }}" rel="stylesheet">
         <link href="{{ 'css/base.css'|url }}" rel="stylesheet">
         {%- if config.theme.highlightjs %}
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/{{ config.theme.hljs_style }}.min.css">
@@ -32,7 +30,8 @@
 
       {%- block libs %}
 
-        <script src="{{ 'js/bootstrap.bundle.min.js'|url }}" defer></script>
+        <script src="{{ 'js/jquery-1.10.2.min.js'|url }}" defer></script>
+        <script src="{{ 'js/bootstrap.min.js'|url }}" defer></script>
         {%- if config.theme.highlightjs %}
         <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
         {%- for lang in config.theme.hljs_languages %}
@@ -69,7 +68,7 @@
 
                 {%- if nav|length>1 or (page and (page.next_page or page.previous_page)) or config.repo_url %}
                 <!-- Expander button -->
-                <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar-collapse">
+                <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#navbar-collapse">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 {%- endif %}
@@ -79,11 +78,11 @@
                   {%- block site_nav %}
                     {%- if nav|length>1 %}
                         <!-- Main navigation -->
-                        <ul class="nav navbar-nav me-auto">
+                        <ul class="nav navbar-nav">
                         {%- for nav_item in nav %}
                         {%- if nav_item.children %}
-                            <li class="nav-item dropdown{% if nav_item.active %} active{% endif %}">
-                                <a href="#" class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{ nav_item.title }}</a>
+                            <li class="dropdown{% if nav_item.active %} active{% endif %}">
+                                <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">{{ nav_item.title }} <b class="caret"></b></a>
                                 <ul class="dropdown-menu">
                                 {%- for nav_item in nav_item.children %}
                                     {% include "nav-sub.html" %}
@@ -91,7 +90,7 @@
                                 </ul>
                             </li>
                         {%- else %}
-                            <li class="nav-item{% if nav_item.active %} active{% endif %}">
+                            <li class="navitem{% if nav_item.active %} active{% endif %}">
                                 <a href="{{ nav_item.url|url }}" class="nav-link">{{ nav_item.title }}</a>
                             </li>
                         {%- endif %}
@@ -100,11 +99,11 @@
                     {%- endif %}
                   {%- endblock %}
 
-                    <ul class="nav navbar-nav navbar-tools">
+                    <ul class="nav navbar-nav ml-auto">
                       {%- block search_button %}
                         {%- if 'search' in config['plugins'] %}
                         <li class="nav-item">
-                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                            <a href="#" class="nav-link" data-toggle="modal" data-target="#mkdocs_search_modal">
                                 <i class="fa fa-search"></i> Search
                             </a>
                         </li>
@@ -114,13 +113,13 @@
                       {%- block next_prev %}
                         {%- if page and (page.next_page or page.previous_page) %}
                             <li class="nav-item">
-                                <a rel="prev" title="Previous{% if page.previous_page %}: {{ page.previous_page.title }}{% endif %}" {% if page.previous_page %}href="{{ page.previous_page.url|url }}" class="nav-link"{% else %}class="nav-link disabled"{% endif %}>
-                                    <i class="fa fa-arrow-left"></i><span class="nav-label"> Previous</span>
+                                <a rel="prev" {% if page.previous_page %}href="{{ page.previous_page.url|url }}" class="nav-link"{% else %}class="nav-link disabled"{% endif %}>
+                                    <i class="fa fa-arrow-left"></i> Previous
                                 </a>
                             </li>
                             <li class="nav-item">
-                                <a rel="next" title="Next{% if page.next_page %}: {{ page.next_page.title }}{% endif %}" {% if page.next_page %}href="{{ page.next_page.url|url }}" class="nav-link"{% else %}class="nav-link disabled"{% endif %}>
-                                    <span class="nav-label">Next </span><i class="fa fa-arrow-right"></i>
+                                <a rel="next" {% if page.next_page %}href="{{ page.next_page.url|url }}" class="nav-link"{% else %}class="nav-link disabled"{% endif %}>
+                                    Next <i class="fa fa-arrow-right"></i>
                                 </a>
                             </li>
                         {%- endif %}
@@ -131,11 +130,11 @@
                             <li class="nav-item">
                                 <a href="{{ page.edit_url }}" class="nav-link">
                                     {%- if config.repo_name == 'GitHub' -%}
-                                        <i class="fa-brands fa-github"></i> Edit on {{ config.repo_name }}
+                                        <i class="fa fa-github"></i> Edit on {{ config.repo_name }}
                                     {%- elif config.repo_name == 'Bitbucket' -%}
-                                        <i class="fa-brands fa-bitbucket"></i> Edit on {{ config.repo_name }}
+                                        <i class="fa fa-bitbucket"></i> Edit on {{ config.repo_name }}
                                     {%- elif config.repo_name == 'GitLab' -%}
-                                        <i class="fa-brands fa-gitlab"></i> Edit on {{ config.repo_name }}
+                                        <i class="fa fa-gitlab"></i> Edit on {{ config.repo_name }}
                                     {%- else -%}
                                     Edit on {{ config.repo_name }}
                                     {%- endif -%}
@@ -145,11 +144,11 @@
                             <li class="nav-item">
                                 <a href="{{ config.repo_url }}" class="nav-link">
                                     {%- if config.repo_name == 'GitHub' -%}
-                                        <i class="fa-brands fa-github"></i> {{ config.repo_name }}
+                                        <i class="fa fa-github"></i> {{ config.repo_name }}
                                     {%- elif config.repo_name == 'Bitbucket' -%}
-                                        <i class="fa-brands fa-bitbucket"></i> {{ config.repo_name }}
+                                        <i class="fa fa-bitbucket"></i> {{ config.repo_name }}
                                     {%- elif config.repo_name == 'GitLab' -%}
-                                        <i class="fa-brands fa-gitlab"></i> {{ config.repo_name }}
+                                        <i class="fa fa-gitlab"></i> {{ config.repo_name }}
                                     {%- else -%}
                                     {{ config.repo_name }}
                                     {%- endif -%}

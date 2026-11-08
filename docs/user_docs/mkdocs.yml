@@ -5,26 +5,14 @@ copyright: 2020 NXT authors
 nav:
     - Home: index.md
     - What's New: whats_new.md
-    - Getting Started:
-        - Installation: install.md
-        - Concepts: concepts.md
-        - Tutorials: tutorials.md
-    - Reference:
-        - Using the Editor: editor.md
-        - Graphs and Nodes: graphs.md
-        - Layers and References: composition.md
-        - File Format and Design: file_format.md
-        - Hotkeys: hotkeys.md
-        - Workflows: workflows.md
+    - Concepts: concepts.md
+    - Tutorials: tutorials.md
+    - Installation: install.md
+    - Reference: reference.md
     - Extensions: extensions.md
     - API: api/index.html
-    - About:
-        - About: about.md
-        - License: license.md
-        - GitHub: https://github.com/nxt-dev/" target="_blank
-
-not_in_nav: |
-    /reference.md
+    - License: license.md
+    - About: about.md
 
 markdown_extensions:
   - admonition

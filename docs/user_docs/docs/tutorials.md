@@ -136,7 +136,7 @@ built from two files.
    The new row is drawn normally because the file is found next to the layer.
    (Had a folder in `NXT_FILE_ROOTS` held a `file_list.nxt`, that one would
    be used instead: roots are looked in before the layer's own folder. See
-   [How references are found](composition.md#how-references-are-found).)
+   [How references are found](reference.md#how-references-are-found).)
    Type a path to a file that does not exist and the row turns red, with
    `1 could not be found` under the list.
 5. Press **OK**. The referenced layers are loaded and the graph is
@@ -179,7 +179,7 @@ Select a node with code, double click into the code editor, and try:
   see its value. Hold `Ctrl` and click a token that reads another node's
   attribute to jump to that node.
 
-See [Code Editor](editor.md#code-editor) for every shortcut.
+See [Code Editor](reference.md#code-editor) for every shortcut.
 
 # Example Graph Walkthroughs
 Still pending

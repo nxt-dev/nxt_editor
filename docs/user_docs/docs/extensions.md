@@ -71,7 +71,7 @@ Now to write your context graph.
 
 !!! Note
     To add a reference that uses an environment variable, open the
-    [Reference Editor](editor.md#reference-editor) (right click the layer
+    [Reference Editor](reference.md#reference-editor) (right click the layer
     in the Layer Manager > **Edit References...**), press **+** and type
     `$NXT_BUILTINS/_context.nxt` into the field. Typed paths are stored
     exactly as written.

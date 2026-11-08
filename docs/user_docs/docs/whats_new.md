@@ -1,32 +1,11 @@
 # What's New
 
-This page summarises what is new in **nxt_editor 4.5**, **nxt_editor 4.4**
-and **nxt_core 0.21**. Each item links to the part of the docs that explains
-it in full.
-
-## nxt_editor 4.5.0
-
-- **[AI Assistant](editor.md#ai-assistant)**, an opt in panel to chat with
-  Claude, OpenAI, Grok or a local model about the open graph. It looks over,
-  searches, changes and runs the graph with tools, and shows each step it
-  takes. Every chat is kept, to go back to, pin or delete.
-
-  ![The AI Assistant](images/ai_assistant.png)
-- **The editor looks the same in Maya as it does on its own.** The workflow
-  buttons, tabs and panels lost their styling in a host.
-- **Every change to a layer shows on it as it happens.** Taking something off
-  a node, such as a local attribute, now marks the layer as changed in the
-  Layer Manager too.
-- **Stop puts the build back.** Stopping a build no longer empties the build
-  list or leaves the editor looking like it is still running, and in Maya
-  the next node no longer runs after Stop.
-- **Saving a layer no longer fails on a damaged editor cache** ("Ran out of
-  input"). The editor's prefs and cache are written whole, and one that can
-  not be read is put right on the next save.
+This page summarises what is new in **nxt_editor 4.4** and **nxt_core 0.21**.
+Each item links to the part of the docs that explains it in full.
 
 ## nxt_editor 4.4.2
 
-- **[Show in Explorer](editor.md#show-in-explorer)** on a layer's right
+- **[Show in Explorer](reference.md#show-in-explorer)** on a layer's right
   click menu opens the folder it is saved in, with its file selected:
   Explorer on Windows, the Finder on a Mac, the file manager on Linux.
 
@@ -68,7 +47,7 @@ rebound in the [Hotkey Editor](hotkeys.md#code-editor).
 - **Syntax highlighting** colours every match on a line. Before, a line
   with two tokens or two strings only had the first one coloured.
 
-See [Code Editor](editor.md#code-editor).
+See [Code Editor](reference.md#code-editor).
 
 ### Tokens you can hover and follow
 
@@ -77,7 +56,7 @@ See [Code Editor](editor.md#code-editor).
 In Raw View (`Q`), hover a `${}` token in the code editor to see what it
 resolves to, and `Ctrl+click` a token that reads another node's attribute to
 select and frame that node in the graph. See
-[Following tokens](editor.md#following-tokens).
+[Following tokens](reference.md#following-tokens).
 
 ### Completion that knows what a compute can use
 
@@ -97,7 +76,7 @@ select and frame that node in the graph. See
   `pip install nxt-editor[completion]`, completion after a dot knows what a
   call returns or a variable holds.
 
-See [Completion](editor.md#completion).
+See [Completion](reference.md#completion).
 
 ### Docks
 
@@ -106,7 +85,7 @@ See [Completion](editor.md#completion).
   again.
 - **View > Reset Layout** puts every dock back where a fresh install has it.
 
-See [Docks and layout](editor.md#docks-and-layout).
+See [Docks and layout](reference.md#docks-and-layout).
 
 ### Editing layer references
 
@@ -116,7 +95,7 @@ the file in a text editor. Paths can be typed exactly as you want them
 stored (for example with an environment variable in them), or picked with a
 file browser. A **resolved** toggle shows where each reference lands on this
 machine, and references that cannot be found are kept and marked rather than
-dropped. See [Reference Editor](editor.md#reference-editor).
+dropped. See [Reference Editor](reference.md#reference-editor).
 
 ### Reload Source
 
@@ -124,13 +103,13 @@ Somebody else saved a file your graph is built on? **Reload Source...** (on a
 layer's right click menu and in the **File** menu) re-reads that layer, and
 as many of the layers it references as you choose, from disk, and
 composites the graph again. It can be undone. See
-[Reload Source](editor.md#reload-source).
+[Reload Source](reference.md#reload-source).
 
 ### Mini map
 
 A mini map in the bottom right of the graph shows the whole graph and where
 the view is inside it. Click or drag in it to move the view. Toggle it with
-**View > Toggle Mini Map** or `Ctrl+M`. See [Stage](editor.md#stage-view).
+**View > Toggle Mini Map** or `Ctrl+M`. See [Stage](reference.md#stage-view).
 
 ### Build view
 
@@ -140,7 +119,7 @@ the view is inside it. Click or drag in it to move the view. Toggle it with
 - The build stays current as the graph changes: disabling, deleting,
   renaming, re-parenting or reconnecting a node updates it straight away.
 
-See [Build View](editor.md#build-view).
+See [Build View](reference.md#build-view).
 
 ### Smaller changes
 
@@ -149,7 +128,7 @@ See [Build View](editor.md#build-view).
 - Pasting several nodes is a single undo.
 - Nodes no longer animate open by default, which makes opening a node with
   many children noticeably faster. The **Animate Nodes** action turns the
-  animation back on (see [Stage](editor.md#stage-view)).
+  animation back on (see [Stage](reference.md#stage-view)).
 - A graph is only composited and drawn when its tab is first selected, so
   opening many files at once is faster.
 - Renaming a node no longer rebuilds the whole graph when it does not need
@@ -202,14 +181,14 @@ PySide6 is held below 6.12 until the editor has been tested on it.
   the layer, which is what lets a working copy listed in `NXT_FILE_ROOTS`
   stand in for the published one. Adding a reference in the editor now
   finds the same file that opening the graph does. See
-  [How references are found](composition.md#how-references-are-found).
+  [How references are found](reference.md#how-references-are-found).
 - **References that cannot be resolved are kept.** Previously a reference to
   a file that could not be found was dropped from the layer, and saving the
   layer wrote it out without the reference. Now it is kept exactly as
   written, so a graph opened on a machine that cannot see a share no longer
   loses its references when saved.
 - **Reloading layers from disk** (`Stage.reload_layers`), which is what
-  [Reload Source](editor.md#reload-source) is built on. A reference added,
+  [Reload Source](reference.md#reload-source) is built on. A reference added,
   removed or reordered in the file since the graph was opened is picked up.
 - **Removing a layer removes everything it brought in**, including all of its
   references, and only the reference that pointed at it.

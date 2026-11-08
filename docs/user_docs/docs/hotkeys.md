@@ -180,9 +180,9 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
     precedence: `Ctrl+F`, `Ctrl+G` and `Ctrl+D` find in code, go to a line and expand the selection there,
     and open the graph wide find, toggle grid snapping and duplicate nodes everywhere else.
     The completion sources are toggled from **Options > Autocomplete**; see
-    [Completion](editor.md#completion).
+    [Completion](reference.md#completion).
 
     `Ctrl+click` on a `${}` token, which selects the node the token reads
     from, is a mouse action rather than a shortcut, so it is not listed here;
-    see [Following tokens](editor.md#following-tokens).
+    see [Following tokens](reference.md#following-tokens).
 
