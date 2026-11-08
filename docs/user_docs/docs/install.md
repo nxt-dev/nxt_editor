@@ -29,7 +29,7 @@ To install the latest release from [PyPI](https://pypi.org/project/nxt-editor/):
     - Optionally, for richer code completion:
       `pip install nxt-editor[completion]`. This adds
       [jedi](https://github.com/davidhalter/jedi), which the
-      [Python Analysis](reference.md#python-analysis-with-jedi) completion
+      [Python Analysis](editor.md#python-analysis-with-jedi) completion
       source uses. The editor works the same without it.
 - Launch the editor
     - `nxt ui`, or `nxt ui path/to/graph.nxt` to open a graph

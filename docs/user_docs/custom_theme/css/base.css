@@ -312,3 +312,94 @@ h1:hover .headerlink, h2:hover .headerlink, h3:hover .headerlink, h4:hover .head
         margin-left: 10px;
     }
 }
+
+/* The top menu: one line, with the dropdowns opening below it. */
+.navbar .container {
+    flex-wrap: nowrap;
+}
+
+.navbar .navbar-brand {
+    margin-right: 1.5rem;
+    white-space: nowrap;
+}
+
+.navbar .nav-link {
+    white-space: nowrap;
+}
+
+.navbar .nav-item.active > .nav-link {
+    color: #fff;
+    font-weight: 600;
+}
+
+.navbar .dropdown-toggle::after {
+    margin-left: 0.35em;
+    vertical-align: 0.2em;
+}
+
+.navbar .dropdown-menu {
+    margin-top: 0.5rem;
+    padding: 0.4rem 0;
+    min-width: 13rem;
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.navbar .dropdown-item {
+    padding: 0.4rem 1.1rem;
+    color: #d0d0d0;
+}
+
+.navbar .dropdown-item:hover,
+.navbar .dropdown-item:focus {
+    color: #fff;
+    background-color: #3a3a3a;
+}
+
+.navbar .dropdown-item.active,
+.navbar .dropdown-item:active {
+    color: #fff;
+    background-color: #2fa4e7;
+}
+
+.navbar-tools .nav-link {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+}
+
+/* Previous and Next keep only their arrows until there is room. */
+@media (max-width: 1199.98px) {
+    .navbar-tools .nav-label {
+        display: none;
+    }
+}
+
+/* Folded into the menu button: one item per line, full width. */
+@media (max-width: 991.98px) {
+    .navbar .container {
+        flex-wrap: wrap;
+    }
+
+    .navbar-tools {
+        flex-direction: row;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        margin-top: 0.4rem;
+        padding-top: 0.4rem;
+    }
+
+    .navbar-tools .nav-label {
+        display: inline;
+    }
+
+    .navbar .dropdown-menu {
+        margin: 0 0 0.4rem 0;
+        box-shadow: none;
+    }
+}
+
+.navbar .nav-link:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+}
