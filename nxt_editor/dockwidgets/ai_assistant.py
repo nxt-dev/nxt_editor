@@ -56,8 +56,8 @@ STYLE = '''
 #aiPanel QPlainTextEdit#aiInput { background: transparent; border: none;
     color: #e6e6e6; }
 #aiPanel QPushButton#aiChip { background: #262626; color: #9a9a9a;
-    border: 1px solid #3a3a3a; border-radius: 10px; padding: 2px 9px;
-    font-size: 11px; }
+    border: 1px solid #3a3a3a; border-radius: 10px; padding: 0px 9px;
+    min-height: 18px; font-size: 11px; }
 #aiPanel QPushButton#aiChip:hover { border-color: #5a5a5a;
     color: #c8c8c8; }
 #aiPanel QPushButton#aiChip:checked { background: #26344a;
