@@ -12,6 +12,7 @@ from Qt import QtCore, QtWidgets
 import nxt_editor
 from nxt_editor import user_dir
 from nxt_editor.ai import claude_code, providers, secret_store
+from nxt_editor.ai.memory_page import MemoryPage
 from nxt_editor.ai.workers import TaskThread
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -554,10 +555,14 @@ class AiSettingsDialog(QtWidgets.QDialog):
         self.store_label.setWordWrap(True)
         layout.addWidget(self.store_label)
 
-        self.body = QtWidgets.QWidget()
-        body_layout = QtWidgets.QVBoxLayout(self.body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.body)
+        self.body = QtWidgets.QTabWidget()
+        layout.addWidget(self.body, 1)
+        sign_ins = QtWidgets.QWidget()
+        body_layout = QtWidgets.QVBoxLayout(sign_ins)
+        self.body.addTab(sign_ins, 'Sign In')
+        self.memory_page = MemoryPage(prefs=self.prefs)
+        self.memory_page.changed.connect(self.settings_changed.emit)
+        self.body.addTab(self.memory_page, 'Memory')
         default_row = QtWidgets.QHBoxLayout()
         default_row.addWidget(QtWidgets.QLabel('Ask'))
         self.provider_combo = QtWidgets.QComboBox()
@@ -580,6 +585,7 @@ class AiSettingsDialog(QtWidgets.QDialog):
             box.changed.connect(self.settings_changed.emit)
             body_layout.addWidget(box)
             self.boxes.append(box)
+        body_layout.addStretch()
 
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)

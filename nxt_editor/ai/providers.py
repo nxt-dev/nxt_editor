@@ -6,6 +6,7 @@ in the operating system's secure store (see secret_store), everything
 else in the user prefs.
 """
 # Builtin
+import json
 import logging
 import os
 import threading
@@ -25,6 +26,37 @@ ENV = 'env'
 
 class AuthError(Exception):
     pass
+
+
+class ToolsUnsupported(Exception):
+    """The model can not use tools, so it is asked again without them."""
+
+
+# Rounds of tool use in one reply.
+MAX_TOOL_ROUNDS = 40
+
+
+class _Gap(object):
+    """Keeps text from before and after the tools are used apart."""
+
+    def __init__(self):
+        self.said = False
+        self.waiting = False
+
+    def text(self, text):
+        if not text:
+            return ''
+        before = '\n\n' if self.waiting and self.said else ''
+        self.waiting = False
+        self.said = True
+        return before + text
+
+    def after_tools(self):
+        self.waiting = True
+
+
+def _stopped(tools):
+    return tools is not None and tools.cancelled.is_set()
 
 
 class Auth(object):
@@ -240,11 +272,13 @@ class Provider(object):
             return self.model
         return models[0] if models else ''
 
-    def stream_chat(self, messages, system, model=None, auth=None):
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
         """Yield the reply a piece at a time.
 
         :param messages: [{'role': 'user' or 'assistant', 'content': str}]
         :param system: Instructions for the model.
+        :param tools: a tools.Toolbox the model may use, or None
         """
         raise NotImplementedError
 
@@ -327,34 +361,82 @@ class Anthropic(Provider):
                 return model_id
         return alias
 
-    def stream_chat(self, messages, system, model=None, auth=None):
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
         auth = self._require_auth(auth)
         if auth.kind == WEB:
+            # Claude Code gets the tools from the editor's MCP server.
             for text in claude_code.stream_chat(messages, system,
                                                 model=model or self.model,
-                                                cli=self.cli):
+                                                cli=self.cli, tools=tools):
                 yield text
             return
         model = model or self.model
         if model in claude_code.MODELS:
             model = self._newest(model, auth)
-        body = {'model': model, 'max_tokens': self.max_tokens,
-                'system': system, 'messages': messages, 'stream': True}
-        with web.request(self.API + '/messages', data=body,
-                         headers=self._headers(auth)) as response:
-            for event, data in web.iter_sse(response):
-                if not isinstance(data, dict):
-                    continue
-                kind = data.get('type', event)
-                if kind == 'content_block_delta':
-                    delta = data.get('delta', {})
-                    if delta.get('type') == 'text_delta':
-                        yield delta.get('text', '')
-                elif kind == 'error':
-                    raise web.WebError(data.get('error', {}).get(
-                        'message', 'Claude stopped with an error.'))
-                elif kind == 'message_stop':
-                    return
+        offered = tools.anthropic_tools() if tools is not None else []
+        convo = list(messages)
+        gap = _Gap()
+        for _ in range(MAX_TOOL_ROUNDS):
+            body = {'model': model, 'max_tokens': self.max_tokens,
+                    'system': system, 'messages': convo, 'stream': True}
+            if offered:
+                body['tools'] = offered
+            blocks = {}
+            stop_reason = None
+            with web.request(self.API + '/messages', data=body,
+                             headers=self._headers(auth)) as response:
+                for event, data in web.iter_sse(response):
+                    if not isinstance(data, dict):
+                        continue
+                    kind = data.get('type', event)
+                    if kind == 'content_block_start':
+                        block = dict(data.get('content_block') or {})
+                        block['partial'] = ''
+                        blocks[data.get('index', len(blocks))] = block
+                    elif kind == 'content_block_delta':
+                        delta = data.get('delta', {})
+                        block = blocks.setdefault(
+                            data.get('index', 0),
+                            {'type': 'text', 'text': '', 'partial': ''})
+                        if delta.get('type') == 'text_delta':
+                            text = delta.get('text', '')
+                            block['text'] = block.get('text', '') + text
+                            yield gap.text(text)
+                        elif delta.get('type') == 'input_json_delta':
+                            block['partial'] += delta.get('partial_json',
+                                                          '')
+                    elif kind == 'message_delta':
+                        stop_reason = (data.get('delta') or {}).get(
+                            'stop_reason', stop_reason)
+                    elif kind == 'error':
+                        raise web.WebError(data.get('error', {}).get(
+                            'message', 'Claude stopped with an error.'))
+                    elif kind == 'message_stop':
+                        break
+            if stop_reason != 'tool_use' or not offered or _stopped(tools):
+                return
+            said, results = [], []
+            for index in sorted(blocks):
+                block = blocks[index]
+                if block.get('type') == 'text' and block.get('text'):
+                    said.append({'type': 'text', 'text': block['text']})
+                elif block.get('type') == 'tool_use':
+                    try:
+                        args = json.loads(block['partial'] or '{}')
+                    except ValueError:
+                        args = {}
+                    said.append({'type': 'tool_use', 'id': block['id'],
+                                 'name': block['name'], 'input': args})
+                    text, failed = tools.call(block['name'], args)
+                    results.append({'type': 'tool_result',
+                                    'tool_use_id': block['id'],
+                                    'content': text, 'is_error': failed})
+            if not results:
+                return
+            convo += [{'role': 'assistant', 'content': said},
+                      {'role': 'user', 'content': results}]
+            gap.after_tools()
 
 
 class OpenAI(Provider):
@@ -412,31 +494,64 @@ class OpenAI(Provider):
                   if not any(s in m['id'] for s in self.SKIP)]
         return self._newest_first(models)
 
-    def stream_chat(self, messages, system, model=None, auth=None):
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
         auth = self._require_auth(auth)
-        # A ChatGPT plan needs stream on and store off; both suit an API
-        # key as well.
-        body = {'model': model or self.model, 'instructions': system,
-                'input': messages, 'stream': True, 'store': False}
-        with web.request(self.API + '/responses', data=body,
-                         headers=self._headers(auth)) as response:
-            for event, data in web.iter_sse(response):
-                if not isinstance(data, dict):
-                    continue
-                kind = data.get('type', event)
-                if kind == 'response.output_text.delta':
-                    yield data.get('delta', '')
-                elif kind == 'response.failed':
-                    error = (data.get('response') or {}).get('error') or {}
-                    raise web.WebError(error.get('message') or
-                                       'OpenAI stopped with an error.',
-                                       code=error.get('code'))
-                elif kind == 'error':
-                    raise web.WebError(data.get('message') or
-                                       'OpenAI stopped with an error.',
-                                       code=data.get('code'))
-                elif kind == 'response.completed':
-                    return
+        offered = tools.responses_tools() if tools is not None else []
+        convo = list(messages)
+        gap = _Gap()
+        for _ in range(MAX_TOOL_ROUNDS):
+            # A ChatGPT plan needs stream on and store off; both suit an
+            # API key as well.
+            body = {'model': model or self.model, 'instructions': system,
+                    'input': convo, 'stream': True, 'store': False}
+            if offered:
+                body['tools'] = offered
+            items = []
+            with web.request(self.API + '/responses', data=body,
+                             headers=self._headers(auth)) as response:
+                for event, data in web.iter_sse(response):
+                    if not isinstance(data, dict):
+                        continue
+                    kind = data.get('type', event)
+                    if kind == 'response.output_text.delta':
+                        yield gap.text(data.get('delta', ''))
+                    elif kind == 'response.output_item.done':
+                        items.append(data.get('item') or {})
+                    elif kind == 'response.failed':
+                        error = (data.get('response') or {}).get(
+                            'error') or {}
+                        raise web.WebError(error.get('message') or
+                                           'OpenAI stopped with an error.',
+                                           code=error.get('code'))
+                    elif kind == 'error':
+                        raise web.WebError(data.get('message') or
+                                           'OpenAI stopped with an error.',
+                                           code=data.get('code'))
+                    elif kind == 'response.completed':
+                        break
+            calls = [i for i in items if i.get('type') == 'function_call']
+            if not calls or not offered or _stopped(tools):
+                return
+            # Nothing is stored, so what it said goes back with the
+            # answers, without the ids of items that were never kept.
+            for item in items:
+                if item.get('type') == 'message':
+                    convo.append({'type': 'message', 'role': 'assistant',
+                                  'content': item.get('content') or []})
+                elif item.get('type') == 'function_call':
+                    convo.append({'type': 'function_call',
+                                  'call_id': item.get('call_id'),
+                                  'name': item.get('name'),
+                                  'arguments': item.get('arguments') or
+                                  '{}'})
+            for call in calls:
+                text, _failed = tools.call(call.get('name'),
+                                           call.get('arguments') or '{}')
+                convo.append({'type': 'function_call_output',
+                              'call_id': call.get('call_id'),
+                              'output': text})
+            gap.after_tools()
 
 
 class XAI(Provider):
@@ -469,38 +584,84 @@ class XAI(Provider):
                   if 'image' not in m['id'] and 'video' not in m['id']]
         return self._newest_first(models)
 
-    def stream_chat(self, messages, system, model=None, auth=None):
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
         auth = self._require_auth(auth)
         for text in stream_chat_completions(
                 self.API, self._headers(auth), model or self.model,
-                messages, system, self.label):
+                messages, system, self.label, tools=tools):
             yield text
 
 
 def stream_chat_completions(api, headers, model, messages, system, label,
-                            timeout=web.TIMEOUT):
+                            timeout=web.TIMEOUT, tools=None):
     """Stream from an OpenAI style /chat/completions, which xAI and every
     local server speak."""
-    body = {'model': model, 'stream': True,
-            'messages': [{'role': 'system', 'content': system}] +
-            list(messages)}
-    with web.request(api + '/chat/completions', data=body, headers=headers,
-                     timeout=timeout) as response:
-        for event, data in web.iter_sse(response):
-            if data == '[DONE]':
-                return
-            if not isinstance(data, dict):
-                continue
-            if data.get('error'):
-                error = data['error']
-                message = (error.get('message') if isinstance(error, dict)
-                           else str(error))
-                raise web.WebError(message or '{} stopped with an '
-                                   'error.'.format(label))
-            for choice in data.get('choices', []):
-                text = (choice.get('delta') or {}).get('content')
-                if text:
-                    yield text
+    offered = tools.chat_completions_tools() if tools is not None else []
+    convo = [{'role': 'system', 'content': system}] + list(messages)
+    gap = _Gap()
+    for round_number in range(MAX_TOOL_ROUNDS):
+        body = {'model': model, 'stream': True, 'messages': convo}
+        if offered:
+            body['tools'] = offered
+        said = ''
+        calls = {}
+        try:
+            with web.request(api + '/chat/completions', data=body,
+                             headers=headers, timeout=timeout) as response:
+                for event, data in web.iter_sse(response):
+                    if data == '[DONE]':
+                        break
+                    if not isinstance(data, dict):
+                        continue
+                    if data.get('error'):
+                        error = data['error']
+                        message = (error.get('message')
+                                   if isinstance(error, dict)
+                                   else str(error))
+                        raise web.WebError(message or '{} stopped with an '
+                                           'error.'.format(label))
+                    for choice in data.get('choices', []):
+                        delta = choice.get('delta') or {}
+                        text = delta.get('content')
+                        if text:
+                            said += text
+                            yield gap.text(text)
+                        for piece in delta.get('tool_calls') or []:
+                            call = calls.setdefault(
+                                piece.get('index', len(calls)),
+                                {'id': None, 'name': '', 'arguments': ''})
+                            call['id'] = piece.get('id') or call['id']
+                            function = piece.get('function') or {}
+                            call['name'] += function.get('name') or ''
+                            call['arguments'] += (function.get('arguments')
+                                                  or '')
+        except web.WebError as err:
+            if (offered and round_number == 0 and not said and
+                    err.status in (400, 404, 422) and
+                    'tool' in str(err).lower()):
+                raise ToolsUnsupported(str(err))
+            raise
+        if not calls or not offered or _stopped(tools):
+            return
+        listed = []
+        for index in sorted(calls):
+            call = calls[index]
+            call['id'] = call['id'] or 'call_{}_{}'.format(round_number,
+                                                           index)
+            listed.append(call)
+        convo.append({'role': 'assistant', 'content': said or None,
+                      'tool_calls': [
+                          {'id': c['id'], 'type': 'function',
+                           'function': {'name': c['name'],
+                                        'arguments': c['arguments'] or
+                                        '{}'}} for c in listed]})
+        for call in listed:
+            text, _failed = tools.call(call['name'],
+                                       call['arguments'] or '{}')
+            convo.append({'role': 'tool', 'tool_call_id': call['id'],
+                          'content': text})
+        gap.after_tools()
 
 
 class Local(Provider):
@@ -569,11 +730,13 @@ class Local(Provider):
                             headers=self._headers(auth), timeout=10)
         return [m['id'] for m in data.get('data', [])]
 
-    def stream_chat(self, messages, system, model=None, auth=None):
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
         auth = self._require_auth(auth)
         for text in stream_chat_completions(
                 self.base_url, self._headers(auth), model or self.model,
-                messages, system, self.label, timeout=self.TIMEOUT):
+                messages, system, self.label, timeout=self.TIMEOUT,
+                tools=tools):
             yield text
 
     @classmethod

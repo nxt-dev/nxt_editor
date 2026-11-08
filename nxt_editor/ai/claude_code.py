@@ -22,6 +22,7 @@ import time
 # Internal
 import nxt_editor
 from nxt_editor import user_dir
+from nxt_editor.ai import mcp_server
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -31,6 +32,8 @@ MODELS = ['opus', 'sonnet', 'fable', 'haiku']
 PLANS = {'pro': 'Pro', 'max': 'Max', 'ultra': 'Ultra', 'team': 'Team',
          'enterprise': 'Enterprise'}
 STATUS_LIFE = 30
+# Rounds of tool use in one reply.
+MAX_TURNS = 40
 _NO_WINDOW = 0x08000000 if sys.platform == 'win32' else 0
 
 
@@ -238,20 +241,36 @@ def _work_dir():
     return path
 
 
-def stream_chat(messages, system, model=None, cli=None):
-    """Yield Claude's reply a piece at a time, from claude -p."""
+def stream_chat(messages, system, model=None, cli=None, tools=None):
+    """Yield Claude's reply a piece at a time, from claude -p.
+
+    :param tools: a tools.Toolbox. Its tools are served to Claude Code by
+        the editor's MCP server, and are the only tools it gets.
+    """
     cli = cli or find_cli()
     if not cli:
         raise ClaudeCodeError('Claude Code is not installed.')
     handle, system_file = tempfile.mkstemp(prefix='nxt_ai_', suffix='.txt')
     with os.fdopen(handle, 'w', encoding='utf-8') as f:
         f.write(system)
+    # None of Claude Code's own tools, and no MCP servers but the editor's.
     args = [cli, '-p', '--output-format', 'stream-json', '--verbose',
             '--include-partial-messages', '--system-prompt-file',
             system_file, '--tools', '', '--no-session-persistence',
             '--strict-mcp-config', '--disable-slash-commands']
     if model:
         args += ['--model', model]
+    server = token = config_file = None
+    if tools is not None and tools.available():
+        server = mcp_server.server()
+        token = server.open(tools)
+        handle, config_file = tempfile.mkstemp(prefix='nxt_mcp_',
+                                               suffix='.json')
+        with os.fdopen(handle, 'w', encoding='utf-8') as f:
+            json.dump(server.config(token), f)
+        args += ['--mcp-config', config_file,
+                 '--allowedTools', 'mcp__' + mcp_server.NAME,
+                 '--max-turns', str(MAX_TURNS)]
     process = None
     try:
         process = subprocess.Popen(args, stdin=subprocess.PIPE,
@@ -262,6 +281,8 @@ def stream_chat(messages, system, model=None, cli=None):
         process.stdin.write(as_prompt(messages).encode('utf-8'))
         process.stdin.close()
         streamed = False
+        # Text from before and after a tool is used, kept apart.
+        gap = False
         for raw in process.stdout:
             try:
                 data = json.loads(raw.decode('utf-8'))
@@ -271,8 +292,13 @@ def stream_chat(messages, system, model=None, cli=None):
             if kind == 'stream_event':
                 event = data.get('event', {})
                 delta = event.get('delta', {})
-                if (event.get('type') == 'content_block_delta' and
+                if event.get('type') == 'message_start' and streamed:
+                    gap = True
+                elif (event.get('type') == 'content_block_delta' and
                         delta.get('type') == 'text_delta'):
+                    if gap:
+                        gap = False
+                        yield '\n\n'
                     streamed = True
                     yield delta.get('text', '')
             elif kind == 'result':
@@ -290,7 +316,11 @@ def stream_chat(messages, system, model=None, cli=None):
     finally:
         if process is not None and process.poll() is None:
             process.kill()
-        try:
-            os.remove(system_file)
-        except OSError:
-            pass
+        if token:
+            server.close(token)
+        for path in (system_file, config_file):
+            if path:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass

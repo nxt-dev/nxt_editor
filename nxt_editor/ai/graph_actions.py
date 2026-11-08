@@ -35,6 +35,12 @@ the editor applies it straight away. Never say you wrote or saved a file.
 ```
 
 Actions (paths are absolute node paths such as /parent/child):
+{reference}
+Give only the block for the changes the user asked for, and a short
+sentence saying what you changed.
+'''
+
+ACTION_REFERENCE = '''
 - add_node: path, and optionally code, attrs (an object), comment,
   instance (path of the node to inherit from), exec_in (path that runs
   before it, top level nodes only), start_point (true or false), enabled.
@@ -70,15 +76,19 @@ Actions (paths are absolute node paths such as /parent/child):
 
 Changes go on the target layer unless an action gives "layer" (an alias).
 Attribute values are strings, numbers, lists or objects. Code is Python,
-reading attributes as self.name. Give only the block for the changes the
-user asked for, and a short sentence saying what you changed.
+reading attributes as self.name.
 '''
 
 _BLOCK = re.compile(r'```' + FENCE + r'[ \t]*\n(.*?)```', re.S)
 
 
+def action_reference():
+    """What each action does and needs, for the block and the tools."""
+    return ACTION_REFERENCE.strip()
+
+
 def instructions():
-    return INSTRUCTIONS.strip()
+    return INSTRUCTIONS.strip().replace('{reference}', action_reference())
 
 
 def find_actions(text):
@@ -553,3 +563,6 @@ class Applier(object):
             raise ActionError('{} can not be the target, it may be '
                               'locked'.format(wanted))
         return 'Target layer is now {}'.format(layer.get_alias())
+
+
+ACTIONS = sorted(name[3:] for name in dir(Applier) if name.startswith('do_'))
