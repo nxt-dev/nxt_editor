@@ -1,7 +1,26 @@
 # What's New
 
-This page summarises what is new in **nxt_editor 4.4** and **nxt_core 0.21**.
-Each item links to the part of the docs that explains it in full.
+This page summarises what is new in **nxt_editor 4.5**, **nxt_editor 4.4**
+and **nxt_core 0.21**. Each item links to the part of the docs that explains
+it in full.
+
+## nxt_editor 4.5.0
+
+- **[AI Assistant](reference.md#ai-assistant)**, an opt in panel to chat with
+  Claude, OpenAI, Grok or a local model about the open graph. It looks over,
+  searches, changes and runs the graph with tools, and shows each step it
+  takes. Every chat is kept, to go back to, pin or delete.
+- **The editor looks the same in Maya as it does on its own.** The workflow
+  buttons, tabs and panels lost their styling in a host.
+- **Every change to a layer shows on it as it happens.** Taking something off
+  a node, such as a local attribute, now marks the layer as changed in the
+  Layer Manager too.
+- **Stop puts the build back.** Stopping a build no longer empties the build
+  list or leaves the editor looking like it is still running, and in Maya
+  the next node no longer runs after Stop.
+- **Saving a layer no longer fails on a damaged editor cache** ("Ran out of
+  input"). The editor's prefs and cache are written whole, and one that can
+  not be read is put right on the next save.
 
 ## nxt_editor 4.4.2
 

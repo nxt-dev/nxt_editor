@@ -354,6 +354,71 @@ restart it.
   does not know about (a node was moved, renamed or deleted), the cache is
   cleared and rebuilt when the build is set up, before anything runs, and
   the Output Log says so.
+- **Stop** ends the build once the node that is running finishes, whether
+  the build was running or being stepped, and puts the start point and the
+  build list back.
+
+## AI Assistant
+
+The AI Assistant is off until it is turned on in **Options > AI Assistant**,
+where you sign in to Claude, OpenAI or Grok, add an API key, or point it at a
+local model server (Ollama, LM Studio, llama.cpp, vLLM or Jan). Once it is on,
+**Window > AI Assistant** opens the panel. Nothing is sent to a provider
+until you ask it something. Keys and sign ins are kept in the operating
+system's secure store.
+
+A Claude account is used through the Claude Code app, which signs in itself,
+so the editor never sees its token.
+
+### Chats
+
+Every chat is kept, so **New Chat** does not lose the last one. The list at
+the top of the panel goes back to any of them; right click a chat to pin it
+to the top or delete it. Each message shows when it was sent, with the day
+wherever it changes. Chats are saved in the editor's prefs folder, on this
+computer only.
+
+### What it can do
+
+The assistant uses tools to look at the graph rather than guessing: it can
+look over the layers and nodes, read a node's attributes and code, search,
+check the build order, find problems and read the Output Log. It selects
+nodes to show you what it means. Each step it takes is listed in its reply as
+it works.
+
+Three toggles under the message box decide the rest:
+
+- **Selection** sends the selected nodes with your message.
+- **Edit graph** lets it make, change and delete nodes, hierarchies, code,
+  attributes and layers. All the changes in one reply are one undo step, so
+  `Ctrl+Z` takes them back.
+- **Run code** lets it run nodes, builds and snippets of Python, in the
+  editor or the host, to test its work and read what they print. It is off
+  until you turn it on.
+
+With a Claude sign in the tools are served to Claude Code by the editor's own
+MCP server, on this computer only, with a new key for every reply. The other
+providers use the same tools through their own tool calling. A model that
+can not use tools answers without them.
+
+### Reading code and imports
+
+The assistant can read code on this computer. The open graph's folder is
+free to read; before it reads anywhere else it asks, saying why, and you can
+**Allow** it for the chat, **Always allow** it, or **Deny** it.
+
+It can also inspect the modules a graph imports: where each is found, what
+functions and classes it has and their arguments, or one of them in full.
+Modules are read as source, without being imported, so their code is not
+run; one that is already imported, such as `maya.cmds` in Maya, is looked at
+as it is.
+
+### Memory
+
+Ask the assistant to remember something and it saves a short note. Notes
+are sent at the start of every chat. **Options > AI Assistant > Memory**
+lists them, and the folders it can always read with what each holds, to
+change or remove.
 
 ## Property Editor, History View, Output Log and Workflow Tools
 
