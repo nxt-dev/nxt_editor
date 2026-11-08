@@ -100,6 +100,9 @@ class StageModel(QtCore.QObject):
         self._build_paused = False
         self._build_should_pause = False
         self._build_should_stop = False
+        # True while a node is running. Stepping runs a node with the
+        # build paused, so paused alone does not mean nothing is running.
+        self._running_node = False
         self._last_built_idx = None
         self.current_rt_layer = None
         self.framing_behavior = EXEC_FRAMING.STEPPING
@@ -3177,17 +3180,24 @@ class StageModel(QtCore.QObject):
 
     def _execute_node(self, node_path):
         t = ExecuteNodeThread(self, node_path)
-        if self.is_standalone:
-            self.processing.emit(True)
-            t.start()
-            while not t.isFinished():
+        self._running_node = True
+        try:
+            if self.is_standalone:
+                self.processing.emit(True)
+                t.start()
+                while not t.isFinished():
+                    self.process_events()
+                self.processing.emit(False)
+            else:
+                # DCCs aren't thread safe, we need to get attached working so
+                # we can know we're in a thread safe environment.
+                t._run()
                 self.process_events()
-            self.processing.emit(False)
-        else:
-            # DCCs aren't thread safe, we need to get attached working so we
-            # can know we're in a thread safe environment.
-            t._run()
-            self.process_events()
+        finally:
+            self._running_node = False
+        if self._build_should_stop and not t.raised_exception:
+            # Stop was pressed while the node ran, after it last looked.
+            raise BuildStop
         if t.raised_exception:
             if isinstance(t.raised_exception, InvalidNodeError):
                 details = ("A build runs against the graph as it was when "
@@ -3506,9 +3516,13 @@ class StageModel(QtCore.QObject):
     def stop_build(self):
         if not self.executing:
             return
-        if self.build_paused:
+        if self.build_paused and not self._running_node:
             self.finish_build()
         else:
+            # A node is running, stepped or not. Ending the build under it
+            # put the build view back while the node carried on, and the
+            # step finishing it again afterwards emptied the build list.
+            # The build stops once the node is done.
             self._build_should_stop = True
 
     def _set_executing(self, executing):
@@ -3520,6 +3534,10 @@ class StageModel(QtCore.QObject):
         self.executing_changed.emit(self._executing)
 
     def finish_build(self, verbose=True):
+        if not self.executing and self.current_build_order is None:
+            # Already finished. Telling the views again would empty the
+            # build list they have just put back.
+            return
         build_seconds = round(time.time() - self.build_start_time)
         if verbose:
             logger.execinfo("Build exec time: "
