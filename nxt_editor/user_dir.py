@@ -12,6 +12,7 @@ import json
 import logging
 import shutil
 import sys
+import time
 
 if sys.version_info[0] == 2:
     import cPickle as pickle
@@ -34,6 +35,59 @@ HOTKEYS_PREF = os.path.join(PREF_DIR, 'hotkeys.json')
 MAX_RECENT_FILES = 10
 JSON_PREFS = [USER_PREFS_PATH, BREAKPOINT_FILE, SKIPPOINT_FILE, HOTKEYS_PREF]
 broken_files = {}
+# Errors a half written or damaged pickle can raise while loading.
+PICKLE_LOAD_ERRORS = (pickle.UnpicklingError, EOFError, ValueError,
+                      TypeError, AttributeError, ImportError, IndexError,
+                      KeyError)
+
+
+def write_whole_file(path, mode, dump):
+    """Write a file so that a reader only ever sees all of it.
+
+    Writing straight to `path` empties it first, so another editor (Maya
+    and standalone share these files) reading at that moment, or a write
+    that fails part way, would find an empty or broken file. `dump` writes
+    to a temporary file next to it, which then replaces `path` in one go.
+
+    :param path: the file to write
+    :param mode: the mode to open the file in, such as 'w' or 'wb'
+    :param dump: called with the open file to write the contents
+    :return: True if `path` was replaced
+    """
+    tmp = '{}.{}.tmp'.format(path, os.getpid())
+    try:
+        with open(tmp, mode) as fp:
+            dump(fp)
+            fp.flush()
+            os.fsync(fp.fileno())
+        # Windows will not replace a file someone else is reading this very
+        # moment, so give them a moment to finish.
+        for attempt in range(20):
+            try:
+                os.replace(tmp, path)
+                return True
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.05)
+    except Exception as err:
+        logger.warning('Could not write "{}": {}'.format(path, err))
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+    return False
+
+
+def warn_broken(path, message):
+    broken_files.setdefault(path, 0)
+    times_hit = broken_files[path]
+    if times_hit < 3:
+        warning = ''
+        if times_hit == 2:
+            warning = "(I'll stop nagging now)"
+        logger.error('{} {}'.format(message, warning).strip())
+    broken_files[path] = times_hit + 1
 
 
 # Make sure the user dir is setup
@@ -259,12 +313,13 @@ class JsonPref(PrefFile):
     def write(self):
         out = {}
         out.update(self)
-        with open(self.path, 'w+') as fp:
-            json.dump(out, fp, indent=4, sort_keys=False,
-                      separators=(',', ': '))
+        write_whole_file(self.path, 'w',
+                         lambda fp: json.dump(out, fp, indent=4,
+                                              sort_keys=False,
+                                              separators=(',', ': ')))
+        self._stamp = None
 
     def read(self):
-        contents = {}
         stamp = self.file_stamp()
         if stamp is None:
             return
@@ -273,17 +328,12 @@ class JsonPref(PrefFile):
         try:
             with open(self.path, 'r') as fp:
                 contents = json.load(fp)
-        except self.json_decode_err:
-            broken_files.setdefault(self.path, 0)
-            times_hit = broken_files[self.path]
-            if times_hit < 3:
-                warning = ''
-                if times_hit == 2:
-                    warning = "(I'll stop nagging now)"
-                logger.error('Invalid json file "{}", please fix by hand or '
-                             'delete it. {}'.format(self.path, warning))
-            times_hit += 1
-            broken_files[self.path] = times_hit
+        except (self.json_decode_err, OSError):
+            # Keep what we have, the next write puts the file right.
+            warn_broken(self.path, 'Invalid json file "{}", please fix by '
+                                   'hand or delete it.'.format(self.path))
+            self._stamp = stamp
+            return
         self.clear()
         self.update(contents)
         self._stamp = stamp
@@ -293,37 +343,36 @@ class PicklePref(PrefFile):
     def write(self):
         out = {}
         out.update(self)
-        with open(self.path, 'wb+') as fp:
-            pickle.dump(out, fp, protocol=2)
+        write_whole_file(self.path, 'wb',
+                         lambda fp: pickle.dump(out, fp, protocol=2))
+        self._stamp = None
 
     def read(self):
-        contents = {}
         stamp = self.file_stamp()
         if stamp is None:
             return
         if stamp == self._stamp:
             return
         try:
-            with open(self.path, 'r+b') as fp:
+            with open(self.path, 'rb') as fp:
                 contents = pickle.load(fp, encoding='bytes')
         except ModuleNotFoundError as e:
             if 'PySide2' in e.msg:
                 shutil.move(self.path, self.path + '.backup')
-        except pickle.UnpicklingError:
-            broken_files.setdefault(self.path, 0)
-            times_hit = broken_files[self.path]
-            if times_hit < 3:
-                warning = ''
-                if times_hit == 2:
-                    warning = "(I'll stop nagging now)"
-                logger.error('Failed to load pickle pref "{}", probably '
-                             'changed interpreter versions. {}'
-                             ''.format(os.path.basename(self.path), warning))
-            times_hit += 1
-            broken_files[self.path] = times_hit
+            contents = {}
+        except (OSError,) + PICKLE_LOAD_ERRORS:
+            # An empty or broken cache, from a write that never finished.
+            # Keep what we have, the next write puts the file right.
+            warn_broken(self.path, 'Failed to load pickle pref "{}", it may '
+                                   'be damaged or from another interpreter.'
+                                   ''.format(os.path.basename(self.path)))
+            self._stamp = stamp
+            return
+        if not isinstance(contents, dict):
+            contents = {}
         self.clear()
         self.update(contents)
-        self._stamp = self.file_stamp()
+        self._stamp = stamp
 
 
 class PrefHandler(object):
