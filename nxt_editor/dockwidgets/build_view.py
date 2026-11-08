@@ -243,7 +243,8 @@ class BuildView(DockWidgetBase):
             (model.comp_layer_changed, self.on_disp_layer_changed),
             (model.node_focus_changed, self.on_model_focus_changed),
             (model.executing_changed, self.on_executing_changed),
-            (model.build_paused_changed, self.on_pause_change)
+            (model.build_paused_changed, self.on_pause_change),
+            (model.build_changed, self.on_build_changed)
         ]
         super(BuildView, self).set_stage_model_connections(model, connect)
 
@@ -272,13 +273,18 @@ class BuildView(DockWidgetBase):
         self.starts_combo.setEnabled(not self.in_running_mode)
         if self.in_running_mode:
             self.restart_button.setEnabled(True)
-            self.pre_exec_start = self.starts_combo.currentText()
+            current = self.starts_combo.currentText()
+            # Never go back to "Running" once the build is over.
+            if current != STARTS.RUNNING:
+                self.pre_exec_start = current
             self.starts_combo.setEditText(STARTS.RUNNING)
-            self.stage_model.build_changed.connect(self.on_build_changed)
         else:
             self.restart_button.setEnabled(False)
             self.pause_resume_button.clearFocus()
             self.starts_combo.setEditText(self.pre_exec_start)
+            # Setting the same text again is not a change, so the build
+            # list is put back here rather than left to the combo box.
+            self.refresh_build_table()
 
     def on_stage_model_destroyed(self):
         super(BuildView, self).on_stage_model_destroyed()
@@ -293,7 +299,12 @@ class BuildView(DockWidgetBase):
         self.refresh_build_table()
 
     def on_build_changed(self, new_build):
-        self.build_model.nodes = new_build
+        # Only a running build is shown from the model. Once it is over the
+        # list is the start box's again, and a finished build telling us
+        # its list is now empty must not wipe it.
+        if not self.in_running_mode or not self.build_model:
+            return
+        self.build_model.nodes = list(new_build)
 
     def refresh_build_table(self):
         """Dump current build table is and rebuild it based on start combo.

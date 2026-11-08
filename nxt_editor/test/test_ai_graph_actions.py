@@ -306,9 +306,11 @@ class ReplyingProvider(providers.Provider):
     def list_models(self, auth=None):
         return ['test-model']
 
-    def stream_chat(self, messages, system, model=None, auth=None):
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
         self.sent = messages
         self.system = system
+        self.tools = tools
         yield self.reply
 
 
@@ -364,10 +366,32 @@ class ThePanelChangesTheGraph(GraphTestCase):
         self.assertIn('Made /rig/arm/hand', shown)
         self.assertNotIn('nxt-actions', shown)
 
-    def test_it_is_told_how_and_what_is_there(self):
+    def test_it_is_given_the_tools(self):
         self.ask('Make a rig', 'ok')
-        self.assertIn('nxt-actions', self.fake.system)
-        self.assertIn('/existing', self.fake.sent[-1]['content'])
+        self.assertIn('change_graph', self.fake.system)
+        self.assertNotIn('nxt-actions', self.fake.system)
+        self.assertIn('change_graph',
+                      [t.name for t in self.fake.tools.available()])
+
+    def test_without_tools_it_is_told_how_and_what_is_there(self):
+        asked = []
+
+        def no_tools(messages, system, model=None, auth=None, tools=None):
+            asked.append((system, tools))
+            if tools is not None:
+                raise providers.ToolsUnsupported('model does not support '
+                                                 'tools')
+            yield 'ok'
+
+        self.fake.stream_chat = no_tools
+        self.ask('Make a rig', 'ok')
+        self.assertEqual(2, len(asked))
+        system, offered = asked[1]
+        self.assertIsNone(offered)
+        self.assertIn('nxt-actions', system)
+        self.assertIn('/existing', system)
+        self.assertIn('can not use tools',
+                      self.panel.transcript.toPlainText())
 
     def test_with_changes_off_nothing_changes(self):
         self.panel.edit_check.setChecked(False)
@@ -376,8 +400,7 @@ class ThePanelChangesTheGraph(GraphTestCase):
             {'action': 'add_node', 'path': '/rig'}))
         self.assertNotIn('/rig', self.nodes())
         self.assertNotIn('nxt-actions', self.fake.system)
-        self.assertIn('Let it change the graph',
-                      self.panel.transcript.toPlainText())
+        self.assertIn('Edit graph', self.panel.transcript.toPlainText())
 
     def test_what_could_not_be_done_is_shown(self):
         self.ask('Change it', block(

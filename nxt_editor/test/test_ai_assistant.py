@@ -754,7 +754,8 @@ class FakeProvider(providers.Provider):
     def list_models(self, auth=None):
         return ['claude-test', 'claude-other']
 
-    def stream_chat(self, messages, system, model=None, auth=None):
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
         self.sent = messages
         for part in self.reply:
             yield part

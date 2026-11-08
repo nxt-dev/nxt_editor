@@ -1,11 +1,13 @@
 """Turn the chat into HTML for the AI Assistant panel.
 
-Each message gets its own colored block, labeled with who wrote it. Replies
+Each message gets its own colored block, labeled with who wrote it and when,
+with the day shown wherever it changes, as chat apps do. Replies
 are Markdown: headings, lists, quotes, links, bold, italics and inline code
 are shown as such, and fenced code is colored the way the code editor
 colors it. Plain Python only, so nothing is needed in any host.
 """
 # Builtin
+import datetime
 import html
 import io
 import keyword
@@ -38,7 +40,16 @@ COLORS = {
     'note': '#c9b26d',
     'number': '#d19a66',
     'json_key': '#8fb8ff',
+    'time': '#8a8a8a',
+    'activity': '#a8a8a8',
+    'read': '#6fb3ff',
+    'show': '#c79bdb',
+    'edit': '#7fd18b',
+    'run': '#e3a35f',
+    'memory': '#e8c96b',
 }
+# Steps shown in a reply before the earlier ones are counted instead.
+MOST_STEPS = 8
 
 
 def _style(name):
@@ -301,12 +312,62 @@ def markdown(text):
     return ''.join(out)
 
 
-def _block(name, name_color, background, body):
+def clock(when):
+    """The time of day of `when` (seconds since the epoch), as 3:42 PM."""
+    stamp = datetime.datetime.fromtimestamp(when)
+    return '{}:{:02d} {}'.format(stamp.hour % 12 or 12, stamp.minute,
+                                 'AM' if stamp.hour < 12 else 'PM')
+
+
+def day_name(when, now=None):
+    """Today, Yesterday, or the date, with the year if it is not this one."""
+    day = datetime.datetime.fromtimestamp(when).date()
+    today = (now or datetime.datetime.now()).date()
+    if day == today:
+        return 'Today'
+    if day == today - datetime.timedelta(days=1):
+        return 'Yesterday'
+    text = '{}, {} {}'.format(day.strftime('%A'), day.strftime('%B'),
+                              day.day)
+    if day.year != today.year:
+        text += ', {}'.format(day.year)
+    return text
+
+
+def short_when(when, now=None):
+    """When a chat was last used, short enough for the list of chats."""
+    day = datetime.datetime.fromtimestamp(when).date()
+    today = (now or datetime.datetime.now()).date()
+    if day == today:
+        return clock(when)
+    if day == today - datetime.timedelta(days=1):
+        return 'Yesterday'
+    if today - day < datetime.timedelta(days=7):
+        return day.strftime('%A')
+    text = '{} {}'.format(day.strftime('%b'), day.day)
+    if day.year != today.year:
+        text += ', {}'.format(day.year)
+    return text
+
+
+def day_html(when):
+    """The line between messages where the day changes."""
+    return ('<p align="center" style="color:{}; font-size:small; '
+            'margin:4px 0 8px 0">{}</p>').format(COLORS['time'],
+                                                  html.escape(day_name(when)))
+
+
+def _block(name, name_color, background, body, when=None):
+    stamp = ''
+    if when:
+        stamp = ('&nbsp;&nbsp;<span style="color:{}; font-weight:normal">'
+                 '{}</span>').format(COLORS['time'], clock(when))
     return ('<table width="100%" cellpadding="8" cellspacing="0" '
             'style="background-color:{}; margin-bottom:8px"><tr><td>'
-            '<div style="color:{}; font-weight:bold; font-size:small">{}</div>'
-            '{}</td></tr></table>').format(background, name_color,
-                                           html.escape(name), body)
+            '<div style="color:{}; font-weight:bold; font-size:small">{}{}'
+            '</div>{}</td></tr></table>').format(background, name_color,
+                                                 html.escape(name), stamp,
+                                                 body)
 
 
 def changes_html(message):
@@ -330,11 +391,58 @@ def changes_html(message):
     return ''.join(parts)
 
 
-def user_html(text):
+def user_html(text, when=None):
     return _block('You', COLORS['user_name'], COLORS['user_bg'],
-                  markdown(text))
+                  markdown(text), when)
 
 
-def reply_html(name, text, changes=''):
+def activity_html(steps):
+    """What the assistant did with its tools: a line for each step, with a
+    dot colored by what kind of step it was."""
+    if not steps:
+        return ''
+    rows = []
+    hidden = len(steps) - MOST_STEPS
+    if hidden > 0:
+        rows.append(('', COLORS['time'], '{} earlier step{}'.format(
+            hidden, '' if hidden == 1 else 's'), ''))
+        steps = steps[-MOST_STEPS:]
+    for step in steps:
+        state = step.get('state')
+        label = step.get('label') or step.get('name') or ''
+        color = COLORS.get(step.get('kind'), COLORS['read'])
+        if state == 'running':
+            rows.append(('○', color, label + '...', ''))
+        elif state == 'failed':
+            rows.append(('✕', COLORS['failed_name'], label,
+                         step.get('detail') or ''))
+        elif state == 'note':
+            rows.append(('•', COLORS['note'], label, ''))
+        else:
+            rows.append(('●', color, label, ''))
+    html_rows = []
+    for mark, color, label, detail in rows:
+        if detail:
+            label = '{} <span style="color:{}">— {}</span>'.format(
+                html.escape(label), COLORS['failed_name'],
+                html.escape(detail[:200]))
+        else:
+            label = html.escape(label)
+        html_rows.append(
+            '<tr><td width="14" style="color:{}">{}</td>'
+            '<td style="color:{}">{}</td></tr>'.format(
+                color, mark, COLORS['activity'], label))
+    return ('<table cellpadding="1" cellspacing="0" style="font-size:small; '
+            'margin-bottom:6px">{}</table>').format(''.join(html_rows))
+
+
+def reply_html(name, text, changes='', when=None, activity=None):
     return _block(name, COLORS['reply_name'], COLORS['reply_bg'],
-                  markdown(text) + changes)
+                  activity_html(activity) + markdown(text) + changes, when)
+
+
+def thinking_html(name):
+    """The reply before anything of it has come."""
+    return _block(name, COLORS['reply_name'], COLORS['reply_bg'],
+                  '<p style="color:{}; font-style:italic">Thinking...'
+                  '</p>'.format(COLORS['time']))
