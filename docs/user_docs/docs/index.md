@@ -5,8 +5,10 @@ scene assembly, and automation.
 
 *It’s code with layers with a nice way to see and change data.*
 
-!!! note "New in nxt_editor 4.4"
-    A code editor with find and replace and completion, a reference editor,
+!!! note "New in nxt_editor 4.5"
+    An [AI Assistant](reference.md#ai-assistant) that looks over, changes and
+    runs the graph with Claude, OpenAI, Grok or a local model. New in 4.4: a
+    code editor with find and replace and completion, a reference editor,
     Reload Source, a mini map, and plugins for Maya, Unreal and Blender.
     See [What's New](whats_new.md).
 

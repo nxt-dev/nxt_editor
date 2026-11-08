@@ -10,6 +10,8 @@ it in full.
   Claude, OpenAI, Grok or a local model about the open graph. It looks over,
   searches, changes and runs the graph with tools, and shows each step it
   takes. Every chat is kept, to go back to, pin or delete.
+
+  ![The AI Assistant](images/ai_assistant.png)
 - **The editor looks the same in Maya as it does on its own.** The workflow
   buttons, tabs and panels lost their styling in a host.
 - **Every change to a layer shows on it as it happens.** Taking something off

@@ -360,65 +360,113 @@ restart it.
 
 ## AI Assistant
 
-The AI Assistant is off until it is turned on in **Options > AI Assistant**,
-where you sign in to Claude, OpenAI or Grok, add an API key, or point it at a
-local model server (Ollama, LM Studio, llama.cpp, vLLM or Jan). Once it is on,
-**Window > AI Assistant** opens the panel. Nothing is sent to a provider
-until you ask it something. Keys and sign ins are kept in the operating
+![The AI Assistant docked beside the graph, after adding attributes to two controls and running them](images/ai_assistant.png)
+
+The AI Assistant is a panel for chatting with Claude, OpenAI, Grok or a local
+model about the open graph. It can look over the graph, explain it, change it
+and test its changes, and it shows each step it takes as it works.
+
+It is off until it is turned on in **Options > AI Assistant**. Once it is on,
+**Window > AI Assistant** opens the panel. Nothing is sent to a provider until
+you ask it something.
+
+### The parts of the panel
+
+![The parts of the AI Assistant panel, numbered](images/ai_assistant_parts.png)
+
+1. **Provider and model.** Who answers, and which of their models. The line
+   under them says which sign in or key is being used. **Settings** opens
+   **Options > AI Assistant**.
+2. **Chats.** Every chat is kept, so **New Chat** does not lose the last
+   one. Click a chat to go back to it and carry on. Right click a chat to
+   **Pin** it to the top or **Delete** it. Pinned chats are listed first,
+   then the rest, most recent first. Chats are saved in the editor's prefs
+   folder, on this computer only.
+3. **The conversation.** Your messages and the replies, each with the time
+   it was sent, and the day wherever it changes. Each reply lists the steps
+   it took, with a dot for each kind: blue for looking, purple for selecting
+   nodes to show you, green for changing the graph, orange for running code,
+   and a red cross for a step that could not be done. Changes it made are
+   listed in a green box under the reply.
+4. **Apply Code** and **Copy Code** show when a reply has a block of code.
+   **Apply Code** puts it in the selected node, and undo puts the old code
+   back. **Copy Code** copies it.
+5. **The message box.** `Ctrl+Enter` sends. While a reply is coming,
+   **Send** becomes **Stop**.
+6. **What it may do.** These toggles are remembered:
+    - **Selection** sends the selected nodes, their attributes and code with
+      your message.
+    - **Edit graph** lets it make, change and delete nodes, hierarchies,
+      code, attributes and layers. All the changes in one reply are one undo
+      step, so `Ctrl+Z` takes them back.
+    - **Run code** lets it run nodes, builds and snippets of Python, in the
+      editor or in the host such as Maya, to test its work and read what
+      they print. It is off until you turn it on, and shows orange when on.
+
+### Signing in
+
+![The Sign In settings](images/ai_settings_sign_in.png)
+
+**Options > AI Assistant > Sign In** has a box for each provider:
+
+- **Claude** uses the Claude Code app's sign in, so any Claude plan works
+  and the editor never sees the account's token. **Sign in with Claude
+  Code** (or **Switch Account**) runs Claude Code's own sign in in the
+  browser. Claude Code needs to be installed for this.
+- **OpenAI** can sign in with a ChatGPT plan, and **Grok** with SuperGrok.
+- Each can use an **API key** instead, or the usual environment variable
+  (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`).
+- **Local Model** points at a server on this computer or the network:
+  Ollama, LM Studio, llama.cpp, vLLM or Jan. **Find** looks for one that is
+  running.
+
+**Ask ... first** picks the provider the panel starts with, and **Check**
+asks a provider for its models. Keys and sign ins are kept in the operating
 system's secure store.
 
-A Claude account is used through the Claude Code app, which signs in itself,
-so the editor never sees its token.
-
-### Chats
-
-Every chat is kept, so **New Chat** does not lose the last one. The list at
-the top of the panel goes back to any of them; right click a chat to pin it
-to the top or delete it. Each message shows when it was sent, with the day
-wherever it changes. Chats are saved in the editor's prefs folder, on this
-computer only.
-
-### What it can do
+### How it works with the graph
 
 The assistant uses tools to look at the graph rather than guessing: it can
-look over the layers and nodes, read a node's attributes and code, search,
-check the build order, find problems and read the Output Log. It selects
-nodes to show you what it means. Each step it takes is listed in its reply as
-it works.
+look over the layers and nodes, list a hierarchy, read a node's attributes
+and code, search, check the build order, find problems and read the Output
+Log. With **Edit graph** on it can change the graph, and with **Run code** on
+it can run what it changed and read the output.
 
-Three toggles under the message box decide the rest:
-
-- **Selection** sends the selected nodes with your message.
-- **Edit graph** lets it make, change and delete nodes, hierarchies, code,
-  attributes and layers. All the changes in one reply are one undo step, so
-  `Ctrl+Z` takes them back.
-- **Run code** lets it run nodes, builds and snippets of Python, in the
-  editor or the host, to test its work and read what they print. It is off
-  until you turn it on.
-
-With a Claude sign in the tools are served to Claude Code by the editor's own
-MCP server, on this computer only, with a new key for every reply. The other
-providers use the same tools through their own tool calling. A model that
-can not use tools answers without them.
+With a Claude sign in, the tools are served to Claude Code by the editor's
+own MCP server, which only listens on this computer and takes a new key for
+every reply. The other providers use the same tools through their own tool
+calling. A model that can not use tools answers without them, and changes
+the graph with a block of changes the editor applies instead.
 
 ### Reading code and imports
 
-The assistant can read code on this computer. The open graph's folder is
-free to read; before it reads anywhere else it asks, saying why, and you can
-**Allow** it for the chat, **Always allow** it, or **Deny** it.
+![The assistant asking to read a folder](images/ai_assistant_ask.png)
 
-It can also inspect the modules a graph imports: where each is found, what
-functions and classes it has and their arguments, or one of them in full.
-Modules are read as source, without being imported, so their code is not
-run; one that is already imported, such as `maya.cmds` in Maya, is looked at
-as it is.
+The assistant can read code on this computer. The open graph's folder is
+free to read. Before it reads anywhere else it asks, with its reason:
+
+- **Allow** lets it read that folder for the rest of the chat.
+- **Always allow** lets it read the folder in every chat, and remembers it
+  in **Memory** with what the folder holds, so later chats know to look
+  there.
+- **Deny** says no, and it does not ask again in that reply.
+
+It can also inspect the modules a graph imports: where each one is found,
+what functions and classes it has and their arguments, or one of them in
+full. Modules are read as source, without being imported, so their code is
+not run. A module that is already imported, such as `maya.cmds` in Maya, is
+looked at as it is.
 
 ### Memory
 
-Ask the assistant to remember something and it saves a short note. Notes
-are sent at the start of every chat. **Options > AI Assistant > Memory**
-lists them, and the folders it can always read with what each holds, to
-change or remove.
+![The Memory settings](images/ai_settings_memory.png)
+
+Ask the assistant to remember something, such as how you name controls, and
+it saves a short note. Notes are sent at the start of every chat.
+**Options > AI Assistant > Memory** lists them, and the folders it can
+always read with what each one holds. Double click a note, or what a folder
+holds, to change it; **Remove** takes it away, and **Add Note** and **Add
+Folder...** add your own.
 
 ## Property Editor, History View, Output Log and Workflow Tools
 
