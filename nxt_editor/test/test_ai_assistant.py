@@ -1508,7 +1508,9 @@ class CodexTests(unittest.TestCase):
             self.assertEqual(exe, codex._unwrap(cmd))
 
     def test_npm_on_mac_and_linux_runs_the_program_not_node(self):
-        top = tempfile.mkdtemp()
+        # The real path, as macOS's temp folder is a link (/var is
+        # /private/var) and the script's link is followed.
+        top = os.path.realpath(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, top, True)
         modules = os.path.join(top, 'lib', 'node_modules', '@openai')
         script = self.make_file(modules, 'codex', 'bin', 'codex.js')
