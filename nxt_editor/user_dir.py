@@ -206,6 +206,7 @@ class USER_PREF():
     AI_OPENAI_CLIENT_ID = 'ai_assistant_openai_client_id'
     AI_LOCAL_URL = 'ai_assistant_local_url'
     AI_CLAUDE_CODE_PATH = 'ai_assistant_claude_code_path'
+    AI_CODEX_PATH = 'ai_assistant_codex_path'
 
 
 class EDITOR_CACHE():

@@ -111,6 +111,7 @@ def status(cli=None, cached=True):
         try:
             result = subprocess.run([cli, 'auth', 'status', '--json'],
                                     capture_output=True, text=True,
+                                    encoding='utf-8', errors='replace',
                                     timeout=20, env=_child_env(),
                                     creationflags=_NO_WINDOW)
             value = json.loads(result.stdout)
