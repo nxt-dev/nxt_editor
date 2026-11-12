@@ -159,6 +159,15 @@ class MiniMap(object):
         :return: list of (QRectF, QColor)
         """
         blocks = []
+        # Backdrops first, so the nodes on them are drawn on top.
+        backdrop_graphics = getattr(self.view, '_backdrop_graphics', {})
+        for graphic in sorted(backdrop_graphics.values(),
+                              key=lambda g: g.zValue()):
+            if graphic.scene() is None:
+                continue
+            color = graphic.color()
+            color.setAlpha(110)
+            blocks += [(graphic.scene_rect(), color)]
         for graphic in self.view._node_graphics.values():
             if graphic.scene() is None or not graphic.isVisible():
                 continue
