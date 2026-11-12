@@ -15,7 +15,7 @@ import time
 # Internal
 import nxt_editor
 from nxt_editor import user_dir
-from nxt_editor.ai import claude_code, secret_store, signin, web
+from nxt_editor.ai import claude_code, codex, secret_store, signin, web
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -59,6 +59,83 @@ def _stopped(tools):
     return tools is not None and tools.cancelled.is_set()
 
 
+# Errors from a ChatGPT plan, and what to do about them.
+# See Errors and recovery in the Sign in with ChatGPT docs.
+PLAN_ERRORS = {
+    'subscription_sharing_user_not_eligible':
+        'Your ChatGPT plan can not be used here. The account, workspace '
+        'or its admin does not allow it. Use an API key instead.',
+    'subscription_sharing_usage_limit_exceeded':
+        'You have used all of the ChatGPT plan that nxt is allowed for '
+        'now. See chatgpt.com/settings/usage, or use an API key.',
+    'subscription_sharing_usage_unavailable':
+        'ChatGPT could not check your plan just now. Try again in a '
+        'minute.',
+    'subscription_sharing_user_unavailable':
+        'ChatGPT could not check your plan just now. Try again in a '
+        'minute.',
+    'subscription_sharing_invalid_user':
+        'ChatGPT did not accept your sign in. Sign in again in Options > '
+        'AI Assistant.',
+    'subscription_sharing_unsupported_capability':
+        'A ChatGPT plan can not do part of this request.',
+    'subscription_sharing_route_not_supported':
+        'A ChatGPT plan can not be used for this kind of request.',
+    'chatpass_v2_scope_not_authorized':
+        'Your ChatGPT sign in does not allow this. Sign in again and allow '
+        'nxt to use your plan.',
+    'chatpass_v2_invalid_authorization_context':
+        'Your ChatGPT sign in does not allow this. Sign in again and allow '
+        'nxt to use your plan.',
+}
+
+
+def explain(err, label, auth=None):
+    """A failed request, in words that say what to do next."""
+    if not isinstance(err, web.WebError):
+        return str(err)
+    if err.code in PLAN_ERRORS:
+        return '{} ({})'.format(PLAN_ERRORS[err.code], err.code)
+    kind = auth.kind if auth else None
+    if err.status in (401, 403):
+        if kind == WEB:
+            return ('{} did not accept your sign in. Sign in again in '
+                    'Options > AI Assistant. ({})'.format(label, err))
+        if kind in (KEY, ENV):
+            where = auth.label if kind == ENV else 'the saved API key'
+            return ('{} did not accept {}. Check the key, or paste a new '
+                    'one in Options > AI Assistant. ({})'.format(
+                        label, where, err))
+    if err.status == 429:
+        return ('{} says too many requests or the plan is used up. Wait a '
+                'little, or check your plan or credits. ({})'.format(
+                    label, err))
+    if err.status and err.status >= 500:
+        return ('{} had a problem on its side. Try again in a minute. '
+                '({})'.format(label, err))
+    return str(err)
+
+
+class explained(object):
+    """Gives a failed request inside it a message that says what to do
+    next."""
+
+    def __init__(self, label, auth=None):
+        self.label = label
+        self.auth = auth
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, kind, err, tb):
+        if not isinstance(err, web.WebError):
+            return False
+        message = explain(err, self.label, self.auth)
+        if message == str(err):
+            return False
+        raise web.WebError(message, status=err.status, code=err.code)
+
+
 class Auth(object):
     """What a request is sent with."""
     def __init__(self, kind, token, label):
@@ -82,6 +159,13 @@ class Provider(object):
     # Otherwise "Sign in on the web" opens keys_url.
     web_sign_in = False
     web_plan = None
+    # Whether an API key can be pasted in.
+    takes_api_key = True
+    # The provider's own app (claude_code or codex) when its sign in is used
+    # by running that app, and the pref that says where the user put it.
+    app = None
+    app_name = None
+    app_path_pref = None
     max_tokens = 8192
 
     def __init__(self, store=None, prefs=None):
@@ -253,7 +337,9 @@ class Provider(object):
         """The models this provider offers now, asked for once."""
         if not refresh and self.id in _models:
             return list(_models[self.id])
-        found = self.list_models()
+        auth = self._require_auth(None)
+        with explained(self.label, auth):
+            found = self.list_models(auth)
         _models[self.id] = list(found)
         return found
 
@@ -301,6 +387,9 @@ class Anthropic(Provider):
     keys_url = 'https://console.anthropic.com/settings/keys'
     web_sign_in = True
     web_plan = 'Claude Code'
+    app = claude_code
+    app_name = 'Claude Code'
+    app_path_pref = user_dir.USER_PREF.AI_CLAUDE_CODE_PATH
     API = 'https://api.anthropic.com/v1'
     VERSION = '2023-06-01'
 
@@ -384,8 +473,9 @@ class Anthropic(Provider):
                 body['tools'] = offered
             blocks = {}
             stop_reason = None
-            with web.request(self.API + '/messages', data=body,
-                             headers=self._headers(auth)) as response:
+            with explained(self.label, auth), \
+                    web.request(self.API + '/messages', data=body,
+                                headers=self._headers(auth)) as response:
                 for event, data in web.iter_sse(response):
                     if not isinstance(data, dict):
                         continue
@@ -439,6 +529,10 @@ class Anthropic(Provider):
             gap.after_tools()
 
 
+# Tells OpenAI.sign_in to add an account rather than reuse one.
+NEW_ACCOUNT = object()
+
+
 class OpenAI(Provider):
     id = 'openai'
     label = 'OpenAI'
@@ -462,16 +556,69 @@ class OpenAI(Provider):
             self.prefs[key] = host_id
         return host_id
 
-    def sign_in(self, open_browser, cancelled=None):
-        previous = self.store.get(self._web_name) or {}
-        client_id = previous.get('client_id') or self.prefs.get(
-            user_dir.USER_PREF.AI_OPENAI_CLIENT_ID)
+    def saved_accounts(self):
+        """The ChatGPT accounts signed in here before, newest first.
+
+        OpenAI ties each registration of the editor to one account and the
+        workspace picked when it was made, so each account keeps its own.
+        """
+        accounts = self.prefs.get(user_dir.USER_PREF.AI_OPENAI_ACCOUNTS)
+        if not isinstance(accounts, list):
+            return []
+        return [a for a in accounts
+                if isinstance(a, dict) and a.get('client_id')]
+
+    def _remember_account(self, record):
+        account = {'client_id': record['client_id'],
+                   'email': record.get('email'),
+                   'plan': record.get('plan')}
+        others = [a for a in self.saved_accounts()
+                  if a['client_id'] != account['client_id']]
+        self.prefs[user_dir.USER_PREF.AI_OPENAI_ACCOUNTS] = (
+            [account] + others)
+
+    def forget_account(self, client_id):
+        accounts = [a for a in self.saved_accounts()
+                    if a['client_id'] != client_id]
+        self.prefs[user_dir.USER_PREF.AI_OPENAI_ACCOUNTS] = accounts
+
+    @staticmethod
+    def account_label(account):
+        label = account.get('email') or 'ChatGPT account'
+        if account.get('plan'):
+            label += ' ({})'.format(account['plan'].title())
+        return label
+
+    def sign_in(self, open_browser, cancelled=None, account=None):
+        """Sign in with ChatGPT.
+
+        :param account: One of `saved_accounts` to sign in to again. With
+            None it goes back to the account signed in now, if there is
+            one, or else adds a new account. NEW_ACCOUNT always adds one.
+        """
+        # From before accounts were kept apart. Which account it belonged
+        # to is unknown, and reusing it can leave nxt stuck on a workspace
+        # the user is not in, so a new one is made instead.
+        try:
+            self.prefs.pop(user_dir.USER_PREF.AI_OPENAI_CLIENT_ID)
+        except KeyError:
+            pass
+        current = self.store.get(self._web_name) or {}
+        if account is None:
+            account = current if current.get('client_id') else NEW_ACCOUNT
+        if account is NEW_ACCOUNT:
+            client_id, previous = None, {}
+        else:
+            client_id = account['client_id']
+            if current.get('client_id') == client_id:
+                previous = current
+            else:
+                previous = {'email': account.get('email')}
         record = signin.OpenAI.sign_in(open_browser, self.host_id,
                                        client_id=client_id,
-                                       cancelled=cancelled)
-        # Kept apart from the sign in, so signing in again reuses it.
-        self.prefs[user_dir.USER_PREF.AI_OPENAI_CLIENT_ID] = \
-            record['client_id']
+                                       cancelled=cancelled,
+                                       previous=previous)
+        self._remember_account(record)
         self.save_web_record(record)
         return record
 
@@ -487,6 +634,11 @@ class OpenAI(Provider):
     def list_models(self, auth=None):
         auth = self._require_auth(auth)
         data = web.get_json(self.API + '/models', headers=self._headers(auth))
+        if isinstance(data.get('models'), list):
+            # A ChatGPT plan: its own list, in the order it is shown.
+            return [m.get('slug') or m.get('id') for m in data['models']
+                    if m.get('visibility', 'list') == 'list' and
+                    (m.get('slug') or m.get('id'))]
         models = data.get('data', [])
         if any('visibility' in m for m in models):
             models = [m for m in models if m.get('visibility') == 'list']
@@ -494,10 +646,22 @@ class OpenAI(Provider):
                   if not any(s in m['id'] for s in self.SKIP)]
         return self._newest_first(models)
 
+    # A ChatGPT plan only takes function tools grouped in a namespace.
+    NAMESPACE = 'nxt'
+
+    def _tools(self, tools, auth):
+        offered = tools.responses_tools() if tools is not None else []
+        if offered and auth.kind == WEB:
+            return [{'type': 'namespace', 'name': self.NAMESPACE,
+                     'description': 'Tools for the graph open in the nxt '
+                                    'editor.',
+                     'tools': offered}]
+        return offered
+
     def stream_chat(self, messages, system, model=None, auth=None,
                     tools=None):
         auth = self._require_auth(auth)
-        offered = tools.responses_tools() if tools is not None else []
+        offered = self._tools(tools, auth)
         convo = list(messages)
         gap = _Gap()
         for _ in range(MAX_TOOL_ROUNDS):
@@ -508,8 +672,9 @@ class OpenAI(Provider):
             if offered:
                 body['tools'] = offered
             items = []
-            with web.request(self.API + '/responses', data=body,
-                             headers=self._headers(auth)) as response:
+            with explained(self.label, auth), \
+                    web.request(self.API + '/responses', data=body,
+                                headers=self._headers(auth)) as response:
                 for event, data in web.iter_sse(response):
                     if not isinstance(data, dict):
                         continue
@@ -540,11 +705,13 @@ class OpenAI(Provider):
                     convo.append({'type': 'message', 'role': 'assistant',
                                   'content': item.get('content') or []})
                 elif item.get('type') == 'function_call':
-                    convo.append({'type': 'function_call',
-                                  'call_id': item.get('call_id'),
-                                  'name': item.get('name'),
-                                  'arguments': item.get('arguments') or
-                                  '{}'})
+                    call = {'type': 'function_call',
+                            'call_id': item.get('call_id'),
+                            'name': item.get('name'),
+                            'arguments': item.get('arguments') or '{}'}
+                    if item.get('namespace'):
+                        call['namespace'] = item['namespace']
+                    convo.append(call)
             for call in calls:
                 text, _failed = tools.call(call.get('name'),
                                            call.get('arguments') or '{}')
@@ -552,6 +719,96 @@ class OpenAI(Provider):
                               'call_id': call.get('call_id'),
                               'output': text})
             gap.after_tools()
+
+
+class Codex(Provider):
+    """A ChatGPT plan, through the user's own Codex sign in.
+
+    Codex signs in to ChatGPT itself and is run headless (see codex), so
+    the editor never sees a token, and the account's Codex limits apply.
+    """
+    id = 'codex'
+    label = 'Codex'
+    env_var = None
+    keys_url = None
+    web_sign_in = True
+    web_plan = 'Codex'
+    takes_api_key = False
+    app = codex
+    app_name = 'Codex'
+    app_path_pref = user_dir.USER_PREF.AI_CODEX_PATH
+
+    @property
+    def cli(self):
+        return codex.find_cli()
+
+    def web_record(self):
+        if not self.cli:
+            return None
+        return codex.signed_in(self.cli)
+
+    def save_web_record(self, record):
+        self.method = WEB
+        self.forget_models()
+
+    def web_label(self, record):
+        if record.get('auth_method') == 'api key':
+            return 'Codex sign in (an API key)'
+        who = record.get('email') or 'your ChatGPT account'
+        if record.get('plan'):
+            who = '{}, {} plan'.format(who, record['plan'])
+        return 'Codex sign in ({})'.format(who)
+
+    def auth(self):
+        record = self.web_record()
+        if not record:
+            return None
+        return Auth(WEB, None, self.web_label(record))
+
+    def status(self):
+        record = self.web_record()
+        if record:
+            return 'Using your {}.'.format(self.web_label(record))
+        return 'Not set up.'
+
+    def _require_auth(self, auth):
+        auth = auth or self.auth()
+        if not auth:
+            if not self.cli:
+                raise AuthError('Codex is not installed. Install it, then '
+                                'sign in with Codex in Options > AI '
+                                'Assistant.')
+            raise AuthError('Codex is not signed in. Sign in with Codex in '
+                            'Options > AI Assistant.')
+        return auth
+
+    def start_sign_in(self):
+        """Sign Codex in, or switch its account. Opens the browser. Gives
+        back the Login to wait on."""
+        return codex.Login(self.cli)
+
+    def finish_sign_in(self, login, cancelled=None):
+        record = login.wait(cancelled or threading.Event())
+        if record:
+            self.method = WEB
+            self.forget_models()
+        return record
+
+    def sign_out(self):
+        codex.logout(self.cli)
+        self.forget_models()
+
+    def list_models(self, auth=None):
+        self._require_auth(auth)
+        return codex.list_models(self.cli)
+
+    def stream_chat(self, messages, system, model=None, auth=None,
+                    tools=None):
+        self._require_auth(auth)
+        for text in codex.stream_chat(messages, system,
+                                      model=model or self.model,
+                                      cli=self.cli, tools=tools):
+            yield text
 
 
 class XAI(Provider):
@@ -587,10 +844,11 @@ class XAI(Provider):
     def stream_chat(self, messages, system, model=None, auth=None,
                     tools=None):
         auth = self._require_auth(auth)
-        for text in stream_chat_completions(
-                self.API, self._headers(auth), model or self.model,
-                messages, system, self.label, tools=tools):
-            yield text
+        with explained(self.label, auth):
+            for text in stream_chat_completions(
+                    self.API, self._headers(auth), model or self.model,
+                    messages, system, self.label, tools=tools):
+                yield text
 
 
 def stream_chat_completions(api, headers, model, messages, system, label,
@@ -733,11 +991,12 @@ class Local(Provider):
     def stream_chat(self, messages, system, model=None, auth=None,
                     tools=None):
         auth = self._require_auth(auth)
-        for text in stream_chat_completions(
-                self.base_url, self._headers(auth), model or self.model,
-                messages, system, self.label, timeout=self.TIMEOUT,
-                tools=tools):
-            yield text
+        with explained(self.label, auth):
+            for text in stream_chat_completions(
+                    self.base_url, self._headers(auth), model or self.model,
+                    messages, system, self.label, timeout=self.TIMEOUT,
+                    tools=tools):
+                yield text
 
     @classmethod
     def find_servers(cls, timeout=1.0):
@@ -754,7 +1013,7 @@ class Local(Provider):
         return found
 
 
-PROVIDERS = (Anthropic, OpenAI, XAI, Local)
+PROVIDERS = (Anthropic, OpenAI, Codex, XAI, Local)
 
 
 def get_providers(store=None, prefs=None):

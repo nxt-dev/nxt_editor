@@ -84,7 +84,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | :----------------------------- | :-------------------------------------------------------------------------: | :----------------------------- | :----------: |
 | Select All Nodes               |                                                                             | Select All Nodes               |    Ctrl+A    |
 | Add Node                       |                     Add a new node to the current graph                     | Add Node                       |      N       |
-| Add Backdrop                   |   Add a backdrop around the selected nodes, or an empty one when none are selected.   | Add Backdrop                   |      B       |
+| Add Backdrop                   |   Add a backdrop around the selected nodes, or an empty one when none are selected.   | Add Backdrop                   |      C       |
 | Delete Node                    |                        Delete the selected node(s).                         | Delete Node                    |     Del      |
 | Recursive Delete Node          |        Delete selected node and all of its descendants recursively.         | Recursive Delete Node          |  Shift+Del   |
 | Cut                            |                                                                             | Cut                            |    Ctrl+X    |

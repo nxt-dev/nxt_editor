@@ -36,7 +36,11 @@ def _error_from(err):
     if isinstance(data, dict):
         found = data.get('error', data)
         if isinstance(found, dict):
-            message = found.get('message') or found.get('error_description')
+            message = (found.get('message') or
+                       found.get('error_description') or
+                       found.get('detail'))
+            if isinstance(message, (list, dict)):
+                message = json.dumps(message)[:300]
             code = found.get('code') or found.get('type')
         elif isinstance(found, str):
             message = data.get('error_description') or found
