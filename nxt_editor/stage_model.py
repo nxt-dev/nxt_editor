@@ -21,6 +21,7 @@ from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
 import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler, user_dir
 from nxt_editor import backdrops
+from nxt_editor import wires
 from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
@@ -81,6 +82,7 @@ class StageModel(QtCore.QObject):
     skips_changed = QtCore.Signal(tuple)  # new skip point paths
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
     backdrops_changed = QtCore.Signal()
+    wires_changed = QtCore.Signal()  # line style or points
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
     request_ding = QtCore.Signal()
@@ -2163,6 +2165,55 @@ class StageModel(QtCore.QObject):
             return
         cmd = SetBackdrops(changes, model=self,
                            layer_path=self.top_layer.real_path, text=text)
+        self.undo_stack.push(cmd)
+
+    # Line style and points, see nxt_editor.wires ------------------------
+
+    def get_connection_style(self):
+        """Whether this graph draws its lines straight or curved."""
+        return wires.merged_style(self.stage._sub_layers)
+
+    def set_connection_style(self, style):
+        """Draw this graph's lines straight or curved, saved on the top
+        layer."""
+        if style not in wires.STYLES or style == self.get_connection_style():
+            return
+        if style == wires.merged_style(self.stage._sub_layers[1:]):
+            # What the lower layers say already, so nothing to keep.
+            saved = wires.ABSENT
+        else:
+            saved = style
+        text = 'Curved connections' if style == wires.CURVED else             'Straight connections'
+        cmd = SetWires(model=self, layer_path=self.top_layer.real_path,
+                       style=saved, text=text)
+        self.undo_stack.push(cmd)
+
+    def get_line_points(self, key=None):
+        """The points lines are routed through.
+
+        :param key: one line's key, see wires.line_key, or None for all
+        :return: [[x, y], ...] for one line, else {key: points}
+        """
+        shown = wires.merged_points(self.stage._sub_layers)
+        if key is None:
+            return shown
+        return shown.get(key, [])
+
+    def set_line_points(self, key, points, text='Edit connection points'):
+        """Route one line through the given points, as one undo. No points
+        takes them all away."""
+        points = wires.clean_points(points) or []
+        if points == self.get_line_points(key):
+            return
+        if points:
+            change = points
+        elif key in wires.merged_points(self.stage._sub_layers[1:]):
+            # A lower layer's, and only the top layer is written.
+            change = None
+        else:
+            change = wires.ABSENT
+        cmd = SetWires(model=self, layer_path=self.top_layer.real_path,
+                       points={key: change}, text=text)
         self.undo_stack.push(cmd)
 
     def get_node_pos(self, node_path):

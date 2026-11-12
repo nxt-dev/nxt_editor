@@ -11,6 +11,7 @@ from Qt.QtWidgets import QUndoCommand
 from nxt_editor import backdrops
 from nxt_editor import colors
 from nxt_editor import user_dir
+from nxt_editor import wires
 from nxt_editor.reference_paths import stored_reference_path
 from nxt import nxt_path
 from nxt.nxt_layer import LAYERS, SAVE_KEY
@@ -769,6 +770,51 @@ class SetBackdrops(NxtCommand):
         layer = self.model.lookup_layer(self.layer_path)
         backdrops.write(layer, self.new)
         self.model.backdrops_changed.emit()
+        self.redo_effected_layer(layer.real_path)
+
+
+class SetWires(NxtCommand):
+
+    """Change how lines are drawn on one layer: the graph's style, and the
+    points lines are routed through."""
+
+    def __init__(self, model, layer_path, points=None, style=None,
+                 text='Edit connection points'):
+        """
+        :param points: {line key: points, None or wires.ABSENT}, see
+            nxt_editor.wires.write_points
+        :param style: a wires style, wires.ABSENT, or None to leave it
+        """
+        super(SetWires, self).__init__(model)
+        self.layer_path = layer_path
+        layer = model.lookup_layer(layer_path)
+        self.new_points = copy.deepcopy(points or {})
+        current = wires.layer_points(layer)
+        self.old_points = {}
+        for key in self.new_points:
+            self.old_points[key] = copy.deepcopy(
+                current.get(key, wires.ABSENT))
+        self.new_style = style
+        self.old_style = wires.layer_style(layer)
+        self.setText(text)
+
+    def _write(self, points, style):
+        layer = self.model.lookup_layer(self.layer_path)
+        if points:
+            wires.write_points(layer, points)
+        if self.new_style is not None:
+            wires.write_style(layer, style)
+        self.model.wires_changed.emit()
+        return layer
+
+    @processing
+    def undo(self):
+        self._write(self.old_points, self.old_style)
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self._write(self.new_points, self.new_style)
         self.redo_effected_layer(layer.real_path)
 
 
