@@ -4,7 +4,7 @@
 [![Rez Release](https://github.com/squarebit-studios/nxt_editor/actions/workflows/rez_release.yml/badge.svg?branch=release)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/rez_release.yml)
 [![Host packages](https://github.com/squarebit-studios/nxt_editor/actions/workflows/maya_module_release.yml/badge.svg)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/maya_module_release.yml)
 
-[![Version](https://img.shields.io/badge/version-4.5.4-green?logo=rocket&logoColor=green)](https://github.com/squarebit-studios/nxt_editor/releases/latest)
+[![Version](https://img.shields.io/badge/version-4.6.0-green?logo=rocket&logoColor=green)](https://github.com/squarebit-studios/nxt_editor/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)&nbsp;&nbsp;
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)

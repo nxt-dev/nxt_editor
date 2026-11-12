@@ -787,8 +787,27 @@ class NodeActions(NxtActionContainer):
             self.main_window.view.add_node()
         self.add_node_action.triggered.connect(add_node)
 
+        # add backdrop
+        self.add_backdrop_action = NxtAction(text='Add Backdrop',
+                                             parent=self)
+        self.add_backdrop_action.setShortcut('B')
+        self.add_backdrop_action.setAutoRepeat(False)
+        self.add_backdrop_action.setWhatsThis('Add a backdrop around the '
+                                              'selected nodes, or an empty '
+                                              'one when none are selected.')
+
+        def add_backdrop():
+            if self.main_window.view:
+                self.main_window.view.add_backdrop()
+        self.add_backdrop_action.triggered.connect(add_backdrop)
+
         # delete nodes
         def del_nodes(recursive=False):
+            # A selected backdrop is deleted on its own, never together
+            # with nodes.
+            view = self.main_window.view
+            if view and view.delete_selected_backdrops():
+                return
             self.main_window.model.delete_nodes(recursive=recursive)
         self.delete_node_action = NxtAction(text='Delete Node', parent=self)
         self.delete_node_action.setShortcut('Del')
@@ -1061,6 +1080,7 @@ class NodeActions(NxtActionContainer):
 
         self.action_display_order = [self.select_all_action,
                                      self.add_node_action,
+                                     self.add_backdrop_action,
                                      self.delete_node_action,
                                      self.recursive_delete_node_action,
                                      self.cut_node_action,
