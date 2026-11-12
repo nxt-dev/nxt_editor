@@ -20,6 +20,7 @@ from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
 import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler, user_dir
+from nxt_editor import backdrops
 from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
@@ -79,6 +80,7 @@ class StageModel(QtCore.QObject):
     breaks_changed = QtCore.Signal(tuple)  # new break point paths
     skips_changed = QtCore.Signal(tuple)  # new skip point paths
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
+    backdrops_changed = QtCore.Signal()
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
     request_ding = QtCore.Signal()
@@ -2099,6 +2101,68 @@ class StageModel(QtCore.QObject):
             return
         cmd = SetNodesPosition(node_positions=clean_positions, model=self,
                                layer_path=layer.real_path)
+        self.undo_stack.push(cmd)
+
+    # Backdrops, see nxt_editor.backdrops ----------------------------------
+
+    def get_backdrops(self):
+        """Every backdrop this graph shows.
+
+        :return: {id: record}
+        """
+        return backdrops.merged(self.stage._sub_layers)
+
+    def get_backdrop(self, backdrop_id):
+        return self.get_backdrops().get(backdrop_id)
+
+    def add_backdrop(self, record, backdrop_id=None):
+        """Add a backdrop to the top layer.
+
+        :return: the new backdrop's id
+        """
+        backdrop_id = backdrop_id or backdrops.new_id()
+        self.set_backdrops({backdrop_id: backdrops.clean(record)},
+                           text='Add backdrop "{}"'.format(
+                               record.get(backdrops.TITLE, '')))
+        return backdrop_id
+
+    def edit_backdrop(self, backdrop_id, text='Edit backdrop', **fields):
+        """Change some of a backdrop's fields, such as title or color."""
+        record = self.get_backdrop(backdrop_id)
+        if record is None:
+            return
+        record.update(fields)
+        self.set_backdrops({backdrop_id: backdrops.clean(record)}, text=text)
+
+    def remove_backdrops(self, backdrop_ids):
+        """Take backdrops away. The nodes in them stay where they are."""
+        top = self.top_layer
+        below = backdrops.merged(self.stage._sub_layers[1:])
+        changes = {}
+        for backdrop_id in backdrop_ids:
+            if backdrop_id in below:
+                # A lower layer made it, and only the top layer is written,
+                # so it is hidden rather than removed.
+                changes[backdrop_id] = None
+            elif backdrop_id in backdrops.layer_backdrops(top):
+                changes[backdrop_id] = backdrops.ABSENT
+        if not changes:
+            return
+        if len(changes) == 1:
+            text = 'Delete backdrop'
+        else:
+            text = 'Delete {} backdrops'.format(len(changes))
+        self.set_backdrops(changes, text=text)
+
+    def set_backdrops(self, changes, text='Edit backdrop'):
+        """Write backdrop records onto the top layer, as one undo.
+
+        :param changes: {id: record, None or backdrops.ABSENT}
+        """
+        if not changes:
+            return
+        cmd = SetBackdrops(changes, model=self,
+                           layer_path=self.top_layer.real_path, text=text)
         self.undo_stack.push(cmd)
 
     def get_node_pos(self, node_path):
