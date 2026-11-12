@@ -529,6 +529,10 @@ class Anthropic(Provider):
             gap.after_tools()
 
 
+# Tells OpenAI.sign_in to add an account rather than reuse one.
+NEW_ACCOUNT = object()
+
+
 class OpenAI(Provider):
     id = 'openai'
     label = 'OpenAI'
@@ -552,23 +556,69 @@ class OpenAI(Provider):
             self.prefs[key] = host_id
         return host_id
 
-    def sign_in(self, open_browser, cancelled=None):
-        previous = self.store.get(self._web_name) or {}
-        client_id = previous.get('client_id') or self.prefs.get(
-            user_dir.USER_PREF.AI_OPENAI_CLIENT_ID)
-        if previous.get('client_id') != client_id:
-            previous = {}
+    def saved_accounts(self):
+        """The ChatGPT accounts signed in here before, newest first.
 
-        def keep_client_id(issued):
-            # Kept apart from the sign in, so signing in again reuses it,
-            # even when this sign in goes no further.
-            self.prefs[user_dir.USER_PREF.AI_OPENAI_CLIENT_ID] = issued
+        OpenAI ties each registration of the editor to one account and the
+        workspace picked when it was made, so each account keeps its own.
+        """
+        accounts = self.prefs.get(user_dir.USER_PREF.AI_OPENAI_ACCOUNTS)
+        if not isinstance(accounts, list):
+            return []
+        return [a for a in accounts
+                if isinstance(a, dict) and a.get('client_id')]
+
+    def _remember_account(self, record):
+        account = {'client_id': record['client_id'],
+                   'email': record.get('email'),
+                   'plan': record.get('plan')}
+        others = [a for a in self.saved_accounts()
+                  if a['client_id'] != account['client_id']]
+        self.prefs[user_dir.USER_PREF.AI_OPENAI_ACCOUNTS] = (
+            [account] + others)
+
+    def forget_account(self, client_id):
+        accounts = [a for a in self.saved_accounts()
+                    if a['client_id'] != client_id]
+        self.prefs[user_dir.USER_PREF.AI_OPENAI_ACCOUNTS] = accounts
+
+    @staticmethod
+    def account_label(account):
+        label = account.get('email') or 'ChatGPT account'
+        if account.get('plan'):
+            label += ' ({})'.format(account['plan'].title())
+        return label
+
+    def sign_in(self, open_browser, cancelled=None, account=None):
+        """Sign in with ChatGPT.
+
+        :param account: One of `saved_accounts` to sign in to again. With
+            None it goes back to the account signed in now, if there is
+            one, or else adds a new account. NEW_ACCOUNT always adds one.
+        """
+        # From before accounts were kept apart. Which account it belonged
+        # to is unknown, and reusing it can leave nxt stuck on a workspace
+        # the user is not in, so a new one is made instead.
+        try:
+            self.prefs.pop(user_dir.USER_PREF.AI_OPENAI_CLIENT_ID)
+        except KeyError:
+            pass
+        current = self.store.get(self._web_name) or {}
+        if account is None:
+            account = current if current.get('client_id') else NEW_ACCOUNT
+        if account is NEW_ACCOUNT:
+            client_id, previous = None, {}
+        else:
+            client_id = account['client_id']
+            if current.get('client_id') == client_id:
+                previous = current
+            else:
+                previous = {'email': account.get('email')}
         record = signin.OpenAI.sign_in(open_browser, self.host_id,
                                        client_id=client_id,
                                        cancelled=cancelled,
-                                       previous=previous,
-                                       on_client_id=keep_client_id)
-        keep_client_id(record['client_id'])
+                                       previous=previous)
+        self._remember_account(record)
         self.save_web_record(record)
         return record
 
