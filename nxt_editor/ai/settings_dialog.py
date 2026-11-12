@@ -62,6 +62,10 @@ class WaitDialog(QtWidgets.QDialog):
         self.copy_button = QtWidgets.QPushButton('Copy Code')
         self.copy_button.hide()
         buttons.addWidget(self.copy_button)
+        self.other_account_button = QtWidgets.QPushButton(
+            'Use Another Account or Workspace')
+        self.other_account_button.hide()
+        buttons.addWidget(self.other_account_button)
         buttons.addStretch()
         cancel = QtWidgets.QPushButton('Cancel')
         cancel.clicked.connect(self.reject)
@@ -104,7 +108,7 @@ class ProviderBox(QtWidgets.QGroupBox):
 
         # Web
         self.web_button = QtWidgets.QPushButton()
-        self.web_button.clicked.connect(self.sign_in)
+        self.web_button.clicked.connect(lambda _=False: self.sign_in())
         layout.addWidget(self.web_button, 1, 0, 1, 2)
         self.sign_out_button = QtWidgets.QPushButton('Sign Out')
         self.sign_out_button.clicked.connect(self.sign_out)
@@ -262,6 +266,9 @@ class ProviderBox(QtWidgets.QGroupBox):
             text = 'Switch Account'
             tip = 'Sign in with a different {} account.'.format(
                 provider.label)
+            if isinstance(provider, providers.OpenAI):
+                tip = ('Sign in with a different ChatGPT account, or the '
+                       'same account in another workspace.')
         elif provider.app is codex:
             text = 'Sign in with Codex'
             tip = ('Opens Codex, which signs in in your browser with your '
@@ -278,6 +285,38 @@ class ProviderBox(QtWidgets.QGroupBox):
                    '{} plan.'.format(provider.web_plan))
         self.web_button.setText(text)
         self.web_button.setToolTip(tip)
+        self.web_button.setMenu(self.accounts_menu(has_web))
+
+    def accounts_menu(self, has_web):
+        """For ChatGPT, the accounts signed in here before and a way to add
+        another. None when there is nothing to pick from."""
+        provider = self.provider
+        if not isinstance(provider, providers.OpenAI):
+            return None
+        accounts = provider.saved_accounts()
+        if not accounts:
+            return None
+        current = None
+        if has_web:
+            current = (provider.web_record() or {}).get('client_id')
+        menu = QtWidgets.QMenu(self)
+        for account in accounts:
+            label = provider.account_label(account)
+            action = menu.addAction(label)
+            if account['client_id'] == current:
+                action.setText(label + ' (signed in)')
+                action.setEnabled(False)
+            else:
+                action.triggered.connect(
+                    lambda _=False, a=account: self.sign_in(account=a))
+        menu.addSeparator()
+        other = menu.addAction('Another Account or Workspace...')
+        other.setToolTip('Each ChatGPT workspace needs its own sign in.')
+        other.triggered.connect(
+            lambda _=False: self.sign_in(account=providers.NEW_ACCOUNT))
+        # The old one is kept by the button until it is replaced.
+        self._accounts_menu = menu
+        return menu
 
     def refresh(self):
         provider = self.provider
@@ -388,23 +427,49 @@ class ProviderBox(QtWidgets.QGroupBox):
             self.wait_dialog.done(0)
             self.wait_dialog = None
 
-    def sign_in(self):
+    def sign_in(self, account=None):
         provider = self.provider
         if self.uses_app:
             self.sign_in_with_app()
             return
+        text = 'Finish signing in in your web browser.'
+        # Signing in to an account made before, which OpenAI keeps to the
+        # workspace it was made in.
+        reusing = (isinstance(provider, providers.OpenAI) and
+                   account is not providers.NEW_ACCOUNT and
+                   bool(account or provider.web_record()))
+        if reusing:
+            text += ('\n\nIf OpenAI says the app is only for members of '
+                     'its workspace, press Use Another Account or '
+                     'Workspace.')
         self.wait_dialog = WaitDialog(
-            'Sign in with {}'.format(provider.web_plan),
-            'Finish signing in in your web browser.', self)
+            'Sign in with {}'.format(provider.web_plan), text, self)
         self.wait_dialog.rejected.connect(self.cancel_sign_in)
+        if reusing:
+            self.wait_dialog.other_account_button.show()
+            self.wait_dialog.other_account_button.clicked.connect(
+                self.sign_in_another_account)
         if isinstance(provider, providers.XAI):
             self._run(lambda cancelled: provider.start_sign_in(),
                       self.on_xai_code)
+        elif isinstance(provider, providers.OpenAI):
+            def sign_in(cancelled):
+                return provider.sign_in(open_url, cancelled=cancelled,
+                                        account=account)
+            self._run(sign_in, self.on_signed_in)
         else:
             def sign_in(cancelled):
                 return provider.sign_in(open_url, cancelled=cancelled)
             self._run(sign_in, self.on_signed_in)
         self.wait_dialog.show()
+
+    def sign_in_another_account(self):
+        """Give up on this sign in and add a new account instead."""
+        wait = self.wait_dialog
+        self.cancel_sign_in()
+        if wait:
+            wait.done(0)
+        self.sign_in(account=providers.NEW_ACCOUNT)
 
     def locate_app(self):
         provider = self.provider

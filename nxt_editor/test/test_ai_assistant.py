@@ -422,7 +422,8 @@ class OpenAISignInTests(unittest.TestCase):
         host_id = prefs[PREF.AI_OPENAI_HOST_ID]
         self.assertTrue(host_id.startswith('urn:uuid:'))
         self.assertEqual(host_id, sign_in.call_args[0][1])
-        self.assertEqual('oaiapp_5', prefs[PREF.AI_OPENAI_CLIENT_ID])
+        self.assertEqual(['oaiapp_5'], [a['client_id'] for a in
+                                         openai.saved_accounts()])
         self.assertEqual('at', openai.auth().token)
 
 
@@ -1069,6 +1070,57 @@ class SettingsDialogTests(unittest.TestCase):
         box.on_models(['grok-new'])
         self.assertEqual('grok-new', box.provider.model)
 
+    def test_chatgpt_offers_saved_accounts_and_another(self):
+        box = self.box('openai')
+        self.assertIsNone(box.web_button.menu())
+        box.provider._remember_account({'client_id': 'oaiapp_home',
+                                        'email': 'me@example.com'})
+        box.provider.save_web_record({'client_id': 'oaiapp_home',
+                                      'access_token': 'at',
+                                      'expires_at': time.time() + 3600})
+        with mock.patch.object(providers.OpenAI, 'list_models',
+                               return_value=['gpt-a']):
+            box.refresh()
+        self.assertEqual('Switch Account', box.web_button.text())
+        actions = [a for a in box.web_button.menu().actions()
+                   if not a.isSeparator()]
+        self.assertEqual(['me@example.com (signed in)',
+                          'Another Account or Workspace...'],
+                         [a.text() for a in actions])
+        self.assertFalse(actions[0].isEnabled())
+        with mock.patch.object(box, 'sign_in') as sign_in:
+            actions[1].trigger()
+        sign_in.assert_called_once_with(account=providers.NEW_ACCOUNT)
+
+    def test_a_stuck_chatgpt_sign_in_can_start_over(self):
+        box = self.box('openai')
+        box.provider.save_web_record({'client_id': 'oaiapp_home',
+                                      'access_token': 'at',
+                                      'expires_at': time.time() + 3600})
+        asked = []
+        started = threading.Event()
+
+        def sign_in(open_browser, cancelled=None, account=None):
+            asked.append(account)
+            started.set()
+            cancelled.wait(10)
+            raise signin.Cancelled()
+        with mock.patch.object(providers.OpenAI, 'sign_in',
+                               side_effect=sign_in):
+            box.sign_in()
+            first = box.wait_dialog
+            self.assertFalse(first.other_account_button.isHidden())
+            wait_for(started.is_set)
+            started.clear()
+            first.other_account_button.click()
+            wait_for(started.is_set)
+            # A new account can not hit that problem, so no button.
+            self.assertTrue(box.wait_dialog.other_account_button.isHidden())
+            self.assertFalse(first.isVisible())
+            box.wait_dialog.reject()
+            box.thread.wait(5000)
+        self.assertEqual([None, providers.NEW_ACCOUNT], asked)
+
     def test_a_refused_sign_in_shows_the_reason(self):
         box = self.box('xai')
         box.on_models_failed('You have run out of credits or need a Grok '
@@ -1153,7 +1205,7 @@ class OpenAISignInFeedbackTests(unittest.TestCase):
 
     browser = OpenAISignInTests.browser
 
-    def test_a_turned_down_code_keeps_the_client_and_says_try_again(self):
+    def test_a_turned_down_code_says_try_again_and_keeps_nothing(self):
         prefs = {}
         openai = providers.OpenAI(store=memory_store(), prefs=prefs)
 
@@ -1167,12 +1219,14 @@ class OpenAISignInFeedbackTests(unittest.TestCase):
                 openai.sign_in(self.browser(answer))
         self.assertIn('Sign in again', str(caught.exception))
         self.assertNotIn('invalid_grant (400)', str(caught.exception))
-        # Kept, so the next try goes back to the same registration.
-        self.assertEqual('oaiapp_7', prefs[PREF.AI_OPENAI_CLIENT_ID])
+        # Which account it was for is unknown, so the next try starts
+        # fresh and can pick any workspace.
+        self.assertEqual([], openai.saved_accounts())
+        self.assertNotIn(PREF.AI_OPENAI_CLIENT_ID, prefs)
 
     def test_signing_in_again_goes_back_to_the_same_account(self):
         store = memory_store()
-        prefs = {PREF.AI_OPENAI_CLIENT_ID: 'oaiapp_3'}
+        prefs = {}
         store.set('openai.web', {'client_id': 'oaiapp_3', 'id_token': 'idt',
                                  'email': 'me@example.com'})
         openai = providers.OpenAI(store=store, prefs=prefs)
@@ -1205,6 +1259,82 @@ class OpenAISignInFeedbackTests(unittest.TestCase):
             signin.OpenAI.sign_in(self.browser(answer), 'h', timeout=10)
         self.assertIn('turned down', str(caught.exception))
         self.assertIn('API key', str(caught.exception))
+
+
+class OpenAIAccountTests(unittest.TestCase):
+    """Each ChatGPT account and workspace gets its own registration."""
+
+    browser = OpenAISignInTests.browser
+
+    def setUp(self):
+        self.store = memory_store()
+        self.prefs = {}
+        self.openai = providers.OpenAI(store=self.store, prefs=self.prefs)
+
+    def sign_in(self, client_id, email, plan=None, **kwargs):
+        claims = {'email': email}
+        if plan:
+            claims[signin.OpenAI.AUTH_CLAIM] = {'chatgpt_plan_type': plan}
+        id_token = 'x.' + signin._b64url(json.dumps(claims).encode(
+            'utf-8')) + '.y'
+
+        def answer(query):
+            return {'code': 'c', 'state': query['state'],
+                    'client_id': client_id}
+        tokens = {'access_token': 'at-' + client_id, 'refresh_token': 'rt',
+                  'id_token': id_token}
+        with mock.patch.object(web, 'post_json', return_value=tokens):
+            record = self.openai.sign_in(self.browser(answer), **kwargs)
+        query = dict(urllib.parse.parse_qsl(
+            urllib.parse.urlparse(self.opened[0]).query))
+        return record, query
+
+    def test_a_client_id_from_an_older_editor_is_not_reused(self):
+        # It may belong to a workspace the user is not in, which leaves
+        # OpenAI saying the app is only for members of its workspace.
+        self.prefs[PREF.AI_OPENAI_CLIENT_ID] = 'oaiapp_old'
+        record, query = self.sign_in('oaiapp_new', 'me@example.com')
+        self.assertEqual('dynamic_agent_client', query['client_id'])
+        self.assertEqual('oaiapp_new', record['client_id'])
+        self.assertNotIn(PREF.AI_OPENAI_CLIENT_ID, self.prefs)
+
+    def test_another_workspace_gets_its_own_registration(self):
+        self.sign_in('oaiapp_home', 'me@example.com', plan='plus')
+        record, query = self.sign_in('oaiapp_work', 'me@example.com',
+                                     plan='enterprise',
+                                     account=providers.NEW_ACCOUNT)
+        self.assertEqual('dynamic_agent_client', query['client_id'])
+        self.assertNotIn('login_hint', query)
+        self.assertEqual('oaiapp_work', record['client_id'])
+        accounts = self.openai.saved_accounts()
+        self.assertEqual(['oaiapp_work', 'oaiapp_home'],
+                         [a['client_id'] for a in accounts])
+        self.assertEqual(['me@example.com (Enterprise)',
+                          'me@example.com (Plus)'],
+                         [self.openai.account_label(a) for a in accounts])
+
+    def test_switching_back_uses_that_accounts_registration(self):
+        self.sign_in('oaiapp_home', 'me@example.com')
+        self.sign_in('oaiapp_work', 'me@work.example.com',
+                     account=providers.NEW_ACCOUNT)
+        home = [a for a in self.openai.saved_accounts()
+                if a['client_id'] == 'oaiapp_home'][0]
+        record, query = self.sign_in('oaiapp_home', 'me@example.com',
+                                     account=home)
+        self.assertEqual('oaiapp_home', query['client_id'])
+        self.assertEqual('me@example.com', query['login_hint'])
+        self.assertEqual('at-oaiapp_home', self.openai.auth().token)
+        self.assertEqual('oaiapp_home',
+                         self.openai.saved_accounts()[0]['client_id'])
+
+    def test_signing_out_keeps_the_account_to_come_back_to(self):
+        self.sign_in('oaiapp_home', 'me@example.com')
+        self.openai.sign_out()
+        self.assertIsNone(self.openai.web_record())
+        self.assertEqual(['oaiapp_home'], [a['client_id'] for a in
+                                            self.openai.saved_accounts()])
+        self.openai.forget_account('oaiapp_home')
+        self.assertEqual([], self.openai.saved_accounts())
 
 
 class FakeToolbox(object):

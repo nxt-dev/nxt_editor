@@ -161,6 +161,8 @@ class OpenAI(object):
     SCOPE = ('openid profile email offline_access resource.invoke ' +
              PLAN_SCOPE)
     APP_NAME = 'nxt editor'
+    # Where the ID token says which ChatGPT plan it is.
+    AUTH_CLAIM = 'https://api.openai.com/auth'
     # OpenAI only takes this path back; the port may change.
     CALLBACK_PATH = '/auth/callback'
 
@@ -171,18 +173,16 @@ class OpenAI(object):
 
     @classmethod
     def sign_in(cls, open_browser, host_id, client_id=None, cancelled=None,
-                listener=None, timeout=600, previous=None,
-                on_client_id=None):
+                listener=None, timeout=600, previous=None):
         """Sign in with ChatGPT in the browser. Gives back the record to
         save.
 
         :param open_browser: Called with the URL to open.
         :param host_id: This computer's ext_agent_host_id, kept in prefs.
-        :param client_id: The client_id OpenAI gave this editor last time.
+        :param client_id: The client_id OpenAI gave the account being
+            signed in to. None adds a new account, which gets its own.
         :param previous: The last sign in with that client, if any, so the
             browser can go straight to the same account.
-        :param on_client_id: Called with a newly issued client_id as soon as
-            OpenAI gives it, so it is kept even if the rest fails.
         """
         cancelled = cancelled or threading.Event()
         listener = listener or LoopbackListener(cls.CALLBACK_PATH)
@@ -227,8 +227,6 @@ class OpenAI(object):
                               'of nxt. Try again.')
         if issued and not client_id:
             client_id = issued
-            if on_client_id:
-                on_client_id(client_id)
         if not client_id:
             raise SignInError('OpenAI did not register the editor. Try '
                               'again.')
@@ -258,10 +256,15 @@ class OpenAI(object):
             raise SignInError('Your ChatGPT plan was not shared with the '
                               'editor. Sign in again and allow it, or use '
                               'an API key.')
+        auth = claims.get(cls.AUTH_CLAIM)
+        if not isinstance(auth, dict):
+            auth = {}
+        plan = auth.get('chatgpt_plan_type')
         return {
             'client_id': client_id,
             'ext_agent_host_id': host_id,
             'email': claims.get('email'),
+            'plan': plan,
             'id_token': tokens.get('id_token'),
             'access_token': tokens['access_token'],
             'refresh_token': tokens.get('refresh_token'),
