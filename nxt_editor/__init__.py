@@ -4,7 +4,7 @@ import logging
 import sys
 
 # External
-from Qt import QtCore, QtWidgets, QtGui
+from Qt import QtCompat, QtCore, QtWidgets, QtGui
 
 # Internal
 import nxt
@@ -110,6 +110,9 @@ def launch_editor(paths=None, start_rpc=False):
     app.setActiveWindow(instance)
     if not existing:
         app.exec_()
+        # Delete the window while Qt is still running. Left to Python's
+        # exit, Qt's objects can go in the wrong order and crash.
+        QtCompat.delete(instance)
     return instance
 
 
