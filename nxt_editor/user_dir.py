@@ -191,6 +191,8 @@ class USER_PREF():
     SHOW_IMPLICIT = 'show_implicit_connections'
     SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'
+    # Whether the graph is shown. On unless turned off in the Window menu.
+    SHOW_STAGE_VIEW = 'show_stage_view'
     # The AI assistant, off until a user turns it on. Keys and sign ins
     # are not kept here, see nxt_editor.ai.secret_store.
     AI_ENABLED = 'ai_assistant_enabled'
