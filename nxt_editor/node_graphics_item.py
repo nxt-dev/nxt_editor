@@ -92,6 +92,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
         self.model.build_idx_changed.connect(self.update_build_focus)
         self.model.executing_changed.connect(self.update_build_focus)
+        self.xChanged.connect(self._moved)
+        self.yChanged.connect(self._moved)
         # draw node
         self.update_from_model()
 
@@ -250,24 +252,43 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         y = global_pos.y() + viewport_pos.y()
         return QtCore.QPointF(x, y)
 
-    def itemChange(self, change, value):
-        """Override of QtWidgets.QGraphicsItem itemChange."""
-        # keep connections drawing to node as it moves
-        if change is QtWidgets.QGraphicsItem.ItemPositionChange:
-            graphics = self.view.get_node_connection_graphics(self.node_path)
+    # There is deliberately no itemChange here. With PySide6 6.9 any
+    # Python itemChange, even one handing back the value it was given,
+    # makes setParentItem quietly do nothing, so child nodes were never
+    # stacked under their parent and were left behind when it moved. Moves
+    # are followed through the xChanged and yChanged signals instead, and
+    # snapping happens while dragging, see mouseMoveEvent.
+
+    def _moved(self):
+        """Keep connections drawing to this node, and to the children
+        stacked under it, as it moves."""
+        if self.scene() is None:
+            return
+        stack = [self]
+        while stack:
+            node = stack.pop()
+            graphics = self.view.get_node_connection_graphics(node.node_path)
             for connection in graphics:
                 connection.rebuild_line()
-        # TODO: Take into account the positions of every selected node and snap them all to a grid as soon as
-        #  the user preses shift. This will avoid the weird wavy snapping effect we have right now
-        if change == QtWidgets.QGraphicsItem.ItemPositionChange and self.scene():
-            ml = QtWidgets.QApplication.mouseButtons() == QtCore.Qt.LeftButton
-            shift = QtWidgets.QApplication.keyboardModifiers() == QtCore.Qt.ShiftModifier
-            force_snap = self.view.alignment_actions.snap_action.isChecked()
-            if (ml & shift) or force_snap and not self.get_is_animating():
-                value = self.closest_grid_point(value)
-                return value
+            stack += [c for c in node.childItems()
+                      if isinstance(c, NodeGraphicsItem)]
 
-        return super(NodeGraphicsItem, self).itemChange(change, value)
+    def mouseMoveEvent(self, event):
+        """Drag the selected nodes, snapped to the grid while Shift is held
+        or grid snapping is on."""
+        super(NodeGraphicsItem, self).mouseMoveEvent(event)
+        shift = event.modifiers() == QtCore.Qt.ShiftModifier
+        force_snap = self.view.alignment_actions.snap_action.isChecked()
+        if not (shift or force_snap) or not self.scene():
+            return
+        for item in self.scene().selectedItems():
+            if not isinstance(item, NodeGraphicsItem):
+                continue
+            if not item.flags() & QtWidgets.QGraphicsItem.ItemIsMovable:
+                continue
+            if item.get_is_animating():
+                continue
+            item.setPos(item.closest_grid_point(item.pos()))
 
     def boundingRect(self):
         """Override of QtWidgets.QGraphicsItem boundingRect. If this rectangle does not encompass the entire
