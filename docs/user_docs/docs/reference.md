@@ -51,7 +51,7 @@ A backdrop is a colored box with a title and a note, drawn behind a group of
 nodes to label what that part of the graph does. It only changes how the
 graph looks: it is not a node and it never runs.
 
-- **Add one** with `B` or **Add Backdrop** in the right click menu. With
+- **Add one** with `C` or **Add Backdrop** in the right click menu. With
   nodes selected the backdrop is drawn around them, otherwise an empty one
   is added under the mouse.
 - **Move it** by dragging its header, the title and note at the top. Every

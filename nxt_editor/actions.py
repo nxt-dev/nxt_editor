@@ -790,7 +790,7 @@ class NodeActions(NxtActionContainer):
         # add backdrop
         self.add_backdrop_action = NxtAction(text='Add Backdrop',
                                              parent=self)
-        self.add_backdrop_action.setShortcut('B')
+        self.add_backdrop_action.setShortcut('C')
         self.add_backdrop_action.setAutoRepeat(False)
         self.add_backdrop_action.setWhatsThis('Add a backdrop around the '
                                               'selected nodes, or an empty '

@@ -335,6 +335,15 @@ class BackdropsInTheView(ViewCase):
         self.assertIsNone(self.view.get_backdrop_graphic(backdrop_id))
         self.assertIsNotNone(self.model.comp_layer.lookup('/inside'))
 
+    def test_its_hotkey_is_not_shared(self):
+        # Qt fires neither action when two share a key.
+        action = self.win.node_actions.add_backdrop_action
+        key = action.shortcut()
+        self.assertFalse(key.isEmpty())
+        shared = [a.text() for a in self.win.findChildren(QtWidgets.QAction)
+                  if a is not action and a.shortcut() == key]
+        self.assertEqual([], shared)
+
     def test_clicking_elsewhere_lets_go_of_it(self):
         backdrop_id = self.add()
         self.mouse(QtCore.QEvent.MouseButtonPress, (-50, -90))
