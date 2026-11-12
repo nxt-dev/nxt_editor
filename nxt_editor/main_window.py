@@ -17,7 +17,7 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import file_browser, user_dir
+from nxt_editor import file_browser, user_dir, wires
 from nxt_editor.ai import providers as ai_providers
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
@@ -626,6 +626,7 @@ QCheckBox::indicator {
         # used to end up with a model that never told the window its
         # colors had changed, for as long as the session lasted.
         model.layer_color_changed.connect(self.update_target_color)
+        model.wires_changed.connect(self.update_curved_action)
         model.target_layer_changed.connect(self.update_target_color)
         model.comp_layer_changed.connect(self.update_target_color)
         if update:
@@ -925,6 +926,7 @@ QCheckBox::indicator {
             logger.debug("Successfully set up new tab.")
             self.last_focused_tab = tab_index
             self.update_implicit_action()
+            self.update_curved_action()
             view.toggle_grid(
                 user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_GRID, True)
             )
@@ -969,6 +971,14 @@ QCheckBox::indicator {
             state = False
         self.execute_actions.enable_cmd_port_action.setChecked(state)
         self.execute_actions.enable_cmd_port_action.blockSignals(False)
+
+    def update_curved_action(self):
+        if not self.model:
+            return
+        curved = self.model.get_connection_style() == wires.CURVED
+        self.view_actions.curved_action.blockSignals(True)
+        self.view_actions.curved_action.setChecked(curved)
+        self.view_actions.curved_action.blockSignals(False)
 
     def update_implicit_action(self):
         self.view_actions.implicit_action.blockSignals(True)
@@ -1423,6 +1433,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addAction(self.display_actions.cached_action)
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.view_actions.implicit_action)
+        self.view_menu.addAction(self.view_actions.curved_action)
         self.view_menu.addAction(self.view_actions.grid_action)
         self.view_menu.addAction(self.view_actions.mini_map_action)
         self.view_menu.addAction(self.view_actions.animation_action)

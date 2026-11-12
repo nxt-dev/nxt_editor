@@ -79,6 +79,25 @@ positions. Backdrops from referenced layers are shown too. Changing one
 saves the change on the top layer and leaves the referenced layer as it
 was.
 
+### Lines between nodes
+
+- **Straight or curved**: **View > Curved Connections** draws the graph's
+  lines as curves that leave and meet each plug going across. The choice
+  is saved with the graph, so everyone who opens it sees the same lines.
+  Graphs start out straight.
+- **Route a line through points**: double click a line to add a point
+  there, then drag the point to bend the line around other nodes. A line
+  can have as many points as you like, and the line passes through them in
+  order. Hold `Shift`, or turn on grid snapping, to snap a point to the
+  grid.
+- **Remove a point** by double clicking it, or select it and press `Del`.
+  `Shift` click adds points to or takes them out of the selection.
+
+Points stay where you put them when nodes move. Like backdrops, they are
+saved in the top layer's meta data, and points from referenced layers are
+shown too. A line's points belong to that one connection, so if the
+connection is removed and made again its points come back.
+
 ### Animate Nodes
 
 Nodes no longer slide open when a parent is expanded. Every child is

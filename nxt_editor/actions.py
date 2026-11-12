@@ -10,7 +10,7 @@ from Qt import QtCore, QtGui, QtWidgets
 # Internal
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
-from nxt_editor import user_dir
+from nxt_editor import user_dir, wires
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, finder, file_search, file_browser
@@ -805,8 +805,11 @@ class NodeActions(NxtActionContainer):
         def del_nodes(recursive=False):
             # A selected backdrop is deleted on its own, never together
             # with nodes.
+            # Selected points on lines and backdrops are deleted on their
+            # own, never together with nodes.
             view = self.main_window.view
-            if view and view.delete_selected_backdrops():
+            if view and (view.delete_selected_points() or
+                         view.delete_selected_backdrops()):
                 return
             self.main_window.model.delete_nodes(recursive=recursive)
         self.delete_node_action = NxtAction(text='Delete Node', parent=self)
@@ -1383,6 +1386,23 @@ class StageViewActions(NxtActionContainer):
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Active, QtGui.QIcon.On)
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.implicit_action.setIcon(lines_icon)
+
+        # Straight or curved lines, saved with the graph.
+        def toggle_curved():
+            view = self.main_window.view
+            if not view:
+                return
+            curved = self.curved_action.isChecked()
+            view.model.set_connection_style(
+                wires.CURVED if curved else wires.STRAIGHT)
+
+        self.curved_action = NxtAction(text='Curved Connections',
+                                       parent=self)
+        self.curved_action.setWhatsThis('Draws this graph\'s connections as '
+                                        'curves rather than straight '
+                                        'lines. Saved with the graph.')
+        self.curved_action.setCheckable(True)
+        self.curved_action.triggered.connect(toggle_curved)
         # FRAME
         # Frame all
         self.frame_all_action = NxtAction(text='Frame All',
@@ -1553,6 +1573,7 @@ class StageViewActions(NxtActionContainer):
                                      self.grid_action, self.mini_map_action,
                                      self.animation_action,
                                      self.implicit_action,
+                                     self.curved_action,
                                      self.pick_walk_up_action,
                                      self.pick_walk_down_action,
                                      self.pick_walk_left_action,
