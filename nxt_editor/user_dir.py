@@ -193,6 +193,9 @@ class USER_PREF():
     FONT_SIZE = 'font_size'
     # Whether the graph is shown. On unless turned off in the Window menu.
     SHOW_STAGE_VIEW = 'show_stage_view'
+    # How lines between nodes are drawn in a graph that does not save its
+    # own choice: 'straight' or 'curved'. See nxt_editor.wires.
+    CONNECTION_STYLE = 'connection_style'
     # The AI assistant, off until a user turns it on. Keys and sign ins
     # are not kept here, see nxt_editor.ai.secret_store.
     AI_ENABLED = 'ai_assistant_enabled'

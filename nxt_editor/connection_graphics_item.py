@@ -205,6 +205,10 @@ class WirePointGraphic(QtWidgets.QGraphicsItem):
 
     Points are moved, selected and removed by the stage view, which saves
     them through the model. See nxt_editor.wires.
+
+    A point is the same size on screen at any zoom. Scaled with the graph
+    it shrank to the width of its line when zoomed out, and could no
+    longer be told apart from it.
     """
     RADIUS = 5.0
 
@@ -213,6 +217,7 @@ class WirePointGraphic(QtWidgets.QGraphicsItem):
         # at the scene's origin and draws in scene positions, so a point's
         # position is its scene position too.
         super(WirePointGraphic, self).__init__(connection)
+        self.setFlag(QtWidgets.QGraphicsItem.ItemIgnoresTransformations)
         self.connection = connection
         self.selected = False
 
@@ -234,8 +239,10 @@ class WirePointGraphic(QtWidgets.QGraphicsItem):
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         color = QtGui.QColor(self.connection.color)
         if self.selected:
-            painter.setPen(QtGui.QPen(colors.SELECTED, 2))
+            ring = QtGui.QPen(colors.SELECTED, 2)
         else:
-            painter.setPen(QtGui.QPen(color.darker(160), 1))
+            # Dark, so the dot stands apart from the line running into it.
+            ring = QtGui.QPen(colors.GRAPH_BG_COLOR, 2)
+        painter.setPen(ring)
         painter.setBrush(color)
         painter.drawEllipse(QtCore.QPointF(), self.RADIUS, self.RADIUS)

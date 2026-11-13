@@ -88,7 +88,9 @@ was.
 - **Straight or curved**: **View > Curved Connections** draws the graph's
   lines as curves that leave and meet each plug going across. The choice
   is saved with the graph, so everyone who opens it sees the same lines.
-  Graphs start out straight.
+  It is also remembered in your preferences, and a graph that has not
+  saved a choice of its own is drawn the way you last picked. With no
+  preference, lines are straight.
 - **Route a line through points**: double click a line to add a point
   there, then drag the point to bend the line around other nodes. A line
   can have as many points as you like, and the line passes through them in
@@ -96,6 +98,21 @@ was.
   grid.
 - **Remove a point** by double clicking it, or select it and press `Del`.
   `Shift` click adds points to or takes them out of the selection.
+- **Select points with a box**: dragging a selection box picks up the
+  points inside it along with the nodes, with the same keys as nodes
+  (`Ctrl+Shift` adds, `Shift` toggles, `Ctrl` takes away). `Del` then
+  removes the points and nodes together, as one undo.
+- **Break a connection** by right clicking its line, a point on it, or a
+  plug, and picking **Break Connection**. On a plug it breaks every line
+  on that plug. What the line came from is taken out and nothing is left
+  in its place: an exec input or instance is cleared, and an attribute is
+  left empty, keeping any other text it held around the reference. A
+  connection made on a weaker layer is broken by making that layer the
+  target first. Lines into a node's code come from its code, and are
+  changed in the code editor.
+
+Points are the same size on screen at any zoom, so they can still be told
+apart from their line when you zoom out.
 
 Points stay where you put them when nodes move. Like backdrops, they are
 saved in the top layer's meta data, and points from referenced layers are
@@ -417,12 +434,21 @@ restart it.
 The Outliner lists the graph's nodes as a tree. It is off until you turn it
 on from **Window > Outliner**.
 
-- Root nodes are listed in the order they run. The chains that begin at a
-  start point (marked with the start point icon) come first, then the
-  other chains, each followed through its exec connections. Roots no chain
-  reaches come last.
+- Root nodes are grouped by the build that runs them. Each start point
+  has a **Build from** section listing the roots that run from it, in
+  order, following exec connections. A root two builds reach is listed
+  under the first. Everything no start point leads to is under **Not in a
+  build**.
 - Each node's children sit under it in their child order. Closed branches
   stay closed as you edit.
+- A row is filled with the color of the layer with the strongest opinion
+  on the node, and each weaker layer with an opinion adds a chip of its
+  color at the right end, as on the node in the graph.
+- The search box at the top finds nodes at any depth by their name. It
+  takes a regular expression and ignores case, and text that is not a
+  valid one yet is searched for as it is. Matching rows are bold, the
+  nodes above them stay so you can see where they are, and `Enter` frames
+  the first match.
 - Disabled nodes are grey and in italics.
 - Selecting rows selects the nodes in the graph, and selecting nodes in the
   graph selects their rows. Double click a row to frame its node.

@@ -742,6 +742,33 @@ class StageView(QtWidgets.QGraphicsView):
         self._selected_points = set(refs)
         self._show_point_selection()
 
+    def points_in(self, scene_rect):
+        """The points on lines inside a scene rectangle.
+
+        Asked of each line rather than of the scene: a point keeps its
+        size on screen as the view zooms, and the scene does not find
+        items like that by area reliably.
+        """
+        refs = set()
+        for connection in self._connection_graphics:
+            for index, graphic in enumerate(connection.point_graphics):
+                if scene_rect.contains(graphic.scenePos()):
+                    refs.add((connection.key, index))
+        return refs
+
+    def box_select_points(self, refs, modifiers):
+        """Select the points a box was dragged around, with the same
+        modifiers as nodes: Ctrl+Shift adds them, Shift toggles them, Ctrl
+        takes them out, and none makes them the selection."""
+        refs = set(refs)
+        if modifiers == self.SEL_ADD_MODIFIERS:
+            refs = self._selected_points | refs
+        elif modifiers == self.SEL_TOGGLE_MODIFIERS:
+            refs = self._selected_points ^ refs
+        elif modifiers == self.SEL_RMV_MODIFIERS:
+            refs = self._selected_points - refs
+        self.select_points(refs)
+
     def point_at(self, view_pos):
         for item in self.items(view_pos):
             if isinstance(item, WirePointGraphic):
@@ -1448,6 +1475,8 @@ class StageView(QtWidgets.QGraphicsView):
             for item in self.scene().items(selection_area_rect):
                 if isinstance(item, NodeGraphicsItem):
                     node_paths.append(item.node_path)
+            self.box_select_points(self.points_in(selection_area_rect),
+                                   event.modifiers())
             selected_paths = node_paths
             if selected_paths:
                 # add items to selection
@@ -1670,17 +1699,90 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene().addItem(self.potential_connection)
         self.potential_connection.setZValue(self.POTENTIAL_CONNECTION_DEPTH)
 
+    def lines_at(self, view_pos):
+        """The lines a right click at view_pos is about.
+
+        On a plug, every line into or out of it. On a line, or a point on
+        one, that line. Lines into a node's code are left out, see
+        StageModel.break_connections.
+
+        :return: list of AttrConnectionGraphic
+        """
+        point = self.point_at(view_pos)
+        if point is not None:
+            found = [point.connection]
+        else:
+            plug = None
+            for item in self.items(view_pos):
+                if isinstance(item, NodeGraphicsPlug):
+                    plug = item
+                    break
+            if plug is not None:
+                found = self.plug_lines(plug)
+            else:
+                line = self.connection_at(self.mapToScene(view_pos))
+                found = [line] if line else []
+        return [line for line in found
+                if self.model._breakable(line.tgt_path)]
+
+    def plug_lines(self, plug):
+        node_path = plug.parentItem().node_path
+        attr = plug.attr_name_represented
+        exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
+        if plug.is_input:
+            path = nxt_path.make_attr_path(node_path, attr)
+            return [line for line in self._connection_graphics
+                    if line.tgt_path == path]
+        if attr == exec_attr:
+            # An exec line starts at the node itself.
+            path = node_path
+        else:
+            path = nxt_path.make_attr_path(node_path, attr)
+        return [line for line in self._connection_graphics
+                if line.src_path == path]
+
+    def lines_menu(self, lines):
+        """The right click menu for lines: break them."""
+        menu = QtWidgets.QMenu(self)
+        if len(lines) == 1:
+            text = 'Break Connection'
+        else:
+            text = 'Break {} Connections'.format(len(lines))
+        action = menu.addAction(text)
+        pairs = [(line.src_path, line.tgt_path) for line in lines]
+        action.triggered.connect(
+            lambda: self.model.break_connections(pairs))
+        menu.exec_(self.mapToGlobal(self._initial_click_pos))
+
     def contextMenuEvent(self, event):
         if self.block_context_menu:  # Check if we shouldn't spawn the menu
             return
         item = self.itemAt(self._initial_click_pos)
+        lines = self.lines_at(self._initial_click_pos)
+        if lines:
+            self.lines_menu(lines)
+            return
         if isinstance(item, BackdropGraphicsItem):
             self.backdrop_menu(item)
             self.block_context_menu = True
             return
-        menu = QtWidgets.QMenu(self)
+        hov_path = None
         if isinstance(item, NodeGraphicsItem):
             hov_path = item.node_path
+        menu = self.node_menu(hov_path)
+        menu.exec_(self.mapToGlobal(self._initial_click_pos))
+        self.block_context_menu = True  # Set the block var to true again
+
+    def node_menu(self, hov_path=None, parent=None):
+        """The right click menu for nodes: running them, and editing the
+        selected ones. The Outliner shows the same one for its rows.
+
+        :param hov_path: the node right clicked on, if any
+        :param parent: the widget to parent the menu to, this view if None
+        :rtype: QtWidgets.QMenu
+        """
+        menu = QtWidgets.QMenu(parent or self)
+        if hov_path:
             exec_hovered_text = 'Execute {}'.format(hov_path)
             exec_hovered_action = menu.addAction(exec_hovered_text)
 
@@ -1737,8 +1839,12 @@ class StageView(QtWidgets.QGraphicsView):
             menu.addAction(self.authoring_actions.revert_child_order_action)
         if has_start:
             menu.addAction(self.exec_actions.revert_start_action)
-        menu.exec_(self.mapToGlobal(self._initial_click_pos))
-        self.block_context_menu = True  # Set the block var to true again
+        if selected_nodes_count > 0:
+            menu.addSeparator()
+            menu.addAction(self.exec_actions.toggle_start_action)
+            menu.addAction(self.exec_actions.toggle_break_action)
+            menu.addAction(self.exec_actions.toggle_skip_action)
+        return menu
 
     @staticmethod
     def get_sel_path_for_graphic(graphic):
