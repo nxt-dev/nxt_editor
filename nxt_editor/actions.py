@@ -14,6 +14,7 @@ from nxt_editor import user_dir, wires
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, finder, file_search, file_browser
+from nxt_editor.layer_color_dialog import LayerColorDialog
 
 logger = logging.getLogger('nxt')
 
@@ -619,16 +620,11 @@ class LayerActions(NxtActionContainer):
                 layer = self.main_window.model.target_layer
             if not layer:
                 return
-            cd = QtWidgets.QColorDialog()
-            cd.setOption(QtWidgets.QColorDialog.DontUseNativeDialog)
-            for i, c in enumerate(colors.LAYER_COLORS):
-                cd.setCustomColor(i, c)
-            cd.setCurrentColor(QtGui.QColor(layer.color))
-            cd.exec_()
-            color = cd.currentColor()
-            if color.isValid():
-                color_name = color.name()
-                model = self.main_window.model
+            # Only colors white text reads on, see LayerColorDialog.
+            model = self.main_window.model
+            color_name = LayerColorDialog.get_color(
+                model.get_layer_color(layer), parent=self.main_window)
+            if color_name:
                 model.set_layer_color(layer_path=layer.real_path,
                                       color=color_name)
         self.change_color_action.triggered.connect(change_color)
@@ -1011,8 +1007,16 @@ class NodeActions(NxtActionContainer):
         # Rename node
 
         def rename_node():
+            # Renamed where it was asked for: in its Outliner row when the
+            # Outliner has focus, else on the node in the graph.
+            outliner = getattr(self.main_window, 'outliner', None)
+            if outliner is not None and outliner.tree.hasFocus():
+                outliner.rename_selected()
+                return
             self.main_window.view.rename_node()
         self.rename_node_action = NxtAction(text='Rename Node', parent=self)
+        self.rename_node_action.setShortcut('F2')
+        self.rename_node_action.setWhatsThis('Rename the selected node.')
         self.rename_node_action.triggered.connect(rename_node)
         # Disable node
 
@@ -1591,7 +1595,27 @@ class StageViewActions(NxtActionContainer):
         tt_state = user_dir.user_prefs.get(user_dir.USER_PREF.NODE_TOOLTIPS,
                                            True)
         self.tooltip_action.setChecked(tt_state)
+        def toggle_neutral_property_text(state):
+            from nxt_editor.dockwidgets import property_editor
+            property_editor.set_neutral_text(state)
+            editor = getattr(self.main_window, 'property_editor', None)
+            if editor is not None:
+                property_editor.refresh_neutral_text(editor)
+        self.neutral_property_text_action = NxtAction(
+            text='Neutral Property Text', parent=self)
+        self.neutral_property_text_action.setWhatsThis(
+            'Show the Property Editor\'s attributes in neutral text, bright '
+            'where the node sets the value and softer where it inherits '
+            'it, with the color of the layer each comes from in the row '
+            'header. Off, rows are in their layer\'s color.')
+        self.neutral_property_text_action.setCheckable(True)
+        self.neutral_property_text_action.setChecked(bool(
+            user_dir.user_prefs.get(
+                user_dir.USER_PREF.NEUTRAL_PROPERTY_TEXT, False)))
+        self.neutral_property_text_action.toggled.connect(
+            toggle_neutral_property_text)
         self.action_display_order = [self.tooltip_action,
+                                     self.neutral_property_text_action,
                                      self.frame_all_action,
                                      self.frame_selection_action,
                                      self.hide_attrs_action,

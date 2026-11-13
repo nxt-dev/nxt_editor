@@ -1077,6 +1077,13 @@ class PropertyEditor(DockWidgetBase):
                                          menu.actions()))
 
 
+def refresh_neutral_text(editor):
+    """Redraw editor's table after neutral_text changed."""
+    table = editor.table_view
+    table.viewport().update()
+    table.verticalHeader().viewport().update()
+
+
 class PropertyModel(QtCore.QAbstractTableModel):
     """Property Editor model"""
 
@@ -1389,19 +1396,37 @@ class PropertyModel(QtCore.QAbstractTableModel):
                     lines = ['No Historical Opinions']
                 return '\n'.join(lines)
 
-        if role == QtCore.Qt.ForegroundRole:
+        if role == LAYER_COLOR_ROLE:
             attr_name = self._data[row][COLUMNS.name]
-            locality_idx = self._data[row][COLUMNS.locality]
-            color = self.node_attr_draw_details[attr_name]['color']
-            if locality_idx in (LOCALITIES.local, LOCALITIES.code):
-                return QtGui.QColor(color).lighter(150)
-            else:
+            return QtGui.QColor(
+                self.node_attr_draw_details[attr_name]['color'])
+
+        locality_idx = self._data[row][COLUMNS.locality]
+        is_local = locality_idx in (LOCALITIES.local, LOCALITIES.code)
+        neutral = neutral_text()
+        if role == QtCore.Qt.ForegroundRole:
+            if not neutral:
+                attr_name = self._data[row][COLUMNS.name]
+                color = self.node_attr_draw_details[attr_name]['color']
+                if is_local:
+                    return QtGui.QColor(color).lighter(150)
                 return QtGui.QColor(color).darker(150)
+            # Bright where this node sets the value, softer where it comes
+            # from elsewhere, and both read on the dark panel whatever the
+            # layer's color. The type's word is always the softer one.
+            if is_local and column != COLUMNS.nxt_type:
+                return theme.color(theme.TEXT)
+            return theme.color(theme.TEXT_DIM)
 
         if role == QtCore.Qt.FontRole:
-            if self._data[row][COLUMNS.locality] == LOCALITIES.instanced:
+            instanced = locality_idx == LOCALITIES.instanced
+            # A value the node sets itself is bold across its row.
+            bold_name = neutral and is_local
+            if instanced or bold_name:
                 font = FONTS.default_font()
-                font.setItalic(True)
+                font.setItalic(instanced)
+                if bold_name:
+                    font.setWeight(QtGui.QFont.DemiBold)
                 return font
 
         if role == QtCore.Qt.DecorationRole and column == COLUMNS.nxt_type:
@@ -1490,6 +1515,9 @@ class AttrsTableView(QtWidgets.QTableView):
         self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
         self.setItemDelegateForColumn(COLUMNS.source, self.node_path_delegate)
+        # The layer each row's value comes from, as a color in the row
+        # header, which stays put however far the table is scrolled.
+        self.setVerticalHeader(LayerRowHeader(self))
         self.mouse_pressed = False
         self.drag_start_pos = None
         self.setDragEnabled(True)
@@ -1541,6 +1569,35 @@ class AttrsTableView(QtWidgets.QTableView):
         return self.model().data(idx)
 
 
+class LayerRowHeader(QtWidgets.QHeaderView):
+    """Row headers filled with the color of the layer each row's value
+    comes from, with neutral_text on. They do not scroll sideways with
+    the table, so the layer shows beside whichever columns are in view."""
+
+    def __init__(self, parent=None):
+        super(LayerRowHeader, self).__init__(QtCore.Qt.Vertical, parent)
+
+    def paintSection(self, painter, rect, logical_index):
+        painter.save()
+        super(LayerRowHeader, self).paintSection(painter, rect,
+                                                 logical_index)
+        painter.restore()
+        model = self.model()
+        if not neutral_text() or model is None:
+            return
+        color = model.data(model.index(logical_index, COLUMNS.name),
+                           LAYER_COLOR_ROLE)
+        if color is None:
+            return
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        chip = QtCore.QRectF(rect).adjusted(2, 1, -2, -1)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(chip, 2, 2)
+        painter.restore()
+
+
 class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
 
     def __init__(self, parent):
@@ -1548,6 +1605,9 @@ class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
         super(NodePathBtnDelegate, self).__init__()
 
     def paint(self, painter, option, index):
+        if neutral_text():
+            self.paint_plain(painter, option, index)
+            return
         self.initStyleOption(option, index)
         inner_rect = QtCore.QRect().united(option.rect)
         inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
@@ -1565,6 +1625,31 @@ class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
         painter.fillRect(inner_rect, color)
         color.setAlpha(255)
         painter.drawText(inner_rect, QtCore.Qt.AlignCenter, index.data())
+
+    def paint_plain(self, painter, option, index):
+        """The source's path as plain text, in the row's text color. It
+        shows it is a button, to jump to the source, only under the
+        mouse."""
+        self.initStyleOption(option, index)
+        inner_rect = QtCore.QRect().united(option.rect)
+        inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
+        painter.save()
+        if option.state & QtWidgets.QStyle.State_MouseOver:
+            pressed = self.parent.mouse_pressed == index.column()
+            painter.setRenderHint(QtGui.QPainter.Antialiasing)
+            painter.setBrush(QtGui.QColor(255, 255, 255, 26 if pressed
+                                          else 15))
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 31), 1))
+            painter.drawRoundedRect(QtCore.QRectF(inner_rect).adjusted(
+                0.5, 0.5, -0.5, -0.5), 3, 3)
+        text_rect = inner_rect.adjusted(6, 0, -4, 0)
+        painter.setFont(option.font)
+        painter.setPen(index.data(role=QtCore.Qt.ForegroundRole))
+        text = QtGui.QFontMetrics(option.font).elidedText(index.data() or '',
+                                             QtCore.Qt.ElideLeft,
+                                             text_rect.width())
+        painter.drawText(text_rect, QtCore.Qt.AlignVCenter, text)
+        painter.restore()
 
     def editorEvent(self, event, model, option, index):
         if event.button() != QtCore.Qt.MouseButton.LeftButton:
@@ -1793,6 +1878,35 @@ class OverlayWidget(QtWidgets.QWidget):
     def update(self):
         self.setGeometry(self.parent().rect())
         super(OverlayWidget, self).update()
+
+
+# The color of the layer a row's value comes from.
+LAYER_COLOR_ROLE = QtCore.Qt.UserRole + 10
+
+_neutral_text = []
+
+
+def neutral_text():
+    """Whether rows are in neutral text, bright where the node sets the
+    value and softer where it does not, with their layer shown as a color
+    in the row header, rather than in their layer's color.
+
+    Layer colors are dark enough to carry white text, so as text on the
+    dark panel the inherited rows, darkened further, are hard to read.
+    Off by default, see View > Options > Neutral Property Text.
+    """
+    if not _neutral_text:
+        _neutral_text.append(bool(user_dir.user_prefs.get(
+            user_dir.USER_PREF.NEUTRAL_PROPERTY_TEXT, False)))
+    return _neutral_text[0]
+
+
+def set_neutral_text(state):
+    """Turn neutral_text on or off, and remember it."""
+    state = bool(state)
+    del _neutral_text[:]
+    _neutral_text.append(state)
+    user_dir.user_prefs[user_dir.USER_PREF.NEUTRAL_PROPERTY_TEXT] = state
 
 
 class LOCALITIES:

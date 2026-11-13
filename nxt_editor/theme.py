@@ -44,6 +44,8 @@ ACCENT_DIM = '#3c3c3c'
 # -- the graph ---------------------------------------------------------------
 NODE_BODY = '#2a2a2a'        # a node's attribute rows
 NODE_TEXT = '#f2f2f2'
+DARK_TEXT = '#141414'          # text on a bright layer color
+BRIGHT = 0.3                 # the luminance past which text goes dark
 SELECTED = '#ffb547'         # the outline of a selected node
 HOVERED = '#ffffff'
 GRID_MINOR = (255, 255, 255, 9)
@@ -117,6 +119,71 @@ def color(value, alpha=None):
     if alpha is not None:
         result.setAlphaF(alpha)
     return result
+
+
+def luminance(value):
+    """How bright a color looks, 0 for black to 1 for white (WCAG)."""
+    value = QtGui.QColor(value)
+
+    def channel(c):
+        c /= 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return (0.2126 * channel(value.red()) +
+            0.7152 * channel(value.green()) +
+            0.0722 * channel(value.blue()))
+
+
+def contrast(a, b):
+    """The contrast ratio between two colors, 1 to 21 (WCAG)."""
+    la, lb = luminance(a), luminance(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+# The least contrast a layer's color keeps with the white text on it.
+# WCAG's for regular sized text, so the Outliner's names read too.
+WHITE_TEXT_CONTRAST = 4.5
+
+
+def white_text_safe(value):
+    """value, as dark as it has to be for white text to read on it.
+
+    A color white text already reads on is kept. A brighter one keeps its
+    hue and saturation and is darkened only as far as it takes, so a
+    yellow becomes a deep gold rather than a brown.
+
+    :param value: a color, or anything QColor takes
+    :rtype: QtGui.QColor
+    """
+    value = QtGui.QColor(value)
+    if contrast(value, NODE_TEXT) >= WHITE_TEXT_CONTRAST:
+        return value
+    hue, saturation, lightness, alpha = value.getHslF()
+    hue = max(hue, 0.0)  # greys have no hue
+    low, high = 0.0, lightness
+    for _ in range(20):
+        middle = (low + high) / 2.0
+        test = QtGui.QColor.fromHslF(hue, saturation, middle, alpha)
+        if contrast(test, NODE_TEXT) >= WHITE_TEXT_CONTRAST:
+            low = middle
+        else:
+            high = middle
+    return QtGui.QColor.fromHslF(hue, saturation, low, alpha)
+
+
+def readable_text(background):
+    """Light or dark text, whichever reads better on a background.
+
+    Layer colors run from deep reds to bright yellows, and white text
+    on the bright ones is hard to read. Strict contrast ratios would turn
+    mid tones such as orange or teal dark too, where light text still
+    reads well and matches the rest, so text only goes dark once a color
+    is clearly bright.
+
+    :rtype: QtGui.QColor
+    """
+    if luminance(background) > BRIGHT:
+        return color(DARK_TEXT)
+    return color(NODE_TEXT)
 
 
 def mix(a, b, amount):

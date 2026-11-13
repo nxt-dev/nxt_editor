@@ -10,7 +10,7 @@ from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
 from nxt_editor.dockwidgets.layer_manager import LetterCheckboxDelegeate
 import nxt_editor
-from nxt_editor import colors
+from nxt_editor import colors, theme
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -436,6 +436,43 @@ class BuildView(DockWidgetBase):
             self.refresh_build_table()
 
 
+class BuildPathDelegate(QtWidgets.QStyledItemDelegate):
+    """Draws a node's row in the build the way rows are everywhere else:
+    its fill, red for the node that runs next, stays as it is, and only
+    the edge shows the node being selected, amber, or under the mouse,
+    white. The style's own hover and selection painted over the fill."""
+
+    def __init__(self, table):
+        super(BuildPathDelegate, self).__init__(table)
+        self.table = table
+
+    def paint(self, painter, option, index):
+        opt = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        rect = QtCore.QRectF(option.rect).adjusted(1, 1, -1, -1)
+        background = index.data(QtCore.Qt.BackgroundRole)
+        if background is not None:
+            path = QtGui.QPainterPath()
+            path.addRoundedRect(rect, 3, 3)
+            painter.fillPath(path, QtGui.QBrush(background))
+        painter.setFont(opt.font)
+        painter.setPen(theme.color(theme.NODE_TEXT))
+        text_rect = rect.adjusted(6, 0, -6, 0)
+        text = opt.fontMetrics.elidedText(opt.text, QtCore.Qt.ElideLeft,
+                                          int(text_rect.width()))
+        painter.drawText(text_rect, QtCore.Qt.AlignVCenter, text)
+        if self.table.is_selected_row(index.row()):
+            painter.setPen(QtGui.QPen(colors.SELECTED, 2))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+        elif index.row() == self.table.hover_row:
+            painter.setPen(QtGui.QPen(theme.color(theme.HOVERED, 0.55), 1))
+            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5),
+                                    3, 3)
+        painter.restore()
+
+
 class BuildTable(QtWidgets.QTableView):
     """Displays a table of nodes for a build.
     The node highlighted in red will be the next run node if the graph is
@@ -452,8 +489,41 @@ class BuildTable(QtWidgets.QTableView):
         self.skip_delegate = LetterCheckboxDelegeate('S')
         self.setItemDelegateForColumn(BuildModel.SKIP_COLUMN,
                                       self.skip_delegate)
+        self.path_delegate = BuildPathDelegate(self)
+        self.setItemDelegateForColumn(BuildModel.PATH_COLUMN,
+                                      self.path_delegate)
+        # The row whose node is under the mouse, its edge drawn white. Only
+        # over the node: the break and skip boxes beside it are their own.
+        self.hover_row = -1
+        self.setMouseTracking(True)
         self.clicked.connect(self.on_row_clicked)
         # TODO context menu and shift-click for +descendents.
+
+    def is_selected_row(self, row):
+        """Whether the node in row is selected, here or anywhere else."""
+        build_model = self.model()
+        if not build_model or not build_model.stage_model:
+            return False
+        try:
+            path = build_model._nodes[row]
+        except IndexError:
+            return False
+        return path in build_model.stage_model.selection
+
+    def set_hover_row(self, row):
+        if row != self.hover_row:
+            self.hover_row = row
+            self.viewport().update()
+
+    def mouseMoveEvent(self, event):
+        pos = event.pos()
+        over_node = self.columnAt(pos.x()) == BuildModel.PATH_COLUMN
+        self.set_hover_row(self.rowAt(pos.y()) if over_node else -1)
+        super(BuildTable, self).mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.set_hover_row(-1)
+        super(BuildTable, self).leaveEvent(event)
 
     def on_row_clicked(self, clicked_idx):
         """When a row in the table is clicked, select and frame.
@@ -479,6 +549,11 @@ class BuildTable(QtWidgets.QTableView):
         if not model:
             return
         model.stage_model.build_idx_changed.connect(self.on_build_idx_changed)
+        # Selected nodes are outlined, wherever they were selected.
+        model.stage_model.selection_changed.connect(self.on_selection_changed)
+
+    def on_selection_changed(self, *args):
+        self.viewport().update()
 
     def scroll_to_path(self, node_path):
         """Bring the row for a node path into view.

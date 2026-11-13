@@ -1561,15 +1561,20 @@ class ClearBreakpoints(QUndoCommand):
 
     @processing
     def undo(self):
-        user_dir.breakpoints[self.layer_path] = self.prev_breaks
+        layer_path = self.model.lookup_layer(self.layer_path).real_path
+        self.model._breaks(layer_path)[layer_path] = self.prev_breaks
         self.model.nodes_changed.emit(tuple(self.prev_breaks))
+        self.model.breaks_changed.emit(self.prev_breaks)
 
     @processing
     def redo(self):
-        self.prev_breaks = user_dir.breakpoints.get(self.layer_path, [])
-        if self.layer_path in list(user_dir.breakpoints.keys()):
-            user_dir.breakpoints.pop(self.layer_path)
+        layer_path = self.model.lookup_layer(self.layer_path).real_path
+        breaks = self.model._breaks(layer_path)
+        self.prev_breaks = breaks.get(layer_path, [])
+        if layer_path in list(breaks.keys()):
+            breaks.pop(layer_path)
         self.model.nodes_changed.emit(tuple(self.prev_breaks))
+        self.model.breaks_changed.emit([])
         self.setText("Clear all breakpoints")
 
 

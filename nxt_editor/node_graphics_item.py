@@ -33,6 +33,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
     ATTR_PLUG_RADIUS = 4
     EXEC_PLUG_RADIUS = 6
+    # A chip of a weaker layer's color at the title bar's right end.
+    LAYER_CHIP = 8
     ROUND_X = theme.NODE_RADIUS
     ROUND_Y = theme.NODE_RADIUS
     # Room around a root node for its shadow: left, top, right, bottom.
@@ -80,6 +82,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.error_list = []
         self.error_item = None
         self.is_build_focus = False
+        self.header_text = theme.color(theme.NODE_TEXT)
 
         # local attributes
         self.user_attr_names = []
@@ -398,7 +401,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
     def draw_header(self, painter):
         """The title bar, in the color of the layer with the strongest
-        opinion. Each weaker layer adds a narrow stripe at its right end.
+        opinion. Each weaker layer adds a chip of its color at the right
+        end, the chips side by side.
 
         Instances are hatched, locked nodes stippled, and nodes that are
         only implied by their children see through.
@@ -417,6 +421,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         fill = top.darker(self.dim_factor)
         if not self.node_enabled:
             fill = theme.mix(fill, theme.NODE_BODY, 0.55)
+        # Text and markers on the title bar are white on every color.
+        self.header_text = theme.color(theme.NODE_TEXT)
         painter.fillRect(title_rect, fill)
         # A lighter line along the top edge, as light falling on it.
         painter.fillRect(QtCore.QRectF(0, 0, self.max_width, 1),
@@ -429,10 +435,10 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
             stipple = QtGui.QColor(0, 0, 0, 90)
             painter.fillRect(title_rect,
                              QtGui.QBrush(stipple, QtCore.Qt.Dense5Pattern))
-        stripe = 5
+        chip = self.LAYER_CHIP
         for i, color in enumerate(reversed(colors_[:-1])):
-            x = self.max_width - (i + 1) * stripe
-            painter.fillRect(QtCore.QRectF(x, 0, stripe - 1,
+            x = self.max_width - (i + 1) * chip
+            painter.fillRect(QtCore.QRectF(x, 0, chip,
                                            self.title_rect_height),
                              color.darker(self.dim_factor))
         if self.user_attr_names:
@@ -441,6 +447,10 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                            self.max_width, 1),
                              QtGui.QColor(0, 0, 0, 70))
         painter.restore()
+
+    def chips_width(self):
+        """How much of the title bar's right end the layer chips take."""
+        return max(len(self.colors) - 1, 0) * self.LAYER_CHIP
 
     @staticmethod
     def _rect_path(rect):
@@ -470,11 +480,12 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         if lod > MIN_LOD:
             # draw attr dots
             offset = -5
-            dots_color = QtGui.QColor(255, 255, 255, 150)
+            dots_color = QtGui.QColor(self.header_text)
+            dots_color.setAlphaF(0.6)
             for fill in self.attr_dots:
                 painter.setBrush(dots_color if fill else QtCore.Qt.NoBrush)
                 painter.setPen(QtGui.QPen(dots_color, 0.8))
-                dot_x = self.max_width - 14
+                dot_x = self.max_width - 14 - self.chips_width()
                 dot_y = (self.title_rect_height / 2) + offset
                 painter.drawEllipse(QtCore.QPointF(dot_x, dot_y), 1.6, 1.6)
                 offset += 5
@@ -484,12 +495,13 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         painter.setFont(self.title_font)
         title_str = nxt_path.node_name_from_node_path(self.node_path)
         font_metrics = QtGui.QFontMetrics(self.title_font)
-        width = self.max_width - 40
+        width = self.max_width - 40 - self.chips_width()
         if self.error_list:
             width -= 20
-        text_color = theme.color(theme.NODE_TEXT).darker(self.dim_factor)
+        # Light or dark, whichever reads on this layer's color.
+        text_color = QtGui.QColor(self.header_text)
         if not self.node_enabled:
-            text_color = theme.color(theme.NODE_TEXT, 0.45)
+            text_color.setAlphaF(0.5)
         if lod > MIN_LOD:
             painter.setPen(text_color)
             title = font_metrics.elidedText(title_str,
@@ -873,20 +885,30 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
     def rename_node(self):
         """Presents a rename dialog pop-up over the node item. The new name is sent to the model."""
+        # The box opens on the node, so the node has to be on screen. A
+        # node renamed from elsewhere, such as the Outliner, may not be.
+        title_scene = self.mapToScene(self.title_bounding_rect).boundingRect()
+        shown = self.view.mapToScene(
+            self.view.viewport().rect()).boundingRect()
+        if not shown.contains(title_scene):
+            self.view.centerOn(title_scene.center())
         # get dialog geometry
         scale_factor = self.view.transform().m11()
         scale = scale_factor if scale_factor > 0.75 else 0.75
         title_rect = self.title_bounding_rect.toRect()
-        width = title_rect.width() * scale
-        height = title_rect.height() * scale
+        width = int(title_rect.width() * scale)
+        height = int(title_rect.height() * scale)
         pos = self.screen_pos
-        geometry = QtCore.QRect(pos.x(), pos.y(), width, height)
+        geometry = QtCore.QRect(int(pos.x()), int(pos.y()), width, height)
 
         # rename dialog
         name = nxt_path.node_name_from_node_path(self.node_path)
         dialog = NameEditDialog(name=name, geometry=geometry, parent=None)
+        # Looks like the title it replaces.
         color_name = self.colors[-1].name()
-        dialog.setStyleSheet('background-color: %s; color: white' % color_name)
+        dialog.line_edit.setStyleSheet(
+            'background-color: %s; color: %s; border: 1px solid %s;' % (
+                color_name, theme.NODE_TEXT, theme.SELECTED))
         font = QtGui.QFont(self.title_font)
         font.setPixelSize(max(1, int(self.title_font.pixelSize() * scale)))
         dialog.line_edit.setFont(font)

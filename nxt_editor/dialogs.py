@@ -9,7 +9,7 @@ from Qt import QtCore, QtWidgets, QtGui
 
 # Internal
 import nxt_editor
-from nxt_editor import user_dir
+from nxt_editor import theme, user_dir
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -436,6 +436,51 @@ class UpgradePrefsDialogue(NxtConfirmDialog):
             user_dir.upgrade_prefs(user_dir.UPGRADABLE_PREFS)
 
 
+class CheckDelegate(QtWidgets.QStyledItemDelegate):
+    """Draws a row's checkbox so it shows on any row color, hovered or
+    not: a dark box with a light edge and a light check. A row filled with
+    its layer's color hid the style's own, apart from under the mouse."""
+
+    def paint(self, painter, option, index):
+        super(CheckDelegate, self).paint(painter, option, index)
+        opt = QtWidgets.QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        features = QtWidgets.QStyleOptionViewItem.HasCheckIndicator
+        if not opt.features & features:
+            return
+        widget = opt.widget
+        style = widget.style() if widget else QtWidgets.QApplication.style()
+        rect = style.subElementRect(
+            QtWidgets.QStyle.SE_ItemViewItemCheckIndicator, opt, widget)
+        draw_check(painter, rect, opt.checkState)
+
+
+def draw_check(painter, rect, state):
+    """A checkbox that reads on any background, in rect."""
+    side = min(rect.width(), rect.height(), 16) - 2
+    box = QtCore.QRectF(0, 0, side, side)
+    box.moveCenter(QtCore.QRectF(rect).center())
+    painter.save()
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    painter.setPen(QtGui.QPen(theme.color(theme.NODE_TEXT), 1.2))
+    painter.setBrush(theme.color(theme.GRAPH))
+    painter.drawRoundedRect(box, 3, 3)
+    pen = QtGui.QPen(theme.color(theme.NODE_TEXT), 2)
+    pen.setCapStyle(QtCore.Qt.RoundCap)
+    pen.setJoinStyle(QtCore.Qt.RoundJoin)
+    painter.setPen(pen)
+    x, y, w = box.left(), box.top(), box.width()
+    if state == QtCore.Qt.Checked:
+        painter.drawPolyline(QtGui.QPolygonF([
+            QtCore.QPointF(x + w * .25, y + w * .52),
+            QtCore.QPointF(x + w * .43, y + w * .7),
+            QtCore.QPointF(x + w * .76, y + w * .32)]))
+    elif state == QtCore.Qt.PartiallyChecked:
+        painter.drawLine(QtCore.QPointF(x + w * .28, y + w * .5),
+                         QtCore.QPointF(x + w * .72, y + w * .5))
+    painter.restore()
+
+
 class UnsavedLayersDialogue(QtWidgets.QDialog):
     @classmethod
     def save_before_exit(cls, stage_models, main_window):
@@ -458,6 +503,7 @@ class UnsavedLayersDialogue(QtWidgets.QDialog):
         # Unsaved Tree
         self.unsaved_tree = QtWidgets.QTreeView()
         self.unsaved_tree.setHeaderHidden(True)
+        self.unsaved_tree.setItemDelegate(CheckDelegate(self.unsaved_tree))
         self.unsaved_model = self.make_unsaved_model(stage_models)
         self.unsaved_tree.setModel(self.unsaved_model)
         self.unsaved_tree.expandAll()
@@ -488,7 +534,7 @@ class UnsavedLayersDialogue(QtWidgets.QDialog):
                 item.setCheckState(QtCore.Qt.Checked)
             color_code = stage_model.get_layer_color(layer)
             item.setBackground(QtGui.QBrush(QtGui.QColor(color_code)))
-            item.setForeground(QtGui.QBrush(QtCore.Qt.white))
+            item.setForeground(QtGui.QBrush(theme.readable_text(color_code)))
             parent_item.appendRow(item)
             for lay_dict in layer.sub_layers:
                 # A reference that could not be resolved is kept on the
@@ -571,6 +617,7 @@ class ReloadSourceDialog(QtWidgets.QDialog):
         self.layer_list = QtWidgets.QListWidget()
         no_selection = QtWidgets.QAbstractItemView.NoSelection
         self.layer_list.setSelectionMode(no_selection)
+        self.layer_list.setItemDelegate(CheckDelegate(self.layer_list))
         self.layer_list.itemChanged.connect(self.on_item_changed)
         self.main_layout.addWidget(self.layer_list)
 

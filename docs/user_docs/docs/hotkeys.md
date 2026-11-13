@@ -101,8 +101,8 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Move up in child order         |                                                                             | Move up in child order         |   Ctrl+Up    |
 | Move down in child order       |                                                                             | Move down in child order       |  Ctrl+Down   |
 | Toggle Node Collapse           |             Toggle the collapse state for the selected node(s).             | Toggle Node Collapse           |    Alt+C     |
-| Recursive Toggle Node Collapse |       Recursively toggle the collapse state for the selected node(s).       | Recursive Toggle Node Collapse | Alt+Shift+C  |
-| Rename Node                    |                                                                             | Rename Node                    |              |
+| Recursive Toggle Node Collapse |  Collapse or expand the selected node(s) and everything below, together.  | Recursive Toggle Node Collapse | Alt+Shift+C  |
+| Rename Node                    |               Rename the selected node, where you are working.              | Rename Node                    |      F2      |
 | Revert child order             |                                                                             | Revert child order             |              |
 
 ## Property Editor

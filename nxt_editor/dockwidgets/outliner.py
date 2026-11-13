@@ -9,8 +9,9 @@ from Qt import QtWidgets, QtGui, QtCore
 import nxt_editor
 from nxt import nxt_path
 from nxt.nxt_layer import LayerReturnTypes
-from nxt_editor import colors
+from nxt_editor import colors, theme
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
+from nxt_editor.label_edit import NameEditDialog
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -21,6 +22,16 @@ LAYERS_ROLE = QtCore.Qt.UserRole + 1
 SECTION_ROLE = QtCore.Qt.UserRole + 2
 # True on a row whose own name matches the search.
 MATCH_ROLE = QtCore.Qt.UserRole + 3
+# True on a disabled node's row.
+DISABLED_ROLE = QtCore.Qt.UserRole + 4
+# The node's points as the graph shows them, of START, SKIP and BREAK, in
+# that order.
+POINTS_ROLE = QtCore.Qt.UserRole + 5
+START = 'start'
+SKIP = 'skip'
+BREAK = 'break'
+POINT_NAMES = {START: 'Start point', SKIP: 'Skip point',
+               BREAK: 'Breakpoint'}
 
 NOT_IN_A_BUILD = 'Not in a build'
 
@@ -109,6 +120,53 @@ def search_pattern(text):
         return re.compile(re.escape(text), re.IGNORECASE)
 
 
+class NodeTree(QtWidgets.QTreeWidget):
+    """The Outliner's tree.
+
+    Typing a letter in a tree jumps to the next row starting with it, but
+    letters are the node hotkeys here, as in the graph, so that is off.
+    The search box finds nodes instead.
+
+    A row's arrow collapses or expands its node, as double clicking the
+    row does, rather than only opening or closing the row.
+    """
+    # The item whose arrow was clicked, and the modifiers held.
+    arrowClicked = QtCore.Signal(object, object)
+
+    def keyboardSearch(self, text):
+        pass
+
+    def arrow_at(self, pos):
+        """The item whose expand arrow is at pos in the viewport, or None."""
+        index = self.indexAt(pos)
+        if not index.isValid():
+            return None
+        item = self.itemFromIndex(index)
+        if not item.childCount():
+            return None
+        rect = self.visualRect(index)
+        if rect.left() - self.indentation() <= pos.x() < rect.left():
+            return item
+        return None
+
+    def mousePressEvent(self, event):
+        item = None
+        if event.button() == QtCore.Qt.LeftButton:
+            item = self.arrow_at(event.pos())
+        if item is not None and item.data(0, PATH_ROLE):
+            self.arrowClicked.emit(item, event.modifiers())
+            event.accept()
+            return
+        super(NodeTree, self).mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        # The press already took care of a click on an arrow.
+        if self.arrow_at(event.pos()) is not None:
+            self.mousePressEvent(event)
+            return
+        super(NodeTree, self).mouseDoubleClickEvent(event)
+
+
 class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
     """Draws a row the way its node looks in the graph.
 
@@ -117,12 +175,19 @@ class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
     at the right end, as on the node's title bar. Section headings are
     plain text.
     """
+    # Tall enough to read and to hit, as a node in the graph is.
+    ROW_HEIGHT = 28
     CHIP = 14        # wide enough to tell the colors apart at a glance
-    CHIP_GAP = 2
+    CHIP_GAP = 0      # side by side, as on the node
+    # A start, skip or break point before the name.
+    POINT = 10
+    POINT_INSET = 5
+    POINT_GAP = 3
+    POINT_TEXT_GAP = 6
 
     def sizeHint(self, option, index):
         size = super(NodeRowDelegate, self).sizeHint(option, index)
-        return QtCore.QSize(size.width(), max(size.height(), 22))
+        return QtCore.QSize(size.width(), max(size.height(), self.ROW_HEIGHT))
 
     def paint(self, painter, option, index):
         layer_colors = index.data(LAYERS_ROLE)
@@ -135,9 +200,9 @@ class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
         top = QtGui.QColor(layer_colors[0])
         selected = bool(option.state & QtWidgets.QStyle.State_Selected)
         hovered = bool(option.state & QtWidgets.QStyle.State_MouseOver)
+        # Hover and selection only outline the row, the node's color
+        # stays as it is.
         fill = top
-        if hovered and not selected:
-            fill = fill.lighter(120)
         path = QtGui.QPainterPath()
         path.addRoundedRect(rect, 4, 4)
         painter.fillPath(path, fill)
@@ -155,26 +220,39 @@ class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
                                            self.CHIP, rect.height()),
                              QtGui.QColor(color))
         painter.restore()
+        # As on the node in the graph: selected is a thick amber edge,
+        # under the mouse a thin white one.
         if selected:
-            painter.setPen(QtGui.QPen(colors.SELECTED, 1.5))
-            painter.drawRoundedRect(rect.adjusted(0.75, 0.75, -0.75, -0.75),
+            painter.setPen(QtGui.QPen(colors.SELECTED, 2))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 4, 4)
+        elif hovered:
+            painter.setPen(QtGui.QPen(theme.color(theme.HOVERED, 0.55), 1))
+            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5),
                                     4, 4)
         y = rect.center().y()
-        # Icon and name.
+        # Start, skip and break points, in the graph's shapes and colors,
+        # then the name.
         left = rect.left() + 10
-        icon = index.data(QtCore.Qt.DecorationRole)
-        if isinstance(icon, QtGui.QIcon) and not icon.isNull():
-            size = 14
-            icon.paint(painter, QtCore.QRect(int(left), int(y - size / 2),
-                                             size, size))
-            left += size + 4
+        points = index.data(POINTS_ROLE) or ()
+        if points:
+            left = rect.left() + self.POINT_INSET
+            edge = fill.darker(167)
+            for point in points:
+                self.paint_point(painter, point,
+                                 QtCore.QPointF(left + self.POINT / 2.0, y),
+                                 edge)
+                left += self.POINT + self.POINT_GAP
+            left += self.POINT_TEXT_GAP - self.POINT_GAP
         font = index.data(QtCore.Qt.FontRole) or option.font
         if index.data(MATCH_ROLE):
             font = QtGui.QFont(font)
             font.setBold(True)
         painter.setFont(font)
-        brush = index.data(QtCore.Qt.ForegroundRole)
-        painter.setPen(brush.color() if brush else QtGui.QColor('#f0f0f0'))
+        # White on every layer color, as on the node in the graph.
+        text_color = theme.color(theme.NODE_TEXT)
+        if index.data(DISABLED_ROLE):
+            text_color.setAlphaF(0.55)
+        painter.setPen(text_color)
         text_rect = QtCore.QRectF(left, rect.top(),
                                   rect.right() - chips_width - 6 - left,
                                   rect.height())
@@ -182,6 +260,31 @@ class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
             index.data(QtCore.Qt.DisplayRole) or '', QtCore.Qt.ElideRight,
             int(text_rect.width()))
         painter.drawText(text_rect, QtCore.Qt.AlignVCenter, text)
+        painter.restore()
+
+    @staticmethod
+    def paint_point(painter, point, center, edge):
+        """A start point's triangle, a skip point's bar or a breakpoint's
+        square, centered on center and outlined in edge so it shows on the
+        row's color."""
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtGui.QPen(edge, 1))
+        x, y = center.x(), center.y()
+        if point == START:
+            painter.setBrush(colors.START_COLOR)
+            painter.drawPolygon(QtGui.QPolygonF([
+                QtCore.QPointF(x - 3.5, y - 4.5),
+                QtCore.QPointF(x + 4.5, y),
+                QtCore.QPointF(x - 3.5, y + 4.5)]))
+        elif point == SKIP:
+            painter.setBrush(colors.SKIP_COLOR)
+            painter.drawRoundedRect(QtCore.QRectF(x - 5.5, y - 2.5, 11, 5),
+                                    2.5, 2.5)
+        elif point == BREAK:
+            painter.setBrush(colors.BREAK_COLOR)
+            painter.drawRoundedRect(QtCore.QRectF(x - 4.5, y - 4.5, 9, 9),
+                                    1.5, 1.5)
         painter.restore()
 
 
@@ -195,6 +298,9 @@ class Outliner(DockWidgetBase):
     follows the graph both ways, double clicking a node frames it, and the
     search box finds nodes at any depth by a regex on their name.
     """
+
+    # Node names, larger than other lists to read at a glance.
+    ROW_TEXT_PX = 15
 
     def __init__(self, parent=None):
         super(Outliner, self).__init__(title='Outliner', parent=parent,
@@ -212,7 +318,8 @@ class Outliner(DockWidgetBase):
         self.search.textChanged.connect(self.request_rebuild)
         self.search.returnPressed.connect(self.frame_first_match)
         layout.addWidget(self.search)
-        self.tree = QtWidgets.QTreeWidget()
+        self.tree = NodeTree()
+        self.tree.setFont(theme.font(self.ROW_TEXT_PX))
         self.tree.setHeaderHidden(True)
         self.tree.setSelectionMode(
             QtWidgets.QAbstractItemView.ExtendedSelection)
@@ -221,20 +328,24 @@ class Outliner(DockWidgetBase):
         self.tree.setItemDelegate(NodeRowDelegate(self.tree))
         self.tree.itemSelectionChanged.connect(self.on_tree_selection)
         self.tree.itemDoubleClicked.connect(self.on_double_click)
+        self.tree.arrowClicked.connect(self.on_arrow_click)
         self.tree.itemCollapsed.connect(self.on_collapsed)
         self.tree.itemExpanded.connect(self.on_expanded)
         self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self.on_context_menu)
         layout.addWidget(self.tree)
         self.main_window = parent
+        self.add_node_hotkeys()
         self.setWidget(main)
         self.start_icon = QtGui.QIcon(
             QtGui.QPixmap(':icons/icons/add_startpoint.png'))
         self.items = {}
         self.sections = {}
         self.matches = []
-        # Paths the user closed, kept closed when the tree is rebuilt.
-        self.collapsed = set()
+        self.point_sets = (set(), set(), set())
+        # What the rows were built from, to tell an edit that changes the
+        # tree's shape from one that only changes rows. {root: exec in}
+        self.exec_inputs = {}
         self._syncing = False
         # Several model signals can arrive for one edit, so the tree is
         # rebuilt once Qt is idle rather than for each of them.
@@ -245,16 +356,18 @@ class Outliner(DockWidgetBase):
 
     def set_stage_model(self, model):
         super(Outliner, self).set_stage_model(model)
-        self.collapsed = set()
         self.request_rebuild()
 
     def set_stage_model_connections(self, model, connect):
         self.model_signal_connections = [
             (model.comp_layer_changed, self.request_rebuild),
-            (model.nodes_changed, self.request_rebuild),
+            (model.nodes_changed, self.on_nodes_changed),
             (model.starts_changed, self.request_rebuild),
+            (model.breaks_changed, self.refresh_points),
+            (model.skips_changed, self.refresh_points),
             (model.layer_color_changed, self.request_rebuild),
             (model.selection_changed, self.on_model_selection),
+            (model.collapse_changed, self.on_collapse_changed),
         ]
         super(Outliner, self).set_stage_model_connections(model, connect)
 
@@ -285,20 +398,24 @@ class Outliner(DockWidgetBase):
             if not model:
                 return
             pattern = search_pattern(self.search.text())
-            starts = set(model.get_start_nodes())
+            # Read once for every row, rather than from the prefs per row.
+            self.point_sets = self.read_points()
+            self.exec_inputs = {}
             for start, roots in build_sections(model):
                 heading = self.add_section(start)
                 for root in roots:
-                    self.add_item(root, heading, starts, pattern)
+                    self.add_item(root, heading, pattern)
                 if not heading.childCount():
                     # Nothing in it matched the search.
                     self.tree.invisibleRootItem().removeChild(heading)
                     self.sections.pop(start or '', None)
             # Only once every row is in the tree: Qt ignores expanding a
             # row that is not in it yet.
+            # Rows are open or closed as their nodes are in the graph.
             searching = pattern is not None
             for path, item in self.items.items():
-                item.setExpanded(searching or path not in self.collapsed)
+                item.setExpanded(searching or
+                                 not model.get_node_collapse(path))
             self.select_items(model.selection)
         finally:
             self._syncing = False
@@ -333,7 +450,7 @@ class Outliner(DockWidgetBase):
             found = [model.get_node_color(path) or '#808080']
         return found
 
-    def add_item(self, path, parent_item, starts, pattern=None):
+    def add_item(self, path, parent_item, pattern=None):
         """Add a node's row and its children's, keeping only the rows that
         match the search, and the rows above them.
 
@@ -347,18 +464,13 @@ class Outliner(DockWidgetBase):
         item.setText(0, name)
         item.setToolTip(0, path)
         item.setData(0, PATH_ROLE, path)
-        item.setData(0, LAYERS_ROLE, self.layer_colors(path))
         if pattern is not None and matched:
             item.setData(0, MATCH_ROLE, True)
-        if path in starts:
-            item.setIcon(0, self.start_icon)
-        if not model.get_node_enabled(path):
-            item.setForeground(0, QtGui.QBrush(QtGui.QColor('#808080')))
-            font = item.font(0)
-            font.setItalic(True)
-            item.setFont(0, font)
+        self.fill_row(item, path)
+        if nxt_path.get_path_depth(path) == 1:
+            self.exec_inputs[path] = model.get_node_exec_in(path)
         for child in model.get_children(path, ordered=True):
-            self.add_item(child, item, starts, pattern)
+            self.add_item(child, item, pattern)
         if not matched and not item.childCount():
             return None
         parent_item.addChild(item)
@@ -366,6 +478,91 @@ class Outliner(DockWidgetBase):
         if pattern is not None and matched:
             self.matches.append(path)
         return item
+
+    def fill_row(self, item, path):
+        """Show on a row what can change without changing the tree: the
+        node's layers, start, break and skip points, and whether it is
+        enabled."""
+        model = self.stage_model
+        item.setData(0, LAYERS_ROLE, self.layer_colors(path))
+        self.set_points(item, path)
+        disabled = not model.get_node_enabled(path)
+        item.setData(0, DISABLED_ROLE, True if disabled else None)
+        font = item.font(0)
+        font.setItalic(disabled)
+        item.setFont(0, font)
+
+    def read_points(self):
+        """The paths of the graph's start, skip and break points.
+
+        :rtype: (set, set, set)
+        """
+        model = self.stage_model
+        return (set(model.get_start_nodes()), set(model.get_skippoints()),
+                set(model.get_breakpoints()))
+
+    def set_points(self, item, path):
+        points = [point for point, paths
+                  in zip((START, SKIP, BREAK), self.point_sets)
+                  if path in paths]
+        item.setData(0, POINTS_ROLE, points or None)
+        names = ', '.join(POINT_NAMES[point] for point in points)
+        item.setToolTip(0, path + ('\n' + names if names else ''))
+
+    def refresh_points(self, *args):
+        """A break or skip point changed: mark the rows, rather than build
+        the tree again for it."""
+        if not self.stage_model or not self.isVisible():
+            # Shown again, the tree is built afresh.
+            return
+        if self.rebuild_timer.isActive():
+            return
+        self.point_sets = self.read_points()
+        for path, item in self.items.items():
+            self.set_points(item, path)
+
+    def on_nodes_changed(self, paths=()):
+        """Nodes were edited. The rows are filled in again where they are,
+        unless the edit changed the tree: a node added, removed or moved,
+        or a root's place in the builds."""
+        if not self.stage_model or not self.isVisible():
+            return
+        if self.rebuild_timer.isActive():
+            return
+        if not self.shape_holds(paths):
+            self.request_rebuild()
+            return
+        self.point_sets = self.read_points()
+        for path in paths:
+            item = self.items.get(path)
+            if item is not None:
+                self.fill_row(item, path)
+        self.tree.viewport().update()
+
+    def shape_holds(self, paths):
+        """Whether the tree built last still has the shape of the graph
+        where paths were edited."""
+        model = self.stage_model
+        if not paths or self.search.text().strip():
+            # Which rows a search keeps can change with any edit.
+            return False
+        comp = model.comp_layer
+        for path in paths:
+            if path == nxt_path.WORLD:
+                continue
+            item = self.items.get(path)
+            exists = comp.lookup(path) is not None
+            if item is None or not exists:
+                return False
+            children = [item.child(i).data(0, PATH_ROLE)
+                        for i in range(item.childCount())]
+            if children != list(model.get_children(path, ordered=True)):
+                return False
+            if (nxt_path.get_path_depth(path) == 1 and
+                    self.exec_inputs.get(path) !=
+                    model.get_node_exec_in(path)):
+                return False
+        return True
 
     def frame_first_match(self):
         """Select and frame the first node the search found."""
@@ -380,13 +577,17 @@ class Outliner(DockWidgetBase):
             if item is None:
                 continue
             item.setSelected(True)
-            parent = item.parent()
-            while parent is not None:
-                parent.setExpanded(True)
-                parent = parent.parent()
             last = item
         if last is not None:
-            self.tree.scrollToItem(last)
+            # Scrolling to a row opens the rows above it, and they stay as
+            # their nodes are in the graph: go to the closest one showing.
+            shown = last
+            parent = last.parent()
+            while parent is not None:
+                if not parent.isExpanded():
+                    shown = parent
+                parent = parent.parent()
+            self.tree.scrollToItem(shown)
 
     def on_model_selection(self, paths):
         if self._syncing:
@@ -409,22 +610,111 @@ class Outliner(DockWidgetBase):
         finally:
             self._syncing = False
 
+    def add_node_hotkeys(self):
+        """The graph's node hotkeys, working here too while the tree has
+        focus: D disables, N adds, Del deletes, S sets a start point, F
+        frames and so on. The graph's arrow keys are left out, the tree
+        needs them to move between rows."""
+        window = self.main_window
+        for name in ('node_actions', 'execute_actions'):
+            container = getattr(window, name, None)
+            if container is not None:
+                self.tree.addActions(container.actions())
+        view_actions = getattr(window, 'view_actions', None)
+        if view_actions is not None:
+            self.tree.addAction(view_actions.frame_selection_action)
+
     def on_double_click(self, item, column=0):
+        """Double click a row as you would its node: collapse or expand
+        it, with Shift everything below it as well, or with Ctrl rename
+        it, here in the row."""
+        path = item.data(0, PATH_ROLE)
+        if not self.stage_model or not path:
+            return
+        modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if modifiers == QtCore.Qt.ControlModifier:
+            self.rename(path)
+            return
+        self.toggle_collapse(path, modifiers)
+
+    def on_arrow_click(self, item, modifiers):
+        """A row's arrow does what double clicking the row does: collapse
+        or expand its node, with Shift everything below it as well."""
         path = item.data(0, PATH_ROLE)
         if self.stage_model and path:
-            self.stage_model.select_and_frame(path)
+            self.toggle_collapse(path, modifiers)
+
+    def toggle_collapse(self, path, modifiers):
+        recursive = bool(modifiers & QtCore.Qt.ShiftModifier)
+        # The rows follow, see on_collapse_changed.
+        self.stage_model.toggle_node_collapse([path],
+                                              recursive_down=recursive)
+
+    def on_collapse_changed(self, paths):
+        """Open or close the rows of nodes collapsed or expanded anywhere,
+        so the tree shows what the graph does."""
+        if self.search.text().strip():
+            # A search shows every row it keeps.
+            return
+        syncing = self._syncing
+        self._syncing = True
+        try:
+            for path in paths or ():
+                item = self.items.get(path)
+                if item is not None:
+                    item.setExpanded(
+                        not self.stage_model.get_node_collapse(path))
+        finally:
+            self._syncing = syncing
+
+    def rename_selected(self):
+        """Rename the first selected node, in its row."""
+        selection = self.stage_model.selection if self.stage_model else []
+        if selection:
+            self.rename(selection[0])
+
+    def rename(self, path):
+        """Rename a node in a box over its row, like renaming it in the
+        graph."""
+        item = self.items.get(path)
+        if item is None:
+            return
+        self.tree.scrollToItem(item)
+        rect = self.tree.visualItemRect(item)
+        top_left = self.tree.viewport().mapToGlobal(rect.topLeft())
+        geometry = QtCore.QRect(top_left.x(), top_left.y(),
+                                max(rect.width(), 120), rect.height())
+        dialog = NameEditDialog(name=item.text(0), geometry=geometry,
+                                parent=None)
+        color = (item.data(0, LAYERS_ROLE) or ['#808080'])[0]
+        dialog.line_edit.setStyleSheet(
+            'background-color: %s; color: %s; border: 1px solid %s;' % (
+                color, theme.NODE_TEXT, theme.SELECTED))
+        dialog.line_edit.setFont(self.tree.font())
+        dialog.exec_()
+        if dialog.result() and dialog.value != item.text(0):
+            self.stage_model.set_node_name(path, dialog.value,
+                                           self.stage_model.target_layer)
 
     def context_menu(self, pos):
         """The menu a right click at pos in the tree shows, or None.
 
         The same as for nodes in the graph, with the row's node added to
         the selection first, or made the selection when it was not in it.
+        Off the rows it is the graph's menu for empty space, to add or
+        paste a node at the top of the hierarchy.
         """
         item = self.tree.itemAt(pos)
         path = item.data(0, PATH_ROLE) if item else None
         view = getattr(self.main_window, 'view', None)
-        if not path or view is None or not self.stage_model:
+        if view is None or not self.stage_model:
             return None
+        if not path:
+            if item is not None:
+                # A section's heading.
+                return None
+            self.stage_model.set_selection([])
+            return view.node_menu(None, parent=self.tree)
         if path not in self.stage_model.selection:
             self.stage_model.set_selection([path])
         menu = view.node_menu(path, parent=self.tree)
@@ -442,11 +732,19 @@ class Outliner(DockWidgetBase):
             menu.exec_(self.tree.viewport().mapToGlobal(pos))
 
     def on_collapsed(self, item):
-        path = item.data(0, PATH_ROLE)
-        if path and not self.search.text().strip():
-            self.collapsed.add(path)
+        self.row_opened(item, False)
 
     def on_expanded(self, item):
+        self.row_opened(item, True)
+
+    def row_opened(self, item, opened):
+        """A row was opened or closed some way other than through its node,
+        such as with the keyboard: do the same to the node, so the two never
+        disagree."""
         path = item.data(0, PATH_ROLE)
-        if path:
-            self.collapsed.discard(path)
+        if (self._syncing or not path or not self.stage_model or
+                self.search.text().strip()):
+            # A search opens every row it keeps, for the search only.
+            return
+        if self.stage_model.get_node_collapse(path) == opened:
+            self.stage_model.set_node_collapse([path], not opened)

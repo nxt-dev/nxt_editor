@@ -23,7 +23,8 @@ START_COLOR = QColor("#1bd40b")
 SKIP_COLOR = QColor("#f0880a")
 BREAK_COLOR = QColor(255, 0, 0)
 
-LAYER_COLORS = [
+# White text reads on each of them, see theme.white_text_safe.
+LAYER_COLORS = [theme.white_text_safe(c) for c in [
     QColor('#991C24'),  # dark red
     QColor('#C91781'),  # fuschia
     QColor('#0052AA'),  # blue
@@ -40,7 +41,7 @@ LAYER_COLORS = [
     QColor('#AF30D8'),  # violet
     QColor('#787878'),  # grey
     QColor('#119B77')   # teal
-]
+]]
 
 SELECTED = QColor(theme.SELECTED)
 

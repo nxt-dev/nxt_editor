@@ -2,9 +2,9 @@
 import logging
 from functools import partial
 try:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 except ImportError:
-    from collections import Iterable
+    from collections import Iterable, Mapping
 
 # External
 from Qt import QtWidgets
@@ -66,6 +66,9 @@ class WidgetBuilder(DockWidgetBase):
                                             minimum_height=minimum_height)
 
         self.updating = False
+        # {graph uid: (comp generation, [window nodes])}, see
+        # find_window_nodes.
+        self._window_scans = {}
         self.setObjectName('Workflow Tools')
         self.default_title = title
 
@@ -350,22 +353,49 @@ class WidgetBuilder(DockWidgetBase):
             # unrecognized node
             else:
                 self.build_widgets(node_path=child_path, layout=layout)
-            self.stage_model.process_events()  # Visually update
+            # The page is shown once it is built. Letting Qt paint after
+            # each widget, as this did, took longer than building them on
+            # a graph with hundreds.
 
-    def get_window_node_path(self):
+    def find_window_nodes(self, changed_paths=None):
+        """The nodes with a window attribute, in graph order.
+
+        Looking at every node is slow on a big graph, and an edit to a
+        few nodes can only change whether those few have one. So the
+        whole graph is looked through once per comp, and after that only
+        the nodes an edit changed.
+        """
+        model = self.stage_model
+        comp = model.comp_layer
+        generation = model.comp_generation
+        cached = self._window_scans.get(model.uid)
+        if cached is not None and cached[0] == generation and changed_paths:
+            window_nodes = cached[1]
+            for path in changed_paths:
+                node_path, _ = nxt_path.path_attr_partition(path)
+                has_window = (comp.lookup(node_path) is not None and
+                              WINDOW_ATTR in model.get_node_local_attr_names(
+                                  node_path, comp))
+                if has_window and node_path not in window_nodes:
+                    window_nodes.append(node_path)
+                elif not has_window and node_path in window_nodes:
+                    window_nodes.remove(node_path)
+            return window_nodes
+        window_nodes = []
+        for node_path in comp.descendants():
+            local_attrs = model.get_node_local_attr_names(node_path, comp)
+            if WINDOW_ATTR in local_attrs:
+                window_nodes.append(node_path)
+        self._window_scans[model.uid] = (generation, window_nodes)
+        return window_nodes
+
+    def get_window_node_path(self, changed_paths=None):
         if not self.stage_model:
             return
         if not self.stage_model.comp_layer:
             return
 
-        all_node_paths = self.stage_model.comp_layer.descendants()
-        window_nodes = []
-        for node_path in all_node_paths:
-            local_attrs = self.stage_model.get_node_local_attr_names(
-                node_path,
-                self.stage_model.comp_layer)
-            if WINDOW_ATTR in local_attrs:
-                window_nodes.append(node_path)
+        window_nodes = self.find_window_nodes(changed_paths)
 
         window_node = None
         for node in window_nodes:
@@ -406,7 +436,9 @@ class WidgetBuilder(DockWidgetBase):
 
         page = self.current_page()
         self.widget_state_data = page.state_data
-        self.window_node_path = self.get_window_node_path()
+        paths = (changed_paths
+                 if isinstance(changed_paths, (list, tuple, set)) else None)
+        self.window_node_path = self.get_window_node_path(paths)
         page.window_node_path = self.window_node_path
         if not self.window_node_path:
             # This graph has no window to show. Mark the page as built
@@ -523,18 +555,47 @@ class WidgetBuilder(DockWidgetBase):
             self.window_frame.menu.show_menu(tab_widget_pos)
 
 
+class ResolvedAttrs(Mapping):
+    """A node's resolved attribute values, each resolved the first time it
+    is read.
+
+    A widget reads a few of its node's attributes, and the node has many
+    more, inherited ones among them. Resolving them all, file paths looked
+    for on disk included, was most of the time it took to build the
+    workflow tools for a big graph. The values are the same either way.
+    """
+
+    def __init__(self, node_path, stage_model):
+        self.node_path = node_path
+        self.stage_model = stage_model
+        self.names = stage_model.get_node_attr_names(
+            node_path=node_path, layer=stage_model.comp_layer)
+        self.values = {}
+
+    def __getitem__(self, attr_name):
+        if attr_name not in self.names:
+            raise KeyError(attr_name)
+        if attr_name not in self.values:
+            self.values[attr_name] = self.stage_model.get_node_attr_value(
+                node_path=self.node_path,
+                attr_name=attr_name,
+                layer=self.stage_model.comp_layer,
+                data_state=DATA_STATE.RESOLVED)
+        return self.values[attr_name]
+
+    def __iter__(self):
+        return iter(self.names)
+
+    def __len__(self):
+        return len(self.names)
+
+
 def get_resolved_attr_values(node_path, stage_model):
-    attr_values = {}
-    attr_names = stage_model.get_node_attr_names(node_path=node_path,
-                                                 layer=stage_model.comp_layer)
-    for attr_name in attr_names:
-        attr_value = stage_model.get_node_attr_value(
-            node_path=node_path,
-            attr_name=attr_name,
-            layer=stage_model.comp_layer,
-            data_state=DATA_STATE.RESOLVED)
-        attr_values[attr_name] = attr_value
-    return attr_values
+    """The node's resolved attribute values, by name.
+
+    :rtype: ResolvedAttrs
+    """
+    return ResolvedAttrs(node_path, stage_model)
 
 
 def get_widget_type(node_path, stage_model):
