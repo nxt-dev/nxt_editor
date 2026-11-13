@@ -822,14 +822,24 @@ class NodeActions(NxtActionContainer):
         # delete nodes
         def del_nodes(recursive=False):
             # A selected backdrop is deleted on its own, never together
-            # with nodes.
-            # Selected points on lines and backdrops are deleted on their
-            # own, never together with nodes.
+            # with nodes. Points on lines go with the nodes a box picked
+            # up alongside them, as one undo.
             view = self.main_window.view
-            if view and (view.delete_selected_points() or
-                         view.delete_selected_backdrops()):
+            model = self.main_window.model
+            if view and view.selected_points:
+                if not model.selection:
+                    view.delete_selected_points()
+                    return
+                model.undo_stack.beginMacro('Delete')
+                try:
+                    view.delete_selected_points()
+                    model.delete_nodes(recursive=recursive)
+                finally:
+                    model.undo_stack.endMacro()
                 return
-            self.main_window.model.delete_nodes(recursive=recursive)
+            if view and view.delete_selected_backdrops():
+                return
+            model.delete_nodes(recursive=recursive)
         self.delete_node_action = NxtAction(text='Delete Node', parent=self)
         self.delete_node_action.setShortcut('Del')
         self.delete_node_action.setWhatsThis('Delete the selected node(s).')

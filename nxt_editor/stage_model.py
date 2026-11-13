@@ -835,7 +835,8 @@ class StageModel(QtCore.QObject):
         sibiling_paths = layer.children(parent_path, layer.RETURNS.Path)
         return sibiling_paths
 
-    def get_layers_with_opinion(self, node_path, attr_name=None):
+    def get_layers_with_opinion(self, node_path, attr_name=None,
+                                as_layers=False):
         """Returns all layer paths in the current comp that contain the given
         node. Ordered with the top layer at 0.
 
@@ -844,7 +845,11 @@ class StageModel(QtCore.QObject):
         :param attr_name: Optional: name of specific attr that must have an
         opinion at the given node path.
         :type attr_name: str
-        :return: list of layer paths
+        :param as_layers: the layers themselves rather than their paths. A
+            path can name the wrong layer, or none: a new layer has no file
+            yet, and two layers can be the same file.
+        :type as_layers: bool
+        :return: list of layer paths, or layers
         :rtype: list
         """
         s, e = self.comp_layer._layer_range
@@ -852,6 +857,8 @@ class StageModel(QtCore.QObject):
         layers = nxt_layer.get_active_layers(comp_layers)
         layers = self.stage.get_layers_with_opinion(node_path, layers,
                                                     attr_name)
+        if as_layers:
+            return list(layers)
         return [self.get_layer_path(l) for l in layers]
 
     def get_node_color(self, node_path, layer=None):
@@ -864,6 +871,11 @@ class StageModel(QtCore.QObject):
         layer = layer or self.target_layer
         if self.node_exists(node_path):
             node = layer.lookup(node_path)
+            if node is None:
+                # The node exists, just not in this layer.
+                node = self.comp_layer.lookup(node_path)
+            if node is None:
+                return self.get_layer_color(layer)
             source_layer = self.stage.get_node_source_layer(node)
             return self.get_layer_color(source_layer)
         elif self.node_is_implied(node_path):
@@ -2169,23 +2181,44 @@ class StageModel(QtCore.QObject):
 
     # Line style and points, see nxt_editor.wires ------------------------
 
+    @staticmethod
+    def preferred_connection_style():
+        """How lines are drawn in a graph that does not save its own
+        choice: the user's preference, else straight."""
+        style = user_dir.user_prefs.get(user_dir.USER_PREF.CONNECTION_STYLE)
+        if style in wires.STYLES:
+            return style
+        return wires.DEFAULT_STYLE
+
     def get_connection_style(self):
         """Whether this graph draws its lines straight or curved."""
-        return wires.merged_style(self.stage._sub_layers)
+        return wires.merged_style(self.stage._sub_layers,
+                                  self.preferred_connection_style())
 
     def set_connection_style(self, style):
         """Draw this graph's lines straight or curved, saved on the top
-        layer."""
-        if style not in wires.STYLES or style == self.get_connection_style():
+        layer, and remembered as the user's preference for graphs that do
+        not save one."""
+        if style not in wires.STYLES:
             return
-        if style == wires.merged_style(self.stage._sub_layers[1:]):
+        if style == self.get_connection_style():
+            # Nothing to see change, but remembered for the graphs to come.
+            user_dir.user_prefs[user_dir.USER_PREF.CONNECTION_STYLE] = style
+            return
+        # Saved on the graph unless it is what the lower layers, or a user
+        # with no preference, would see anyway.
+        lower = wires.merged_style(self.stage._sub_layers[1:])
+        if style == lower:
             # What the lower layers say already, so nothing to keep.
             saved = wires.ABSENT
         else:
             saved = style
-        text = 'Curved connections' if style == wires.CURVED else             'Straight connections'
+        if style == wires.CURVED:
+            text = 'Curved connections'
+        else:
+            text = 'Straight connections'
         cmd = SetWires(model=self, layer_path=self.top_layer.real_path,
-                       style=saved, text=text)
+                       style=saved, text=text, preference=style)
         self.undo_stack.push(cmd)
 
     def get_line_points(self, key=None):
@@ -2215,6 +2248,130 @@ class StageModel(QtCore.QObject):
         cmd = SetWires(model=self, layer_path=self.top_layer.real_path,
                        points={key: change}, text=text)
         self.undo_stack.push(cmd)
+
+    def break_connections(self, lines, text=None):
+        """Break connections, as one undo.
+
+        What a line came from is taken out of where it went, and nothing
+        else is left in its place: an exec input or instance is cleared,
+        and an attribute loses the reference, keeping any other text it
+        has, and is left empty when that was all it held. Should a weaker
+        layer still make the connection, the target layer is given an
+        empty value over it. The line's points go too.
+
+        :param lines: (source path, target attr path) pairs, as the graph
+            draws them
+        :return: how many were broken
+        """
+        breakable = []
+        for src, tgt in lines:
+            if not self._breakable(tgt):
+                continue
+            owner = self._connection_layer(tgt)
+            if owner is not None and owner != self.target_layer.real_path:
+                # nxt reads an empty exec input or instance as no opinion,
+                # so a stronger layer cannot clear a weaker one's. It is
+                # broken on the layer that made it.
+                logger.warning(
+                    'The connection into {} is made on {}. Make that the '
+                    'target layer to break it.'.format(tgt, owner),
+                    links=[nxt_path.node_path_from_attr_path(tgt)])
+                continue
+            breakable.append((src, tgt))
+        lines = breakable
+        if not lines:
+            return 0
+        if text is None:
+            text = ('Break connection' if len(lines) == 1 else
+                    'Break {} connections'.format(len(lines)))
+        self.undo_stack.beginMacro(text)
+        try:
+            for src, tgt in lines:
+                self._break_connection(src, tgt)
+                self.set_line_points(wires.line_key(src, tgt), [],
+                                     text=text)
+        finally:
+            self.undo_stack.endMacro()
+        return len(lines)
+
+    @staticmethod
+    def _breakable(tgt_path):
+        """Whether a line into this attr can be broken from the graph.
+
+        A line into a node's code is drawn for a reference written in the
+        code, which is the code editor's to change.
+        """
+        attr = nxt_path.attr_name_from_attr_path(tgt_path)
+        return bool(attr) and attr != INTERNAL_ATTRS.COMPUTE
+
+    def _connection_layer(self, tgt_path):
+        """The path of the layer whose opinion makes a connection, or None
+        when it cannot be told."""
+        node_path = nxt_path.node_path_from_attr_path(tgt_path)
+        attr = nxt_path.attr_name_from_attr_path(tgt_path)
+        node = self.comp_layer.lookup(node_path)
+        if node is None:
+            return None
+        try:
+            layer_path, _ = self.stage.get_node_attr_source(node, attr)
+        except (AttributeError, TypeError, ValueError):
+            return None
+        return layer_path
+
+    def _break_connection(self, src_path, tgt_path):
+        node_path = nxt_path.node_path_from_attr_path(tgt_path)
+        attr = nxt_path.attr_name_from_attr_path(tgt_path)
+        layer = self.target_layer
+        if attr == INTERNAL_ATTRS.EXECUTE_IN:
+            self._clear_link(node_path, attr, layer,
+                             lambda value: self.set_node_exec_in(
+                                 node_path, value, layer),
+                             lambda: self.get_node_exec_in(node_path,
+                                                           self.comp_layer))
+            return
+        if attr == INTERNAL_ATTRS.INSTANCE_PATH:
+            # An empty instance path is how an instance is removed, see
+            # the Remove Instance action.
+            self.set_node_instance(node_path, '', layer)
+            return
+        value = self.get_node_attr_value(node_path, attr, self.comp_layer,
+                                         data_state=DATA_STATE.RAW)
+        kept = self._without_reference(value, src_path, node_path)
+        if kept is not None and str(kept).strip():
+            self.set_node_attr_value(node_path, attr, kept, layer)
+            return
+        self._clear_link(node_path, attr, layer,
+                         lambda value: self.set_node_attr_value(
+                             node_path, attr, value, layer),
+                         lambda: src_path in (
+                             self.get_node_attr_external_sources(
+                                 node_path, attr, self.comp_layer) or []))
+
+    @staticmethod
+    def _clear_link(node_path, attr, layer, write, still_linked):
+        """Clear an attr on the layer, and if a weaker layer's value then
+        still links it, write an empty one over that."""
+        write(None)
+        if still_linked():
+            write('')
+
+    def _without_reference(self, value, src_path, node_path):
+        """An attr value with every reference to src_path taken out.
+
+        :return: what is left, or None when nothing is
+        """
+        if value is None:
+            return None
+        text = str(value)
+        attr_tokens = self.stage.get_tokens_from(
+            text, token_type=tokens.TOKENTYPE.ATTR)
+        for token in attr_tokens:
+            ref = tokens.get_token_content(token)
+            if not nxt_path.is_attr_path(ref):
+                continue
+            if nxt_path.expand_relative_node_path(ref, node_path) == src_path:
+                text = text.replace(token, '')
+        return text if text.strip() else None
 
     def get_node_pos(self, node_path):
         default = [0.0, 0.0]

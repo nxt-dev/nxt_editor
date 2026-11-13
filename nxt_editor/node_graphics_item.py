@@ -191,11 +191,12 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.out_anim_group.start()
 
     def update_color(self):
-        layers = self.model.get_layers_with_opinion(self.node_path)
+        layers = self.model.get_layers_with_opinion(self.node_path,
+                                                    as_layers=True)
         n_colors = []
         if layers:
-            for l_path in layers:
-                n_colors += [self.model.get_node_color(self.node_path, l_path)]
+            for layer in layers:
+                n_colors += [self.model.get_node_color(self.node_path, layer)]
         elif not self.model.node_is_implied(self.node_path):
             disp_layer = self.model.comp_layer
             n_colors = [self.model.get_node_color(self.node_path, disp_layer)]

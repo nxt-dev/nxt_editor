@@ -937,6 +937,8 @@ QCheckBox::indicator {
             self.last_focused_tab = tab_index
             self.update_implicit_action()
             self.update_curved_action()
+            # The preferred style may have changed in another tab since.
+            view.draw_wires()
             view.toggle_grid(
                 user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_GRID, True)
             )

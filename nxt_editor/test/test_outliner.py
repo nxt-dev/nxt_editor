@@ -1,8 +1,11 @@
 """The outliner, and turning the stage view on and off.
 
-The outliner lists the graph's root nodes in the order they run, with each
-node's children under it. It is opt in from the Window menu. The stage view
-is on unless it is turned off in the Window menu, which is remembered.
+The outliner lists the graph's root nodes in the order they run, grouped by
+the start point whose build runs them, with each node's children under it.
+Rows show the colors of the layers a node is on, and a search box finds
+nodes at any depth by a regex on their name. It is opt in from the Window
+menu. The stage view is on unless it is turned off in the Window menu,
+which is remembered.
 """
 # Builtin
 import json
@@ -14,12 +17,14 @@ import unittest
 from unittest import mock
 
 # External
-from Qt import QtWidgets
+from Qt import QtCore, QtWidgets
 
 # Internal
 from nxt.session import Session
 from nxt_editor import stage_model, user_dir
-from nxt_editor.dockwidgets.outliner import root_exec_order
+from nxt_editor.dockwidgets import outliner as outliner_module
+from nxt_editor.dockwidgets.outliner import (build_sections, root_exec_order,
+                                             search_pattern)
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
@@ -45,6 +50,8 @@ GRAPH = {
     },
 }
 RUN_ORDER = ['/setup', '/build', '/publish', '/loose', '/other', '/tidy']
+IN_THE_BUILD = ['/setup', '/build', '/publish']
+NOT_IN_THE_BUILD = ['/loose', '/other', '/tidy']
 
 
 def write_graph(tmp):
@@ -71,6 +78,17 @@ class RootOrder(unittest.TestCase):
         # The follower first in the layer, the one nxt runs, comes first.
         self.assertEqual(['/setup', '/build', '/loose', '/publish',
                           '/other', '/tidy'], order)
+
+    def test_roots_are_grouped_by_the_build_that_runs_them(self):
+        self.assertEqual([('/setup', IN_THE_BUILD), (None, NOT_IN_THE_BUILD)],
+                         build_sections(self.model))
+
+    def test_each_start_point_has_its_own_build(self):
+        self.model.set_startpoints(['/other'], state=True)
+        self.assertEqual([('/other', ['/other', '/tidy']),
+                          ('/setup', IN_THE_BUILD), (None, ['/loose'])],
+                         sorted(build_sections(self.model),
+                                key=lambda s: (s[0] is None, s[0] or '')))
 
     def test_a_loop_still_lists_every_root(self):
         self.model.set_node_exec_in('/other', '/tidy')
@@ -142,6 +160,13 @@ class OutlinerTests(WindowCase):
         parent = parent or self.tree.invisibleRootItem()
         return [parent.child(i).text(0) for i in range(parent.childCount())]
 
+    def section_rows(self, start=None):
+        return self.rows(self.outliner.sections[start or ''])
+
+    def search(self, text):
+        self.outliner.search.setText(text)
+        app.processEvents()
+
     def test_it_is_off_in_the_default_layout(self):
         # Once shown, the saved layout remembers it like any other dock.
         self.win.reset_layout()
@@ -150,12 +175,108 @@ class OutlinerTests(WindowCase):
 
     def test_roots_are_in_run_order_and_children_nest(self):
         self.show_outliner()
-        self.assertEqual([p.lstrip('/') for p in RUN_ORDER], self.rows())
+        self.assertEqual(['Build from setup', outliner_module.NOT_IN_A_BUILD],
+                         self.rows())
+        self.assertEqual([p.lstrip('/') for p in IN_THE_BUILD],
+                         self.section_rows('/setup'))
+        self.assertEqual([p.lstrip('/') for p in NOT_IN_THE_BUILD],
+                         self.section_rows())
         build = self.outliner.items['/build']
         self.assertEqual(['rig', 'export'], self.rows(build))
         rig = self.outliner.items['/build/rig']
         self.assertEqual(['skeleton', 'controls'], self.rows(rig))
         self.assertTrue(rig.isExpanded())
+
+    def test_section_headings_cannot_be_selected(self):
+        self.show_outliner()
+        heading = self.outliner.sections['/setup']
+        self.assertFalse(heading.flags() & QtCore.Qt.ItemIsSelectable)
+
+    def test_rows_carry_the_colors_of_the_nodes_layers(self):
+        self.show_outliner()
+        item = self.outliner.items['/build']
+        color = self.model.get_layer_color(self.model.top_layer)
+        self.assertEqual([color], item.data(0, outliner_module.LAYERS_ROLE))
+
+    def test_a_search_finds_a_node_deep_in_the_hierarchy(self):
+        self.show_outliner()
+        self.search('skel')
+        # The match, and the nodes above it so you can see where it is.
+        self.assertEqual(['/build', '/build/rig', '/build/rig/skeleton'],
+                         sorted(self.outliner.items))
+        self.assertEqual(['/build/rig/skeleton'], self.outliner.matches)
+        self.assertTrue(self.outliner.items['/build/rig'].isExpanded())
+        # Only the section it is in is shown.
+        self.assertEqual(['Build from setup'], self.rows())
+
+    def test_a_search_is_a_regex_and_ignores_case(self):
+        self.show_outliner()
+        self.search('^(TIDY|loose)$')
+        self.assertEqual(['/loose', '/tidy'], sorted(self.outliner.matches))
+
+    def test_a_search_that_is_not_a_regex_yet_is_taken_as_text(self):
+        self.assertTrue(search_pattern('rig[').search('my_rig[0]'))
+        self.assertIsNone(search_pattern('   '))
+
+    def test_clearing_the_search_shows_everything_again(self):
+        self.show_outliner()
+        self.search('skel')
+        self.search('')
+        self.assertEqual(sorted(GRAPH['nodes']), sorted(self.outliner.items))
+
+    def test_enter_frames_the_first_match(self):
+        self.show_outliner()
+        framed = []
+        self.model.frame_items.connect(framed.append)
+        self.search('export')
+        self.outliner.search.returnPressed.emit()
+        self.assertEqual([('/build/export',)], framed)
+
+    def menu_for(self, path):
+        item = self.outliner.items[path]
+        self.tree.scrollToItem(item)
+        pos = self.tree.visualItemRect(item).center()
+        return self.outliner.context_menu(pos)
+
+    def test_right_click_shows_the_graphs_node_menu(self):
+        self.show_outliner()
+        menu = self.menu_for('/build/rig')
+        texts = [a.text() for a in menu.actions()]
+        self.assertEqual('Frame in Graph', texts[0])
+        self.assertIn('Execute /build/rig', texts)
+        for action in (self.win.execute_actions.execute_selected_action,
+                       self.win.node_actions.disable_node_action,
+                       self.win.node_actions.delete_node_action,
+                       self.win.execute_actions.toggle_start_action):
+            self.assertIn(action, menu.actions())
+        menu.deleteLater()
+
+    def test_right_click_selects_the_row_it_was_on(self):
+        self.show_outliner()
+        self.model.set_selection(['/tidy'])
+        menu = self.menu_for('/build/export')
+        self.assertEqual(['/build/export'], self.model.get_selected_nodes())
+        menu.deleteLater()
+        # One already in the selection keeps the rest of it.
+        self.model.set_selection(['/tidy', '/loose'])
+        menu = self.menu_for('/loose')
+        self.assertEqual(['/loose', '/tidy'],
+                         sorted(self.model.get_selected_nodes()))
+        menu.deleteLater()
+
+    def test_the_menu_disables_the_row(self):
+        self.show_outliner()
+        menu = self.menu_for('/build/export')
+        self.win.node_actions.disable_node_action.trigger()
+        app.processEvents()
+        self.assertFalse(self.model.get_node_enabled('/build/export'))
+        menu.deleteLater()
+
+    def test_right_click_on_a_heading_shows_nothing(self):
+        self.show_outliner()
+        heading = self.outliner.sections['/setup']
+        pos = self.tree.visualItemRect(heading).center()
+        self.assertIsNone(self.outliner.context_menu(pos))
 
     def test_start_points_have_an_icon(self):
         self.show_outliner()

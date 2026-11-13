@@ -133,16 +133,17 @@ def write_points(layer, changes):
         meta.pop(POINTS_KEY, None)
 
 
-def merged_style(layers):
+def merged_style(layers, default=DEFAULT_STYLE):
     """The style the graph shows: the highest layer that saves one.
 
     :param layers: top layer first, as a stage holds them
+    :param default: the style when no layer saves one
     """
     for layer in layers:
         style = layer_style(layer)
         if style is not ABSENT:
             return style
-    return DEFAULT_STYLE
+    return default
 
 
 def merged_points(layers):

@@ -18,7 +18,7 @@ from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from nxt.session import Session
-from nxt_editor import stage_model, wires
+from nxt_editor import stage_model, user_dir, wires
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
@@ -47,6 +47,23 @@ def write_graph(tmp, base=None, top=None):
     return os.path.join(tmp, 'top.nxt')
 
 
+def without_style_preference(case):
+    """Run a test with no connection style preference, putting back the
+    user's own afterwards: these are real preferences on disk."""
+    key = user_dir.USER_PREF.CONNECTION_STYLE
+    had = key in user_dir.user_prefs
+    saved = user_dir.user_prefs.get(key)
+
+    def restore():
+        if had:
+            user_dir.user_prefs[key] = saved
+        elif key in user_dir.user_prefs:
+            user_dir.user_prefs.pop(key)
+    case.addCleanup(restore)
+    if had:
+        user_dir.user_prefs.pop(key)
+
+
 def saved_meta(path):
     with open(path) as fp:
         return json.load(fp).get('meta_data', {})
@@ -72,6 +89,7 @@ class Helpers(unittest.TestCase):
 class ModelCase(unittest.TestCase):
 
     def setUp(self):
+        without_style_preference(self)
         self.tmp = tempfile.mkdtemp(prefix='nxt_wires_')
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.path = write_graph(self.tmp)
@@ -112,6 +130,34 @@ class StyleTests(ModelCase):
     def test_nonsense_is_ignored(self):
         self.model.set_connection_style('wiggly')
         self.assertFalse(self.changed)
+        self.assertNotIn(user_dir.USER_PREF.CONNECTION_STYLE,
+                         user_dir.user_prefs)
+
+    def test_changing_it_is_remembered_as_the_preference(self):
+        self.model.set_connection_style(wires.STRAIGHT)
+        self.assertEqual(wires.STRAIGHT, user_dir.user_prefs.get(
+            user_dir.USER_PREF.CONNECTION_STYLE))
+
+    def test_undo_puts_the_preference_back(self):
+        key = user_dir.USER_PREF.CONNECTION_STYLE
+        self.model.set_connection_style(wires.STRAIGHT)
+        self.model.undo_stack.undo()
+        self.assertNotIn(key, user_dir.user_prefs)
+        self.model.undo_stack.redo()
+        self.assertEqual(wires.STRAIGHT, user_dir.user_prefs.get(key))
+
+    def test_a_graph_with_none_follows_the_preference(self):
+        path = write_graph(self.tmp, base=dict(BASE, meta_data={}))
+        model = stage_model.StageModel(Session().load_file(filepath=path))
+        key = user_dir.USER_PREF.CONNECTION_STYLE
+        user_dir.user_prefs[key] = wires.CURVED
+        self.assertEqual(wires.CURVED, model.get_connection_style())
+
+    def test_a_graph_that_saves_one_keeps_it_over_the_preference(self):
+        key = user_dir.USER_PREF.CONNECTION_STYLE
+        user_dir.user_prefs[key] = wires.STRAIGHT
+        # The base layer saves curved.
+        self.assertEqual(wires.CURVED, self.model.get_connection_style())
 
 
 class PointTests(ModelCase):
@@ -158,6 +204,7 @@ class PointTests(ModelCase):
 class ViewCase(unittest.TestCase):
 
     def setUp(self):
+        without_style_preference(self)
         self.tmp = tempfile.mkdtemp(prefix='nxt_wires_')
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         base = dict(BASE, meta_data={})
@@ -308,6 +355,60 @@ class LinesInTheView(ViewCase):
                          self.model.get_line_points(EXEC_KEY))
         self.assertIsNotNone(self.model.comp_layer.lookup('/first'))
         self.assertEqual([], self.view.selected_points)
+
+    def box(self, start, end, modifiers=QtCore.Qt.NoModifier):
+        """Drag a selection box from open space."""
+        self.mouse(QtCore.QEvent.MouseButtonPress, start, modifiers)
+        self.mouse(QtCore.QEvent.MouseMove, end, modifiers)
+        self.mouse(QtCore.QEvent.MouseButtonRelease, end, modifiers)
+
+    def test_a_box_selects_the_points_inside_it(self):
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0], [400.0, 300.0]])
+        app.processEvents()
+        self.box((350, -60), (450, 320))
+        self.assertEqual([(EXEC_KEY, 0), (EXEC_KEY, 1)],
+                         self.view.selected_points)
+        self.assertEqual([], self.model.get_selected_nodes())
+
+    def test_a_box_with_shift_toggles_points(self):
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0], [400.0, 300.0]])
+        app.processEvents()
+        self.click((400, 0))
+        self.box((350, -60), (450, 320), QtCore.Qt.ShiftModifier)
+        self.assertEqual([(EXEC_KEY, 1)], self.view.selected_points)
+
+    def test_delete_takes_the_points_and_nodes_a_box_picked_up(self):
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0], [400.0, 300.0]])
+        app.processEvents()
+        self.box((-30, -30), (450, 60))
+        self.assertEqual(['/first'], self.model.get_selected_nodes())
+        self.assertEqual([(EXEC_KEY, 0)], self.view.selected_points)
+        count = self.model.undo_stack.count()
+        self.win.node_actions.delete_node_action.trigger()
+        app.processEvents()
+        self.assertIsNone(self.model.comp_layer.lookup('/first'))
+        self.assertEqual([[400.0, 300.0]],
+                         self.model.get_line_points(EXEC_KEY))
+        self.assertEqual(count + 1, self.model.undo_stack.count())
+        self.model.undo_stack.undo()
+        app.processEvents()
+        self.assertIsNotNone(self.model.comp_layer.lookup('/first'))
+        self.assertEqual([[400.0, 0.0], [400.0, 300.0]],
+                         self.model.get_line_points(EXEC_KEY))
+
+    def test_points_stay_the_same_size_on_screen_zoomed_out(self):
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0]])
+        app.processEvents()
+        graphic = self.line.point_graphics[0]
+        size = graphic.boundingRect().width()
+        for scale in (1.0, 0.1):
+            self.view.resetTransform()
+            self.view.scale(scale, scale)
+            app.processEvents()
+            on_screen = graphic.deviceTransform(
+                self.view.viewportTransform()).mapRect(
+                graphic.boundingRect())
+            self.assertAlmostEqual(size, on_screen.width(), delta=0.5)
 
     def test_clicking_elsewhere_lets_go_of_a_point(self):
         self.model.set_line_points(EXEC_KEY, [[400.0, 0.0]])
