@@ -133,6 +133,36 @@ class NodeTree(QtWidgets.QTreeWidget):
     def keyboardSearch(self, text):
         pass
 
+    def drawBranches(self, painter, rect, index):
+        """Drawn in drawRow instead, once the row is done."""
+
+    def drawRow(self, painter, option, index):
+        """The row, then the space beside it with only its arrow, drawn last.
+        Rows outline themselves when selected, and Qt filled the space
+        beside a selected row with the selection's grey, over its arrow."""
+        super(NodeTree, self).drawRow(painter, option, index)
+        left = self.visualRect(index).left()
+        rect = QtCore.QRect(option.rect.left(), option.rect.top(),
+                            left - option.rect.left(), option.rect.height())
+        if rect.width() <= 0:
+            return
+        painter.save()
+        painter.fillRect(rect, theme.color(theme.BASE))
+        item = self.itemFromIndex(index)
+        if item is not None and item.childCount():
+            name = 'branch_open' if item.isExpanded() else 'branch_closed'
+            pixmap = QtGui.QPixmap(
+                ':/dark_style/styles/dark/rc/{}.png'.format(name))
+            if not pixmap.isNull():
+                indent = self.indentation()
+                space = QtCore.QRect(left - indent, rect.top(), indent,
+                                     rect.height())
+                size = pixmap.size() / max(pixmap.devicePixelRatio(), 1.0)
+                target = QtCore.QRect(QtCore.QPoint(0, 0), size)
+                target.moveCenter(space.center())
+                painter.drawPixmap(target, pixmap)
+        painter.restore()
+
     def arrow_at(self, pos):
         """The item whose expand arrow is at pos in the viewport, or None."""
         index = self.indexAt(pos)
