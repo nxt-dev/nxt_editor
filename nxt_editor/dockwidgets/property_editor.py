@@ -20,7 +20,7 @@ from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
-from nxt_editor import colors, LOGGER_NAME
+from nxt_editor import colors, theme, LOGGER_NAME
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
@@ -84,7 +84,7 @@ class PropertyEditor(DockWidgetBase):
         self.main.setLayout(self.layout)
 
         self.background_frame = QtWidgets.QFrame(self)
-        self.background_frame.setStyleSheet('background-color: #3E3E3E; border-radius: 0px;')
+        self.background_frame.setStyleSheet(theme.fill('background-color: {RAISED}; border-radius: 0px;'))
         self.layout.addWidget(self.background_frame)
 
         # ACTIONS
@@ -125,7 +125,7 @@ class PropertyEditor(DockWidgetBase):
         # properties
         ############
         self.properties_frame = QtWidgets.QFrame(self)
-        self.properties_frame.setStyleSheet('background-color: #3E3E3E; border-radius: 0px;')
+        self.properties_frame.setStyleSheet(theme.fill('background-color: {RAISED}; border-radius: 0px;'))
         self.layout.addWidget(self.properties_frame)
 
         self.properties_layout = QtWidgets.QVBoxLayout()
@@ -165,7 +165,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.path_field = QtWidgets.QLineEdit(parent=self)
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
-        self.path_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #323232')
+        self.path_field.setStyleSheet(theme.fill('border-radius: 11px; border: 1px solid transparent; background-color: {RAISED}'))
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.path_field.setReadOnly(True)
         self.details_layout.addWidget(self.path_field, 0, 1)
@@ -185,7 +185,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.instance_field_model = QtCore.QStringListModel()
         self.instance_field_completer = QtWidgets.QCompleter()
-        self.instance_field_completer.popup().setStyleSheet('border: 1px solid transparent; background-color: #323232; color: white')
+        self.instance_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
         self.instance_field_completer.setModel(self.instance_field_model)
         self.instance_field.setCompleter(self.instance_field_completer)
         self.instance_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -199,7 +199,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.locate_instance_button.setToolTip('Locate Instance')
-        self.locate_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.locate_instance_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.locate_instance_button.setFixedWidth(17)
         self.locate_instance_button.setFixedHeight(16)
         self.locate_instance_button.clicked.connect(self.view_instance_node)
@@ -214,7 +214,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.revert_instance_button.setToolTip('Revert Instance')
-        self.revert_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_instance_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_instance_button.set_action(self.revert_inst_path_action)
         self.instance_layout.addWidget(self.revert_instance_button, 0, 3)
 
@@ -235,7 +235,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.execute_field_model = QtCore.QStringListModel()
         self.execute_field_completer = QtWidgets.QCompleter()
-        self.execute_field_completer.popup().setStyleSheet('border: 1px solid transparent; background-color: #323232; color: white')
+        self.execute_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
         self.execute_field_completer.setModel(self.execute_field_model)
         self.execute_field.setCompleter(self.execute_field_completer)
         self.execute_opinions = OpinionDots(self, 'Execute Opinions')
@@ -248,7 +248,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.revert_exec_source_button.setToolTip('Revert Execute Source')
-        self.revert_exec_source_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_exec_source_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_exec_source_button.set_action(self.revert_exec_path_action)
         self.execute_layout.addWidget(self.revert_exec_source_button, 0, 2)
         # execute_order
@@ -260,8 +260,8 @@ class PropertyEditor(DockWidgetBase):
         self.details_layout.addLayout(self.child_order_layout, 3, 1)
 
         self.child_order_field = LineEdit(parent=self)
-        self.child_order_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #232323')
-        self.child_order_field.setFont(QtGui.QFont("Roboto Mono", 8))
+        self.child_order_field.setStyleSheet(theme.fill('border-radius: 11px; border: 1px solid transparent; background-color: {BASE}'))
+        self.child_order_field.setFont(FONTS.monospace_font(8))
         self.child_order_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.child_order_field.accept.connect(self.accept_edit_child_order)
         self.child_order_field.cancel.connect(self.cancel_edit_child_order)
@@ -269,7 +269,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.child_order_field_model = QtCore.QStringListModel()
         self.child_order_field_completer = QtWidgets.QCompleter()
-        self.child_order_field_completer.popup().setStyleSheet('border: 1px solid transparent; background-color: #323232; color: white')
+        self.child_order_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
         self.child_order_field_completer.setModel(self.child_order_field_model)
         self.child_order_field.setCompleter(self.child_order_field_completer)
         self.child_order_opinions = OpinionDots(self, 'Child Order Opinions')
@@ -283,7 +283,7 @@ class PropertyEditor(DockWidgetBase):
             resize_signal=self.main_window.font_size_changed)
         self.revert_child_order_button.setToolTip('Revert Child Order')
         self.revert_child_order_button.setStyleSheet(
-            'QToolTip {color: white; border: 1px solid #3E3E3E}')
+            theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_child_order_button.clicked.connect(self.revert_child_order)
         self.child_order_layout.addWidget(self.revert_child_order_button, 0, 2)
 
@@ -334,9 +334,8 @@ class PropertyEditor(DockWidgetBase):
                                                   parent=self.properties_frame,
                                                   resize_signal=self.main_window.font_size_changed)
         self.revert_enabled_button.setToolTip('Revert Enabled State')
-        self.revert_enabled_button.setStyleSheet('QToolTip {color: white; '
-                                          'order: 1px solid #3E3E3E'
-                                          '}')
+        self.revert_enabled_button.setStyleSheet(theme.fill(
+            'QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_enabled_button.clicked.connect(self.revert_node_enabled)
         self.position_layout.addWidget(self.revert_enabled_button, 0,
                                        QtCore.Qt.AlignLeft)
@@ -364,7 +363,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.revert_comment_button.setToolTip('Revert Comment')
-        self.revert_comment_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_comment_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_comment_button.clicked.connect(self.remove_comment)
         self.comment_layout.addWidget(self.revert_comment_button, 0, 2)
         # Comment
@@ -376,7 +375,7 @@ class PropertyEditor(DockWidgetBase):
         # attributes table
         ##################
         self.attributes_widget = QtWidgets.QWidget(self)
-        self.attributes_widget.setStyleSheet('background-color: #232323')
+        self.attributes_widget.setStyleSheet(theme.fill('background-color: {BASE}'))
         self.properties_layout.addWidget(self.attributes_widget, 1)
 
         self.attributes_layout = QtWidgets.QVBoxLayout()
@@ -686,11 +685,11 @@ class PropertyEditor(DockWidgetBase):
         # style position widgets
         top_layer_color = self.stage_model.get_layer_color(
             self.stage_model.top_layer) or 'transparent'
-        pos_style = '''
+        pos_style = theme.fill('''
                     QAbstractSpinBox {
-                        background-color: #232323;
+                        background-color: {BASE};
                         border: 1px solid transparent;
-                        color: #F0F0F0;
+                        color: {TEXT};
                         padding-top: 2px;
                         padding-bottom: 2px;
                         padding-left: 0px;
@@ -707,17 +706,17 @@ class PropertyEditor(DockWidgetBase):
                     }
 
                     QAbstractSpinBox:up-button {
-                        border-left: 0px solid #3E3E3E;
+                        border-left: 0px solid {BORDER};
                         padding-right: 6px;
                         padding-top: 3px;
                     }
 
                     QAbstractSpinBox:down-button {
-                        border-left: 0px solid #3E3E3E;
+                        border-left: 0px solid {BORDER};
                         padding-right: 6px;
                         padding-bottom: 3px;
                     }
-                    ''' % (top_layer_color, top_layer_color)
+                    ''') % (top_layer_color, top_layer_color)
         self.positionX_field.setStyleSheet(pos_style)
         self.positionY_field.setStyleSheet(pos_style)
 
@@ -1401,7 +1400,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
         if role == QtCore.Qt.FontRole:
             if self._data[row][COLUMNS.locality] == LOCALITIES.instanced:
-                font = QtGui.QFont()
+                font = FONTS.default_font()
                 font.setItalic(True)
                 return font
 
@@ -1448,7 +1447,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
 class AttrsTableView(QtWidgets.QTableView):
     def __init__(self, parent=None):
         super(AttrsTableView, self).__init__(parent=parent)
-        style = '''
+        style = theme.fill('''
                         QTableView {
                             outline: none;
                             border-radius: 11px;
@@ -1460,7 +1459,7 @@ class AttrsTableView(QtWidgets.QTableView):
                         }
 
                         QTableView::item:selected:hover {
-                            color: #148CD2;
+                            color: {ACCENT};
                         }
 
                         QTableView:item:selected {
@@ -1484,9 +1483,9 @@ class AttrsTableView(QtWidgets.QTableView):
                         QToolTip {
                             font-family: %s;
                             color: white;
-                            border: 1px solid #3E3E3E
+                            border: 1px solid {BORDER}
                         }
-                        ''' % (FONTS.MONOSPACE,)
+                        ''') % (FONTS.MONOSPACE,)
         self.setStyleSheet(style)
         self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
@@ -1618,7 +1617,7 @@ class HistoricalContextMenu(QtWidgets.QMenu):
         option = QtWidgets.QStyleOptionButton()
         option.initFrom(self)
         for action in self.actions():
-            color = getattr(action, 'color', '#232323')
+            color = getattr(action, 'color', theme.BASE)
             rect = QtCore.QRect(0, y, self.rect().width(), step)
             x = fm.boundingRect(action.text()).width()
             x_pos = (rect.width() - x) * .5
@@ -1823,7 +1822,7 @@ class COLUMNS:
 
 
 def line_edit_style_factory(txt_color='white', tgt_layer_color='white',
-                            bg_color='#232323'):
+                            bg_color=theme.BASE):
     """Generates a string of a qss style sheet for a line edit. Colors can be
     supplied as strings of color name or hex value. If a color arg receives
     a tuple we assume it is either an rgb or rgba tuple.

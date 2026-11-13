@@ -17,7 +17,7 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import file_browser, user_dir, wires
+from nxt_editor import file_browser, theme, user_dir, wires
 from nxt_editor.ai import providers as ai_providers
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
@@ -167,7 +167,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # set style sheet
         self.stylesheet = nxt_editor.stylesheet()
         self.setStyleSheet(self.stylesheet)
-        self.setFont(FONTS.default_font())
+        self._font_size = FONTS.DEFAULT_SIZE
+        self.setFont(theme.font())
 
         # nxt object in charge of loaded graphs
         self.nxt = Session()
@@ -288,9 +289,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_bar = QtWidgets.QStatusBar()
         self.status_bar.setSizeGripEnabled(False)
         self.status_bar.setContentsMargins(4, 4, 4, 4)
-        self.status_bar.setStyleSheet(
-            "color: lightGrey; background-color: #232323; border: 4px solid #3E3E3E"
-        )
+        self.status_bar.setStyleSheet(theme.fill(
+            "QStatusBar { color: {TEXT_DIM}; background-color: {BASE};"
+            " border: none; border-top: 1px solid {BORDER}; }"
+        ))
         self.setStatusBar(self.status_bar)
 
         self.log_button = QtWidgets.QPushButton("Show Log")
@@ -440,11 +442,15 @@ class MainWindow(QtWidgets.QMainWindow):
         if absolute:
             font_size = delta
         else:
-            font_size = self.font().pointSize() + delta
+            font_size = self._font_size + delta
             self.font_size_changed.emit(delta)
+        self._font_size = font_size
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
-        font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
+        # The preference counts in points, as it always has. The font is
+        # made in pixels, at the size a point is on a 96 dpi screen, so it
+        # is that size in every host and on every platform.
+        font = theme.font(theme.points_to_px(font_size))
         if nxt_editor.owns_qapp():
             app = QtWidgets.QApplication.instance()
             app.setFont(font)
@@ -1005,8 +1011,10 @@ QCheckBox::indicator {
         color = self.model.get_layer_color(disp_layer)
 
         # update widgets
+        # The target layer's color, as a line under the file tabs.
         self.open_files_tab_widget.setStyleSheet(
-            "padding: 1; border: 1px solid %s" % color
+            "QTabWidget::pane { border: none; border-top: 2px solid %s; }"
+            % color
         )
         self.open_files_tab_widget.update()
         self.code_editor.update_border_color()

@@ -1,6 +1,7 @@
 <RCC>
     <qresource prefix="styles">
         <file>styles/dark/dark.qss</file>
+        <file>styles/dark/modern.qss</file>
     </qresource>
     <qresource prefix="fonts">
         <file>fonts/RobotoMono/RobotoMono-Bold.ttf</file>

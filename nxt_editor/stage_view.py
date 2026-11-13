@@ -18,13 +18,13 @@ from nxt_editor.constants import FONTS
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.backdrop_graphics_item import (BackdropGraphicsItem,
                                                BackdropEditDialog)
-from nxt_editor import backdrops
+from nxt_editor import backdrops, theme
 from nxt_editor.connection_graphics_item import (AttrConnectionGraphic,
                                                   WirePointGraphic,
                                                   HIT_WIDTH)
 from nxt_editor import wires
 from nxt_editor.dialogs import NxtWarningDialog
-from nxt_editor.mini_map import MiniMap
+from nxt_editor.mini_map import MiniMap, node_scene_rect
 from nxt_editor.commands import *
 from nxt_editor import colors
 from .user_dir import USER_PREF, user_prefs
@@ -359,7 +359,8 @@ class StageView(QtWidgets.QGraphicsView):
         style = '''
                 QToolTip {
                     font-family: %s;
-                    background-color: %s
+                    background-color: %s;
+                    color: #111111;
                 }
 
                 QRubberBand {
@@ -416,7 +417,7 @@ class StageView(QtWidgets.QGraphicsView):
             graphic = self.get_node_graphic(path)
             if not graphic:
                 continue
-            bounding_rect = bounding_rect.united(graphic.sceneBoundingRect())
+            bounding_rect = bounding_rect.united(node_scene_rect(graphic))
         if bounding_rect != QtCore.QRectF():
             self.frame_rect(bounding_rect)
 
@@ -897,19 +898,23 @@ class StageView(QtWidgets.QGraphicsView):
 
         if self.show_grid:
             # draw grid vertical lines
+            # Cosmetic pens stay one pixel wide at any zoom. Every tenth
+            # line is a little brighter, to judge distance by.
+            minor = QtGui.QPen(theme.color(theme.GRID_MINOR), 0)
+            major = QtGui.QPen(theme.color(theme.GRID_MAJOR), 0)
             for x in range(left, int(rect.right()), self.draw_grid_size):
                 if x % (self.draw_grid_size * 10.0) == 0.0:
-                    painter.setPen(QtGui.QPen(QtGui.QColor(20, 20, 20), 1.0, QtCore.Qt.SolidLine))
+                    painter.setPen(major)
                 else:
-                    painter.setPen(QtGui.QPen(QtGui.QColor(100, 100, 100, 100), 1.0, QtCore.Qt.SolidLine))
+                    painter.setPen(minor)
                 painter.drawLine(x, rect.top(), x, rect.bottom())
 
             # draw grid horizontal lines
             for y in range(top, int(rect.bottom()), self.draw_grid_size):
                 if y % (self.draw_grid_size * 10.0) == 0.0:
-                    painter.setPen(QtGui.QPen(QtGui.QColor(20, 20, 20), 1.0, QtCore.Qt.SolidLine))
+                    painter.setPen(major)
                 else:
-                    painter.setPen(QtGui.QPen(QtGui.QColor(100, 100, 100, 100), 0.5, QtCore.Qt.SolidLine))
+                    painter.setPen(minor)
                 painter.drawLine(rect.left(), y, rect.right(), y)
 
     def add_node(self):
@@ -1019,7 +1024,7 @@ class StageView(QtWidgets.QGraphicsView):
                 continue
             if node_graphic.scene() is None:
                 continue
-            if area.contains(node_graphic.sceneBoundingRect().center()):
+            if area.contains(node_scene_rect(node_graphic).center()):
                 nodes += [node_graphic]
         inner = []
         for other in self._backdrop_graphics.values():
@@ -1038,10 +1043,13 @@ class StageView(QtWidgets.QGraphicsView):
         included."""
         rect = QtCore.QRectF()
         for graphic in node_graphics:
-            rect = rect.united(graphic.sceneBoundingRect())
-            children = graphic.childrenBoundingRect()
-            if not children.isEmpty():
-                rect = rect.united(graphic.mapRectToScene(children))
+            rect = rect.united(node_scene_rect(graphic))
+            for child in graphic.childItems():
+                if isinstance(child, NodeGraphicsItem):
+                    rect = rect.united(self._nodes_rect([child]))
+                elif child.isVisible():
+                    # Plugs and the like, which reach past the node's edge.
+                    rect = rect.united(child.sceneBoundingRect())
         return rect
 
     def add_backdrop(self):

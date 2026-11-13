@@ -33,9 +33,9 @@ class BackdropGraphicsItem(QtWidgets.QGraphicsItem):
         self.backdrop_id = backdrop_id
         self.record = None
         self.selected = False
-        self.title_font = QtGui.QFont(FONTS.DEFAULT_FAMILY, 18)
+        self.title_font = FONTS.default_font(18)
         self.title_font.setBold(True)
-        self.note_font = QtGui.QFont(FONTS.DEFAULT_FAMILY, 12)
+        self.note_font = FONTS.default_font(12)
         self.setAcceptHoverEvents(True)
         self.set_record(record)
 

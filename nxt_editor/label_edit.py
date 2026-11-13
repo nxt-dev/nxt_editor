@@ -3,6 +3,8 @@ from Qt import QtWidgets
 from Qt import QtGui
 from Qt import QtCore
 
+from nxt_editor import theme
+
 
 class LabelEdit(QtWidgets.QLabel):
     doubleClicked = QtCore.Signal()
@@ -51,7 +53,7 @@ class NameEditDialog(QtWidgets.QDialog):
     def __init__(self, name='', geometry=None, parent=None):
         super(NameEditDialog, self).__init__(parent)
         self.setGeometry(geometry)
-        self.setStyleSheet('background-color: #3E3E3E')
+        self.setStyleSheet(theme.fill('background-color: {RAISED}'))
         self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.FramelessWindowHint | QtCore.Qt.Popup)
 
         # layout
@@ -63,7 +65,7 @@ class NameEditDialog(QtWidgets.QDialog):
         self.line_edit = QtWidgets.QLineEdit(name, parent=self)
         self.line_edit.setFocus()
         self.line_edit.selectAll()
-        self.line_edit.setStyleSheet('background-color: #232323')
+        self.line_edit.setStyleSheet(theme.fill('background-color: {BASE}'))
         self.layout.addWidget(self.line_edit)
 
     @property

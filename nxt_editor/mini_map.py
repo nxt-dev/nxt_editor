@@ -8,9 +8,17 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import colors
+from nxt_editor import colors, theme
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
+
+
+def node_scene_rect(graphic):
+    """Where a node is in the scene, not counting room for its shadow."""
+    rect = getattr(graphic, 'get_selection_rect', None)
+    if rect is None:
+        return graphic.sceneBoundingRect()
+    return graphic.mapRectToScene(rect())
 
 
 class MiniMap(object):
@@ -48,8 +56,8 @@ class MiniMap(object):
     REBUILD_DELAY_FACTOR = 4
     MAX_REBUILD_DELAY_MS = 1000
 
-    BG_COLOR = QtGui.QColor(24, 24, 24, 235)
-    BORDER_COLOR = QtGui.QColor(90, 90, 90, 220)
+    BG_COLOR = theme.color(theme.BASE, 0.92)
+    BORDER_COLOR = theme.color(theme.BORDER_STRONG)
     VIEWPORT_COLOR = QtGui.QColor(230, 230, 230, 190)
     VIEWPORT_FILL = QtGui.QColor(255, 255, 255, 20)
 
@@ -179,7 +187,7 @@ class MiniMap(object):
             alpha = getattr(graphic, 'color_alpha', 1.0)
             if alpha != 1.0:
                 color.setAlphaF(alpha)
-            blocks += [(graphic.sceneBoundingRect(), color)]
+            blocks += [(node_scene_rect(graphic), color)]
         return blocks
 
     def _rebuild_cache(self):
@@ -317,7 +325,7 @@ class MiniMap(object):
             if not graphic or graphic.scene() is None:
                 continue
             painter.fillRect(
-                self._scene_rect_to_map(graphic.sceneBoundingRect()),
+                self._scene_rect_to_map(node_scene_rect(graphic)),
                 colors.SELECTED)
 
     def _draw_viewport(self, painter):
