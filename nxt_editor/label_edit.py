@@ -52,9 +52,12 @@ class NameEditDialog(QtWidgets.QDialog):
 
     def __init__(self, name='', geometry=None, parent=None):
         super(NameEditDialog, self).__init__(parent)
-        self.setGeometry(geometry)
         self.setStyleSheet(theme.fill('background-color: {RAISED}'))
         self.setWindowFlags(QtCore.Qt.Window | QtCore.Qt.FramelessWindowHint | QtCore.Qt.Popup)
+        # After the flags: changing them makes the window again, which can
+        # move it, and the box belongs exactly over what it renames.
+        if geometry is not None:
+            self.setGeometry(geometry)
 
         # layout
         self.layout = QtWidgets.QHBoxLayout()

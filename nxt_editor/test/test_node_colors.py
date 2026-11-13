@@ -31,6 +31,8 @@ class NewLayers(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix='nxt_node_colors_')
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.win = MainWindow()
+        # A hidden graph is drawn when it is shown, not as it is edited.
+        self.win.show()
         self.win.new_tab()
         app.processEvents()
         self.model = self.win.model

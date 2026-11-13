@@ -10,7 +10,7 @@ import sys
 import unittest
 
 # External
-from Qt import QtGui, QtWidgets
+from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from nxt_editor import theme
@@ -71,6 +71,87 @@ class LayerColors(unittest.TestCase):
         finally:
             window.close()
             window.deleteLater()
+            app.processEvents()
+
+
+    def test_a_rows_checkbox_shows_on_its_color(self):
+        # Layers to save on close are checked off on rows of their layer's
+        # color, and the box shows without the mouse over it.
+        import nxt_editor
+        from nxt_editor.dialogs import CheckDelegate
+        window = QtWidgets.QWidget()
+        window.setStyleSheet(nxt_editor.stylesheet())
+        layout = QtWidgets.QVBoxLayout(window)
+        tree = QtWidgets.QTreeView()
+        tree.setHeaderHidden(True)
+        tree.setItemDelegate(CheckDelegate(tree))
+        model = QtGui.QStandardItemModel(tree)
+        item = QtGui.QStandardItem('layer')
+        item.setCheckable(True)
+        item.setCheckState(QtCore.Qt.Unchecked)
+        item.setBackground(QtGui.QBrush(QtGui.QColor('#99cc33')))
+        model.appendRow(item)
+        tree.setModel(model)
+        layout.addWidget(tree)
+        window.resize(300, 100)
+        window.show()
+        try:
+            for _ in range(5):
+                app.processEvents()
+            option = QtWidgets.QStyleOptionViewItem()
+            option.initFrom(tree)
+            option.rect = tree.visualRect(model.index(0, 0))
+            option.widget = tree
+            delegate = tree.itemDelegate()
+            delegate.initStyleOption(option, model.index(0, 0))
+            box = tree.style().subElementRect(
+                QtWidgets.QStyle.SE_ItemViewItemCheckIndicator, option, tree)
+            image = tree.viewport().grab().toImage()
+            color = QtGui.QColor(image.pixel(box.center()))
+            self.assertEqual(theme.GRAPH, color.name())
+        finally:
+            window.close()
+            window.deleteLater()
+            app.processEvents()
+
+
+class ReadableText(unittest.TestCase):
+
+    def test_bright_layer_colors_get_dark_text(self):
+        for bright in ('#99CC33', '#CFA305', '#F38B00', '#51B848',
+                       '#00A5E6', '#ffffff'):
+            self.assertEqual(theme.DARK_TEXT,
+                             theme.readable_text(bright).name(), bright)
+
+    def test_deep_and_mid_colors_keep_light_text(self):
+        for deep in ('#991C24', '#0052AA', '#6E33BB', '#E83723',
+                     '#119B77', '#787878'):
+            self.assertEqual(theme.NODE_TEXT,
+                             theme.readable_text(deep).name(), deep)
+
+    def test_the_text_picked_reads_well(self):
+        # Every layer color, with the text picked for it, passes WCAG's
+        # contrast for large text.
+        from nxt_editor import colors
+        for layer_color in colors.LAYER_COLORS:
+            text = theme.readable_text(layer_color)
+            self.assertGreaterEqual(theme.contrast(layer_color, text), 3.0,
+                                    layer_color.name())
+
+
+class RenameBox(unittest.TestCase):
+
+    def test_it_opens_where_it_is_put(self):
+        from nxt_editor.label_edit import NameEditDialog
+        geometry = QtCore.QRect(300, 240, 260, 40)
+        dialog = NameEditDialog(name='node', geometry=geometry)
+        try:
+            dialog.show()
+            app.processEvents()
+            self.assertEqual(geometry.topLeft(), dialog.geometry().topLeft())
+        finally:
+            dialog.reject()
+            dialog.deleteLater()
             app.processEvents()
 
 

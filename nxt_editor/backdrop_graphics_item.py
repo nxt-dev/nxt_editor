@@ -15,7 +15,8 @@ from Qt import QtCore
 
 # Internal
 from nxt_editor import backdrops
-from nxt_editor import colors
+from nxt_editor import colors, theme
+from nxt_editor.layer_color_dialog import LayerColorDialog
 from nxt_editor.constants import FONTS
 
 
@@ -124,7 +125,9 @@ class BackdropGraphicsItem(QtWidgets.QGraphicsItem):
         color = QtGui.QColor(self.record[backdrops.COLOR])
         if not color.isValid():
             color = QtGui.QColor(backdrops.DEFAULT_COLOR)
-        return color
+        # One saved lighter, before colors were kept to the range white
+        # text reads on, shows as the nearest that is.
+        return theme.white_text_safe(color)
 
     def paint(self, painter, option, widget):
         painter.setRenderHints(QtGui.QPainter.Antialiasing |
@@ -288,10 +291,11 @@ class BackdropEditDialog(QtWidgets.QDialog):
         self.custom_button.setStyleSheet(style)
 
     def pick_color(self):
-        color = QtWidgets.QColorDialog.getColor(
-            QtGui.QColor(self.color), self, 'Backdrop Color')
-        if color.isValid():
-            self.set_color(color.name())
+        # The same colors as layers, ones white text reads on.
+        color = LayerColorDialog.get_color(self.color, self,
+                                           title='Backdrop Color')
+        if color:
+            self.set_color(color)
 
     def values(self):
         """{title, note, color} as the dialog has them now."""

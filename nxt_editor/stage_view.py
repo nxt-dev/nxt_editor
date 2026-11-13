@@ -24,6 +24,7 @@ from nxt_editor.connection_graphics_item import (AttrConnectionGraphic,
                                                   HIT_WIDTH)
 from nxt_editor import wires
 from nxt_editor.dialogs import NxtWarningDialog
+from nxt_editor.layer_color_dialog import LayerColorDialog
 from nxt_editor.mini_map import MiniMap, node_scene_rect
 from nxt_editor.commands import *
 from nxt_editor import colors
@@ -95,6 +96,10 @@ class StageView(QtWidgets.QGraphicsView):
         self.verticalScrollBar().setValue(0)
         self.setOptimizationFlag(QtWidgets.QGraphicsView.DontSavePainterState, enabled=True)
         self.setOptimizationFlag(QtWidgets.QGraphicsView.DontAdjustForAntialiasing, enabled=True)
+        # The grid is drawn once into a pixmap and kept, rather than drawn
+        # again under every node that moves. Panning draws only the strip
+        # that comes into view, and zooming starts the pixmap over.
+        self.setCacheMode(QtWidgets.QGraphicsView.CacheBackground)
         # scene
         self._scene = QtWidgets.QGraphicsScene()
         self.setScene(self._scene)
@@ -149,6 +154,12 @@ class StageView(QtWidgets.QGraphicsView):
         # scene is left empty until the view is first put in front of
         # somebody. See ensure_drawn.
         self._drawn = False
+        # Edits made while the view is hidden, turned off from the Window
+        # menu or in a host window that is closed, are not drawn for
+        # nobody. The graph is drawn again once, when it is shown. See
+        # defer_update.
+        self._stale = False
+        self._forced = False
 
         # local attributes
         self.show_grid = user_prefs.get(USER_PREF.SHOW_GRID, True)
@@ -293,7 +304,7 @@ class StageView(QtWidgets.QGraphicsView):
         if self._drawn:
             return False
         self._drawn = True
-        self.update_view()
+        self.redraw()
         # The comp this graph has just been drawn from is the first one
         # anybody has seen of it, and a comp that failed is worth saying
         # so about here rather than only when the next edit lands.
@@ -305,7 +316,32 @@ class StageView(QtWidgets.QGraphicsView):
         # for the first time. Either way this is the moment the graph has
         # somebody to be drawn for.
         super(StageView, self).showEvent(event)
-        self.ensure_drawn()
+        if not self.ensure_drawn() and self._stale:
+            self.redraw()
+
+    def redraw(self):
+        """Draw the whole graph, shown or not."""
+        self._stale = False
+        self._forced = True
+        try:
+            self.update_view()
+            self.draw_wires()
+        finally:
+            self._forced = False
+
+    def defer_update(self):
+        """Whether to leave an edit undrawn: before the graph is first
+        drawn, or while nobody can see the view, when the graph is drawn
+        again once it is shown.
+
+        :rtype: bool
+        """
+        if not self._drawn:
+            return True
+        if self._forced or self.isVisible():
+            return False
+        self._stale = True
+        return True
 
     def failure_check(self, *args):
         if not self._drawn:
@@ -323,10 +359,11 @@ class StageView(QtWidgets.QGraphicsView):
         :param dirty: List or Tuple of dirty node paths
         :return: None
         """
-        if not self._drawn:
+        if self.defer_update():
             # There is nothing drawn to update, and drawing only the dirty
             # part now would leave the rest of the graph missing. The whole
-            # graph is drawn when the tab is first selected.
+            # graph is drawn when the tab is first selected, or the view
+            # shown again.
             return
         start = time.time()
         # The signal layer_color_changed somehow passes its layer to this
@@ -391,7 +428,8 @@ class StageView(QtWidgets.QGraphicsView):
             self.show_grid = not self.show_grid
         else:
             self.show_grid = state
-        self.update()
+        self.resetCachedContent()
+        self.viewport().update()
 
     def toggle_mini_map(self, state=None):
         if state is None:
@@ -709,6 +747,8 @@ class StageView(QtWidgets.QGraphicsView):
         points."""
         self.connection_style = self.model.get_connection_style()
         self._line_points = self.model.get_line_points()
+        if self.defer_update():
+            return
         for graphic in self._connection_graphics:
             points = self._line_points.get(graphic.key, [])
             drawn = [[p.x(), p.y()] for p in graphic.points]
@@ -882,6 +922,9 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.set_line_points(connection.key, points,
                                    text='Move connection point')
 
+    # Screen pixels between minor grid lines below which they are left out.
+    MIN_GRID_SPACING = 4
+
     def drawBackground(self, painter, rect):
         super(StageView, self).drawBackground(painter, rect)
 
@@ -897,25 +940,39 @@ class StageView(QtWidgets.QGraphicsView):
         top = int(rect.top()) - (int(rect.top()) % self.draw_grid_size)
 
         if self.show_grid:
-            # draw grid vertical lines
             # Cosmetic pens stay one pixel wide at any zoom. Every tenth
-            # line is a little brighter, to judge distance by.
-            minor = QtGui.QPen(theme.color(theme.GRID_MINOR), 0)
-            major = QtGui.QPen(theme.color(theme.GRID_MAJOR), 0)
-            for x in range(left, int(rect.right()), self.draw_grid_size):
-                if x % (self.draw_grid_size * 10.0) == 0.0:
-                    painter.setPen(major)
-                else:
-                    painter.setPen(minor)
-                painter.drawLine(x, rect.top(), x, rect.bottom())
-
-            # draw grid horizontal lines
-            for y in range(top, int(rect.bottom()), self.draw_grid_size):
-                if y % (self.draw_grid_size * 10.0) == 0.0:
-                    painter.setPen(major)
-                else:
-                    painter.setPen(minor)
-                painter.drawLine(rect.left(), y, rect.right(), y)
+            # line is a little brighter, to judge distance by. Each kind is
+            # drawn in one call: a call per line was thousands of them on
+            # every repaint, zoomed out.
+            step = self.draw_grid_size
+            every = step * 10
+            # Minor lines closer than this on screen are only a wash.
+            show_minor = step * self.scale_factor >= self.MIN_GRID_SPACING
+            minor_lines = []
+            major_lines = []
+            for x in range(left, int(rect.right()), step):
+                line = QtCore.QLineF(x, rect.top(), x, rect.bottom())
+                if x % every == 0:
+                    major_lines.append(line)
+                elif show_minor:
+                    minor_lines.append(line)
+            for y in range(top, int(rect.bottom()), step):
+                line = QtCore.QLineF(rect.left(), y, rect.right(), y)
+                if y % every == 0:
+                    major_lines.append(line)
+                elif show_minor:
+                    minor_lines.append(line)
+            # Level, one pixel lines need no smoothing, and smoothing
+            # them was most of what drawing the grid cost.
+            painter.save()
+            painter.setRenderHint(QtGui.QPainter.Antialiasing, False)
+            if minor_lines:
+                painter.setPen(QtGui.QPen(theme.color(theme.GRID_MINOR), 0))
+                painter.drawLines(minor_lines)
+            if major_lines:
+                painter.setPen(QtGui.QPen(theme.color(theme.GRID_MAJOR), 0))
+                painter.drawLines(major_lines)
+            painter.restore()
 
     def add_node(self):
         sel_node_paths = self.model.get_selected_nodes()
@@ -927,10 +984,17 @@ class StageView(QtWidgets.QGraphicsView):
                     self.new_node(parent_path=parent_path)
 
         else:
-            # new node in the scene at mouse position
-            mouse_pos = self.mapFromGlobal(QtGui.QCursor.pos())
-            pos = self.mapToScene(mouse_pos)
+            pos = self.placement_pos()
             self.new_node(pos=[pos.x(), pos.y()])
+
+    def placement_pos(self):
+        """Where a node added or pasted from a menu or hotkey goes: at the
+        mouse, or in the middle of the graph when the mouse is not over
+        it, such as for a node added from the Outliner."""
+        mouse_pos = self.mapFromGlobal(QtGui.QCursor.pos())
+        if not self.viewport().rect().contains(mouse_pos):
+            mouse_pos = self.viewport().rect().center()
+        return self.mapToScene(mouse_pos)
 
     def new_node(self, name='node', parent_path=None, pos=None):
         """Creates a new node object on the target layer which triggers a view update.
@@ -956,7 +1020,7 @@ class StageView(QtWidgets.QGraphicsView):
 
     def paste_nodes(self, pos=None, parent_path=None):
         if not pos:
-            mouse_pos = self.mapToScene(self.mapFromGlobal(QtGui.QCursor.pos()))
+            mouse_pos = self.placement_pos()
             pos = [mouse_pos.x(), mouse_pos.y()]
         if not parent_path:
             sel_node_paths = self.model.get_selected_nodes()
@@ -971,7 +1035,7 @@ class StageView(QtWidgets.QGraphicsView):
 
     def draw_backdrops(self):
         """Bring the backdrops drawn in line with the model's."""
-        if not self._drawn:
+        if self.defer_update():
             return
         records = self.model.get_backdrops()
         for backdrop_id in list(self._backdrop_graphics):
@@ -1114,11 +1178,12 @@ class StageView(QtWidgets.QGraphicsView):
         record = self.model.get_backdrop(backdrop_id)
         if record is None:
             return
-        color = QtWidgets.QColorDialog.getColor(
-            QtGui.QColor(record[backdrops.COLOR]), self, 'Backdrop Color')
-        if color.isValid():
+        # The same colors as layers, ones white text reads on.
+        color = LayerColorDialog.get_color(record[backdrops.COLOR], self,
+                                           title='Backdrop Color')
+        if color:
             self.model.edit_backdrop(backdrop_id, text='Color backdrop',
-                                     color=color.name())
+                                     color=color)
 
     def fit_backdrop(self, backdrop_id):
         """Size a backdrop to just hold the nodes inside it."""
@@ -1864,8 +1929,8 @@ class StageView(QtWidgets.QGraphicsView):
         return None
 
     def on_model_selection_changed(self, new_selection):
-        if not self._drawn:
-            # Nothing drawn to keep up with yet, see ensure_drawn.
+        if self.defer_update():
+            # Nothing drawn to keep up with, see defer_update.
             return
         # The map draws selection live, outside its cached node blocks, so
         # it needs its corner repainted. Selection changes otherwise only
@@ -1903,8 +1968,8 @@ class StageView(QtWidgets.QGraphicsView):
                 logger.error("Cannot find item to select: " + str(path))
 
     def handle_nodes_changed(self, node_paths):
-        if not self._drawn:
-            # Nothing drawn to keep up with yet, see ensure_drawn.
+        if self.defer_update():
+            # Nothing drawn to keep up with, see defer_update.
             return
         updated_paths = []
         roots_hit = set()
@@ -1957,8 +2022,8 @@ class StageView(QtWidgets.QGraphicsView):
         :param attr_paths: Tuple of attr paths /node.attr
         :return: None
         """
-        if not self._drawn:
-            # Nothing drawn to keep up with yet, see ensure_drawn.
+        if self.defer_update():
+            # Nothing drawn to keep up with, see defer_update.
             return
         start = time.time()
         attr_map = {}
@@ -1989,8 +2054,8 @@ class StageView(QtWidgets.QGraphicsView):
         logger.debug("Time to update attrs: " + update_time + "ms")
 
     def handle_node_move(self, node_path, pos):
-        if not self._drawn:
-            # Nothing drawn to keep up with yet, see ensure_drawn.
+        if self.defer_update():
+            # Nothing drawn to keep up with, see defer_update.
             return
         node_item = self.get_node_graphic(node_path)
         if node_item:
@@ -2006,8 +2071,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.do_animations = state
 
     def handle_collapse_changed(self, node_paths):
-        if not self._drawn:
-            # Nothing drawn to keep up with yet, see ensure_drawn.
+        if self.defer_update():
+            # Nothing drawn to keep up with, see defer_update.
             return
         while self._animating:
             QtWidgets.QApplication.processEvents()

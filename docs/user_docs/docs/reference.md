@@ -71,7 +71,9 @@ graph looks: it is not a node and it never runs.
   with **Edit Backdrop...** in its right click menu. The note is shown under
   the title at the top left, wrapped to the backdrop's width, and grows the
   header to fit. The right click menu also has a **Color** submenu, **Select
-  Nodes Inside** and **Fit to Nodes Inside**.
+  Nodes Inside** and **Fit to Nodes Inside**. Backdrops take the same
+  colors as layers, ones their white title reads on, and the color picker
+  only offers those.
 - **Delete it** with `Del` while it is selected, or **Delete Backdrop** in
   its right click menu. The nodes inside it stay where they are.
 
@@ -421,6 +423,10 @@ restart it.
   selected node is not always part of the build: it may be disabled,
   outside the start point's branch, or not executable at all. In that case
   the Output Log says the node is not in the build, and the editor dings.
+- The node selected, here or anywhere else, has an amber edge, and the
+  node under the mouse a white one. Only the node's name is outlined, not
+  the break and skip boxes beside it, and the node that runs next stays
+  red.
 - The build stays current as you edit. Enabling or disabling a node,
   changing a start point, exec input, child order, instance path or parent,
   and renaming or deleting a node all update the list straight away.
@@ -449,15 +455,44 @@ on from **Window > Outliner**.
   valid one yet is searched for as it is. Matching rows are bold, the
   nodes above them stay so you can see where they are, and `Enter` frames
   the first match.
-- Disabled nodes are grey and in italics.
+- Text is white, as on the node in the graph, and a disabled node's is
+  faded and in italics. Hovering a row outlines it in white and selecting
+  it outlines it in amber, the row's color staying as it is.
+- Start, break and skip points show before the name as they do on the
+  node in the graph: the start icon, a red square for a breakpoint and an
+  orange bar for a skip point.
 - Selecting rows selects the nodes in the graph, and selecting nodes in the
-  graph selects their rows. Double click a row to frame its node.
+  graph selects their rows.
+- Rows work like their nodes in the graph. The node hotkeys work while
+  the Outliner has focus (`D` to disable, `N` to add, `Del` to delete, `S`
+  for a start point, `F` to frame and so on), and a right click gives the
+  graph's node menu, with **Frame in Graph** at the top. Double click a
+  row, or click its arrow, to collapse or expand its node, hold `Shift` to
+  do the same to everything below it, and `Ctrl` double click, or `F2`, to rename it
+  right there in the row.
+- Right click below the rows for the graph's menu for empty space, to add
+  or paste a node at the top of the hierarchy. It lands in the middle of
+  the graph's view.
+- Letters are hotkeys here, so typing does not jump between rows. Use the
+  search box to find a node.
 
 ## Property Editor, History View, Output Log and Workflow Tools
 
 See the [tutorial videos](tutorials.md) for a tour of these. The History
 View lists every step on the undo stack, including reference edits and
 reloads.
+
+In the Property Editor's attribute table, each row is in the color of the
+layer its value comes from, lighter where the selected node sets the value
+itself and darker where it inherits it. Instanced values are in italics.
+
+Darker layer colors can be hard to read as text, so **View > Options >
+Neutral Property Text** shows the rows in neutral text instead: bright,
+in bold across the row, where the node sets the value, and a softer grey where it
+inherits it. The row header on the left is filled with the layer's color,
+and stays in view however far you scroll the table. The source looks like a
+button only under the mouse; click it to go to that node. It is off by
+default and remembered with your preferences.
 
 # Terms and Definitions
 
@@ -611,6 +646,13 @@ To begin execution from a given node, the first node is run, followed by a depth
 All of the layers in your file are composited together to produce final code to execute. Each layer has the power to change as much or as little as is needed to customize the composited node’s attributes and code block. These changes are stored in the file they are made on, keeping referenced files safe to use for many purposes.
 
 Layer color propagates into nodes an also attributes.
+
+Layer colors are always ones white text reads on, so node names can be read
+on every layer. **Change Color** offers the layer palette, a field of hues
+and a shade bar that stops before a color gets too light for white text.
+A typed hex that is too light is taken as the nearest color that is not,
+and so is a lighter color saved in a file or set from a script, keeping
+its hue.
 
 ![attribute_color.PNG](images/attribute_color.PNG)
 

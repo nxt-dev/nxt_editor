@@ -212,6 +212,8 @@ class TheLayerManagerWithAnUnresolvedReference(unittest.TestCase):
                                     node_names=['from_top'])
         from nxt_editor.main_window import MainWindow
         self.win = MainWindow(filepath=self.top_path)
+        # A hidden graph is drawn when it is shown, not as it is edited.
+        self.win.show()
         self.model = self.win.model
         app.processEvents()
 

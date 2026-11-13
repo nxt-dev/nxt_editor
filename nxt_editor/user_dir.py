@@ -188,6 +188,9 @@ class USER_PREF():
     CE_COMPLETE_JEDI = 'code_editor_complete_jedi'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
+    # Property Editor rows in neutral text, the layer as a color beside
+    # them, rather than in their layer's color.
+    NEUTRAL_PROPERTY_TEXT = 'neutral_property_text'
     SHOW_IMPLICIT = 'show_implicit_connections'
     SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'
