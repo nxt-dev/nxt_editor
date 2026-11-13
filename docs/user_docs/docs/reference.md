@@ -45,6 +45,40 @@ nodes, and a rectangle for the part of the graph the view is showing.
 - Toggle it with **View > Toggle Mini Map** or `Ctrl+M`. The choice is
   remembered between sessions.
 
+### Backdrops
+
+A backdrop is a colored box with a title and a note, drawn behind a group of
+nodes to label what that part of the graph does. It only changes how the
+graph looks: it is not a node and it never runs.
+
+- **Add one** with `C` or **Add Backdrop** in the right click menu. With
+  nodes selected the backdrop is drawn around them, otherwise an empty one
+  is added under the mouse.
+- **Move it** by dragging its header, the title and note at the top. Every
+  node inside it, and every backdrop wholly inside it, moves with it, and
+  the whole move is one undo. Hold `Ctrl` while dragging to move the
+  backdrop on its own. Hold `Shift`, or turn on grid snapping, to snap to
+  the grid.
+- **Put nodes in it or take them out** by dragging the nodes. A node
+  belongs to a backdrop when its middle is inside it, so nothing has to be
+  kept up to date when nodes are renamed, deleted or pasted.
+- **Resize it** by dragging the bottom right corner.
+- **Edit the title, note and color** by double clicking the header, or
+  with **Edit Backdrop...** in its right click menu. The note is shown under
+  the title at the top left, wrapped to the backdrop's width, and grows the
+  header to fit. The right click menu also has a **Color** submenu, **Select
+  Nodes Inside** and **Fit to Nodes Inside**.
+- **Delete it** with `Del` while it is selected, or **Delete Backdrop** in
+  its right click menu. The nodes inside it stay where they are.
+
+Only the header and the resize corner take the mouse, so you can still
+start a rubber band selection inside a backdrop.
+
+Backdrops are saved in the top layer's meta data, next to the node
+positions. Backdrops from referenced layers are shown too. Changing one
+saves the change on the top layer and leaves the referenced layer as it
+was.
+
 ### Animate Nodes
 
 Nodes no longer slide open when a parent is expanded. Every child is

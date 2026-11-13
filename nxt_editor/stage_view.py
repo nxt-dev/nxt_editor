@@ -1,4 +1,5 @@
 # Built-in
+import copy
 import math
 import logging
 import time
@@ -15,6 +16,9 @@ import nxt_editor
 from nxt import nxt_node, tokens
 from nxt_editor.constants import FONTS
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
+from nxt_editor.backdrop_graphics_item import (BackdropGraphicsItem,
+                                               BackdropEditDialog)
+from nxt_editor import backdrops
 from nxt_editor.connection_graphics_item import AttrConnectionGraphic
 from nxt_editor.dialogs import NxtWarningDialog
 from nxt_editor.mini_map import MiniMap
@@ -39,6 +43,10 @@ class StageView(QtWidgets.QGraphicsView):
     POTENTIAL_CONNECTION_DEPTH = 30
     CONNECTION_DEPTH = -10
     NODE_DEPTH = 0
+    # Behind the connections, so a wire across a backdrop stays visible.
+    BACKDROP_DEPTH = -1000
+    # Room left around the nodes a new backdrop is drawn around.
+    BACKDROP_PADDING = 40
 
     def __init__(self, model, parent=None):
         super(StageView, self).__init__(parent=parent)
@@ -122,6 +130,10 @@ class StageView(QtWidgets.QGraphicsView):
         self._node_graphics = {}
         self._connection_graphics = []
         self._attr_concerns = {}
+        self._backdrop_graphics = {}
+        # What a backdrop being moved or resized started from, see
+        # backdrop_press.
+        self._backdrop_drag = None
         self.prev_build_focus_path = None
         # A tab nobody has selected has nobody to show a graph to, so the
         # scene is left empty until the view is first put in front of
@@ -150,6 +162,7 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.selection_changed.connect(self.on_model_selection_changed)
         self.model.frame_items.connect(self.frame_nodes)
         self.model.collapse_changed.connect(self.handle_collapse_changed)
+        self.model.backdrops_changed.connect(self.draw_backdrops)
 
         # The view is drawn when it is first shown, not here: see
         # ensure_drawn.
@@ -347,6 +360,8 @@ class StageView(QtWidgets.QGraphicsView):
         self._node_graphics = {}
         self._connection_graphics = []
         self._attr_concerns = {}
+        self._backdrop_graphics = {}
+        self._backdrop_drag = None
         self.scene().clear()
 
     def toggle_implicit_connections(self, state=None):
@@ -413,6 +428,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.do_animations = False
         self.handle_nodes_changed(node_paths)
         self.do_animations = og_do_anims
+        if not dirty:
+            self.draw_backdrops()
 
     def draw_node(self, node_path):
         graphic = self.get_node_graphic(node_path)
@@ -745,6 +762,309 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.paste_nodes(pos=pos, parent_path=parent_path,
                                layer=self.model.target_layer)
 
+
+    # Backdrops ------------------------------------------------------------
+
+    def draw_backdrops(self):
+        """Bring the backdrops drawn in line with the model's."""
+        if not self._drawn:
+            return
+        records = self.model.get_backdrops()
+        for backdrop_id in list(self._backdrop_graphics):
+            if backdrop_id not in records:
+                graphic = self._backdrop_graphics.pop(backdrop_id)
+                if graphic.scene():
+                    self.scene().removeItem(graphic)
+        for backdrop_id, record in records.items():
+            graphic = self._backdrop_graphics.get(backdrop_id)
+            if graphic is None:
+                graphic = BackdropGraphicsItem(backdrop_id, record)
+                self._backdrop_graphics[backdrop_id] = graphic
+                self.scene().addItem(graphic)
+            else:
+                graphic.set_record(record)
+        # Larger ones behind smaller ones, so a backdrop inside another can
+        # still be grabbed.
+        by_area = sorted(self._backdrop_graphics.values(),
+                         key=lambda g: -(g.width * g.height))
+        for index, graphic in enumerate(by_area):
+            graphic.setZValue(self.BACKDROP_DEPTH + (index * .01))
+        self.mini_map.mark_dirty()
+
+    def get_backdrop_graphic(self, backdrop_id):
+        return self._backdrop_graphics.get(backdrop_id)
+
+    @property
+    def selected_backdrops(self):
+        return [backdrop_id for backdrop_id, graphic
+                in self._backdrop_graphics.items() if graphic.selected]
+
+    def select_backdrops(self, backdrop_ids):
+        for backdrop_id, graphic in self._backdrop_graphics.items():
+            selected = backdrop_id in backdrop_ids
+            if graphic.selected != selected:
+                graphic.selected = selected
+                graphic.update()
+
+    def backdrop_contents(self, graphic):
+        """What moves with a backdrop: every top level node whose middle is
+        inside it, and every backdrop wholly inside it.
+
+        :return: ([NodeGraphicsItem], [BackdropGraphicsItem])
+        """
+        area = graphic.scene_rect()
+        nodes = []
+        for path, node_graphic in self._node_graphics.items():
+            if nxt_path.get_root_path(path) != path:
+                # Children are stacked under their root and go with it.
+                continue
+            if node_graphic.scene() is None:
+                continue
+            if area.contains(node_graphic.sceneBoundingRect().center()):
+                nodes += [node_graphic]
+        inner = []
+        for other in self._backdrop_graphics.values():
+            if other is not graphic and area.contains(other.scene_rect()):
+                inner += [other]
+        return nodes, inner
+
+    def _position_layer(self):
+        """The layer node positions are written to, see mouseReleaseEvent."""
+        if self.model.target_layer.layer_idx() == 0:
+            return self.model.target_layer
+        return self.model.top_layer
+
+    def _nodes_rect(self, node_graphics):
+        """Scene rectangle around nodes, the children stacked under them
+        included."""
+        rect = QtCore.QRectF()
+        for graphic in node_graphics:
+            rect = rect.united(graphic.sceneBoundingRect())
+            children = graphic.childrenBoundingRect()
+            if not children.isEmpty():
+                rect = rect.united(graphic.mapRectToScene(children))
+        return rect
+
+    def add_backdrop(self):
+        """Add a backdrop around the selected nodes, or an empty one under
+        the mouse when nothing is selected."""
+        roots = []
+        for path in self.model.get_selected_nodes():
+            graphic = self.get_node_graphic(nxt_path.get_root_path(path))
+            if graphic and graphic not in roots:
+                roots += [graphic]
+        nodes_rect = self._nodes_rect(roots)
+        if not nodes_rect.isEmpty():
+            pad = self.BACKDROP_PADDING
+            # Measure the header the new backdrop will have, so the nodes
+            # start below it.
+            sizer = BackdropGraphicsItem('', backdrops.make((0, 0)))
+            header = sizer.header_rect().height()
+            pos = (nodes_rect.left() - pad, nodes_rect.top() - pad - header)
+            size = (nodes_rect.width() + (pad * 2),
+                    nodes_rect.height() + (pad * 2) + header)
+        else:
+            view_pos = self.mapFromGlobal(QtGui.QCursor.pos())
+            if not self.viewport().rect().contains(view_pos):
+                view_pos = self.viewport().rect().center()
+            center = self.mapToScene(view_pos)
+            size = backdrops.DEFAULT_SIZE
+            pos = (center.x() - (size[0] * .5), center.y() - 30)
+        record = backdrops.make(pos, size)
+        stack = self.model.undo_stack
+        stack.beginMacro('Add backdrop')
+        backdrop_id = self.model.add_backdrop(record)
+        self.model.clear_selection()
+        stack.endMacro()
+        self.select_backdrops([backdrop_id])
+        return backdrop_id
+
+    def delete_selected_backdrops(self):
+        """Delete the selected backdrops, and only them.
+
+        :return: True when there were some to delete
+        """
+        selected = self.selected_backdrops
+        if not selected:
+            return False
+        self.model.remove_backdrops(selected)
+        return True
+
+    def edit_backdrop(self, backdrop_id):
+        record = self.model.get_backdrop(backdrop_id)
+        if record is None:
+            return
+        dialog = BackdropEditDialog(record, parent=self)
+        if not dialog.exec_():
+            return
+        values = dialog.values()
+        if all(record.get(k) == v for k, v in values.items()):
+            return
+        self.model.edit_backdrop(backdrop_id, text='Edit backdrop "{}"'.format(
+            values[backdrops.TITLE]), **values)
+
+    def pick_backdrop_color(self, backdrop_id):
+        record = self.model.get_backdrop(backdrop_id)
+        if record is None:
+            return
+        color = QtWidgets.QColorDialog.getColor(
+            QtGui.QColor(record[backdrops.COLOR]), self, 'Backdrop Color')
+        if color.isValid():
+            self.model.edit_backdrop(backdrop_id, text='Color backdrop',
+                                     color=color.name())
+
+    def fit_backdrop(self, backdrop_id):
+        """Size a backdrop to just hold the nodes inside it."""
+        graphic = self.get_backdrop_graphic(backdrop_id)
+        if not graphic:
+            return
+        nodes, inner = self.backdrop_contents(graphic)
+        rect = self._nodes_rect(nodes)
+        for other in inner:
+            rect = rect.united(other.scene_rect())
+        if rect.isEmpty():
+            return
+        pad = self.BACKDROP_PADDING
+        header = graphic.header_rect().height()
+        self.model.edit_backdrop(
+            backdrop_id, text='Fit backdrop',
+            pos=[rect.left() - pad, rect.top() - pad - header],
+            size=[rect.width() + (pad * 2),
+                  rect.height() + (pad * 2) + header])
+
+    def select_backdrop_nodes(self, backdrop_id):
+        graphic = self.get_backdrop_graphic(backdrop_id)
+        if not graphic:
+            return
+        nodes, _ = self.backdrop_contents(graphic)
+        self.select_backdrops([])
+        self.model.set_selection([g.node_path for g in nodes])
+
+    def backdrop_menu(self, graphic):
+        backdrop_id = graphic.backdrop_id
+        menu = QtWidgets.QMenu(self)
+        edit = menu.addAction('Edit Backdrop...')
+        edit.triggered.connect(partial(self.edit_backdrop, backdrop_id))
+        color_menu = menu.addMenu('Color')
+        for name, hex_color in backdrops.PRESET_COLORS:
+            swatch = QtGui.QPixmap(14, 14)
+            swatch.fill(QtGui.QColor(hex_color))
+            action = color_menu.addAction(QtGui.QIcon(swatch), name)
+            action.triggered.connect(partial(
+                self.model.edit_backdrop, backdrop_id,
+                text='Color backdrop', color=hex_color))
+        color_menu.addSeparator()
+        custom = color_menu.addAction('Custom...')
+        custom.triggered.connect(partial(self.pick_backdrop_color,
+                                         backdrop_id))
+        menu.addSeparator()
+        select = menu.addAction('Select Nodes Inside')
+        select.triggered.connect(partial(self.select_backdrop_nodes,
+                                         backdrop_id))
+        fit = menu.addAction('Fit to Nodes Inside')
+        fit.triggered.connect(partial(self.fit_backdrop, backdrop_id))
+        menu.addSeparator()
+        delete = menu.addAction('Delete Backdrop')
+        delete.triggered.connect(partial(self.model.remove_backdrops,
+                                         [backdrop_id]))
+        menu.exec_(self.mapToGlobal(self._initial_click_pos))
+
+    def backdrop_press(self, event):
+        """Start moving or resizing the backdrop under a left click.
+
+        Dragging the header moves the backdrop and everything inside it,
+        holding Ctrl moves the backdrop alone. Dragging the bottom right
+        corner resizes it. Shift click adds it to or takes it out of the
+        selected backdrops.
+
+        :return: True when the click was on a backdrop
+        """
+        item = self.itemAt(event.pos())
+        if not isinstance(item, BackdropGraphicsItem):
+            if event.modifiers() == QtCore.Qt.NoModifier:
+                self.select_backdrops([])
+            return False
+        scene_pos = self.mapToScene(event.pos())
+        part = item.part_at(scene_pos)
+        if part is None:
+            return False
+        mods = event.modifiers()
+        if mods == self.SEL_TOGGLE_MODIFIERS:
+            selected = self.selected_backdrops
+            if item.backdrop_id in selected:
+                selected.remove(item.backdrop_id)
+            else:
+                selected += [item.backdrop_id]
+            self.select_backdrops(selected)
+            return True
+        self.select_backdrops([item.backdrop_id])
+        self.model.clear_selection()
+        nodes, inner = [], []
+        if part == 'header' and not mods & QtCore.Qt.ControlModifier:
+            nodes, inner = self.backdrop_contents(item)
+        self._backdrop_drag = {
+            'graphic': item, 'part': part, 'start': scene_pos,
+            'pos': QtCore.QPointF(item.pos()),
+            'size': (item.width, item.height), 'moved': False,
+            'nodes': [(g, QtCore.QPointF(g.pos())) for g in nodes
+                      if not g.locked],
+            'inner': [(g, QtCore.QPointF(g.pos())) for g in inner]}
+        return True
+
+    def backdrop_drag_move(self, event):
+        drag = self._backdrop_drag
+        graphic = drag['graphic']
+        delta = self.mapToScene(event.pos()) - drag['start']
+        shift = event.modifiers() & QtCore.Qt.ShiftModifier
+        snap = shift or self.alignment_actions.snap_action.isChecked()
+        grid = float(self.draw_grid_size)
+        if drag['part'] == 'resize':
+            width = drag['size'][0] + delta.x()
+            height = drag['size'][1] + delta.y()
+            if snap:
+                width = round(width / grid) * grid
+                height = round(height / grid) * grid
+            graphic.set_size(width, height)
+        else:
+            new_pos = drag['pos'] + delta
+            if snap:
+                new_pos = QtCore.QPointF(*self.model.snap_pos_to_grid(
+                    (new_pos.x(), new_pos.y())))
+                delta = new_pos - drag['pos']
+            graphic.setPos(new_pos)
+            for moved, start in drag['nodes'] + drag['inner']:
+                moved.setPos(start + delta)
+        drag['moved'] = True
+        self.mini_map.mark_dirty()
+
+    def backdrop_release(self):
+        """Save where a backdrop was moved or resized to, as one undo."""
+        drag = self._backdrop_drag
+        self._backdrop_drag = None
+        if not drag['moved']:
+            return
+        graphic = drag['graphic']
+        changes = {}
+        for moved in [graphic] + [g for g, _ in drag['inner']]:
+            record = copy.deepcopy(moved.record)
+            record[backdrops.POS] = [moved.pos().x(), moved.pos().y()]
+            changes[moved.backdrop_id] = record
+        node_positions = {}
+        for node_graphic, _ in drag['nodes']:
+            node_positions[node_graphic.node_path] = [node_graphic.pos().x(),
+                                                      node_graphic.pos().y()]
+        if drag['part'] == 'resize':
+            text = 'Resize backdrop'
+        else:
+            text = 'Move backdrop'
+        stack = self.model.undo_stack
+        stack.beginMacro(text)
+        if node_positions:
+            self.model.set_nodes_pos(node_positions,
+                                     layer=self._position_layer())
+        self.model.set_backdrops(changes, text=text)
+        stack.endMacro()
+
     def select_all(self):
         node_paths = list(self._node_graphics.keys())
         self.model.set_selection(paths=node_paths)
@@ -792,6 +1112,9 @@ class StageView(QtWidgets.QGraphicsView):
 
         # left button event
         if event.button() == QtCore.Qt.LeftButton:
+            if not self.zooming and self.backdrop_press(event):
+                event.accept()
+                return
             # get item under event
             item = self.itemAt(event.pos())
 
@@ -842,6 +1165,11 @@ class StageView(QtWidgets.QGraphicsView):
 
     def mouseMoveEvent(self, event):
         if self.mini_map.handle_mouse_move(event):
+            return
+        if self._backdrop_drag is not None:
+            self.mouse_scene_pos = self.mapToScene(event.pos())
+            self.backdrop_drag_move(event)
+            event.accept()
             return
         # rubber band action
         if self._rubber_band_origin is not None:
@@ -903,6 +1231,11 @@ class StageView(QtWidgets.QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         if self.mini_map.handle_mouse_release(event):
+            return
+        if (self._backdrop_drag is not None and
+                event.button() == QtCore.Qt.LeftButton):
+            self.backdrop_release()
+            event.accept()
             return
         was_just_zooming = self.zooming
         self.zooming = False
@@ -1068,6 +1401,10 @@ class StageView(QtWidgets.QGraphicsView):
         event.pos()
         if event.button() == QtCore.Qt.LeftButton:
             item = self.itemAt(event.pos())
+            if isinstance(item, BackdropGraphicsItem):
+                self._backdrop_drag = None
+                self.edit_backdrop(item.backdrop_id)
+                return
             # TODO this is strictly a nodegraphicsitem's job, move there.
             if item and isinstance(item, NodeGraphicsItem):
                 if modifiers == QtCore.Qt.ControlModifier:
@@ -1139,8 +1476,12 @@ class StageView(QtWidgets.QGraphicsView):
     def contextMenuEvent(self, event):
         if self.block_context_menu:  # Check if we shouldn't spawn the menu
             return
-        menu = QtWidgets.QMenu(self)
         item = self.itemAt(self._initial_click_pos)
+        if isinstance(item, BackdropGraphicsItem):
+            self.backdrop_menu(item)
+            self.block_context_menu = True
+            return
+        menu = QtWidgets.QMenu(self)
         if isinstance(item, NodeGraphicsItem):
             hov_path = item.node_path
             exec_hovered_text = 'Execute {}'.format(hov_path)
@@ -1167,6 +1508,7 @@ class StageView(QtWidgets.QGraphicsView):
             menu.addSeparator()
         if selected_nodes_count <= 1:
             menu.addAction(self.authoring_actions.add_node_action)
+        menu.addAction(self.authoring_actions.add_backdrop_action)
         if selected_nodes_count == 1:
             menu.addAction(self.authoring_actions.rename_node_action)
         if selected_nodes_count > 0:

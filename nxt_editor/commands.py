@@ -8,6 +8,7 @@ import time
 from Qt.QtWidgets import QUndoCommand
 
 # Internal
+from nxt_editor import backdrops
 from nxt_editor import colors
 from nxt_editor import user_dir
 from nxt_editor.reference_paths import stored_reference_path
@@ -733,6 +734,41 @@ class SetNodesPosition(NxtCommand):
                 else:
                     nodes_str = 'nodes'
                 self.setText('Move {} {}'.format(nodes_str, delta_str))
+        self.redo_effected_layer(layer.real_path)
+
+
+class SetBackdrops(NxtCommand):
+
+    """Add, change or remove backdrops on one layer."""
+
+    def __init__(self, changes, model, layer_path, text='Edit backdrop'):
+        """
+        :param changes: {id: record, None or backdrops.ABSENT}, see
+            nxt_editor.backdrops.write
+        """
+        super(SetBackdrops, self).__init__(model)
+        self.layer_path = layer_path
+        self.new = copy.deepcopy(changes)
+        layer = model.lookup_layer(layer_path)
+        current = backdrops.layer_backdrops(layer)
+        self.old = {}
+        for backdrop_id in changes:
+            self.old[backdrop_id] = copy.deepcopy(
+                current.get(backdrop_id, backdrops.ABSENT))
+        self.setText(text)
+
+    @processing
+    def undo(self):
+        layer = self.model.lookup_layer(self.layer_path)
+        backdrops.write(layer, self.old)
+        self.model.backdrops_changed.emit()
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self.model.lookup_layer(self.layer_path)
+        backdrops.write(layer, self.new)
+        self.model.backdrops_changed.emit()
         self.redo_effected_layer(layer.real_path)
 
 
