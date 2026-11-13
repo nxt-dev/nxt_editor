@@ -186,7 +186,12 @@ class TheDialog(RangeCase):
         from Qt import QtTest
         self.dialog.even_radio.setChecked(True)
         self.dialog.chroma_box.setValue(0.1)
-        QtTest.QTest.qWait(300)
+        self.assertEqual([], self.applied)
+        # A moment, however long the event loop takes to get to it.
+        for _ in range(60):
+            QtTest.QTest.qWait(50)
+            if self.applied:
+                break
         self.assertEqual((color_range.EVEN, 0.65, 0.1), self.applied[-1])
 
     def test_ok_remembers_it(self):
