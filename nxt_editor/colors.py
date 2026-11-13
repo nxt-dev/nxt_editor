@@ -23,25 +23,19 @@ START_COLOR = QColor("#1bd40b")
 SKIP_COLOR = QColor("#f0880a")
 BREAK_COLOR = QColor(255, 0, 0)
 
-# White text reads on each of them, see theme.white_text_safe.
-LAYER_COLORS = [theme.white_text_safe(c) for c in [
-    QColor('#991C24'),  # dark red
-    QColor('#C91781'),  # fuschia
-    QColor('#0052AA'),  # blue
-    QColor('#E83723'),  # tangerine
-    QColor('#6E33BB'),  # purple
-    QColor('#01697F'),  # dark teal
-    QColor('#51B848'),  # green
-    QColor('#00A5E6'),  # light blue
-    QColor('#99CC33'),  # lime
-    QColor('#F38B00'),  # light orange
-    QColor('#5633BB'),  # dark purple
-    QColor('#CFA305'),  # yellow
-    QColor('#BE0000'),  # red
-    QColor('#AF30D8'),  # violet
-    QColor('#787878'),  # grey
-    QColor('#119B77')   # teal
-]]
+# Layer colors: hues spread evenly around the circle, in OKLCH so the steps
+# look even, each made dark enough for white text (theme.white_text_safe),
+# and a grey. Ordered so each layer added gets a hue well away from the one
+# before it.
+LAYER_HUE_COUNT = 15
+LAYER_FIRST_HUE = 25.0
+LAYER_COLORS = [
+    theme.white_text_safe(theme.from_oklch(
+        theme.PALETTE_LIGHTNESS, theme.PALETTE_CHROMA,
+        LAYER_FIRST_HUE + (i * 7 % LAYER_HUE_COUNT) * 360.0 / LAYER_HUE_COUNT))
+    for i in range(LAYER_HUE_COUNT)
+] + [theme.white_text_safe(theme.from_oklch(theme.PALETTE_LIGHTNESS, 0.0,
+                                            0.0))]
 
 SELECTED = QColor(theme.SELECTED)
 

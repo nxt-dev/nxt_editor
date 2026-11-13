@@ -1,47 +1,25 @@
-"""Picking a layer's color, from only the colors white text reads on.
+"""Picking a layer's, or a backdrop's, color: any color at all.
 
-Nodes, Outliner rows and the layer list show their names in white on the
-layer's color. The picker offers the layer palette, and a field of every
-hue and saturation with a shade bar beside it that stops where white text
-would stop reading, so whatever is picked can be read on.
+The layer is given exactly the color picked. How it is then shown is the
+user's own view, see color_range: as it is by default, or darker when too
+light for white text, or evened out. In your view shows how the color
+picked will look to you.
 """
 # External
 from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
-from nxt_editor import colors, theme
-
-# The darkest shade offered. Darker than this the layer colors all look
-# black on the graph.
-DARKEST = 0.12
-
-
-def max_lightness(hue, saturation):
-    """The lightest a hue and saturation can be with white text reading on
-    it.
-
-    :rtype: float
-    """
-    low, high = 0.0, 1.0
-    for _ in range(14):
-        middle = (low + high) / 2.0
-        test = QtGui.QColor.fromHslF(hue, saturation, middle)
-        if theme.contrast(test, theme.NODE_TEXT) >= theme.WHITE_TEXT_CONTRAST:
-            low = middle
-        else:
-            high = middle
-    return low
+from nxt_editor import color_range, colors, theme
 
 
 def shade_color(hue, saturation, shade):
-    """The color at shade, 0 the darkest offered and 1 the lightest white
-    text reads on.
+    """The color at a hue, saturation and shade, 0 black and 1 the hue at
+    its brightest.
 
     :rtype: QtGui.QColor
     """
-    top = max(max_lightness(hue, saturation), DARKEST)
-    lightness = DARKEST + (top - DARKEST) * min(max(shade, 0.0), 1.0)
-    return QtGui.QColor.fromHslF(hue, saturation, lightness)
+    return QtGui.QColor.fromHsvF(hue, saturation,
+                                 min(max(shade, 0.0), 1.0))
 
 
 def hue_saturation_shade(value):
@@ -49,15 +27,8 @@ def hue_saturation_shade(value):
 
     :rtype: (float, float, float)
     """
-    value = theme.white_text_safe(value)
-    hue, saturation, lightness, _ = value.getHslF()
-    hue = max(hue, 0.0)
-    top = max(max_lightness(hue, saturation), DARKEST)
-    if top <= DARKEST:
-        shade = 1.0
-    else:
-        shade = (lightness - DARKEST) / (top - DARKEST)
-    return hue, saturation, min(max(shade, 0.0), 1.0)
+    hue, saturation, shade, _ = QtGui.QColor(value).getHsvF()
+    return max(hue, 0.0), saturation, shade
 
 
 class HueSaturationField(QtWidgets.QWidget):
@@ -175,6 +146,7 @@ class Preview(QtWidgets.QWidget):
         super(Preview, self).__init__(parent)
         self.setMinimumSize(120, 32)
         self.color = QtGui.QColor(colors.LAYER_COLORS[0])
+        self.label = 'Layer'
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -186,11 +158,11 @@ class Preview(QtWidgets.QWidget):
         painter.setPen(theme.color(theme.NODE_TEXT))
         painter.setFont(theme.font(theme.NODE_TITLE_PX))
         painter.drawText(self.rect().adjusted(12, 0, 0, 0),
-                         QtCore.Qt.AlignVCenter, 'Layer')
+                         QtCore.Qt.AlignVCenter, self.label)
 
 
 class LayerColorDialog(QtWidgets.QDialog):
-    """Pick a layer's color from those white text reads on."""
+    """Pick a layer's color, any color."""
 
     def __init__(self, color=None, parent=None, title='Layer Color'):
         super(LayerColorDialog, self).__init__(parent)
@@ -227,10 +199,19 @@ class LayerColorDialog(QtWidgets.QDialog):
         bottom = QtWidgets.QHBoxLayout()
         self.preview = Preview(self)
         bottom.addWidget(self.preview, 1)
+        # How this color will look to you in your Layer Color View, which
+        # may show it darker or evener. It is not what is stored, see
+        # color_range.
+        self.view_preview = Preview(self)
+        self.view_preview.setFixedWidth(110)
+        self.view_preview.label = 'In your view'
+        self.view_preview.setToolTip(
+            'How this color looks in your Layer Color View, View > Options. '
+            'The layer is given the color on the left.')
+        bottom.addWidget(self.view_preview)
         self.hex_edit = QtWidgets.QLineEdit()
         self.hex_edit.setFixedWidth(90)
-        self.hex_edit.setToolTip('A hex color. One too light for white text '
-                                 'is taken as the nearest that is not.')
+        self.hex_edit.setToolTip('A hex color, any color at all.')
         self.hex_edit.editingFinished.connect(self.on_hex_edited)
         bottom.addWidget(self.hex_edit)
         layout.addLayout(bottom)
@@ -244,14 +225,14 @@ class LayerColorDialog(QtWidgets.QDialog):
 
     @property
     def color(self):
-        """The color picked, one white text reads on.
+        """The color picked.
 
         :rtype: QtGui.QColor
         """
         return shade_color(self.hue, self.saturation, self.shade)
 
     def set_color(self, value):
-        """Show value, or the nearest color to it white text reads on."""
+        """Show value."""
         hue, saturation, shade = hue_saturation_shade(value)
         self.hue, self.saturation, self.shade = hue, saturation, shade
         self.field.set_position(hue, saturation)
@@ -262,6 +243,8 @@ class LayerColorDialog(QtWidgets.QDialog):
         color = self.color
         self.preview.color = color
         self.preview.update()
+        self.view_preview.color = color_range.shown(color)
+        self.view_preview.update()
         self.hex_edit.setText(color.name())
 
     def on_field_picked(self, hue, saturation):

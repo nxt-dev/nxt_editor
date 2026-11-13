@@ -1,6 +1,5 @@
 # Builtin
 import logging
-import re
 
 # External
 from Qt import QtWidgets, QtGui, QtCore
@@ -9,7 +8,7 @@ from Qt import QtWidgets, QtGui, QtCore
 import nxt_editor
 from nxt import nxt_path
 from nxt.nxt_layer import LayerReturnTypes
-from nxt_editor import colors, theme
+from nxt_editor import colors, node_search, theme
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.label_edit import NameEditDialog
 
@@ -30,10 +29,14 @@ POINTS_ROLE = QtCore.Qt.UserRole + 5
 START = 'start'
 SKIP = 'skip'
 BREAK = 'break'
+# True on an instanced node's row: an instance, or made by one.
+INSTANCED_ROLE = QtCore.Qt.UserRole + 6
 POINT_NAMES = {START: 'Start point', SKIP: 'Skip point',
                BREAK: 'Breakpoint'}
 
 NOT_IN_A_BUILD = 'Not in a build'
+# How long after the last key a search runs.
+SEARCH_DELAY_MS = 300
 
 
 def root_exec_order(model):
@@ -106,18 +109,12 @@ def build_sections(model):
 
 
 def search_pattern(text):
-    """A case insensitive regex from what was typed, or None for nothing.
+    """What was typed in the search box, or None when it searches for
+    nothing. See node_search: * for anything, commas between names.
 
-    Text that is not a valid regex is searched for as it is, so typing a
-    bracket on the way to something else does not stop the search.
+    :rtype: node_search.NodeSearch or None
     """
-    text = text.strip()
-    if not text:
-        return None
-    try:
-        return re.compile(text, re.IGNORECASE)
-    except re.error:
-        return re.compile(re.escape(text), re.IGNORECASE)
+    return node_search.search_for(text)
 
 
 class NodeTree(QtWidgets.QTreeWidget):
@@ -153,7 +150,10 @@ class NodeTree(QtWidgets.QTreeWidget):
         item = None
         if event.button() == QtCore.Qt.LeftButton:
             item = self.arrow_at(event.pos())
-        if item is not None and item.data(0, PATH_ROLE):
+        shift = bool(event.modifiers() & QtCore.Qt.ShiftModifier)
+        # A node's arrow, or with Shift a group's: the group's arrow on its
+        # own just opens and closes the group.
+        if item is not None and (item.data(0, PATH_ROLE) or shift):
             self.arrowClicked.emit(item, event.modifiers())
             event.accept()
             return
@@ -206,6 +206,12 @@ class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
         path = QtGui.QPainterPath()
         path.addRoundedRect(rect, 4, 4)
         painter.fillPath(path, fill)
+        if index.data(INSTANCED_ROLE):
+            # Striped, as an instanced node's title is in the graph.
+            painter.save()
+            painter.setClipPath(path)
+            theme.paint_stripes(painter, rect, fill)
+            painter.restore()
         # A chip for each weaker layer, the next strongest nearest the
         # name, inside the row's rounded corners.
         weaker = layer_colors[1:]
@@ -296,7 +302,8 @@ class Outliner(DockWidgetBase):
     they run. Each node's children sit under it in their child order.
     Rows are drawn in the colors of the layers the node is on. Selection
     follows the graph both ways, double clicking a node frames it, and the
-    search box finds nodes at any depth by a regex on their name.
+    search box finds nodes at any depth by name, with * for anything
+    and commas between names.
     """
 
     # Node names, larger than other lists to read at a glance.
@@ -310,12 +317,20 @@ class Outliner(DockWidgetBase):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
         self.search = QtWidgets.QLineEdit()
-        self.search.setPlaceholderText('Search nodes (regex)')
+        self.search.setPlaceholderText('Search nodes: arm*ctrl, leg')
         self.search.setClearButtonEnabled(True)
-        self.search.setToolTip('Show the nodes whose name matches, and the '
-                               'nodes above them. Enter frames the first '
-                               'match.')
-        self.search.textChanged.connect(self.request_rebuild)
+        self.search.setToolTip('Show the nodes whose name has what you type '
+                               'in it, and the nodes above them. * stands '
+                               'for anything, commas separate names, and a '
+                               '/ matches the whole path. Enter frames the '
+                               'first match.')
+        # Searched once typing stops, or on Enter, rather than on every
+        # key: each search rebuilds the tree.
+        self.search_timer = QtCore.QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(SEARCH_DELAY_MS)
+        self.search_timer.timeout.connect(self.request_rebuild)
+        self.search.textChanged.connect(self.on_search_edited)
         self.search.returnPressed.connect(self.frame_first_match)
         layout.addWidget(self.search)
         self.tree = NodeTree()
@@ -368,6 +383,7 @@ class Outliner(DockWidgetBase):
             (model.layer_color_changed, self.request_rebuild),
             (model.selection_changed, self.on_model_selection),
             (model.collapse_changed, self.on_collapse_changed),
+            (model.frame_items, self.reveal),
         ]
         super(Outliner, self).set_stage_model_connections(model, connect)
 
@@ -459,7 +475,7 @@ class Outliner(DockWidgetBase):
         """
         model = self.stage_model
         name = nxt_path.node_name_from_node_path(path)
-        matched = pattern is None or bool(pattern.search(name))
+        matched = pattern is None or pattern.matches(path)
         item = QtWidgets.QTreeWidgetItem()
         item.setText(0, name)
         item.setToolTip(0, path)
@@ -485,6 +501,10 @@ class Outliner(DockWidgetBase):
         enabled."""
         model = self.stage_model
         item.setData(0, LAYERS_ROLE, self.layer_colors(path))
+        comp = model.comp_layer
+        instanced = (model.get_node_is_proxy(path) or
+                     model.get_node_instance(path, comp) is not None)
+        item.setData(0, INSTANCED_ROLE, True if instanced else None)
         self.set_points(item, path)
         disabled = not model.get_node_enabled(path)
         item.setData(0, DISABLED_ROLE, True if disabled else None)
@@ -564,8 +584,41 @@ class Outliner(DockWidgetBase):
                 return False
         return True
 
+    def reveal(self, paths=()):
+        """Nodes were framed in the graph: open the group they are in and
+        scroll to their rows. The graph opened any node they were collapsed
+        in, and the rows followed it."""
+        if not self.isVisible() or self.rebuild_timer.isActive():
+            return
+        last = None
+        for path in paths or ():
+            item = self.items.get(path)
+            if item is None:
+                continue
+            top = item
+            while top.parent() is not None:
+                top = top.parent()
+            if not top.isExpanded():
+                top.setExpanded(True)
+            last = item
+        if last is not None:
+            self.tree.scrollToItem(last)
+
+    def on_search_edited(self, text):
+        if not text.strip():
+            # Cleared: everything comes back straight away.
+            self.search_timer.stop()
+            self.request_rebuild()
+        else:
+            self.search_timer.start()
+
     def frame_first_match(self):
-        """Select and frame the first node the search found."""
+        """Search now, then select and frame the first node found."""
+        # Typing may have stopped and the tree not be rebuilt yet.
+        if self.search_timer.isActive() or self.rebuild_timer.isActive():
+            self.search_timer.stop()
+            self.rebuild_timer.stop()
+            self.rebuild()
         if self.stage_model and self.matches:
             self.stage_model.select_and_frame(self.matches[0])
 
@@ -629,9 +682,13 @@ class Outliner(DockWidgetBase):
         it, with Shift everything below it as well, or with Ctrl rename
         it, here in the row."""
         path = item.data(0, PATH_ROLE)
-        if not self.stage_model or not path:
-            return
         modifiers = QtWidgets.QApplication.keyboardModifiers()
+        if not self.stage_model:
+            return
+        if not path:
+            if modifiers & QtCore.Qt.ShiftModifier:
+                self.toggle_group(item)
+            return
         if modifiers == QtCore.Qt.ControlModifier:
             self.rename(path)
             return
@@ -641,8 +698,33 @@ class Outliner(DockWidgetBase):
         """A row's arrow does what double clicking the row does: collapse
         or expand its node, with Shift everything below it as well."""
         path = item.data(0, PATH_ROLE)
-        if self.stage_model and path:
+        if not self.stage_model:
+            return
+        if path:
             self.toggle_collapse(path, modifiers)
+        elif modifiers & QtCore.Qt.ShiftModifier:
+            self.toggle_group(item)
+
+    def toggle_group(self, heading):
+        """Collapse every node in a group, a build or the nodes in none, or
+        expand them all when they all are, as one undo."""
+        paths = []
+
+        def gather(item):
+            for i in range(item.childCount()):
+                child = item.child(i)
+                path = child.data(0, PATH_ROLE)
+                if path and child.childCount():
+                    paths.append(path)
+                gather(child)
+        gather(heading)
+        if not paths:
+            return
+        model = self.stage_model
+        collapse = not all(model.get_node_collapse(p) for p in paths)
+        heading.setExpanded(True)
+        # The rows follow, see on_collapse_changed.
+        model.set_node_collapse(paths, collapse)
 
     def toggle_collapse(self, path, modifiers):
         recursive = bool(modifiers & QtCore.Qt.ShiftModifier)

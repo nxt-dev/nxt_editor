@@ -191,6 +191,13 @@ class USER_PREF():
     # Property Editor rows in neutral text, the layer as a color beside
     # them, rather than in their layer's color.
     NEUTRAL_PROPERTY_TEXT = 'neutral_property_text'
+    # The Instance View's toggles.
+    INSTANCE_VIEW_FOLLOW = 'instance_view_follow'
+    INSTANCE_VIEW_SYNC = 'instance_view_sync'
+    # The range layer colors are shown in, see color_range.
+    COLOR_RANGE_MODE = 'color_range_mode'
+    COLOR_RANGE_LIGHTNESS = 'color_range_lightness'
+    COLOR_RANGE_CHROMA = 'color_range_chroma'
     SHOW_IMPLICIT = 'show_implicit_connections'
     SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'

@@ -13,7 +13,7 @@ from nxt_editor.constants import NXT_WEBSITE
 from nxt_editor import user_dir, wires
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
-from nxt_editor import colors, finder, file_search, file_browser
+from nxt_editor import colors, exec_icons, finder, file_search, file_browser
 from nxt_editor.layer_color_dialog import LayerColorDialog
 
 logger = logging.getLogger('nxt')
@@ -351,6 +351,16 @@ class AppActions(NxtActionContainer):
                                           'run.')
         self.available_without_model.append(self.outliner_action)
 
+        # Instance View
+        self.instance_view_action = NxtAction(text='Instance View',
+                                              parent=self)
+        self.instance_view_action.setCheckable(True)
+        self.instance_view_action.setShortcutContext(context)
+        self.instance_view_action.setWhatsThis(
+            'Toggle the Instance View, the nodes the selected node '
+            'instances from and those that instance it.')
+        self.available_without_model.append(self.instance_view_action)
+
         # Hotkey editor
         self.hotkey_editor_action = NxtAction(text='Hotkey Editor',
                                               parent=self)
@@ -396,6 +406,17 @@ class AppActions(NxtActionContainer):
         self.ai_settings_action.setShortcutContext(context)
         self.available_without_model.append(self.ai_settings_action)
 
+        self.color_range_action = NxtAction(text='Layer Color View...',
+                                            parent=self)
+        self.color_range_action.setWhatsThis(
+            'How layer and backdrop colors are shown to you: white text '
+            'safe, the default, or every hue at one lightness and chroma. '
+            'It does not change the color of any layer.')
+        self.color_range_action.triggered.connect(
+            self.main_window.open_color_range)
+        self.color_range_action.setShortcutContext(context)
+        self.available_without_model.append(self.color_range_action)
+
         def find_node():
             if not self.main_window.model:
                 return
@@ -403,8 +424,10 @@ class AppActions(NxtActionContainer):
 
         self.find_node_action = NxtAction(text='Find Node',
                                           parent=self)
-        self.find_node_action.setWhatsThis('Search for, select, and focus '
-                                           'nodes in the view')
+        self.find_node_action.setWhatsThis('Find nodes by name, with * for '
+                                           'anything and commas between '
+                                           'names, then select and frame '
+                                           'them.')
         self.find_node_action.setShortcut('/')
         self.find_node_action.triggered.connect(find_node)
         self.find_node_action.setShortcutContext(context)
@@ -494,6 +517,7 @@ class AppActions(NxtActionContainer):
                                      self.output_log_action,
                                      self.stage_view_action,
                                      self.outliner_action,
+                                     self.instance_view_action,
                                      self.hotkey_editor_action,
                                      self.workflow_tools_action,
                                      self.ai_assistant_action,
@@ -1663,6 +1687,11 @@ class ExecuteActions(NxtActionContainer):
         self.execute_selected_action.setAutoRepeat(False)
         self.execute_selected_action.setShortcut('Enter')
         self.execute_selected_action.setIconText('Exec Sel')
+        self.execute_selected_action.setIcon(exec_icons.execute_selected())
+        self.execute_selected_action.setToolTip(
+            'Execute Selected (Enter): run only the selected nodes.')
+        self.execute_selected_action.setWhatsThis(
+            'Run only the selected nodes.')
 
         def exec_selected():
             if not self.main_window.model:
@@ -1673,12 +1702,15 @@ class ExecuteActions(NxtActionContainer):
         # Execute from selected
         self.execute_from_action = NxtAction(text='Execute '
                                                   'From Selected', parent=self)
-        self.execute_from_action.setToolTip('Execute')
+        self.execute_from_action.setToolTip(
+            'Execute From Selected: run the selected node, then on down its '
+            'exec chain.')
         self.execute_from_action.setWhatsThis('Execute from the currently '
                                               'selected node and continue '
                                               'down the exec chain.')
         self.execute_from_action.setAutoRepeat(False)
         self.execute_from_action.setIconText('Exec From Sel')
+        self.execute_from_action.setIcon(exec_icons.execute_from())
 
         def exec_from_sel():
             if not self.main_window.model:
@@ -1692,6 +1724,12 @@ class ExecuteActions(NxtActionContainer):
                                                   parent=self)
         self.execute_hierarchy_action.setAutoRepeat(False)
         self.execute_hierarchy_action.setIconText('Exec Hierarchy')
+        self.execute_hierarchy_action.setIcon(exec_icons.execute_hierarchy())
+        self.execute_hierarchy_action.setToolTip(
+            'Execute Hierarchy: run the selected node and every node under '
+            'it.')
+        self.execute_hierarchy_action.setWhatsThis(
+            'Run the selected node and every node under it.')
 
         def exec_hierarchy():
             if not self.main_window.model:

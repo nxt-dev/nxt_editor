@@ -36,6 +36,7 @@ from nxt_editor.dockwidgets import (
     FindRepDockWidget,
     AiAssistant,
     Outliner,
+    InstanceView,
 )
 from nxt_editor.dockwidgets.output_log import FileTailingThread, QtLogStreamHandler
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
@@ -267,6 +268,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.outliner = Outliner(parent=self)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.outliner)
         self.outliner.hide()
+
+        # Instance View, opt in from the Window menu.
+        self.instance_view = InstanceView(parent=self)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.instance_view)
+        self.instance_view.hide()
 
         # AI assistant, opt in. Made either way so the saved layout has a
         # place for it, but hidden while the assistant is off.
@@ -937,6 +943,7 @@ QCheckBox::indicator {
             self.find_rep.set_stage_model(model)
             self.ai_assistant.set_stage_model(model)
             self.outliner.set_stage_model(model)
+            self.instance_view.set_stage_model(model)
             self.output_log.set_stage_model(model)
             self.update_target_color()
             logger.debug("Successfully set up new tab.")
@@ -1094,6 +1101,26 @@ QCheckBox::indicator {
         """Show or hide the graph, and remember it for next time."""
         self.open_files_tab_widget.setVisible(visible)
         user_dir.user_prefs[user_dir.USER_PREF.SHOW_STAGE_VIEW] = visible
+
+    def open_color_range(self):
+        """View > Options > Layer Color View."""
+        from nxt_editor.color_range_dialog import ColorRangeDialog
+        dialog = ColorRangeDialog(parent=self,
+                                  apply=self.refresh_layer_colors)
+        dialog.exec_()
+        return dialog
+
+    def refresh_layer_colors(self):
+        """Redraw everything shown in a layer's color, after the range
+        colors are shown in changed."""
+        for open_file in self.open_files.values():
+            model = open_file.get('model')
+            if model is not None:
+                model.layer_color_changed.emit(nxt_layer.LAYERS.TOP)
+        self.layer_manager.layer_tree.viewport().update()
+        editor = self.property_editor
+        if getattr(editor, 'stage_model', None):
+            editor.set_represented_node()
 
     def open_ai_settings(self):
         """Options > AI Assistant."""
@@ -1469,6 +1496,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_opt_menu = self.view_menu.addMenu("Options")
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
+        self.view_opt_menu.addAction(self.app_actions.color_range_action)
         self.view_opt_menu.addAction(
             self.view_actions.neutral_property_text_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
@@ -1511,6 +1539,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.app_actions.stage_view_action.setData(
             parent.open_files_tab_widget)
         self.app_actions.outliner_action.setData(parent.outliner)
+        self.app_actions.instance_view_action.setData(parent.instance_view)
         self.app_actions.hotkey_editor_action.setData(parent.hotkey_editor)
         self.app_actions.workflow_tools_action.setData(parent.workflow_tools)
         self.app_actions.ai_assistant_action.setData(parent.ai_assistant)
@@ -1522,6 +1551,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.window_menu_actions = [
             self.app_actions.stage_view_action,
             self.app_actions.outliner_action,
+            self.app_actions.instance_view_action,
             self.app_actions.layer_manager_action,
             self.app_actions.property_editor_action,
             self.app_actions.code_editor_action,

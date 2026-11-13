@@ -3,7 +3,7 @@
 The outliner lists the graph's root nodes in the order they run, grouped by
 the start point whose build runs them, with each node's children under it.
 Rows show the colors of the layers a node is on, and a search box finds
-nodes at any depth by a regex on their name. It is opt in from the Window
+nodes at any depth by name, with * for anything and commas between names. It is opt in from the Window
 menu. The stage view is on unless it is turned off in the Window menu,
 which is remembered.
 """
@@ -164,8 +164,44 @@ class OutlinerTests(WindowCase):
         return self.rows(self.outliner.sections[start or ''])
 
     def search(self, text):
+        """Type text and stop, as the search waits for."""
         self.outliner.search.setText(text)
+        self.wait_for_search()
+
+    def wait_for_search(self):
+        """Until the search has run and the tree is rebuilt."""
+        outliner = self.outliner
+        for _ in range(100):
+            QtTest.QTest.qWait(outliner_module.SEARCH_DELAY_MS // 3)
+            if not (outliner.search_timer.isActive() or
+                    outliner.rebuild_timer.isActive()):
+                break
         app.processEvents()
+
+    def test_typing_does_not_search_on_every_key(self):
+        self.show_outliner()
+        with mock.patch.object(self.outliner, 'rebuild') as rebuild:
+            QtTest.QTest.keyClicks(self.outliner.search, 'skel')
+            app.processEvents()
+            rebuild.assert_not_called()
+            self.wait_for_search()
+        self.assertEqual(1, rebuild.call_count)
+
+    def test_enter_searches_straight_away(self):
+        self.show_outliner()
+        framed = []
+        self.model.frame_items.connect(framed.append)
+        self.outliner.search.setText('export')
+        self.outliner.search.returnPressed.emit()
+        self.assertEqual(['/build/export'], self.outliner.matches)
+        self.assertEqual([('/build/export',)], framed)
+
+    def test_clearing_shows_everything_straight_away(self):
+        self.show_outliner()
+        self.search('skel')
+        self.outliner.search.setText('')
+        app.processEvents()
+        self.assertEqual(sorted(GRAPH['nodes']), sorted(self.outliner.items))
 
     def test_it_is_off_in_the_default_layout(self):
         # Once shown, the saved layout remembers it like any other dock.
@@ -209,14 +245,19 @@ class OutlinerTests(WindowCase):
         # Only the section it is in is shown.
         self.assertEqual(['Build from setup'], self.rows())
 
-    def test_a_search_is_a_regex_and_ignores_case(self):
+    def test_commas_find_several_names_and_case_is_ignored(self):
         self.show_outliner()
-        self.search('^(TIDY|loose)$')
+        self.search('TIDY, loose')
         self.assertEqual(['/loose', '/tidy'], sorted(self.outliner.matches))
 
-    def test_a_search_that_is_not_a_regex_yet_is_taken_as_text(self):
-        self.assertTrue(search_pattern('rig[').search('my_rig[0]'))
+    def test_a_star_stands_for_anything(self):
+        self.show_outliner()
+        self.search('s*on')
+        self.assertEqual(['/build/rig/skeleton'], self.outliner.matches)
+
+    def test_nothing_typed_searches_for_nothing(self):
         self.assertIsNone(search_pattern('   '))
+        self.assertIsNone(search_pattern(' , * '))
 
     def test_clearing_the_search_shows_everything_again(self):
         self.show_outliner()
@@ -482,6 +523,53 @@ class OutlinerTests(WindowCase):
         self.click_arrow('/build', QtCore.Qt.ShiftModifier)
         self.assertFalse(any(self.model.get_node_collapse(p) for p in below))
         self.assertTrue(self.outliner.items['/build/rig'].isExpanded())
+
+    def test_shift_on_a_groups_arrow_does_every_node_in_it(self):
+        self.show_outliner()
+        heading = self.outliner.sections['/setup']
+        self.tree.scrollToItem(heading)
+        rect = self.tree.visualItemRect(heading)
+        pos = QtCore.QPoint(rect.left() - self.tree.indentation() // 2,
+                            rect.center().y())
+        self.assertIs(heading, self.tree.arrow_at(pos))
+        QtTest.QTest.mouseClick(self.tree.viewport(), QtCore.Qt.LeftButton,
+                                QtCore.Qt.ShiftModifier, pos)
+        app.processEvents()
+        in_it = ['/build', '/build/rig']
+        self.assertTrue(all(self.model.get_node_collapse(p) for p in in_it))
+        # The group stays open to show its collapsed nodes.
+        self.assertTrue(self.outliner.sections['/setup'].isExpanded())
+        self.assert_rows_match_the_graph()
+        # All collapsed: again expands them all, as one undo.
+        QtTest.QTest.mouseClick(self.tree.viewport(), QtCore.Qt.LeftButton,
+                                QtCore.Qt.ShiftModifier, pos)
+        app.processEvents()
+        self.assertFalse(any(self.model.get_node_collapse(p) for p in in_it))
+        self.model.undo_stack.undo()
+        app.processEvents()
+        self.assertTrue(all(self.model.get_node_collapse(p) for p in in_it))
+
+    def test_shift_double_click_on_a_group_does_the_same(self):
+        self.show_outliner()
+        heading = self.outliner.sections['/setup']
+        held = mock.patch.object(QtWidgets.QApplication, 'keyboardModifiers',
+                                 return_value=QtCore.Qt.ShiftModifier)
+        with held:
+            self.outliner.on_double_click(heading)
+        app.processEvents()
+        self.assertTrue(self.model.get_node_collapse('/build'))
+
+    def test_a_plain_click_on_a_groups_arrow_only_closes_the_group(self):
+        self.show_outliner()
+        heading = self.outliner.sections['/setup']
+        rect = self.tree.visualItemRect(heading)
+        pos = QtCore.QPoint(rect.left() - self.tree.indentation() // 2,
+                            rect.center().y())
+        QtTest.QTest.mouseClick(self.tree.viewport(), QtCore.Qt.LeftButton,
+                                QtCore.Qt.NoModifier, pos)
+        app.processEvents()
+        self.assertFalse(heading.isExpanded())
+        self.assertFalse(self.model.get_node_collapse('/build'))
 
     def test_rows_follow_a_node_collapsed_from_the_graph(self):
         self.show_outliner()
