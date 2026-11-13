@@ -19,7 +19,7 @@ from Qt import QtCore, QtWidgets
 # Internal
 import nxt_editor
 from nxt_editor import user_dir
-from nxt_editor.ai import (chat_render, chats, claude_code, context,
+from nxt_editor.ai import (chat_render, chats, claude_code, codex, context,
                            graph_actions, providers, tools)
 from nxt_editor.ai.memory import Memory
 from nxt_editor.ai.workers import ChatThread, TaskThread
@@ -942,6 +942,7 @@ class AiAssistant(DockWidgetBase):
         super(AiAssistant, self).showEvent(event)
         # Pick up a sign in made since, here or in Claude Code.
         claude_code.forget_status(older_than=5)
+        codex.forget_status(older_than=5)
         if not self.busy:
             self.refresh_providers()
 

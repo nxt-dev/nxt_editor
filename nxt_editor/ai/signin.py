@@ -62,9 +62,46 @@ def _expires_at(token_data):
     return time.time() + float(token_data.get('expires_in') or 3600)
 
 
-DONE_PAGE = (b'<!doctype html><meta charset="utf-8"><title>nxt</title>'
-             b'<body style="font-family:sans-serif;padding:3em">'
-             b'<h2>You can close this tab and go back to nxt.</h2></body>')
+_PAGE = ('<!doctype html><meta charset="utf-8"><title>nxt</title>'
+         '<body style="font-family:sans-serif;padding:3em">'
+         '<h2>{}</h2></body>')
+DONE_PAGE = _PAGE.format('You can close this tab and go back to nxt.'
+                         ).encode('utf-8')
+FAILED_PAGE = _PAGE.format('The sign in did not finish. Go back to nxt to '
+                           'see why.').encode('utf-8')
+
+# What OpenAI's sign in errors mean, said plainly.
+_OPENAI_ERRORS = {
+    'access_denied': 'The sign in was turned down in the browser, so nxt '
+                     'can not use your ChatGPT plan. Sign in again and '
+                     'allow it, or use an API key.',
+    'invalid_grant': 'OpenAI did not accept the sign in code. Codes only '
+                     'work once and run out quickly, so press Sign in '
+                     'again.',
+    'invalid_client': 'OpenAI does not know this copy of nxt any more. '
+                      'Press Sign in again to register it again.',
+    'invalid_request': 'OpenAI turned down the sign in request.',
+    'invalid_scope': 'OpenAI would not share your ChatGPT plan with nxt. '
+                     'Your plan or workspace may not allow it. Use an API '
+                     'key instead.',
+    'unauthorized_client': 'OpenAI would not share your ChatGPT plan with '
+                           'nxt. Your plan or workspace may not allow it. '
+                           'Use an API key instead.',
+    'temporarily_unavailable': 'OpenAI sign in is busy right now. Try '
+                               'again in a minute.',
+    'server_error': 'OpenAI sign in had a problem on its side. Try again '
+                    'in a minute.',
+}
+
+
+def explain_openai_error(code, detail=None):
+    """A sign in error from OpenAI, as something to tell the user."""
+    message = _OPENAI_ERRORS.get(code)
+    if not message:
+        return detail or code or 'The sign in did not finish.'
+    if detail and detail != code:
+        message = '{} ({})'.format(message, detail)
+    return message
 
 
 class _CallbackHandler(BaseHTTPRequestHandler):
@@ -76,11 +113,12 @@ class _CallbackHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         query = urllib.parse.parse_qs(url.query)
-        self.server.result = {k: v[0] for k, v in query.items()}
+        result = {k: v[0] for k, v in query.items()}
+        self.server.result = result
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(DONE_PAGE)
+        self.wfile.write(FAILED_PAGE if result.get('error') else DONE_PAGE)
 
     def log_message(self, *args):
         pass
@@ -89,7 +127,7 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 class LoopbackListener(object):
     """Waits for the browser to come back to http://127.0.0.1:<port>/..."""
 
-    def __init__(self, path='/callback'):
+    def __init__(self, path='/auth/callback'):
         self.server = HTTPServer(('127.0.0.1', 0), _CallbackHandler)
         self.server.callback_path = path
         self.server.result = None
@@ -104,7 +142,8 @@ class LoopbackListener(object):
                 if cancelled.is_set():
                     raise Cancelled()
                 if time.monotonic() > end:
-                    raise SignInError('Gave up waiting for the browser.')
+                    raise SignInError('Gave up waiting for the browser. '
+                                      'Press Sign in to try again.')
                 self.server.handle_request()
             return self.server.result
         finally:
@@ -122,6 +161,10 @@ class OpenAI(object):
     SCOPE = ('openid profile email offline_access resource.invoke ' +
              PLAN_SCOPE)
     APP_NAME = 'nxt editor'
+    # Where the ID token says which ChatGPT plan it is.
+    AUTH_CLAIM = 'https://api.openai.com/auth'
+    # OpenAI only takes this path back; the port may change.
+    CALLBACK_PATH = '/auth/callback'
 
     @classmethod
     def new_host_id(cls):
@@ -130,16 +173,19 @@ class OpenAI(object):
 
     @classmethod
     def sign_in(cls, open_browser, host_id, client_id=None, cancelled=None,
-                listener=None, timeout=600):
+                listener=None, timeout=600, previous=None):
         """Sign in with ChatGPT in the browser. Gives back the record to
         save.
 
         :param open_browser: Called with the URL to open.
         :param host_id: This computer's ext_agent_host_id, kept in prefs.
-        :param client_id: The client_id OpenAI gave this editor last time.
+        :param client_id: The client_id OpenAI gave the account being
+            signed in to. None adds a new account, which gets its own.
+        :param previous: The last sign in with that client, if any, so the
+            browser can go straight to the same account.
         """
         cancelled = cancelled or threading.Event()
-        listener = listener or LoopbackListener('/callback')
+        listener = listener or LoopbackListener(cls.CALLBACK_PATH)
         verifier, challenge = pkce_pair()
         state = _b64url(os.urandom(24))
         nonce = _b64url(os.urandom(24))
@@ -157,6 +203,12 @@ class OpenAI(object):
         }
         if not client_id:
             params['agent_name_hint'] = cls.APP_NAME
+        elif previous:
+            # Goes straight back to the account signed in last time.
+            if previous.get('id_token'):
+                params['id_token_hint'] = previous['id_token']
+            if previous.get('email'):
+                params['login_hint'] = previous['email']
         open_browser(cls.AUTHORIZE_URL + '?' +
                      urllib.parse.urlencode(params))
         answer = listener.wait(cancelled, timeout=timeout)
@@ -164,21 +216,37 @@ class OpenAI(object):
             raise SignInError('The browser answered a different sign in. '
                               'Try again.')
         if answer.get('error'):
-            raise SignInError(answer.get('error_description') or
-                              answer['error'])
+            raise SignInError(explain_openai_error(
+                answer['error'], answer.get('error_description')))
         if not answer.get('code'):
-            raise SignInError('OpenAI did not finish the sign in.')
-        client_id = answer.get('client_id') or client_id
+            raise SignInError('OpenAI did not finish the sign in. Try '
+                              'again.')
+        issued = answer.get('client_id')
+        if client_id and issued and issued != client_id:
+            raise SignInError('OpenAI answered for a different registration '
+                              'of nxt. Try again.')
+        if issued and not client_id:
+            client_id = issued
         if not client_id:
-            raise SignInError('OpenAI did not register the editor.')
-        tokens = web.post_json(cls.TOKEN_URL, form={
-            'grant_type': 'authorization_code',
-            'client_id': client_id,
-            'code': answer['code'],
-            'code_verifier': verifier,
-            'redirect_uri': listener.redirect_uri,
-            'resource': cls.RESOURCE,
-        })
+            raise SignInError('OpenAI did not register the editor. Try '
+                              'again.')
+        try:
+            tokens = web.post_json(cls.TOKEN_URL, form={
+                'grant_type': 'authorization_code',
+                'client_id': client_id,
+                'code': answer['code'],
+                'code_verifier': verifier,
+                'redirect_uri': listener.redirect_uri,
+                'resource': cls.RESOURCE,
+            })
+        except web.WebError as err:
+            if err.code in _OPENAI_ERRORS:
+                raise SignInError(explain_openai_error(err.code))
+            raise SignInError('OpenAI did not finish the sign in: '
+                              '{}'.format(err))
+        if not tokens.get('access_token'):
+            raise SignInError('OpenAI did not send back a sign in. Try '
+                              'again.')
         claims = jwt_claims(tokens.get('id_token'))
         if claims.get('nonce') not in (None, nonce):
             raise SignInError('The sign in could not be checked. Try again.')
@@ -188,10 +256,15 @@ class OpenAI(object):
             raise SignInError('Your ChatGPT plan was not shared with the '
                               'editor. Sign in again and allow it, or use '
                               'an API key.')
+        auth = claims.get(cls.AUTH_CLAIM)
+        if not isinstance(auth, dict):
+            auth = {}
+        plan = auth.get('chatgpt_plan_type')
         return {
             'client_id': client_id,
             'ext_agent_host_id': host_id,
             'email': claims.get('email'),
+            'plan': plan,
             'id_token': tokens.get('id_token'),
             'access_token': tokens['access_token'],
             'refresh_token': tokens.get('refresh_token'),

@@ -203,9 +203,12 @@ class USER_PREF():
     AI_MEMORY = 'ai_assistant_memory'
     AI_FOLDERS = 'ai_assistant_folders'
     AI_OPENAI_HOST_ID = 'ai_assistant_openai_host_id'
+    # Only read to clear it; see OpenAI.sign_in.
     AI_OPENAI_CLIENT_ID = 'ai_assistant_openai_client_id'
+    AI_OPENAI_ACCOUNTS = 'ai_assistant_openai_accounts'
     AI_LOCAL_URL = 'ai_assistant_local_url'
     AI_CLAUDE_CODE_PATH = 'ai_assistant_claude_code_path'
+    AI_CODEX_PATH = 'ai_assistant_codex_path'
 
 
 class EDITOR_CACHE():
