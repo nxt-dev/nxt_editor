@@ -444,6 +444,28 @@ class OutlinerTests(WindowCase):
                  for image in (plain, hovered, selected)}
         self.assertEqual(3, len(edges))
 
+    def test_nothing_fills_the_space_beside_a_selected_row(self):
+        from Qt import QtGui
+        from nxt_editor import theme
+        # Fusion, as on Linux and in some hosts, filled the space beside a
+        # selected row; the Windows style does not.
+        before = app.style().objectName()
+        app.setStyle('Fusion')
+        self.addCleanup(app.setStyle, before)
+        self.show_outliner()
+        self.outliner.setFloating(True)
+        self.outliner.resize(360, 560)
+        self.model.set_selection(['/build/rig'])
+        for _ in range(10):
+            app.processEvents()
+        item = self.outliner.items['/build/rig']
+        rect = self.tree.visualItemRect(item)
+        image = self.tree.viewport().grab().toImage()
+        # Nothing but the background, and the arrow, left of the row.
+        greys = {QtGui.QColor(image.pixel(x, rect.top() + 2)).name()
+                 for x in range(0, rect.left())}
+        self.assertEqual({theme.BASE}, greys)
+
     def test_disabled_nodes_are_dimmed(self):
         self.show_outliner()
         item = self.outliner.items['/build/rig/controls']
