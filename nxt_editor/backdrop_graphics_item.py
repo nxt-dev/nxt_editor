@@ -15,7 +15,7 @@ from Qt import QtCore
 
 # Internal
 from nxt_editor import backdrops
-from nxt_editor import colors, theme
+from nxt_editor import color_range, colors, theme
 from nxt_editor.layer_color_dialog import LayerColorDialog
 from nxt_editor.constants import FONTS
 
@@ -127,7 +127,7 @@ class BackdropGraphicsItem(QtWidgets.QGraphicsItem):
             color = QtGui.QColor(backdrops.DEFAULT_COLOR)
         # One saved lighter, before colors were kept to the range white
         # text reads on, shows as the nearest that is.
-        return theme.white_text_safe(color)
+        return color_range.shown(color)
 
     def paint(self, painter, option, widget):
         painter.setRenderHints(QtGui.QPainter.Antialiasing |

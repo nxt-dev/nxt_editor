@@ -5,7 +5,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 ## Application Actions
 |        Name         |                   What's this                   |      Tool tip       |   Shortcut   |
 | :------------------ | :---------------------------------------------: | :------------------ | :----------: |
-| Find Node           | Search for, select, and focus nodes in the view | Find Node           |      /       |
+| Find Node           | Find nodes by name (`*` for anything, commas between names), then select and frame them | Find Node           |      /       |
 | New Graph           |                New empty graph.                 | New Graph           |    Ctrl+N    |
 | Open Graph          |                 Open nxt file.                  | Open Graph          |    Ctrl+O    |
 | Undo                |               Undo last command.                | Undo                |    Ctrl+Z    |
@@ -128,9 +128,9 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | :--------------------------- | :------------------------------------------------------------------------: | :--------------------------- | :------: |
 | Run Build                    |          Runs build specified by the current value of build view.          | Run Build                    |          |
 | Execute Graph                |                                                                            | Execute Graph                |          |
-| Execute Selected             |                                                                            | Execute Selected             |  Enter   |
-| Execute From Selected        | Execute from the currently selected node and continue down the exec chain. | Execute                      |          |
-| Execute Hierarchy            |                                                                            | Execute Hierarchy            |          |
+| Execute Selected             | Run only the selected nodes.                                               | Execute Selected             |  Enter   |
+| Execute From Selected        | Execute from the currently selected node and continue down the exec chain. | Execute From Selected        |          |
+| Execute Hierarchy            | Run the selected node and every node under it.                             | Execute Hierarchy            |          |
 | Add Start Point              |                                                                            | Add Start Point              |          |
 | Remove Start Point           |                                                                            | Remove Start Point           |          |
 | Revert Start Point           |                                                                            | Revert Start Point           |          |

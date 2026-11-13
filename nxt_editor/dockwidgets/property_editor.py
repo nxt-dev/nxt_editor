@@ -415,6 +415,7 @@ class PropertyEditor(DockWidgetBase):
         self.proxy_model.setSourceModel(self.model)
 
         self.table_view.setModel(self.proxy_model)
+        self.table_view.verticalHeader().follow(self.proxy_model)
         self.table_view.selectionModel().selectionChanged.connect(
             self.set_selection)
 
@@ -1576,17 +1577,47 @@ class LayerRowHeader(QtWidgets.QHeaderView):
 
     def __init__(self, parent=None):
         super(LayerRowHeader, self).__init__(QtCore.Qt.Vertical, parent)
+        # Each row's layer color, read once the table has changed. Asking
+        # the model while painting crashed: the header can paint while
+        # the table's sorting proxy is part way through being reset.
+        self.row_colors = []
+
+        self.table_model = None
+
+    def follow(self, model):
+        """Keep the row colors of model, the table's own, once it is set
+        up. Not from setModel: Qt sets the header a placeholder model
+        while the table is built, and asking that one crashed."""
+        self.table_model = model
+        for signal in (model.modelReset, model.layoutChanged,
+                       model.rowsInserted, model.rowsRemoved,
+                       model.dataChanged):
+            signal.connect(self.refresh_colors)
+        self.refresh_colors()
+
+    def refresh_colors(self, *args):
+        model = self.table_model
+        colors_ = []
+        if model is not None:
+            for row in range(model.rowCount()):
+                index = model.index(row, COLUMNS.name)
+                # A table with no columns yet has rows but no indexes, and
+                # asking for an invalid index's data crashed.
+                colors_.append(model.data(index, LAYER_COLOR_ROLE)
+                               if index.isValid() else None)
+        self.row_colors = colors_
+        self.viewport().update()
 
     def paintSection(self, painter, rect, logical_index):
         painter.save()
         super(LayerRowHeader, self).paintSection(painter, rect,
                                                  logical_index)
         painter.restore()
-        model = self.model()
-        if not neutral_text() or model is None:
+        if not neutral_text():
             return
-        color = model.data(model.index(logical_index, COLUMNS.name),
-                           LAYER_COLOR_ROLE)
+        if not 0 <= logical_index < len(self.row_colors):
+            return
+        color = self.row_colors[logical_index]
         if color is None:
             return
         painter.save()

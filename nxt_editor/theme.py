@@ -13,10 +13,11 @@ scaling, so nothing here leans on them:
   that changes its scaling, where pixels do not.
 """
 # Builtin
+import math
 import re
 
 # External
-from Qt import QtGui
+from Qt import QtCore, QtGui
 
 # Internal
 from nxt_editor.constants import FONTS, points_to_px  # noqa: F401
@@ -139,6 +140,76 @@ def contrast(a, b):
     return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 
 
+# The layer palette's hues are spread evenly in OKLCH, a color space where
+# equal steps look equal, at one lightness and chroma, before each is made
+# dark enough for white text, see colors.LAYER_COLORS.
+PALETTE_LIGHTNESS = 0.65
+PALETTE_CHROMA = 0.15
+
+
+def _linear(c):
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _gamma(c):
+    return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+
+
+def to_oklch(value):
+    """A color's OKLCH: lightness 0 to 1, chroma, and hue in degrees.
+
+    :rtype: (float, float, float)
+    """
+    value = QtGui.QColor(value)
+    r, g, b = (_linear(c) for c in (value.redF(), value.greenF(),
+                                    value.blueF()))
+    l_ = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3.0)
+    m_ = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3.0)
+    s_ = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3.0)
+    lightness = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
+    a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
+    b_ = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    chroma = math.hypot(a, b_)
+    hue = math.degrees(math.atan2(b_, a)) % 360.0
+    return lightness, chroma, hue
+
+
+def _oklch_rgb(lightness, chroma, hue):
+    """Linear-free sRGB channels for an OKLCH color, unclipped."""
+    a = chroma * math.cos(math.radians(hue))
+    b = chroma * math.sin(math.radians(hue))
+    l_ = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m_ = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s_ = (lightness - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    r = 4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_
+    g = -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_
+    b2 = -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076147010 * s_
+    return r, g, b2
+
+
+def from_oklch(lightness, chroma, hue):
+    """The sRGB color for an OKLCH one. A chroma the screen can not show at
+    that lightness and hue is brought down until it can.
+
+    :rtype: QtGui.QColor
+    """
+    def fits(c):
+        return all(-1e-6 <= v <= 1 + 1e-6 for v in _oklch_rgb(lightness, c,
+                                                              hue))
+    if not fits(chroma):
+        low, high = 0.0, chroma
+        for _ in range(24):
+            middle = (low + high) / 2.0
+            if fits(middle):
+                low = middle
+            else:
+                high = middle
+        chroma = low
+    channels = [_gamma(min(max(v, 0.0), 1.0))
+                for v in _oklch_rgb(lightness, chroma, hue)]
+    return QtGui.QColor.fromRgbF(*channels)
+
+
 # The least contrast a layer's color keeps with the white text on it.
 # WCAG's for regular sized text, so the Outliner's names read too.
 WHITE_TEXT_CONTRAST = 4.5
@@ -184,6 +255,39 @@ def readable_text(background):
     if luminance(background) > BRIGHT:
         return color(DARK_TEXT)
     return color(NODE_TEXT)
+
+
+# Diagonal stripes across an instanced node, so it can be told from one
+# that is not at a glance. Darker than the node, so its white text reads.
+STRIPE_WIDTH = 3.0
+STRIPE_GAP = 6.0
+STRIPE_DARKER = 140
+
+
+def paint_stripes(painter, rect, base):
+    """Diagonal stripes, a darker shade of base, across rect.
+
+    :param painter: QPainter, clipped as wanted by the caller
+    :param rect: QRectF to stripe
+    :param base: the color under them
+    """
+    rect = QtCore.QRectF(rect)
+    stripe = QtGui.QColor(base).darker(STRIPE_DARKER)
+    stripe.setAlpha(QtGui.QColor(base).alpha())
+    painter.save()
+    painter.setClipRect(rect, QtCore.Qt.IntersectClip)
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    pen = QtGui.QPen(stripe, STRIPE_WIDTH)
+    pen.setCapStyle(QtCore.Qt.FlatCap)
+    painter.setPen(pen)
+    step = STRIPE_WIDTH + STRIPE_GAP
+    height = rect.height()
+    x = rect.left() - height
+    while x < rect.right() + step:
+        painter.drawLine(QtCore.QPointF(x, rect.bottom()),
+                         QtCore.QPointF(x + height, rect.top()))
+        x += step
+    painter.restore()
 
 
 def mix(a, b, amount):

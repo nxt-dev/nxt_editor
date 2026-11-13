@@ -10,7 +10,7 @@ Checkout our example graphs [here](https://github.com/nxt-dev/nxt_editor/tree/re
 The editor is made of a graph (the stage view) in the middle, surrounded by
 dock widgets that can be moved, tabbed and closed: the Layer Manager,
 Property Editor, Code Editor, History View, Build View, Workflow Tools,
-Output Log, [Outliner](#outliner) and [Hotkey Editor](hotkeys.md). Closed
+Output Log, [Outliner](#outliner), [Instance View](#instance-view) and [Hotkey Editor](hotkeys.md). Closed
 docks come back from the **Window** menu.
 
 ## Docks and layout
@@ -36,6 +36,22 @@ so switching back to a tab is instant.
 **Window > Stage View** hides the graph, leaving the space to the docks,
 and shows it again. The editor remembers your choice. With the graph
 hidden, switch between open files from the bottom of the **Window** menu.
+
+### Find Node
+
+Press `/` over the graph to find nodes. Type any part of a node's name, and
+the nodes that match are listed as you type, ignoring case.
+
+- `*` stands for anything: `arm*ctrl` finds `arm_L_ctrl` and `arm_R_ctrl`.
+- Commas separate names: `arm, leg` finds either.
+- A name with a `/` in it matches the whole path: `rig/*ctrl` finds the
+  controls under `rig`.
+- Nothing else is special. Dots, brackets and the like are matched as they
+  are typed.
+
+Pick a node in the list to select and frame it, or press `Enter` to select
+and frame every node that matches. The Outliner's search box works the same
+way.
 
 ### Mini map
 
@@ -72,8 +88,7 @@ graph looks: it is not a node and it never runs.
   the title at the top left, wrapped to the backdrop's width, and grows the
   header to fit. The right click menu also has a **Color** submenu, **Select
   Nodes Inside** and **Fit to Nodes Inside**. Backdrops take the same
-  colors as layers, ones their white title reads on, and the color picker
-  only offers those.
+  colors as layers: any color, shown in your Layer Color View.
 - **Delete it** with `Del` while it is selected, or **Delete Backdrop** in
   its right click menu. The nodes inside it stay where they are.
 
@@ -450,13 +465,13 @@ on from **Window > Outliner**.
 - A row is filled with the color of the layer with the strongest opinion
   on the node, and each weaker layer with an opinion adds a chip of its
   color at the right end, as on the node in the graph.
-- The search box at the top finds nodes at any depth by their name. It
-  takes a regular expression and ignores case, and text that is not a
-  valid one yet is searched for as it is. Matching rows are bold, the
-  nodes above them stay so you can see where they are, and `Enter` frames
-  the first match.
+- The search box at the top finds nodes at any depth by their name, the
+  same way as [Find Node](#find-node). Matching rows are bold, the nodes
+  above them stay so you can see where they are, and `Enter` frames the
+  first match.
 - Text is white, as on the node in the graph, and a disabled node's is
-  faded and in italics. Hovering a row outlines it in white and selecting
+  faded and in italics. An instanced node's row is striped, as its title
+  is in the graph. Hovering a row outlines it in white and selecting
   it outlines it in amber, the row's color staying as it is.
 - Start, break and skip points show before the name as they do on the
   node in the graph: the start icon, a red square for a breakpoint and an
@@ -470,11 +485,37 @@ on from **Window > Outliner**.
   row, or click its arrow, to collapse or expand its node, hold `Shift` to
   do the same to everything below it, and `Ctrl` double click, or `F2`, to rename it
   right there in the row.
+- `Shift` click a group's arrow, or `Shift` double click its heading, to
+  collapse every node in that build, or in **Not in a build**. When they
+  all are, it expands them all. A plain click on the arrow only opens or
+  closes the group.
 - Right click below the rows for the graph's menu for empty space, to add
   or paste a node at the top of the hierarchy. It lands in the middle of
   the graph's view.
 - Letters are hotkeys here, so typing does not jump between rows. Use the
   search box to find a node.
+
+## Instance View
+
+The Instance View shows a node's instance connections and nothing else.
+Turn it on from **Window > Instance View**.
+
+- It shows what the node instances from, back to the first source, on the
+  left, and every node that instances it, and those that instance them, on
+  the right, joined by the graph's instance lines. Nodes that only share a
+  source with it are left out.
+- Nodes are grey cards so they can be told from the graph at a glance. The
+  layer colors are in a strip along the top: the strongest layer's across
+  it, and a chip for each weaker one at its right end, as on the node in
+  the graph. Each card shows the node's name and path, and the node shown
+  has a light edge.
+- **Follow Selection** shows whichever node is selected in the graph or the
+  Outliner. With it off, select a node and press **Show Selected**. Double
+  click a node in the view to show its connections instead.
+- **Sync Selection** selects the nodes you pick in the Instance View in the
+  graph and the Outliner too. Both toggles are remembered.
+- Scroll to zoom, drag with the middle mouse button to pan, drag to box
+  select, and press `F` to frame everything.
 
 ## Property Editor, History View, Output Log and Workflow Tools
 
@@ -647,12 +688,40 @@ All of the layers in your file are composited together to produce final code to 
 
 Layer color propagates into nodes an also attributes.
 
-Layer colors are always ones white text reads on, so node names can be read
-on every layer. **Change Color** offers the layer palette, a field of hues
-and a shade bar that stops before a color gets too light for white text.
-A typed hex that is too light is taken as the nearest color that is not,
-and so is a lighter color saved in a file or set from a script, keeping
-its hue.
+A layer can be any color. **Change Color** picks from the full spectrum: the
+layer palette, a field of every hue and saturation, a shade bar from black
+to the hue at its brightest, and a hex field. The layer is given exactly the
+color picked, and by default every color is shown exactly as it is. How
+layer colors are shown is your own view, see Layer Color View below. **In
+your view** in Change Color shows how the color you are choosing will look
+to you.
+
+#### Layer Color View
+
+**View > Options > Layer Color View...** sets how layer and backdrop colors
+are shown to you. It is a view preference, yours alone and remembered with
+your preferences. It never changes the color a layer or backdrop is given:
+that is chosen with **Change Color**, and is the same whatever anyone's
+view, so a teammate sees the same file in their own view.
+
+- **Raw (default)** shows every color exactly as it is.
+- **White-text safe** shows a color too light for the white names on it
+  darker, only as far as it takes for them to read at 4.5:1, keeping its
+  hue.
+- **Even (OKLCH)** shows every color at one lightness and chroma, keeping
+  its hue, so no layer stands out from another. Set them with the sliders.
+  Hues the screen can not show that colorful get as close as it can, and a
+  grey stays grey.
+- Example colors and three sample nodes show the view as you set it, with
+  how well white text reads on the color it reads worst on: green when it reads
+  at 4.5:1, amber when weaker, red below 3:1. A tick on the lightness
+  slider marks where white text stops reading at 4.5:1 on every hue.
+- While you drag a slider only the dialog follows it, and the editor is
+  redrawn when you let go, or just after a typed value. **OK** keeps it,
+  **Cancel** puts back the view you had, and **Reset to Default** goes back
+  to raw.
+- **In your view** in **Change Color** shows how the color you are choosing
+  will look to you in this view.
 
 ![attribute_color.PNG](images/attribute_color.PNG)
 

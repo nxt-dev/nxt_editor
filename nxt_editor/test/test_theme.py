@@ -139,6 +139,37 @@ class ReadableText(unittest.TestCase):
                                     layer_color.name())
 
 
+class Stripes(unittest.TestCase):
+
+    def test_they_darken_part_of_what_they_cross(self):
+        image = QtGui.QImage(120, 30, QtGui.QImage.Format_ARGB32_Premultiplied)
+        base = QtGui.QColor('#00a881')
+        image.fill(base)
+        painter = QtGui.QPainter(image)
+        theme.paint_stripes(painter, QtCore.QRectF(0, 0, 120, 30), base)
+        painter.end()
+        seen = {QtGui.QColor(image.pixel(x, 15)).name()
+                for x in range(120)}
+        self.assertIn(base.name(), seen)
+        darker = [c for c in seen if theme.luminance(c) <
+                  theme.luminance(base) * 0.7]
+        self.assertTrue(darker)
+
+
+class ExecuteIcons(unittest.TestCase):
+
+    def test_each_is_drawn_and_goes_green_under_the_mouse(self):
+        from nxt_editor import exec_icons
+        for icon in (exec_icons.execute_selected(),
+                     exec_icons.execute_from(),
+                     exec_icons.execute_hierarchy()):
+            self.assertFalse(icon.isNull())
+            normal = icon.pixmap(QtCore.QSize(17, 16)).toImage()
+            active = icon.pixmap(QtCore.QSize(17, 16),
+                                 QtGui.QIcon.Active).toImage()
+            self.assertNotEqual(normal, active)
+
+
 class RenameBox(unittest.TestCase):
 
     def test_it_opens_where_it_is_put(self):

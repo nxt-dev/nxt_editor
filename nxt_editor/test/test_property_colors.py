@@ -140,6 +140,35 @@ class Rows(unittest.TestCase):
             user_dir.USER_PREF.NEUTRAL_PROPERTY_TEXT))
 
 
+class TheRowHeader(unittest.TestCase):
+    """Painting a row header asked the table's sorting proxy for the row's
+    layer color, and an invalid index, from a table with rows but no
+    columns yet or one part way through a reset, crashed the editor."""
+
+    def test_rows_without_columns_do_not_crash(self):
+        from Qt import QtCore
+        source = QtGui.QStandardItemModel(3, 0)
+        proxy = QtCore.QSortFilterProxyModel()
+        proxy.setSourceModel(source)
+        header = property_editor.LayerRowHeader()
+        header.follow(proxy)
+        self.assertEqual([None, None, None], header.row_colors)
+
+    def test_it_paints_from_colors_it_kept(self):
+        from Qt import QtCore
+        source = QtGui.QStandardItemModel(2, COLUMNS.comment + 1)
+        source.setData(source.index(0, COLUMNS.name),
+                       QtGui.QColor('#0052aa'), LAYER_COLOR_ROLE)
+        proxy = QtCore.QSortFilterProxyModel()
+        proxy.setSourceModel(source)
+        header = property_editor.LayerRowHeader()
+        header.follow(proxy)
+        self.assertEqual('#0052aa', header.row_colors[0].name())
+        source.setData(source.index(1, COLUMNS.name),
+                       QtGui.QColor('#991c24'), LAYER_COLOR_ROLE)
+        self.assertEqual('#991c24', header.row_colors[1].name())
+
+
 class Default(unittest.TestCase):
 
     def test_it_is_off_unless_turned_on(self):

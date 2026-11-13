@@ -6,6 +6,7 @@ from nxt_editor.dockwidgets.hotkey_editor import HotkeyEditor
 from nxt_editor.dockwidgets.layer_manager import LayerManager
 from nxt_editor.dockwidgets.output_log import OutputLog
 from nxt_editor.dockwidgets.outliner import Outliner
+from nxt_editor.dockwidgets.instance_view import InstanceView
 from nxt_editor.dockwidgets.property_editor import PropertyEditor
 from nxt_editor.dockwidgets.widget_builder import WidgetBuilder
 from nxt_editor.dockwidgets.find_rep import FindRepDockWidget

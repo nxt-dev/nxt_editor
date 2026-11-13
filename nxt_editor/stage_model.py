@@ -10,6 +10,7 @@ import sys
 # External
 from Qt import QtWidgets
 from Qt import QtCore
+from Qt import QtGui
 
 # Internal
 from nxt import clean_json, nxt_io
@@ -19,7 +20,7 @@ from nxt.constants import API_VERSION, is_standalone
 from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
 import nxt_editor
-from nxt_editor import DIRECTIONS, StringSignaler, theme, user_dir
+from nxt_editor import DIRECTIONS, StringSignaler, color_range, theme, user_dir
 from nxt_editor import backdrops
 from nxt_editor import wires
 from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
@@ -603,7 +604,10 @@ class StageModel(QtCore.QObject):
             logger.error('Cannot set color for invalid layer: {}'.format(layer))
             return
         if color is not None:
-            color = theme.white_text_safe(color).name()
+            # Exactly the color chosen; how it is shown is each user's view.
+            chosen = QtGui.QColor(color)
+            if chosen.isValid():
+                color = chosen.name()
         if layer is self.top_layer:
             cur_color = layer.get_color(local=True)
         else:
@@ -728,9 +732,10 @@ class StageModel(QtCore.QObject):
             layer_color = colors.LAYER_COLORS[idx % len(colors.LAYER_COLORS)].name()
             layer.color = layer_color
             return layer_color
-        # A color saved before colors were kept to ones white text reads
-        # on, or set from a script, is shown as the nearest one that is.
-        return theme.white_text_safe(color).name()
+        # Shown as the user views layer colors, see color_range. A color
+        # saved before colors were kept to ones white text reads on, or set
+        # from a script, is shown as the nearest one in that.
+        return color_range.shown(color).name()
 
     def get_layer_locked(self, layer_path):
         layer = self.lookup_layer(layer_path)
@@ -2102,14 +2107,26 @@ class StageModel(QtCore.QObject):
         return None
 
     def select_and_frame(self, node_path):
-        if not (self.node_exists(node_path) or self.node_is_implied(node_path)):
+        self.select_and_frame_nodes([node_path])
+
+    def select_and_frame_nodes(self, node_paths):
+        """Select the nodes and frame them in the graph, expanding any
+        collapsed node they are under so they show."""
+        node_paths = [path for path in node_paths
+                      if self.node_exists(path) or self.node_is_implied(path)]
+        if not node_paths:
             return
-        self.undo_stack.beginMacro('Select and frame {}'.format(node_path))
-        if self.get_collapsed_ancestor(node_path):
-            parent = nxt_path.get_parent_path(node_path)
-            self.set_node_collapse([parent], False, recursive_up=True)
-        self.set_selection([node_path])
-        self.frame_items.emit((node_path,))
+        if len(node_paths) == 1:
+            text = 'Select and frame {}'.format(node_paths[0])
+        else:
+            text = 'Select and frame {} nodes'.format(len(node_paths))
+        self.undo_stack.beginMacro(text)
+        for node_path in node_paths:
+            if self.get_collapsed_ancestor(node_path):
+                parent = nxt_path.get_parent_path(node_path)
+                self.set_node_collapse([parent], False, recursive_up=True)
+        self.set_selection(list(node_paths))
+        self.frame_items.emit(tuple(node_paths))
         self.undo_stack.endMacro()
 
     def set_nodes_pos(self, node_positions, layer=None):
@@ -2160,12 +2177,13 @@ class StageModel(QtCore.QObject):
 
     @staticmethod
     def _safe_backdrop(record):
-        """A clean record, its color one white text reads on, as layers'
-        are: a backdrop's title is white on it."""
+        """A clean record. Its color is kept as chosen, written the way
+        colors are; how it is shown is each user's view, see color_range."""
         record = backdrops.clean(record)
         if record is not None:
-            record[backdrops.COLOR] = theme.white_text_safe(
-                record[backdrops.COLOR]).name()
+            color = QtGui.QColor(record[backdrops.COLOR])
+            if color.isValid():
+                record[backdrops.COLOR] = color.name()
         return record
 
     def remove_backdrops(self, backdrop_ids):

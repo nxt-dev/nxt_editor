@@ -404,7 +404,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         opinion. Each weaker layer adds a chip of its color at the right
         end, the chips side by side.
 
-        Instances are hatched, locked nodes stippled, and nodes that are
+        Instanced nodes are striped, locked nodes stippled, and nodes that are
         only implied by their children see through.
         """
         title_rect = QtCore.QRectF(0, 0, self.max_width,
@@ -427,10 +427,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         # A lighter line along the top edge, as light falling on it.
         painter.fillRect(QtCore.QRectF(0, 0, self.max_width, 1),
                          QtGui.QColor(255, 255, 255, 40))
-        if self.is_proxy:
-            hatch = QtGui.QColor(255, 255, 255, 18)
-            painter.fillRect(title_rect,
-                             QtGui.QBrush(hatch, QtCore.Qt.BDiagPattern))
+        if self.is_proxy or self.node_instance:
+            # Instanced, made by its parent's instance or one itself.
+            theme.paint_stripes(painter, title_rect, fill)
         if self.locked:
             stipple = QtGui.QColor(0, 0, 0, 90)
             painter.fillRect(title_rect,
