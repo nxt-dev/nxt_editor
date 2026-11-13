@@ -334,6 +334,22 @@ class AppActions(NxtActionContainer):
         self.output_log_action.setWhatsThis('Toggle the output log widget.')
         self.available_without_model.append(self.output_log_action)
 
+        # Stage view
+        self.stage_view_action = NxtAction(text='Stage View', parent=self)
+        self.stage_view_action.setCheckable(True)
+        self.stage_view_action.setShortcutContext(context)
+        self.stage_view_action.setWhatsThis('Toggle the graph.')
+        self.available_without_model.append(self.stage_view_action)
+
+        # Outliner
+        self.outliner_action = NxtAction(text='Outliner', parent=self)
+        self.outliner_action.setCheckable(True)
+        self.outliner_action.setShortcutContext(context)
+        self.outliner_action.setWhatsThis('Toggle the outliner, the graph\'s '
+                                          'nodes as a tree in the order they '
+                                          'run.')
+        self.available_without_model.append(self.outliner_action)
+
         # Hotkey editor
         self.hotkey_editor_action = NxtAction(text='Hotkey Editor',
                                               parent=self)
@@ -475,6 +491,8 @@ class AppActions(NxtActionContainer):
                                      self.history_view_action,
                                      self.build_view_action,
                                      self.output_log_action,
+                                     self.stage_view_action,
+                                     self.outliner_action,
                                      self.hotkey_editor_action,
                                      self.workflow_tools_action,
                                      self.ai_assistant_action,

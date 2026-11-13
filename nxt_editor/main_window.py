@@ -35,6 +35,7 @@ from nxt_editor.dockwidgets import (
     BuildView,
     FindRepDockWidget,
     AiAssistant,
+    Outliner,
 )
 from nxt_editor.dockwidgets.output_log import FileTailingThread, QtLogStreamHandler
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
@@ -216,6 +217,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # graph tabs
         self.open_files_tab_widget.currentChanged.connect(self.on_tab_change)
         self.setCentralWidget(self.open_files_tab_widget)
+        if not user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_STAGE_VIEW,
+                                       True):
+            self.open_files_tab_widget.hide()
         self.splash_screen.showMessage(
             "Setting up dockwidgets...", QtCore.Qt.AlignCenter, QtCore.Qt.white
         )
@@ -257,6 +261,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # workflow tools
         self.workflow_tools = WidgetBuilder(parent=self)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.workflow_tools)
+
+        # Outliner, opt in from the Window menu.
+        self.outliner = Outliner(parent=self)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.outliner)
+        self.outliner.hide()
 
         # AI assistant, opt in. Made either way so the saved layout has a
         # place for it, but hidden while the assistant is off.
@@ -921,6 +930,7 @@ QCheckBox::indicator {
             self.build_view.set_stage_model(model)
             self.find_rep.set_stage_model(model)
             self.ai_assistant.set_stage_model(model)
+            self.outliner.set_stage_model(model)
             self.output_log.set_stage_model(model)
             self.update_target_color()
             logger.debug("Successfully set up new tab.")
@@ -1069,6 +1079,11 @@ QCheckBox::indicator {
         """Restore all dock widgets and toolbars to the default layout."""
         self.restoreState(self.default_layout_state)
         self.state_last_hidden = None
+
+    def set_stage_view_visible(self, visible):
+        """Show or hide the graph, and remember it for next time."""
+        self.open_files_tab_widget.setVisible(visible)
+        user_dir.user_prefs[user_dir.USER_PREF.SHOW_STAGE_VIEW] = visible
 
     def open_ai_settings(self):
         """Options > AI Assistant."""
@@ -1481,6 +1496,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.app_actions.history_view_action.setData(parent.history_view)
         self.app_actions.build_view_action.setData(parent.build_view)
         self.app_actions.output_log_action.setData(parent.output_log)
+        self.app_actions.stage_view_action.setData(
+            parent.open_files_tab_widget)
+        self.app_actions.outliner_action.setData(parent.outliner)
         self.app_actions.hotkey_editor_action.setData(parent.hotkey_editor)
         self.app_actions.workflow_tools_action.setData(parent.workflow_tools)
         self.app_actions.ai_assistant_action.setData(parent.ai_assistant)
@@ -1490,6 +1508,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.window_menu.aboutToShow.connect(self.populate_window_menu)
         self.window_menu.triggered.connect(self.window_action_triggered)
         self.window_menu_actions = [
+            self.app_actions.stage_view_action,
+            self.app_actions.outliner_action,
             self.app_actions.layer_manager_action,
             self.app_actions.property_editor_action,
             self.app_actions.code_editor_action,
@@ -1601,6 +1621,9 @@ class MenuBar(QtWidgets.QMenuBar):
     def window_action_triggered(self, action=None):
         if not action:
             # Sometimes Qt sends us this signal with no action.
+            return
+        if action is self.app_actions.stage_view_action:
+            self.main_window.set_stage_view_visible(action.isChecked())
             return
         widget = action.data()
         tab_index = self.main_window.open_files_tab_widget.indexOf(widget)

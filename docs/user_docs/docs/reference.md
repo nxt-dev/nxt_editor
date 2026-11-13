@@ -10,8 +10,8 @@ Checkout our example graphs [here](https://github.com/nxt-dev/nxt_editor/tree/re
 The editor is made of a graph (the stage view) in the middle, surrounded by
 dock widgets that can be moved, tabbed and closed: the Layer Manager,
 Property Editor, Code Editor, History View, Build View, Workflow Tools,
-Output Log and [Hotkey Editor](hotkeys.md). Closed docks come back from the
-**Window** menu.
+Output Log, [Outliner](#outliner) and [Hotkey Editor](hotkeys.md). Closed
+docks come back from the **Window** menu.
 
 ## Docks and layout
 
@@ -32,6 +32,10 @@ Output Log and [Hotkey Editor](hotkeys.md). Closed docks come back from the
 The stage view draws the composited graph for the open tab. Each tab is
 composited and drawn the first time it is selected, and kept from then on,
 so switching back to a tab is instant.
+
+**Window > Stage View** hides the graph, leaving the space to the docks,
+and shows it again. The editor remembers your choice. With the graph
+hidden, switch between open files from the bottom of the **Window** menu.
 
 ### Mini map
 
@@ -407,6 +411,21 @@ restart it.
   does not know about (a node was moved, renamed or deleted), the cache is
   cleared and rebuilt when the build is set up, before anything runs, and
   the Output Log says so.
+
+## Outliner
+
+The Outliner lists the graph's nodes as a tree. It is off until you turn it
+on from **Window > Outliner**.
+
+- Root nodes are listed in the order they run. The chains that begin at a
+  start point (marked with the start point icon) come first, then the
+  other chains, each followed through its exec connections. Roots no chain
+  reaches come last.
+- Each node's children sit under it in their child order. Closed branches
+  stay closed as you edit.
+- Disabled nodes are grey and in italics.
+- Selecting rows selects the nodes in the graph, and selecting nodes in the
+  graph selects their rows. Double click a row to frame its node.
 
 ## Property Editor, History View, Output Log and Workflow Tools
 
