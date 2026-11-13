@@ -14,7 +14,7 @@ from Qt import QtGui, QtWidgets
 # Internal
 import nxt_editor
 from nxt_editor import user_dir
-from nxt_editor.constants import FONTS
+from nxt_editor.constants import FONTS, points_to_px
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
@@ -72,16 +72,20 @@ class HostFonts(unittest.TestCase):
         self.assert_host_untouched()
 
     def test_changing_the_font_size_changes_the_editor(self):
-        before = self.win.font().pointSize()
+        # The preference counts in points and the font is made in pixels,
+        # so it is the same size in every host.
+        before = self.win._font_size
         self.win._change_font_size(2, save=False)
-        self.assertEqual(before + 2, self.win.font().pointSize())
-        self.assertEqual(before + 2, self.win.menu_bar.font().pointSize())
+        bigger = points_to_px(before + 2)
+        self.assertEqual(bigger, self.win.font().pixelSize())
+        self.assertEqual(bigger, self.win.menu_bar.font().pixelSize())
         # A menu is a window of its own and does not inherit the editor's
         # font, so it is given it, and kept in step.
         view_menu = self.win.menu_bar.view_menu
-        self.assertEqual(before + 2, view_menu.font().pointSize())
+        self.assertEqual(bigger, view_menu.font().pixelSize())
         self.win._change_font_size(1, save=False)
-        self.assertEqual(before + 3, view_menu.font().pointSize())
+        self.assertEqual(points_to_px(before + 3),
+                         view_menu.font().pixelSize())
 
     def test_a_widget_with_its_own_font_keeps_it(self):
         label = QtWidgets.QLabel('small', self.win)
@@ -117,7 +121,7 @@ class OwnAppFonts(unittest.TestCase):
     def test_the_application_gets_nxts_font(self):
         self.win._change_font_size(12, absolute=True, save=False)
         self.assertEqual(FONTS.DEFAULT_FAMILY, app.font().family())
-        self.assertEqual(12, app.font().pointSize())
+        self.assertEqual(points_to_px(12), app.font().pixelSize())
 
 
 if __name__ == '__main__':

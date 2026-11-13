@@ -8,7 +8,7 @@ from Qt import QtWidgets, QtGui, QtCore
 import nxt_editor
 from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
-from nxt_editor import colors, dialogs
+from nxt_editor import colors, dialogs, theme
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 TOOLTIP_INFO = ('<p style="font-size:12px;color:white;">'
@@ -28,11 +28,11 @@ TOOLTIP_INFO = ('<p style="font-size:12px;color:white;">'
                 'are global and cannot have a shortcut that conflicts with any '
                 'other shortcut.</p>')
 
-TOOLTIP_STYLE = '''QToolTip {
+TOOLTIP_STYLE = theme.fill('''QToolTip {
                     font-family: %s;
-                    background-color: #3E3E3E;
-                    border: 1px solid #232323;
-                }''' % (FONTS.MONOSPACE,)
+                    background-color: {RAISED};
+                    border: 1px solid {GRAPH};
+                }''') % (FONTS.MONOSPACE,)
 
 TABLE_STYLE = '''QTableView {
                     font-family: %s;
@@ -289,13 +289,12 @@ class HotkeyModel(QtCore.QAbstractTableModel):
                     default_shortcut = default_shortcut.toString()
                 shortcut = self._data[row][self.columnCount()-1] or None
                 if shortcut != default_shortcut:
-                    font = QtGui.QFont()
+                    font = FONTS.default_font()
                     font.setItalic(True)
                     return font
             else:
-                font = QtGui.QFont()
+                font = FONTS.default_font(FONTS.DEFAULT_SIZE * 1.1)
                 font.setBold(True)
-                font.setPointSizeF(font.pointSize()*1.1)
                 font.setItalic(True)
                 return font
         elif not role:

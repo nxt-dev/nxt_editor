@@ -8,6 +8,7 @@ from Qt.QtWidgets import QDockWidget
 
 # Internal
 import nxt_editor
+from nxt_editor import theme
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -41,17 +42,16 @@ class DockWidgetBase(QDockWidget):
         self.setObjectName(re.sub(r'[^a-zA-Z0-9]', '', safe_name))
 
         # set title size
-        self.setStyleSheet('''QDockWidget{
-                                font-size: 7pt;
-                                font-weight: bold;
-                                color: grey;
-                              }
-
-                              QDockWidget::title{
-                                text-align: center;
-                                color: grey;
-                              }
-                              ''')
+        self.setStyleSheet(theme.fill('''
+            QDockWidget {
+                font-size: {SMALL_PX}px;
+                font-weight: 600;
+                color: {TEXT_DIM};
+            }
+            QDockWidget::title {
+                text-align: left;
+            }
+            '''))
 
         # set graph model
         self.stage_model = graph_model

@@ -56,10 +56,27 @@ class _FontManager:
         return self._code_family
 
     def default_font(self, size=None):
-        return QtGui.QFont(self.DEFAULT_FAMILY, size or self.DEFAULT_SIZE)
+        return self._sized(self.DEFAULT_FAMILY, size)
 
     def monospace_font(self, size=None):
-        return QtGui.QFont(self.MONOSPACE, size or self.DEFAULT_SIZE)
+        return self._sized(self.MONOSPACE, size)
+
+    def _sized(self, family, size=None):
+        """A font sized in points, made in pixels.
+
+        A point is a different number of pixels on macOS than on Windows,
+        and in a host that scales its interface, so the same point size
+        did not look the same everywhere. Pixels do.
+        """
+        font = QtGui.QFont(family)
+        font.setPixelSize(points_to_px(size or self.DEFAULT_SIZE))
+        return font
+
+
+def points_to_px(points):
+    """Pixels for a size in points, at the 96 dots per inch most screens
+    are laid out at."""
+    return max(1, int(round(points * 96.0 / 72.0)))
 
 
 FONTS = _FontManager()

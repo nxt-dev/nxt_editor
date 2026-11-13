@@ -1,0 +1,478 @@
+/* The modern layer, read after dark.qss and winning where both say
+   something. {NAME} is a value from nxt_editor/theme.py.
+
+   No font-family here. A stylesheet font beats setFont() on every widget
+   under it, which would take the code editor's monospace away. The
+   window's font is set in code, in pixels, and inherited instead.
+   Menus and tooltips are windows of their own, which inherit nothing,
+   so they are given the family here; nothing in them shows code. Their
+   size comes from the font size preference, see
+   MainWindow._change_font_size. */
+
+QMenuBar, QMenu, QToolTip {
+    font-family: "{FONT_FAMILY}";
+}
+
+QWidget {
+    background-color: {BASE};
+    color: {TEXT};
+    selection-background-color: {ACCENT_STRONG};
+    selection-color: {TEXT};
+}
+
+/* A blue box around whatever has focus was the old look. Inputs show
+   focus with their own border below. */
+QWidget:focus {
+    border: none;
+}
+
+QWidget:disabled {
+    background-color: {BASE};
+    color: {TEXT_FAINT};
+}
+
+QWidget:item:hover {
+    background-color: {HOVER};
+    color: {TEXT};
+}
+
+QWidget:item:selected {
+    background-color: {ACCENT_STRONG};
+    color: {TEXT};
+}
+
+/* -- window frame ---------------------------------------------------------- */
+
+QMainWindow::separator {
+    background-color: {BASE};
+    width: 4px;
+    height: 4px;
+    image: none;
+}
+
+QMainWindow::separator:hover {
+    background-color: {ACCENT};
+}
+
+QStatusBar {
+    background-color: {BASE};
+    border: none;
+    border-top: 1px solid {BORDER};
+    color: {TEXT_DIM};
+}
+
+QToolTip {
+    background-color: {RAISED};
+    color: {TEXT};
+    border: 1px solid {BORDER_STRONG};
+    padding: 4px 6px;
+}
+
+/* -- menus ------------------------------------------------------------------- */
+
+QMenuBar {
+    background-color: {BASE};
+    border: none;
+    border-bottom: 1px solid {BORDER};
+    padding: 2px 4px;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+QMenuBar::item:selected,
+QMenuBar::item:pressed {
+    background-color: {HOVER};
+    color: {TEXT};
+}
+
+/* Square: a menu is a window, and round corners on an opaque window leave
+   black corners behind them on some platforms. */
+QMenu {
+    background-color: {RAISED};
+    border: 1px solid {BORDER_STRONG};
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 5px 24px 5px 26px;
+    border-radius: 4px;
+    background: transparent;
+}
+
+QMenu::item:selected {
+    background-color: {ACCENT_STRONG};
+    color: {TEXT};
+}
+
+QMenu::item:disabled {
+    color: {TEXT_FAINT};
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: {BORDER_STRONG};
+    margin: 4px 6px;
+}
+
+/* -- toolbar --------------------------------------------------------------- */
+
+QToolBar {
+    background-color: {BASE};
+    border: none;
+    border-bottom: 1px solid {BORDER};
+    padding: 3px 4px;
+    spacing: 2px;
+}
+
+QToolBar::separator:horizontal {
+    width: 1px;
+    background-color: {BORDER_STRONG};
+    margin: 4px 6px;
+    image: none;
+}
+
+QToolBar::separator:vertical {
+    height: 1px;
+    background-color: {BORDER_STRONG};
+    margin: 6px 4px;
+    image: none;
+}
+
+QToolBar::handle {
+    image: none;
+    width: 0px;
+}
+
+QToolButton,
+QToolBar QToolButton {
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    padding: 3px;
+    color: {TEXT};
+}
+
+QToolButton:hover {
+    background-color: {HOVER};
+    border: 1px solid {BORDER};
+}
+
+QToolButton:pressed {
+    background-color: {PRESSED};
+}
+
+QToolButton:checked {
+    background-color: {ACCENT_DIM};
+    border: 1px solid {ACCENT_STRONG};
+}
+
+QToolButton:checked:hover {
+    background-color: {ACCENT_STRONG};
+}
+
+/* -- buttons and inputs ---------------------------------------------------- */
+
+QPushButton {
+    background-color: {RAISED};
+    border: 1px solid {BORDER_STRONG};
+    border-radius: {RADIUS}px;
+    padding: 5px 12px;
+    color: {TEXT};
+}
+
+QPushButton:hover {
+    background-color: {HOVER};
+}
+
+QPushButton:pressed {
+    background-color: {PRESSED};
+}
+
+QPushButton:checked {
+    background-color: {ACCENT_STRONG};
+    border: 1px solid {ACCENT};
+}
+
+QPushButton:default {
+    border: 1px solid {ACCENT};
+}
+
+QPushButton:disabled {
+    background-color: {BASE};
+    border: 1px solid {BORDER};
+    color: {TEXT_FAINT};
+}
+
+QLineEdit,
+QAbstractSpinBox,
+QComboBox {
+    background-color: {GRAPH};
+    border: 1px solid {BORDER_STRONG};
+    border-radius: {RADIUS}px;
+    padding: 4px 6px;
+    color: {TEXT};
+}
+
+QLineEdit:hover,
+QAbstractSpinBox:hover,
+QComboBox:hover {
+    border: 1px solid {TEXT_FAINT};
+}
+
+QLineEdit:focus,
+QAbstractSpinBox:focus,
+QComboBox:focus,
+QComboBox:on {
+    border: 1px solid {ACCENT};
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 20px;
+}
+
+QComboBox QAbstractItemView {
+    background-color: {RAISED};
+    border: 1px solid {BORDER_STRONG};
+    padding: 2px;
+    outline: none;
+}
+
+QTextEdit,
+QPlainTextEdit {
+    background-color: {GRAPH};
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS}px;
+}
+
+QTextEdit:focus,
+QPlainTextEdit:focus {
+    border: 1px solid {ACCENT};
+}
+
+QCheckBox,
+QRadioButton {
+    background: transparent;
+    spacing: 6px;
+}
+
+QGroupBox {
+    border: 1px solid {BORDER};
+    border-radius: {RADIUS}px;
+    margin-top: 14px;
+    padding-top: 6px;
+}
+
+QGroupBox::title {
+    color: {TEXT_DIM};
+    padding: 0 4px;
+    left: 8px;
+}
+
+QProgressBar {
+    background-color: {GRAPH};
+    border: 1px solid {BORDER};
+    border-radius: 4px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    background-color: {ACCENT_STRONG};
+    border-radius: 3px;
+}
+
+QSlider::groove:horizontal {
+    background-color: {BORDER_STRONG};
+    height: 4px;
+    border-radius: 2px;
+    border: none;
+}
+
+QSlider::sub-page:horizontal {
+    background-color: {ACCENT};
+    border-radius: 2px;
+    border: none;
+}
+
+QSlider::handle:horizontal {
+    background-color: {TEXT};
+    border: none;
+    width: 12px;
+    height: 12px;
+    margin: -4px 0;
+    border-radius: 6px;
+}
+
+/* -- lists, trees and tables ------------------------------------------------- */
+
+QAbstractItemView {
+    background-color: {BASE};
+    alternate-background-color: {RAISED};
+    border: none;
+    outline: none;
+}
+
+/* No rule for every ::item here. Qt then paints each row from the
+   stylesheet and drops a background the row sets itself, which is how
+   layers show their colors in lists. Only hover and selection, which are
+   meant to cover it, are styled. */
+
+QAbstractItemView::item:hover {
+    background-color: {HOVER};
+}
+
+QAbstractItemView::item:selected {
+    background-color: {ACCENT_DIM};
+    color: {TEXT};
+}
+
+QAbstractItemView::item:selected:active {
+    background-color: {ACCENT_STRONG};
+}
+
+QHeaderView::section {
+    background-color: {RAISED};
+    color: {TEXT_DIM};
+    border: none;
+    border-right: 1px solid {BORDER};
+    border-bottom: 1px solid {BORDER};
+    padding: 4px 6px;
+}
+
+QTableView {
+    gridline-color: {BORDER};
+}
+
+/* -- scroll bars, thin and without arrows ------------------------------------ */
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0px;
+    border: none;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+    margin: 0px;
+    border: none;
+}
+
+QScrollBar::handle:vertical {
+    background-color: {BORDER_STRONG};
+    min-height: 24px;
+    border-radius: 3px;
+    margin: 2px;
+    border: none;
+}
+
+QScrollBar::handle:horizontal {
+    background-color: {BORDER_STRONG};
+    min-width: 24px;
+    border-radius: 3px;
+    margin: 2px;
+    border: none;
+}
+
+QScrollBar::handle:hover {
+    background-color: {TEXT_FAINT};
+}
+
+QScrollBar::add-line,
+QScrollBar::sub-line {
+    width: 0px;
+    height: 0px;
+    border: none;
+    background: none;
+}
+
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    background: none;
+}
+
+/* -- tabs ------------------------------------------------------------------ */
+
+QTabWidget::pane {
+    border: none;
+    border-top: 1px solid {BORDER};
+    background-color: {BASE};
+}
+
+QTabBar {
+    background: transparent;
+    border: none;
+    qproperty-drawBase: 0;
+}
+
+QTabBar::tab {
+    background-color: transparent;
+    color: {TEXT_DIM};
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 6px 12px;
+    margin: 0px;
+    min-width: 40px;
+}
+
+QTabBar::tab:hover {
+    color: {TEXT};
+    background-color: {HOVER};
+}
+
+QTabBar::tab:selected {
+    color: {TEXT};
+    background-color: {RAISED};
+    border-bottom: 2px solid {ACCENT};
+}
+
+/* -- docks ----------------------------------------------------------------- */
+
+QDockWidget {
+    background-color: {BASE};
+    border: none;
+    outline: none;
+    color: {TEXT_DIM};
+}
+
+QDockWidget::title {
+    background-color: {RAISED};
+    border: none;
+    border-bottom: 1px solid {BORDER};
+    padding: 6px 8px;
+    text-align: left;
+}
+
+QDockWidget::close-button,
+QDockWidget::float-button {
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    padding: 1px;
+}
+
+QDockWidget::close-button:hover,
+QDockWidget::float-button:hover {
+    background-color: {HOVER};
+}
+
+/* -- the graph ------------------------------------------------------------- */
+
+QGraphicsView {
+    background-color: {GRAPH};
+    border: none;
+}
+
+QGraphicsView:focus {
+    border: none;
+}
+
+QRubberBand {
+    border: 1px solid {ACCENT};
+    background-color: rgba(255, 255, 255, 24);
+}

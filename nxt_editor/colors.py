@@ -4,6 +4,7 @@ import logging
 from Qt.QtGui import QColor
 # Internal
 from nxt.nxt_log import GRAPHERROR, NODEOUT, EXECINFO, COMPINFO
+from nxt_editor import theme
 
 ATTR_COLORS = {
     'None': QColor('#808080'),
@@ -17,7 +18,7 @@ ATTR_COLORS = {
     'dict': QColor('#984dab'),
 }
 
-GRAPH_BG_COLOR = QColor(35, 35, 35)
+GRAPH_BG_COLOR = QColor(theme.GRAPH)
 START_COLOR = QColor("#1bd40b")
 SKIP_COLOR = QColor("#f0880a")
 BREAK_COLOR = QColor(255, 0, 0)
@@ -41,7 +42,7 @@ LAYER_COLORS = [
     QColor('#119B77')   # teal
 ]
 
-SELECTED = QColor(232, 229, 54, 255)
+SELECTED = QColor(theme.SELECTED)
 
 UNCACHED_RED = QColor(255, 0, 0, 200)
 

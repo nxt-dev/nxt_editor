@@ -17,7 +17,7 @@ from Qt import QtCore
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
-from nxt_editor import colors, user_dir
+from nxt_editor import colors, theme, user_dir
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path, tokens
 from nxt.nxt_node import INTERNAL_ATTRS
@@ -25,7 +25,7 @@ from nxt_editor.dockwidgets import syntax
 from nxt_editor.dockwidgets import code_completion
 from nxt_editor.dockwidgets.code_overlays import (FindOverlay,
                                                   GotoLineOverlay)
-from nxt_editor.constants import FONTS
+from nxt_editor.constants import FONTS, points_to_px
 import nxt_editor
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -60,12 +60,12 @@ class CodeEditor(DockWidgetBase):
         self.main.setLayout(self.layout)
 
         self.background_frame = QtWidgets.QFrame(self)
-        self.background_frame.setStyleSheet('background-color: #3E3E3E; border-radius: 0px;')
+        self.background_frame.setStyleSheet(theme.fill('background-color: {RAISED}; border-radius: 0px;'))
         self.layout.addWidget(self.background_frame)
 
         # details
         self.details_frame = QtWidgets.QFrame(self)
-        self.details_frame.setStyleSheet('background-color: #3E3E3E; border-radius: 0px;')
+        self.details_frame.setStyleSheet(theme.fill('background-color: {RAISED}; border-radius: 0px;'))
         self.topLevelChanged.connect(self.display_details)
         self.dockLocationChanged.connect(self.display_details)
         self.layout.addWidget(self.details_frame)
@@ -82,7 +82,7 @@ class CodeEditor(DockWidgetBase):
         self.details_layout.addLayout(self.name_layout)
 
         self.name_label = LabelEdit(parent=self.details_frame)
-        self.name_label.setFont(QtGui.QFont(FONTS.DEFAULT_FAMILY, 14))
+        self.name_label.setFont(FONTS.default_font(14))
         self.name_label.nameChangeRequested.connect(self.edit_name)
         self.name_layout.addWidget(self.name_label, 0, QtCore.Qt.AlignLeft)
 
@@ -96,13 +96,13 @@ class CodeEditor(DockWidgetBase):
         self.name_layout.addWidget(self.name_edit_button, 0, QtCore.Qt.AlignLeft)
 
         self.path_label = QtWidgets.QLabel(parent=self.details_frame)
-        self.path_label.setFont(QtGui.QFont(FONTS.MONOSPACE, 8))
+        self.path_label.setFont(FONTS.monospace_font(8))
         self.path_label.setStyleSheet('color: grey')
         self.details_layout.addWidget(self.path_label)
 
         # code editor
         self.code_frame = QtWidgets.QFrame(self)
-        self.code_frame.setStyleSheet('background-color: #3E3E3E; border-radius: 0px')
+        self.code_frame.setStyleSheet(theme.fill('background-color: {RAISED}; border-radius: 0px'))
         self.layout.addWidget(self.code_frame)
 
         self.frame_layout = QtWidgets.QVBoxLayout()
@@ -115,7 +115,7 @@ class CodeEditor(DockWidgetBase):
         # shrinks kept whatever was drawn there last, which is how dragging
         # the splitter smeared the editor's border across the top.
         self.code_widget.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self.code_widget.setStyleSheet('background-color: #3E3E3E;')
+        self.code_widget.setStyleSheet(theme.fill('background-color: {RAISED};'))
         self.frame_layout.addWidget(self.code_widget)
 
         self.code_layout = QtWidgets.QVBoxLayout()
@@ -162,7 +162,7 @@ class CodeEditor(DockWidgetBase):
             parent=self.code_frame,
             resize_signal=self.main_window.font_size_changed)
         self.copy_resolved_button.setToolTip('Copy Resolved')
-        self.copy_resolved_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.copy_resolved_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.copy_resolved_button.clicked.connect(self.copy_resolved)
         self.buttons_layout.addWidget(self.copy_resolved_button, 0, 0)
 
@@ -181,7 +181,7 @@ class CodeEditor(DockWidgetBase):
             parent=self.code_frame,
             resize_signal=self.main_window.font_size_changed)
         self.format_button.setToolTip('Show Non-Printing Characters')
-        self.format_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.format_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.format_button.toggled.connect(lambda: self.edit_format_characters(not self.editor.format_characters_on))
         self.buttons_layout.addWidget(self.format_button, 0, 3)
 
@@ -197,7 +197,7 @@ class CodeEditor(DockWidgetBase):
                                           parent=self.code_frame,
                                           resize_signal=self.main_window.font_size_changed)
         self.accept_button.setToolTip('Accept Edit')
-        self.accept_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.accept_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.accept_button.clicked.connect(self.accept_edit)
         self.buttons_layout.addWidget(self.accept_button, 0, 5,
                                       QtCore.Qt.AlignRight)
@@ -210,7 +210,7 @@ class CodeEditor(DockWidgetBase):
                                           parent=self.code_frame,
                                           resize_signal=self.main_window.font_size_changed)
         self.cancel_button.setToolTip('Cancel Edit')
-        self.cancel_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.cancel_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.cancel_button.setFocusPolicy(QtCore.Qt.NoFocus)
         self.cancel_button.clicked.connect(self.exit_editing)
         self.buttons_layout.addWidget(self.cancel_button, 0, 6,
@@ -225,7 +225,7 @@ class CodeEditor(DockWidgetBase):
             parent=self.code_frame,
             resize_signal=self.main_window.font_size_changed)
         self.revert_code_button.setToolTip('Remove Compute')
-        self.revert_code_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_code_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_code_button.clicked.connect(self.revert_code)
         self.buttons_layout.addWidget(self.revert_code_button, 0, 7,
                                       QtCore.Qt.AlignRight)
@@ -238,13 +238,13 @@ class CodeEditor(DockWidgetBase):
 
     def update_background(self):
         if self.editor.isReadOnly():
-            style = '''
-            background-color: #232323;
+            style = theme.fill('''
+            background-color: {BASE};
             background-image: url(:icons/icons/BDiagPattern.png);
             background-repeat: repeat-xy;
-            background-attachment: fixed;'''
+            background-attachment: fixed;''')
         else:
-            style = 'background-color: #232323;'
+            style = theme.fill('background-color: {BASE};')
         self.code_widget.setStyleSheet(style)
 
     def sync_overlay_geometry(self):
@@ -690,14 +690,14 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             self.layout.setContentsMargins(0, 0, 0, 0)
             self.setLayout(self.layout)
 
-            style = '''
-                    background-color: #323232;
+            style = theme.fill('''
+                    background-color: {RAISED};
                     border: 1px solid transparent;
                     border-top-left-radius: 8px;
                     border-bottom-left-radius: 8px;
                     border-top-right-radius: 0px;
                     border-bottom-right-radius: 0px;
-                    '''
+                    ''')
 
             self.frame = QtWidgets.QFrame()
             self.frame.setStyleSheet(style)
@@ -1596,7 +1596,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         else:
             self.font_size += delta
         font = self.font()
-        font.setPointSize(self.font_size)
+        font.setPixelSize(points_to_px(self.font_size))
         self.setFont(font)
 
     def update_previous_scroll_positions(self):
@@ -2303,9 +2303,6 @@ class NumberBar(QtWidgets.QWidget):
             self.update(0, rect.y(), self.width(), rect.height())
 
         if rect.contains(self.editor.viewport().rect()):
-            font_size = self.editor.currentCharFormat().font().pointSize()
-            self.font().setPointSize(font_size)
-            self.font().setStyle(QtGui.QFont.StyleNormal)
             self.update_width()
 
 
@@ -2326,7 +2323,8 @@ class OverlayWidget(QtWidgets.QWidget):
     def paintEvent(self, event):
         painter = QtGui.QPainter()
         painter.begin(self)
-        painter.setFont(QtGui.QFont(FONTS.MONOSPACE, 14))
+        points = 14
+        painter.setFont(FONTS.monospace_font(points))
         font_metrics = QtGui.QFontMetrics(painter.font())
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         # actual_display_state
@@ -2338,14 +2336,14 @@ class OverlayWidget(QtWidgets.QWidget):
         show_data_state = self._parent.ce_actions.show_data_state_action.isChecked()
         if show_data_state:
             offset = font_metrics.boundingRect(self.data_state).width()
-            offset += painter.font().pointSize() * 1.5
+            offset += points * 1.5
             painter.drawText(self.rect().right() - offset,
-                             painter.font().pointSize() * 1.5, self.data_state)
+                             points * 1.5, self.data_state)
         # Draw center message text
         show_msg = self._parent.ce_actions.overlay_message_action.isChecked()
         if show_msg:
             msg_offset = font_metrics.boundingRect(self.click_msg).width()
-            msg_offset += painter.font().pointSize()
+            msg_offset += points
             painter.drawText(self.rect().center().x() - (msg_offset*.5),
                              self.rect().center().y(), self.click_msg)
         painter.setCompositionMode(QtGui.QPainter.CompositionMode_Darken)
@@ -2373,12 +2371,12 @@ def code_style_factory(color='', border='solid', thickness=(2, 2, 2)):
     :return: string of qss
     """
     if not color:
-        color = '#31363B'  # Pulled from the dark.qss
+        color = theme.RAISED  # The theme's raised panels
     lines = []
     for thick in thickness:
         line = 'border-radius: 11px; border: {}px {} {}'.format(thick, border, color)
         lines.append(line)
-    code_edit_default_style = '''
+    code_edit_default_style = theme.fill('''
                             QPlainTextEdit{
                                 %s;
                             }
@@ -2392,10 +2390,10 @@ def code_style_factory(color='', border='solid', thickness=(2, 2, 2)):
                             }
 
                             QToolTip {
-                                color: #f0f0f0;
-                                background-color: #2b2b2b;
-                                border: 1px solid #5a5a5a;
+                                color: {TEXT};
+                                background-color: {RAISED};
+                                border: 1px solid {BORDER_STRONG};
                                 padding: 3px;
                             }
-                            '''
+                            ''')
     return code_edit_default_style % tuple(lines)
