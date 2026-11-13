@@ -37,10 +37,70 @@ so switching back to a tab is instant.
 and shows it again. The editor remembers your choice. With the graph
 hidden, switch between open files from the bottom of the **Window** menu.
 
+### How nodes look
+
+The editor is drawn in neutral dark greys, so the only color on screen is
+your layers'. It ships its own fonts, sized in pixels, and its own colors,
+so it looks the same on Windows, macOS and Linux, and inside Maya, Unreal
+and Blender.
+
+- A node is a rounded card. Its title bar is the color of the layer with
+  the strongest opinion on it, and each weaker layer with an opinion adds a
+  chip of its color at the right end. How layer colors are shown can be
+  changed for you alone, see [Layer Color View](#layer-color-view)
+  below.
+- Names are white. A disabled node's title is faded and struck through, and
+  a node that is an instance, or was made by one, has its name in italics
+  and diagonal stripes across its title.
+- A selected node has an amber outline, and the node under the mouse a thin
+  white one.
+- Start, skip and break points sit on the node's exec input: a green
+  triangle, an orange bar and a red square.
+
+### Layer Color View
+
+**View > Options > Layer Color View...** sets how layer and backdrop colors
+are shown to you. It is a view preference, yours alone and remembered with
+your preferences. It never changes the color a layer or backdrop is given:
+that is chosen with **Change Color**, and is the same whatever anyone's
+view, so a teammate sees the same file in their own view.
+
+- **Raw (default)** shows every color exactly as it is.
+- **White-text safe** shows a color too light for the white names on it
+  darker, only as far as it takes for them to read at 4.5:1, keeping its
+  hue.
+- **Even (OKLCH)** shows every color at one lightness and chroma, keeping
+  its hue, so no layer stands out from another. Set them with the sliders.
+  Hues the screen can not show that colorful get as close as it can, and a
+  grey stays grey.
+- Example colors and three sample nodes show the view as you set it, with
+  how well white text reads on the color it reads worst on: green when it reads
+  at 4.5:1, amber when weaker, red below 3:1. A tick on the lightness
+  slider marks where white text stops reading at 4.5:1 on every hue.
+- While you drag a slider only the dialog follows it, and the editor is
+  redrawn when you let go, or just after a typed value. **OK** keeps it,
+  **Cancel** puts back the view you had, and **Reset to Default** goes back
+  to raw.
+- **In your view** in **Change Color** shows how the color you are choosing
+  will look to you in this view.
+
+### Running nodes
+
+Besides **Execute Graph** (the play button) and stop, the toolbar has a
+button for each way of running part of the graph. Hover a button to see
+what it runs.
+
+- **Execute Selected** (`Enter`), the play button with a node: runs only
+  the selected nodes.
+- **Execute From Selected**, the play button with a node and an arrow down:
+  runs the selected node, then on down its exec chain.
+- **Execute Hierarchy**, the play button with a parent and its children:
+  runs the selected node and every node under it.
+
 ### Find Node
 
 Press `/` over the graph to find nodes. Type any part of a node's name, and
-the nodes that match are listed as you type, ignoring case.
+the nodes that match are listed once you stop typing, ignoring case.
 
 - `*` stands for anything: `arm*ctrl` finds `arm_L_ctrl` and `arm_R_ctrl`.
 - Commas separate names: `arm, leg` finds either.
@@ -692,36 +752,10 @@ A layer can be any color. **Change Color** picks from the full spectrum: the
 layer palette, a field of every hue and saturation, a shade bar from black
 to the hue at its brightest, and a hex field. The layer is given exactly the
 color picked, and by default every color is shown exactly as it is. How
-layer colors are shown is your own view, see Layer Color View below. **In
+layer colors are shown is your own view, see
+[Layer Color View](#layer-color-view). **In
 your view** in Change Color shows how the color you are choosing will look
 to you.
-
-#### Layer Color View
-
-**View > Options > Layer Color View...** sets how layer and backdrop colors
-are shown to you. It is a view preference, yours alone and remembered with
-your preferences. It never changes the color a layer or backdrop is given:
-that is chosen with **Change Color**, and is the same whatever anyone's
-view, so a teammate sees the same file in their own view.
-
-- **Raw (default)** shows every color exactly as it is.
-- **White-text safe** shows a color too light for the white names on it
-  darker, only as far as it takes for them to read at 4.5:1, keeping its
-  hue.
-- **Even (OKLCH)** shows every color at one lightness and chroma, keeping
-  its hue, so no layer stands out from another. Set them with the sliders.
-  Hues the screen can not show that colorful get as close as it can, and a
-  grey stays grey.
-- Example colors and three sample nodes show the view as you set it, with
-  how well white text reads on the color it reads worst on: green when it reads
-  at 4.5:1, amber when weaker, red below 3:1. A tick on the lightness
-  slider marks where white text stops reading at 4.5:1 on every hue.
-- While you drag a slider only the dialog follows it, and the editor is
-  redrawn when you let go, or just after a typed value. **OK** keeps it,
-  **Cancel** puts back the view you had, and **Reset to Default** goes back
-  to raw.
-- **In your view** in **Change Color** shows how the color you are choosing
-  will look to you in this view.
 
 ![attribute_color.PNG](images/attribute_color.PNG)
 

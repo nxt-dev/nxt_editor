@@ -1,7 +1,72 @@
 # What's New
 
-This page summarises what is new in **nxt_editor 4.4** and **nxt_core 0.21**.
-Each item links to the part of the docs that explains it in full.
+This page summarises what is new in recent releases of **nxt_editor**, and
+in **nxt_core 0.21**. Each item links to the part of the docs that explains
+it in full.
+
+## nxt_editor 4.6
+
+### A new look, the same everywhere
+
+The editor is drawn in neutral dark greys, so the only color on screen is
+your layers'. Nodes are rounded cards in their layer's color with white
+names, a selected node has an amber outline, and instanced nodes are
+striped. It ships its own fonts and colors, so it looks the same on every
+platform and in every host. See [How nodes look](reference.md#how-nodes-look).
+
+### Outliner
+
+**Window > Outliner** lists the graph's nodes as a tree, grouped by the
+start point whose build runs them. Rows show their layer colors, start,
+skip and break points, and work like their nodes in the graph: hotkeys,
+double click to collapse (`Shift` for everything below, or for a whole
+group), `F2` to rename, and the graph's right click menu. See
+[Outliner](reference.md#outliner).
+
+### Instance View
+
+**Window > Instance View** shows a node's instance connections and nothing
+else: what it instances from and everything that instances it. It can
+follow the selection, and select what you pick in it in the graph and the
+Outliner. See [Instance View](reference.md#instance-view).
+
+### Finding nodes
+
+[Find Node](reference.md#find-node) (`/`) and the Outliner's search find
+nodes by name, with `*` for anything, commas between names, and a `/` to
+match the whole path. `Enter` in Find Node selects and frames every match.
+
+### Lines and backdrops
+
+- [Lines between nodes](reference.md#lines-between-nodes) can be curved,
+  routed through points you drag, and broken with a right click.
+- [Backdrops](reference.md#backdrops) (`C`) put a colored, titled box behind
+  a group of nodes, and move them together.
+- **Window > Stage View** hides the graph to give the space to the docks.
+
+### Colors
+
+- **Change Color** picks any color, and the layer keeps exactly that color.
+- [Layer Color View](reference.md#layer-color-view) sets how layer colors
+  are shown to you: as they are, darker where too light for white text, or
+  every hue at one lightness and chroma. It is your preference only.
+- **View > Options > Neutral Property Text** shows the Property Editor's
+  attributes in neutral text, with each layer's color in the row header.
+
+### Faster on big graphs
+
+Opening a large graph takes about half as long, moving and panning are
+smoother, and a hidden graph, Outliner or Instance View does no work until
+it is shown again.
+
+### Smaller changes
+
+- The toolbar has its own buttons for [running](reference.md#running-nodes)
+  the selected nodes, from them, or their hierarchy.
+- The Build View outlines the selected node in amber and the hovered one in
+  white, and keeps the next node to run red.
+- Break and skip points work on graphs that have not been saved yet.
+- The list of layers to save on close shows their colors and checkboxes.
 
 ## nxt_editor 4.4.2
 
