@@ -67,7 +67,15 @@ class LayerColors(unittest.TestCase):
             image = tree.viewport().grab().toImage()
             rect = tree.visualRect(model.index(0, 0))
             color = QtGui.QColor(image.pixel(rect.center()))
-            self.assertEqual('#991c24', color.name())
+            # macOS hands back a grab in the display's color profile, so a
+            # saturated red comes back a few steps off. The row is still
+            # the layer's red, not the panel's grey a stylesheet rule for
+            # every row would leave.
+            expected = QtGui.QColor('#991c24')
+            for got, want in ((color.red(), expected.red()),
+                              (color.green(), expected.green()),
+                              (color.blue(), expected.blue())):
+                self.assertLess(abs(got - want), 24, color.name())
         finally:
             window.close()
             window.deleteLater()
