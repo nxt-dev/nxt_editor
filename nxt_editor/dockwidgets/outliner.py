@@ -29,7 +29,8 @@ POINTS_ROLE = QtCore.Qt.UserRole + 5
 START = 'start'
 SKIP = 'skip'
 BREAK = 'break'
-# True on an instanced node's row: an instance, or made by one.
+# True on a proxy node's row: one made by an instance, with nothing of its
+# own.
 INSTANCED_ROLE = QtCore.Qt.UserRole + 6
 POINT_NAMES = {START: 'Start point', SKIP: 'Skip point',
                BREAK: 'Breakpoint'}
@@ -237,7 +238,7 @@ class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
         path.addRoundedRect(rect, 4, 4)
         painter.fillPath(path, fill)
         if index.data(INSTANCED_ROLE):
-            # Striped, as an instanced node's title is in the graph.
+            # Striped, as a proxy node's title is in the graph.
             painter.save()
             painter.setClipPath(path)
             theme.paint_stripes(painter, rect, fill)
@@ -531,9 +532,7 @@ class Outliner(DockWidgetBase):
         enabled."""
         model = self.stage_model
         item.setData(0, LAYERS_ROLE, self.layer_colors(path))
-        comp = model.comp_layer
-        instanced = (model.get_node_is_proxy(path) or
-                     model.get_node_instance(path, comp) is not None)
+        instanced = model.get_node_is_proxy(path)
         item.setData(0, INSTANCED_ROLE, True if instanced else None)
         self.set_points(item, path)
         disabled = not model.get_node_enabled(path)

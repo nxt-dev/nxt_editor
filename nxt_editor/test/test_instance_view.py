@@ -32,7 +32,8 @@ GRAPH = {'version': '1.17', 'alias': 'inst', 'nodes': {
     '/arm': {'instance': '/base'},
     '/arm_L': {'instance': '/arm'}, '/arm_R': {'instance': '/arm'},
     '/arm_L_twist': {'instance': '/arm_L'},
-    '/leg': {'instance': '/base'}, '/loose': {}}}
+    '/leg': {'instance': '/base'},
+    '/leg/child': {'attrs': {'side': {'value': 'L'}}}, '/loose': {}}}
 
 
 class InstanceViewCase(unittest.TestCase):
@@ -146,17 +147,25 @@ class Showing(InstanceViewCase):
 
 
 class Striped(InstanceViewCase):
-    """Instanced nodes are striped in the graph and the Outliner."""
+    """Proxy nodes, made by an instance with nothing of their own, are
+    striped in the graph and the Outliner. An instance, or a node that
+    overrides what its instance gives it, looks like any other node."""
 
-    def test_instances_are_marked_in_the_outliner(self):
+    def test_proxies_are_marked_in_the_outliner(self):
         from nxt_editor.dockwidgets.outliner import INSTANCED_ROLE
         rows = self.win.outliner
         rows.show()
         app.processEvents()
-        self.assertTrue(rows.items['/arm'].data(0, INSTANCED_ROLE))
-        self.assertTrue(rows.items['/arm_L_twist'].data(0, INSTANCED_ROLE))
-        self.assertFalse(rows.items['/base'].data(0, INSTANCED_ROLE))
-        self.assertFalse(rows.items['/loose'].data(0, INSTANCED_ROLE))
+        self.assertTrue(rows.items['/arm/child'].data(0, INSTANCED_ROLE))
+        for path in ('/arm', '/arm_L_twist', '/leg/child', '/base',
+                     '/base/child', '/loose'):
+            self.assertFalse(rows.items[path].data(0, INSTANCED_ROLE), path)
+
+    def test_proxies_are_striped_in_the_graph(self):
+        view = self.win.view
+        self.assertTrue(view.get_node_graphic('/arm/child').is_proxy)
+        for path in ('/arm', '/leg/child', '/base/child'):
+            self.assertFalse(view.get_node_graphic(path).is_proxy, path)
 
     def test_the_toolbar_runs_have_icons_and_tooltips(self):
         actions = self.win.execute_actions
