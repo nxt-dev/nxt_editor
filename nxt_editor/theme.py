@@ -373,7 +373,9 @@ def restyle(sheet):
 
 def tokens():
     """The names a stylesheet can use as {NAME}, and their values."""
-    return {name: value for name, value in globals().items()
+    # A copy: the module's names can change while this reads them, which
+    # stops the read with "dictionary changed size during iteration".
+    return {name: value for name, value in list(globals().items())
             if name.isupper() and isinstance(value, (str, int))}
 
 
