@@ -188,9 +188,24 @@ class USER_PREF():
     CE_COMPLETE_JEDI = 'code_editor_complete_jedi'
     DING = 'ding'
     SHOW_GRID = 'show_grid'
+    # Property Editor rows in neutral text, the layer as a color beside
+    # them, rather than in their layer's color.
+    NEUTRAL_PROPERTY_TEXT = 'neutral_property_text'
+    # The Instance View's toggles.
+    INSTANCE_VIEW_FOLLOW = 'instance_view_follow'
+    INSTANCE_VIEW_SYNC = 'instance_view_sync'
+    # The range layer colors are shown in, see color_range.
+    COLOR_RANGE_MODE = 'color_range_mode'
+    COLOR_RANGE_LIGHTNESS = 'color_range_lightness'
+    COLOR_RANGE_CHROMA = 'color_range_chroma'
     SHOW_IMPLICIT = 'show_implicit_connections'
     SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'
+    # Whether the graph is shown. On unless turned off in the Window menu.
+    SHOW_STAGE_VIEW = 'show_stage_view'
+    # How lines between nodes are drawn in a graph that does not save its
+    # own choice: 'straight' or 'curved'. See nxt_editor.wires.
+    CONNECTION_STYLE = 'connection_style'
     # The AI assistant, off until a user turns it on. Keys and sign ins
     # are not kept here, see nxt_editor.ai.secret_store.
     AI_ENABLED = 'ai_assistant_enabled'

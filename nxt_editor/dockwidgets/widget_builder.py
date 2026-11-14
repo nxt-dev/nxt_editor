@@ -2,9 +2,9 @@
 import logging
 from functools import partial
 try:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
 except ImportError:
-    from collections import Iterable
+    from collections import Iterable, Mapping
 
 # External
 from Qt import QtWidgets
@@ -19,7 +19,7 @@ except AttributeError:
 
 # Internal
 import nxt_editor
-from nxt_editor import user_dir
+from nxt_editor import theme, user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import DATA_STATE, nxt_path
 from nxt import nxt_node
@@ -66,6 +66,9 @@ class WidgetBuilder(DockWidgetBase):
                                             minimum_height=minimum_height)
 
         self.updating = False
+        # {graph uid: (comp generation, [window nodes])}, see
+        # find_window_nodes.
+        self._window_scans = {}
         self.setObjectName('Workflow Tools')
         self.default_title = title
 
@@ -100,7 +103,7 @@ class WidgetBuilder(DockWidgetBase):
         # background frame
         self.background_frame = QtWidgets.QFrame(self)
         self.background_frame.setStyleSheet(
-            'QFrame {background-color: #3E3E3E; border-radius: 0px;}')
+            theme.fill('QFrame {background-color: {RAISED}; border-radius: 0px;}'))
         self.layout.addWidget(self.background_frame)
 
         self.background_layout = QtWidgets.QVBoxLayout()
@@ -350,22 +353,49 @@ class WidgetBuilder(DockWidgetBase):
             # unrecognized node
             else:
                 self.build_widgets(node_path=child_path, layout=layout)
-            self.stage_model.process_events()  # Visually update
+            # The page is shown once it is built. Letting Qt paint after
+            # each widget, as this did, took longer than building them on
+            # a graph with hundreds.
 
-    def get_window_node_path(self):
+    def find_window_nodes(self, changed_paths=None):
+        """The nodes with a window attribute, in graph order.
+
+        Looking at every node is slow on a big graph, and an edit to a
+        few nodes can only change whether those few have one. So the
+        whole graph is looked through once per comp, and after that only
+        the nodes an edit changed.
+        """
+        model = self.stage_model
+        comp = model.comp_layer
+        generation = model.comp_generation
+        cached = self._window_scans.get(model.uid)
+        if cached is not None and cached[0] == generation and changed_paths:
+            window_nodes = cached[1]
+            for path in changed_paths:
+                node_path, _ = nxt_path.path_attr_partition(path)
+                has_window = (comp.lookup(node_path) is not None and
+                              WINDOW_ATTR in model.get_node_local_attr_names(
+                                  node_path, comp))
+                if has_window and node_path not in window_nodes:
+                    window_nodes.append(node_path)
+                elif not has_window and node_path in window_nodes:
+                    window_nodes.remove(node_path)
+            return window_nodes
+        window_nodes = []
+        for node_path in comp.descendants():
+            local_attrs = model.get_node_local_attr_names(node_path, comp)
+            if WINDOW_ATTR in local_attrs:
+                window_nodes.append(node_path)
+        self._window_scans[model.uid] = (generation, window_nodes)
+        return window_nodes
+
+    def get_window_node_path(self, changed_paths=None):
         if not self.stage_model:
             return
         if not self.stage_model.comp_layer:
             return
 
-        all_node_paths = self.stage_model.comp_layer.descendants()
-        window_nodes = []
-        for node_path in all_node_paths:
-            local_attrs = self.stage_model.get_node_local_attr_names(
-                node_path,
-                self.stage_model.comp_layer)
-            if WINDOW_ATTR in local_attrs:
-                window_nodes.append(node_path)
+        window_nodes = self.find_window_nodes(changed_paths)
 
         window_node = None
         for node in window_nodes:
@@ -406,7 +436,9 @@ class WidgetBuilder(DockWidgetBase):
 
         page = self.current_page()
         self.widget_state_data = page.state_data
-        self.window_node_path = self.get_window_node_path()
+        paths = (changed_paths
+                 if isinstance(changed_paths, (list, tuple, set)) else None)
+        self.window_node_path = self.get_window_node_path(paths)
         page.window_node_path = self.window_node_path
         if not self.window_node_path:
             # This graph has no window to show. Mark the page as built
@@ -483,7 +515,7 @@ class WidgetBuilder(DockWidgetBase):
         background_color = self.stage_model.get_node_attr_value(
             node_path=self.window_node_path,
             attr_name=self.WINDOW_COLOR_ATTR)
-        background_color = background_color or '#232323'
+        background_color = background_color or theme.BASE
         style = '''
                 QFrame {
                     background-color:%s;
@@ -523,18 +555,47 @@ class WidgetBuilder(DockWidgetBase):
             self.window_frame.menu.show_menu(tab_widget_pos)
 
 
+class ResolvedAttrs(Mapping):
+    """A node's resolved attribute values, each resolved the first time it
+    is read.
+
+    A widget reads a few of its node's attributes, and the node has many
+    more, inherited ones among them. Resolving them all, file paths looked
+    for on disk included, was most of the time it took to build the
+    workflow tools for a big graph. The values are the same either way.
+    """
+
+    def __init__(self, node_path, stage_model):
+        self.node_path = node_path
+        self.stage_model = stage_model
+        self.names = stage_model.get_node_attr_names(
+            node_path=node_path, layer=stage_model.comp_layer)
+        self.values = {}
+
+    def __getitem__(self, attr_name):
+        if attr_name not in self.names:
+            raise KeyError(attr_name)
+        if attr_name not in self.values:
+            self.values[attr_name] = self.stage_model.get_node_attr_value(
+                node_path=self.node_path,
+                attr_name=attr_name,
+                layer=self.stage_model.comp_layer,
+                data_state=DATA_STATE.RESOLVED)
+        return self.values[attr_name]
+
+    def __iter__(self):
+        return iter(self.names)
+
+    def __len__(self):
+        return len(self.names)
+
+
 def get_resolved_attr_values(node_path, stage_model):
-    attr_values = {}
-    attr_names = stage_model.get_node_attr_names(node_path=node_path,
-                                                 layer=stage_model.comp_layer)
-    for attr_name in attr_names:
-        attr_value = stage_model.get_node_attr_value(
-            node_path=node_path,
-            attr_name=attr_name,
-            layer=stage_model.comp_layer,
-            data_state=DATA_STATE.RESOLVED)
-        attr_values[attr_name] = attr_value
-    return attr_values
+    """The node's resolved attribute values, by name.
+
+    :rtype: ResolvedAttrs
+    """
+    return ResolvedAttrs(node_path, stage_model)
 
 
 def get_widget_type(node_path, stage_model):
@@ -565,7 +626,7 @@ class ContextMenu(QtWidgets.QMenu):
                  parent=None):
         super(ContextMenu, self).__init__(parent=parent)
         self.setStyleSheet(
-            'background-color: #232323; border: 1px solid #3E3E3E')
+            theme.fill('background-color: {BASE}; border: 1px solid {BORDER}'))
 
         self.stage_model = stage_model
         self.node_path = node_path
@@ -632,9 +693,9 @@ class Tab(QtWidgets.QWidget):
         # scroll area
         self.scroll_area = QtWidgets.QScrollArea(self)
         self.scroll_area.setWidgetResizable(True)
-        style = '''
+        style = theme.fill('''
                 QScrollBar:vertical {
-                    background-color: #303030;
+                    background-color: {RAISED};
                     width: 16px;
                     margin: 16px 2px 16px 2px;
                     border: none;
@@ -642,20 +703,20 @@ class Tab(QtWidgets.QWidget):
                 }
 
                 QScrollBar::handle:vertical {
-                    background-color: #606060;
+                    background-color: {PRESSED};
                     border: none;
                     min-height: 8px;
                     border-radius: 4px;
                 }
 
                 QScrollBar::handle:vertical:hover {
-                    background-color: #148CD2;
+                    background-color: {ACCENT};
                     border: none;
                     border-radius: 4px;
                     min-height: 8px;
 
                 }
-                '''
+                ''')
         self.scroll_area.verticalScrollBar().setStyleSheet(style)
         self.scroll_area.setStyleSheet(style)
         self.main_layout.addWidget(self.scroll_area)
@@ -678,9 +739,9 @@ class Tab(QtWidgets.QWidget):
                     parent=self)
 
     def set_tab_style(self):
-        background_color = self.background_color if self.background_color else '#3E3E3E'
+        background_color = self.background_color if self.background_color else theme.RAISED
         border = '2px solid ' + self.border_color if self.border_color else 'none'
-        style = '''
+        style = theme.fill('''
                         QTabWidget::pane {
                             border-radius: 9px;
                             border: %s;
@@ -711,7 +772,7 @@ class Tab(QtWidgets.QWidget):
 
                         QTabBar::tab:!selected {
                             border: none;
-                            background-color: #303030;
+                            background-color: {RAISED};
                         }
 
                         QTabBar::tab:!selected:hover {
@@ -721,7 +782,7 @@ class Tab(QtWidgets.QWidget):
                         QWidget {
                             background-color: transparent;
                         }
-                        ''' % (border, background_color, border,
+                        ''') % (border, background_color, border,
                                background_color)
         self._tab_parent.setStyleSheet(style)
 
@@ -754,7 +815,7 @@ class Panel(QtWidgets.QWidget):
         # panel frame
         background_color = attr_data.get(self.BACKGROUND_COLOR_ATTR)
         border_color = attr_data.get(self.BORDER_COLOR_ATTR)
-        background_color = background_color or '#3E3E3E'
+        background_color = background_color or theme.RAISED
         border_color = border_color or 'transparent'
         style = '''
                 QFrame {
@@ -930,7 +991,7 @@ class Button(QtWidgets.QPushButton):
         self.pressed.connect(lambda p=self.node_path, a=self.EXEC_PATH_ATTR:
                              self.execute_node_path(p, a))
 
-        background_color = attr_data.get(self.BACKGROUND_COLOR_ATTR) or '#606060'
+        background_color = attr_data.get(self.BACKGROUND_COLOR_ATTR) or theme.PRESSED
         border_color = attr_data.get(self.BORDER_COLOR_ATTR) or 'none'
         text_color = attr_data.get(self.TEXT_COLOR_ATTR) or 'white'
         style = '''
@@ -1209,7 +1270,7 @@ class DropDownMenu(QtWidgets.QWidget):
         self.main_layout.addWidget(self.label)
 
         # style
-        background_color = attr_data.get(self.BACKGROUND_COLOR_ATTR) or '#232323'
+        background_color = attr_data.get(self.BACKGROUND_COLOR_ATTR) or theme.BASE
         border_color = attr_data.get(self.BORDER_COLOR_ATTR) or 'transparent'
         border_line = '2px solid %s' % border_color if border_color != 'transparent' else 'none'
         padding = '4' if border_color != 'transparent' else '6'
@@ -1229,10 +1290,10 @@ class DropDownMenu(QtWidgets.QWidget):
                     }
                 ''' % (text_color, background_color, padding,
                        border_line)
-        view_style = '''
+        view_style = theme.fill('''
                      QComboBox QAbstractItemView {
                          selection-color: white;
-                         selection-background-color: #148CD2;
+                         selection-background-color: {ACCENT};
                          background: %s;
                          border-top-left-radius: 0px;
                          border-top-right-radius: 0px;
@@ -1245,7 +1306,7 @@ class DropDownMenu(QtWidgets.QWidget):
                          margin-left: 9px;
                          outline: 0;
                      }
-                     ''' % (background_color, border_color, border_color,
+                     ''') % (background_color, border_color, border_color,
                             border_color)
 
         # combo box
@@ -1323,7 +1384,7 @@ class SelectionDialog(QtWidgets.QDialog):
         self.setWindowFlags(
             self.windowFlags() & ~QtCore.Qt.WindowContextHelpButtonHint)
         self.setWindowTitle(title or 'Select Items')
-        self.setStyleSheet('QDialog {background: #232323;}')
+        self.setStyleSheet(theme.fill('QDialog {background: {BASE};}'))
 
         self.main_layout = QtWidgets.QVBoxLayout()
         self.main_layout.setContentsMargins(8, 8, 8, 8)
@@ -1366,7 +1427,7 @@ class SelectionDialog(QtWidgets.QDialog):
         self.button_layout.setSpacing(8)
         self.main_layout.addLayout(self.button_layout)
 
-        style = 'QPushButton {border-radius: 9px; background-color: #606060;}'
+        style = theme.fill('QPushButton {border-radius: 9px; background-color: {PRESSED};}')
 
         self.accept_button = QtWidgets.QPushButton('Accept')
         self.accept_button.setStyleSheet(style)

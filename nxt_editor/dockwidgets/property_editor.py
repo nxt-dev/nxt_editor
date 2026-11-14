@@ -20,7 +20,7 @@ from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
-from nxt_editor import colors, LOGGER_NAME
+from nxt_editor import colors, theme, LOGGER_NAME
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
@@ -84,7 +84,7 @@ class PropertyEditor(DockWidgetBase):
         self.main.setLayout(self.layout)
 
         self.background_frame = QtWidgets.QFrame(self)
-        self.background_frame.setStyleSheet('background-color: #3E3E3E; border-radius: 0px;')
+        self.background_frame.setStyleSheet(theme.fill('background-color: {RAISED}; border-radius: 0px;'))
         self.layout.addWidget(self.background_frame)
 
         # ACTIONS
@@ -125,7 +125,7 @@ class PropertyEditor(DockWidgetBase):
         # properties
         ############
         self.properties_frame = QtWidgets.QFrame(self)
-        self.properties_frame.setStyleSheet('background-color: #3E3E3E; border-radius: 0px;')
+        self.properties_frame.setStyleSheet(theme.fill('background-color: {RAISED}; border-radius: 0px;'))
         self.layout.addWidget(self.properties_frame)
 
         self.properties_layout = QtWidgets.QVBoxLayout()
@@ -165,7 +165,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.path_field = QtWidgets.QLineEdit(parent=self)
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
-        self.path_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #323232')
+        self.path_field.setStyleSheet(theme.fill('border-radius: 11px; border: 1px solid transparent; background-color: {RAISED}'))
         self.path_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.path_field.setReadOnly(True)
         self.details_layout.addWidget(self.path_field, 0, 1)
@@ -185,7 +185,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.instance_field_model = QtCore.QStringListModel()
         self.instance_field_completer = QtWidgets.QCompleter()
-        self.instance_field_completer.popup().setStyleSheet('border: 1px solid transparent; background-color: #323232; color: white')
+        self.instance_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
         self.instance_field_completer.setModel(self.instance_field_model)
         self.instance_field.setCompleter(self.instance_field_completer)
         self.instance_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -199,7 +199,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.locate_instance_button.setToolTip('Locate Instance')
-        self.locate_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.locate_instance_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.locate_instance_button.setFixedWidth(17)
         self.locate_instance_button.setFixedHeight(16)
         self.locate_instance_button.clicked.connect(self.view_instance_node)
@@ -214,7 +214,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.revert_instance_button.setToolTip('Revert Instance')
-        self.revert_instance_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_instance_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_instance_button.set_action(self.revert_inst_path_action)
         self.instance_layout.addWidget(self.revert_instance_button, 0, 3)
 
@@ -235,7 +235,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.execute_field_model = QtCore.QStringListModel()
         self.execute_field_completer = QtWidgets.QCompleter()
-        self.execute_field_completer.popup().setStyleSheet('border: 1px solid transparent; background-color: #323232; color: white')
+        self.execute_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
         self.execute_field_completer.setModel(self.execute_field_model)
         self.execute_field.setCompleter(self.execute_field_completer)
         self.execute_opinions = OpinionDots(self, 'Execute Opinions')
@@ -248,7 +248,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.revert_exec_source_button.setToolTip('Revert Execute Source')
-        self.revert_exec_source_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_exec_source_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_exec_source_button.set_action(self.revert_exec_path_action)
         self.execute_layout.addWidget(self.revert_exec_source_button, 0, 2)
         # execute_order
@@ -260,8 +260,8 @@ class PropertyEditor(DockWidgetBase):
         self.details_layout.addLayout(self.child_order_layout, 3, 1)
 
         self.child_order_field = LineEdit(parent=self)
-        self.child_order_field.setStyleSheet('border-radius: 11px; border: 1px solid transparent; background-color: #232323')
-        self.child_order_field.setFont(QtGui.QFont("Roboto Mono", 8))
+        self.child_order_field.setStyleSheet(theme.fill('border-radius: 11px; border: 1px solid transparent; background-color: {BASE}'))
+        self.child_order_field.setFont(FONTS.monospace_font(8))
         self.child_order_field.setAlignment(QtCore.Qt.AlignVCenter)
         self.child_order_field.accept.connect(self.accept_edit_child_order)
         self.child_order_field.cancel.connect(self.cancel_edit_child_order)
@@ -269,7 +269,7 @@ class PropertyEditor(DockWidgetBase):
 
         self.child_order_field_model = QtCore.QStringListModel()
         self.child_order_field_completer = QtWidgets.QCompleter()
-        self.child_order_field_completer.popup().setStyleSheet('border: 1px solid transparent; background-color: #323232; color: white')
+        self.child_order_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
         self.child_order_field_completer.setModel(self.child_order_field_model)
         self.child_order_field.setCompleter(self.child_order_field_completer)
         self.child_order_opinions = OpinionDots(self, 'Child Order Opinions')
@@ -283,7 +283,7 @@ class PropertyEditor(DockWidgetBase):
             resize_signal=self.main_window.font_size_changed)
         self.revert_child_order_button.setToolTip('Revert Child Order')
         self.revert_child_order_button.setStyleSheet(
-            'QToolTip {color: white; border: 1px solid #3E3E3E}')
+            theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_child_order_button.clicked.connect(self.revert_child_order)
         self.child_order_layout.addWidget(self.revert_child_order_button, 0, 2)
 
@@ -334,9 +334,8 @@ class PropertyEditor(DockWidgetBase):
                                                   parent=self.properties_frame,
                                                   resize_signal=self.main_window.font_size_changed)
         self.revert_enabled_button.setToolTip('Revert Enabled State')
-        self.revert_enabled_button.setStyleSheet('QToolTip {color: white; '
-                                          'order: 1px solid #3E3E3E'
-                                          '}')
+        self.revert_enabled_button.setStyleSheet(theme.fill(
+            'QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_enabled_button.clicked.connect(self.revert_node_enabled)
         self.position_layout.addWidget(self.revert_enabled_button, 0,
                                        QtCore.Qt.AlignLeft)
@@ -364,7 +363,7 @@ class PropertyEditor(DockWidgetBase):
             parent=self.properties_frame,
             resize_signal=self.main_window.font_size_changed)
         self.revert_comment_button.setToolTip('Revert Comment')
-        self.revert_comment_button.setStyleSheet('QToolTip {color: white; border: 1px solid #3E3E3E}')
+        self.revert_comment_button.setStyleSheet(theme.fill('QToolTip {color: white; border: 1px solid {BORDER}}'))
         self.revert_comment_button.clicked.connect(self.remove_comment)
         self.comment_layout.addWidget(self.revert_comment_button, 0, 2)
         # Comment
@@ -376,7 +375,7 @@ class PropertyEditor(DockWidgetBase):
         # attributes table
         ##################
         self.attributes_widget = QtWidgets.QWidget(self)
-        self.attributes_widget.setStyleSheet('background-color: #232323')
+        self.attributes_widget.setStyleSheet(theme.fill('background-color: {BASE}'))
         self.properties_layout.addWidget(self.attributes_widget, 1)
 
         self.attributes_layout = QtWidgets.QVBoxLayout()
@@ -416,6 +415,7 @@ class PropertyEditor(DockWidgetBase):
         self.proxy_model.setSourceModel(self.model)
 
         self.table_view.setModel(self.proxy_model)
+        self.table_view.verticalHeader().follow(self.proxy_model)
         self.table_view.selectionModel().selectionChanged.connect(
             self.set_selection)
 
@@ -686,11 +686,11 @@ class PropertyEditor(DockWidgetBase):
         # style position widgets
         top_layer_color = self.stage_model.get_layer_color(
             self.stage_model.top_layer) or 'transparent'
-        pos_style = '''
+        pos_style = theme.fill('''
                     QAbstractSpinBox {
-                        background-color: #232323;
+                        background-color: {BASE};
                         border: 1px solid transparent;
-                        color: #F0F0F0;
+                        color: {TEXT};
                         padding-top: 2px;
                         padding-bottom: 2px;
                         padding-left: 0px;
@@ -707,17 +707,17 @@ class PropertyEditor(DockWidgetBase):
                     }
 
                     QAbstractSpinBox:up-button {
-                        border-left: 0px solid #3E3E3E;
+                        border-left: 0px solid {BORDER};
                         padding-right: 6px;
                         padding-top: 3px;
                     }
 
                     QAbstractSpinBox:down-button {
-                        border-left: 0px solid #3E3E3E;
+                        border-left: 0px solid {BORDER};
                         padding-right: 6px;
                         padding-bottom: 3px;
                     }
-                    ''' % (top_layer_color, top_layer_color)
+                    ''') % (top_layer_color, top_layer_color)
         self.positionX_field.setStyleSheet(pos_style)
         self.positionY_field.setStyleSheet(pos_style)
 
@@ -1078,6 +1078,13 @@ class PropertyEditor(DockWidgetBase):
                                          menu.actions()))
 
 
+def refresh_neutral_text(editor):
+    """Redraw editor's table after neutral_text changed."""
+    table = editor.table_view
+    table.viewport().update()
+    table.verticalHeader().viewport().update()
+
+
 class PropertyModel(QtCore.QAbstractTableModel):
     """Property Editor model"""
 
@@ -1390,19 +1397,37 @@ class PropertyModel(QtCore.QAbstractTableModel):
                     lines = ['No Historical Opinions']
                 return '\n'.join(lines)
 
-        if role == QtCore.Qt.ForegroundRole:
+        if role == LAYER_COLOR_ROLE:
             attr_name = self._data[row][COLUMNS.name]
-            locality_idx = self._data[row][COLUMNS.locality]
-            color = self.node_attr_draw_details[attr_name]['color']
-            if locality_idx in (LOCALITIES.local, LOCALITIES.code):
-                return QtGui.QColor(color).lighter(150)
-            else:
+            return QtGui.QColor(
+                self.node_attr_draw_details[attr_name]['color'])
+
+        locality_idx = self._data[row][COLUMNS.locality]
+        is_local = locality_idx in (LOCALITIES.local, LOCALITIES.code)
+        neutral = neutral_text()
+        if role == QtCore.Qt.ForegroundRole:
+            if not neutral:
+                attr_name = self._data[row][COLUMNS.name]
+                color = self.node_attr_draw_details[attr_name]['color']
+                if is_local:
+                    return QtGui.QColor(color).lighter(150)
                 return QtGui.QColor(color).darker(150)
+            # Bright where this node sets the value, softer where it comes
+            # from elsewhere, and both read on the dark panel whatever the
+            # layer's color. The type's word is always the softer one.
+            if is_local and column != COLUMNS.nxt_type:
+                return theme.color(theme.TEXT)
+            return theme.color(theme.TEXT_DIM)
 
         if role == QtCore.Qt.FontRole:
-            if self._data[row][COLUMNS.locality] == LOCALITIES.instanced:
-                font = QtGui.QFont()
-                font.setItalic(True)
+            instanced = locality_idx == LOCALITIES.instanced
+            # A value the node sets itself is bold across its row.
+            bold_name = neutral and is_local
+            if instanced or bold_name:
+                font = FONTS.default_font()
+                font.setItalic(instanced)
+                if bold_name:
+                    font.setWeight(QtGui.QFont.DemiBold)
                 return font
 
         if role == QtCore.Qt.DecorationRole and column == COLUMNS.nxt_type:
@@ -1448,7 +1473,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
 class AttrsTableView(QtWidgets.QTableView):
     def __init__(self, parent=None):
         super(AttrsTableView, self).__init__(parent=parent)
-        style = '''
+        style = theme.fill('''
                         QTableView {
                             outline: none;
                             border-radius: 11px;
@@ -1460,7 +1485,7 @@ class AttrsTableView(QtWidgets.QTableView):
                         }
 
                         QTableView::item:selected:hover {
-                            color: #148CD2;
+                            color: {ACCENT};
                         }
 
                         QTableView:item:selected {
@@ -1484,13 +1509,16 @@ class AttrsTableView(QtWidgets.QTableView):
                         QToolTip {
                             font-family: %s;
                             color: white;
-                            border: 1px solid #3E3E3E
+                            border: 1px solid {BORDER}
                         }
-                        ''' % (FONTS.MONOSPACE,)
+                        ''') % (FONTS.MONOSPACE,)
         self.setStyleSheet(style)
         self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
         self.setItemDelegateForColumn(COLUMNS.source, self.node_path_delegate)
+        # The layer each row's value comes from, as a color in the row
+        # header, which stays put however far the table is scrolled.
+        self.setVerticalHeader(LayerRowHeader(self))
         self.mouse_pressed = False
         self.drag_start_pos = None
         self.setDragEnabled(True)
@@ -1542,6 +1570,65 @@ class AttrsTableView(QtWidgets.QTableView):
         return self.model().data(idx)
 
 
+class LayerRowHeader(QtWidgets.QHeaderView):
+    """Row headers filled with the color of the layer each row's value
+    comes from, with neutral_text on. They do not scroll sideways with
+    the table, so the layer shows beside whichever columns are in view."""
+
+    def __init__(self, parent=None):
+        super(LayerRowHeader, self).__init__(QtCore.Qt.Vertical, parent)
+        # Each row's layer color, read once the table has changed. Asking
+        # the model while painting crashed: the header can paint while
+        # the table's sorting proxy is part way through being reset.
+        self.row_colors = []
+
+        self.table_model = None
+
+    def follow(self, model):
+        """Keep the row colors of model, the table's own, once it is set
+        up. Not from setModel: Qt sets the header a placeholder model
+        while the table is built, and asking that one crashed."""
+        self.table_model = model
+        for signal in (model.modelReset, model.layoutChanged,
+                       model.rowsInserted, model.rowsRemoved,
+                       model.dataChanged):
+            signal.connect(self.refresh_colors)
+        self.refresh_colors()
+
+    def refresh_colors(self, *args):
+        model = self.table_model
+        colors_ = []
+        if model is not None:
+            for row in range(model.rowCount()):
+                index = model.index(row, COLUMNS.name)
+                # A table with no columns yet has rows but no indexes, and
+                # asking for an invalid index's data crashed.
+                colors_.append(model.data(index, LAYER_COLOR_ROLE)
+                               if index.isValid() else None)
+        self.row_colors = colors_
+        self.viewport().update()
+
+    def paintSection(self, painter, rect, logical_index):
+        painter.save()
+        super(LayerRowHeader, self).paintSection(painter, rect,
+                                                 logical_index)
+        painter.restore()
+        if not neutral_text():
+            return
+        if not 0 <= logical_index < len(self.row_colors):
+            return
+        color = self.row_colors[logical_index]
+        if color is None:
+            return
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        chip = QtCore.QRectF(rect).adjusted(2, 1, -2, -1)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawRoundedRect(chip, 2, 2)
+        painter.restore()
+
+
 class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
 
     def __init__(self, parent):
@@ -1549,6 +1636,9 @@ class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
         super(NodePathBtnDelegate, self).__init__()
 
     def paint(self, painter, option, index):
+        if neutral_text():
+            self.paint_plain(painter, option, index)
+            return
         self.initStyleOption(option, index)
         inner_rect = QtCore.QRect().united(option.rect)
         inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
@@ -1566,6 +1656,31 @@ class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
         painter.fillRect(inner_rect, color)
         color.setAlpha(255)
         painter.drawText(inner_rect, QtCore.Qt.AlignCenter, index.data())
+
+    def paint_plain(self, painter, option, index):
+        """The source's path as plain text, in the row's text color. It
+        shows it is a button, to jump to the source, only under the
+        mouse."""
+        self.initStyleOption(option, index)
+        inner_rect = QtCore.QRect().united(option.rect)
+        inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
+        painter.save()
+        if option.state & QtWidgets.QStyle.State_MouseOver:
+            pressed = self.parent.mouse_pressed == index.column()
+            painter.setRenderHint(QtGui.QPainter.Antialiasing)
+            painter.setBrush(QtGui.QColor(255, 255, 255, 26 if pressed
+                                          else 15))
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 31), 1))
+            painter.drawRoundedRect(QtCore.QRectF(inner_rect).adjusted(
+                0.5, 0.5, -0.5, -0.5), 3, 3)
+        text_rect = inner_rect.adjusted(6, 0, -4, 0)
+        painter.setFont(option.font)
+        painter.setPen(index.data(role=QtCore.Qt.ForegroundRole))
+        text = QtGui.QFontMetrics(option.font).elidedText(index.data() or '',
+                                             QtCore.Qt.ElideLeft,
+                                             text_rect.width())
+        painter.drawText(text_rect, QtCore.Qt.AlignVCenter, text)
+        painter.restore()
 
     def editorEvent(self, event, model, option, index):
         if event.button() != QtCore.Qt.MouseButton.LeftButton:
@@ -1618,7 +1733,7 @@ class HistoricalContextMenu(QtWidgets.QMenu):
         option = QtWidgets.QStyleOptionButton()
         option.initFrom(self)
         for action in self.actions():
-            color = getattr(action, 'color', '#232323')
+            color = getattr(action, 'color', theme.BASE)
             rect = QtCore.QRect(0, y, self.rect().width(), step)
             x = fm.boundingRect(action.text()).width()
             x_pos = (rect.width() - x) * .5
@@ -1796,6 +1911,35 @@ class OverlayWidget(QtWidgets.QWidget):
         super(OverlayWidget, self).update()
 
 
+# The color of the layer a row's value comes from.
+LAYER_COLOR_ROLE = QtCore.Qt.UserRole + 10
+
+_neutral_text = []
+
+
+def neutral_text():
+    """Whether rows are in neutral text, bright where the node sets the
+    value and softer where it does not, with their layer shown as a color
+    in the row header, rather than in their layer's color.
+
+    Layer colors are dark enough to carry white text, so as text on the
+    dark panel the inherited rows, darkened further, are hard to read.
+    Off by default, see View > Options > Neutral Property Text.
+    """
+    if not _neutral_text:
+        _neutral_text.append(bool(user_dir.user_prefs.get(
+            user_dir.USER_PREF.NEUTRAL_PROPERTY_TEXT, False)))
+    return _neutral_text[0]
+
+
+def set_neutral_text(state):
+    """Turn neutral_text on or off, and remember it."""
+    state = bool(state)
+    del _neutral_text[:]
+    _neutral_text.append(state)
+    user_dir.user_prefs[user_dir.USER_PREF.NEUTRAL_PROPERTY_TEXT] = state
+
+
 class LOCALITIES:
     code = '0.Code'
     local = '1.Local'
@@ -1823,7 +1967,7 @@ class COLUMNS:
 
 
 def line_edit_style_factory(txt_color='white', tgt_layer_color='white',
-                            bg_color='#232323'):
+                            bg_color=theme.BASE):
     """Generates a string of a qss style sheet for a line edit. Colors can be
     supplied as strings of color name or hex value. If a color arg receives
     a tuple we assume it is either an rgb or rgba tuple.

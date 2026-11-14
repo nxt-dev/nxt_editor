@@ -17,10 +17,13 @@ from Qt import QtWidgets
 
 # Internal
 import nxt_editor
+from nxt_editor import theme
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
-QSS = os.path.join(os.path.dirname(nxt_editor.__file__), 'resources',
-                   'styles', 'dark', 'dark.qss')
+STYLES = os.path.join(os.path.dirname(nxt_editor.__file__), 'resources',
+                      'styles', 'dark')
+QSS = os.path.join(STYLES, 'dark.qss')
+MODERN_QSS = os.path.join(STYLES, 'modern.qss')
 # What a workflow button sets on itself.
 BUTTON_STYLE = ('QPushButton {background-color: #606060; '
                 'border-radius: 9px; border: none;}')
@@ -30,8 +33,17 @@ class HostStylesheet(unittest.TestCase):
 
     def test_it_is_the_text_on_disk(self):
         with open(QSS, 'rb') as fp:
-            self.assertEqual(fp.read().decode('utf-8'),
-                             nxt_editor.stylesheet())
+            dark = fp.read().decode('utf-8')
+        with open(MODERN_QSS, 'rb') as fp:
+            modern = fp.read().decode('utf-8')
+        self.assertEqual(theme.restyle(dark) + '\n' + theme.fill(modern),
+                         nxt_editor.stylesheet())
+
+    def test_every_theme_name_is_filled_in(self):
+        # Comments aside, a {NAME} left in would be handed to Qt as is.
+        sheet = re.sub(r'/\*.*?\*/', '', nxt_editor.stylesheet(),
+                       flags=re.S)
+        self.assertEqual([], re.findall(r'\{[A-Z_]+\}', sheet))
 
     def test_a_window_with_it_rounds_the_workflow_buttons(self):
         old = app.styleSheet()

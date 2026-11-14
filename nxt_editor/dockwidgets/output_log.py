@@ -11,7 +11,7 @@ from Qt import QtWidgets, QtGui, QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import user_dir
+from nxt_editor import theme, user_dir
 from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_log
@@ -190,8 +190,8 @@ class OutputLog(DockWidgetBase):
         super(OutputLog, self).__init__('Output Log', graph_model=graph_model,
                                         minimum_height=100, parent=parent)
         self.main_frame = QtWidgets.QFrame(self)
-        self.main_frame.setStyleSheet('background-color: #3E3E3E; '
-                                      'border-radius: 0px;')
+        self.main_frame.setStyleSheet(theme.fill(
+            'background-color: {RAISED}; border-radius: 0px;'))
         self.main_layout = QtWidgets.QVBoxLayout()
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
@@ -457,7 +457,7 @@ class OutputTextEdit(QtWidgets.QTextEdit):
         self._parent = parent
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setReadOnly(True)
-        self.setFont(QtGui.QFont(FONTS.MONOSPACE, 10))
+        self.setFont(FONTS.monospace_font(10))
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
@@ -473,7 +473,7 @@ class OutputTextBrowser(QtWidgets.QTextBrowser):
         self.anchorClicked.connect(self.parent().link_clicked)
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setOpenLinks(False)
-        self.setFont(QtGui.QFont(FONTS.MONOSPACE, 10))
+        self.setFont(FONTS.monospace_font(10))
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()

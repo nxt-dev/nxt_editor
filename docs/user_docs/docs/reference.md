@@ -10,8 +10,8 @@ Checkout our example graphs [here](https://github.com/nxt-dev/nxt_editor/tree/re
 The editor is made of a graph (the stage view) in the middle, surrounded by
 dock widgets that can be moved, tabbed and closed: the Layer Manager,
 Property Editor, Code Editor, History View, Build View, Workflow Tools,
-Output Log and [Hotkey Editor](hotkeys.md). Closed docks come back from the
-**Window** menu.
+Output Log, [Outliner](#outliner), [Instance View](#instance-view) and [Hotkey Editor](hotkeys.md). Closed
+docks come back from the **Window** menu.
 
 ## Docks and layout
 
@@ -32,6 +32,86 @@ Output Log and [Hotkey Editor](hotkeys.md). Closed docks come back from the
 The stage view draws the composited graph for the open tab. Each tab is
 composited and drawn the first time it is selected, and kept from then on,
 so switching back to a tab is instant.
+
+**Window > Stage View** hides the graph, leaving the space to the docks,
+and shows it again. The editor remembers your choice. With the graph
+hidden, switch between open files from the bottom of the **Window** menu.
+
+### How nodes look
+
+The editor is drawn in neutral dark greys, so the only color on screen is
+your layers'. It ships its own fonts, sized in pixels, and its own colors,
+so it looks the same on Windows, macOS and Linux, and inside Maya, Unreal
+and Blender.
+
+- A node is a rounded card. Its title bar is the color of the layer with
+  the strongest opinion on it, and each weaker layer with an opinion adds a
+  chip of its color at the right end. How layer colors are shown can be
+  changed for you alone, see [Layer Color View](#layer-color-view)
+  below.
+- Names are white. A disabled node's title is faded and struck through, and
+  a node that is an instance, or was made by one, has its name in italics
+  and diagonal stripes across its title.
+- A selected node has an amber outline, and the node under the mouse a thin
+  white one.
+- Start, skip and break points sit on the node's exec input: a green
+  triangle, an orange bar and a red square.
+
+### Layer Color View
+
+**View > Options > Layer Color View...** sets how layer and backdrop colors
+are shown to you. It is a view preference, yours alone and remembered with
+your preferences. It never changes the color a layer or backdrop is given:
+that is chosen with **Change Color**, and is the same whatever anyone's
+view, so a teammate sees the same file in their own view.
+
+- **Raw (default)** shows every color exactly as it is.
+- **White-text safe** shows a color too light for the white names on it
+  darker, only as far as it takes for them to read at 4.5:1, keeping its
+  hue.
+- **Even (OKLCH)** shows every color at one lightness and chroma, keeping
+  its hue, so no layer stands out from another. Set them with the sliders.
+  Hues the screen can not show that colorful get as close as it can, and a
+  grey stays grey.
+- Example colors and three sample nodes show the view as you set it, with
+  how well white text reads on the color it reads worst on: green when it reads
+  at 4.5:1, amber when weaker, red below 3:1. A tick on the lightness
+  slider marks where white text stops reading at 4.5:1 on every hue.
+- While you drag a slider only the dialog follows it, and the editor is
+  redrawn when you let go, or just after a typed value. **OK** keeps it,
+  **Cancel** puts back the view you had, and **Reset to Default** goes back
+  to raw.
+- **In your view** in **Change Color** shows how the color you are choosing
+  will look to you in this view.
+
+### Running nodes
+
+Besides **Execute Graph** (the play button) and stop, the toolbar has a
+button for each way of running part of the graph. Hover a button to see
+what it runs.
+
+- **Execute Selected** (`Enter`), the play button with a node: runs only
+  the selected nodes.
+- **Execute From Selected**, the play button with a node and an arrow down:
+  runs the selected node, then on down its exec chain.
+- **Execute Hierarchy**, the play button with a parent and its children:
+  runs the selected node and every node under it.
+
+### Find Node
+
+Press `/` over the graph to find nodes. Type any part of a node's name, and
+the nodes that match are listed once you stop typing, ignoring case.
+
+- `*` stands for anything: `arm*ctrl` finds `arm_L_ctrl` and `arm_R_ctrl`.
+- Commas separate names: `arm, leg` finds either.
+- A name with a `/` in it matches the whole path: `rig/*ctrl` finds the
+  controls under `rig`.
+- Nothing else is special. Dots, brackets and the like are matched as they
+  are typed.
+
+Pick a node in the list to select and frame it, or press `Enter` to select
+and frame every node that matches. The Outliner's search box works the same
+way.
 
 ### Mini map
 
@@ -67,7 +147,8 @@ graph looks: it is not a node and it never runs.
   with **Edit Backdrop...** in its right click menu. The note is shown under
   the title at the top left, wrapped to the backdrop's width, and grows the
   header to fit. The right click menu also has a **Color** submenu, **Select
-  Nodes Inside** and **Fit to Nodes Inside**.
+  Nodes Inside** and **Fit to Nodes Inside**. Backdrops take the same
+  colors as layers: any color, shown in your Layer Color View.
 - **Delete it** with `Del` while it is selected, or **Delete Backdrop** in
   its right click menu. The nodes inside it stay where they are.
 
@@ -78,6 +159,42 @@ Backdrops are saved in the top layer's meta data, next to the node
 positions. Backdrops from referenced layers are shown too. Changing one
 saves the change on the top layer and leaves the referenced layer as it
 was.
+
+### Lines between nodes
+
+- **Straight or curved**: **View > Curved Connections** draws the graph's
+  lines as curves that leave and meet each plug going across. The choice
+  is saved with the graph, so everyone who opens it sees the same lines.
+  It is also remembered in your preferences, and a graph that has not
+  saved a choice of its own is drawn the way you last picked. With no
+  preference, lines are straight.
+- **Route a line through points**: double click a line to add a point
+  there, then drag the point to bend the line around other nodes. A line
+  can have as many points as you like, and the line passes through them in
+  order. Hold `Shift`, or turn on grid snapping, to snap a point to the
+  grid.
+- **Remove a point** by double clicking it, or select it and press `Del`.
+  `Shift` click adds points to or takes them out of the selection.
+- **Select points with a box**: dragging a selection box picks up the
+  points inside it along with the nodes, with the same keys as nodes
+  (`Ctrl+Shift` adds, `Shift` toggles, `Ctrl` takes away). `Del` then
+  removes the points and nodes together, as one undo.
+- **Break a connection** by right clicking its line, a point on it, or a
+  plug, and picking **Break Connection**. On a plug it breaks every line
+  on that plug. What the line came from is taken out and nothing is left
+  in its place: an exec input or instance is cleared, and an attribute is
+  left empty, keeping any other text it held around the reference. A
+  connection made on a weaker layer is broken by making that layer the
+  target first. Lines into a node's code come from its code, and are
+  changed in the code editor.
+
+Points are the same size on screen at any zoom, so they can still be told
+apart from their line when you zoom out.
+
+Points stay where you put them when nodes move. Like backdrops, they are
+saved in the top layer's meta data, and points from referenced layers are
+shown too. A line's points belong to that one connection, so if the
+connection is removed and made again its points come back.
 
 ### Animate Nodes
 
@@ -381,6 +498,10 @@ restart it.
   selected node is not always part of the build: it may be disabled,
   outside the start point's branch, or not executable at all. In that case
   the Output Log says the node is not in the build, and the editor dings.
+- The node selected, here or anywhere else, has an amber edge, and the
+  node under the mouse a white one. Only the node's name is outlined, not
+  the break and skip boxes beside it, and the node that runs next stays
+  red.
 - The build stays current as you edit. Enabling or disabling a node,
   changing a start point, exec input, child order, instance path or parent,
   and renaming or deleting a node all update the list straight away.
@@ -389,11 +510,90 @@ restart it.
   cleared and rebuilt when the build is set up, before anything runs, and
   the Output Log says so.
 
+## Outliner
+
+The Outliner lists the graph's nodes as a tree. It is off until you turn it
+on from **Window > Outliner**.
+
+- Root nodes are grouped by the build that runs them. Each start point
+  has a **Build from** section listing the roots that run from it, in
+  order, following exec connections. A root two builds reach is listed
+  under the first. Everything no start point leads to is under **Not in a
+  build**.
+- Each node's children sit under it in their child order. Closed branches
+  stay closed as you edit.
+- A row is filled with the color of the layer with the strongest opinion
+  on the node, and each weaker layer with an opinion adds a chip of its
+  color at the right end, as on the node in the graph.
+- The search box at the top finds nodes at any depth by their name, the
+  same way as [Find Node](#find-node). Matching rows are bold, the nodes
+  above them stay so you can see where they are, and `Enter` frames the
+  first match.
+- Text is white, as on the node in the graph, and a disabled node's is
+  faded and in italics. An instanced node's row is striped, as its title
+  is in the graph. Hovering a row outlines it in white and selecting
+  it outlines it in amber, the row's color staying as it is.
+- Start, break and skip points show before the name as they do on the
+  node in the graph: the start icon, a red square for a breakpoint and an
+  orange bar for a skip point.
+- Selecting rows selects the nodes in the graph, and selecting nodes in the
+  graph selects their rows.
+- Rows work like their nodes in the graph. The node hotkeys work while
+  the Outliner has focus (`D` to disable, `N` to add, `Del` to delete, `S`
+  for a start point, `F` to frame and so on), and a right click gives the
+  graph's node menu, with **Frame in Graph** at the top. Double click a
+  row, or click its arrow, to collapse or expand its node, hold `Shift` to
+  do the same to everything below it, and `Ctrl` double click, or `F2`, to rename it
+  right there in the row.
+- `Shift` click a group's arrow, or `Shift` double click its heading, to
+  collapse every node in that build, or in **Not in a build**. When they
+  all are, it expands them all. A plain click on the arrow only opens or
+  closes the group.
+- Right click below the rows for the graph's menu for empty space, to add
+  or paste a node at the top of the hierarchy. It lands in the middle of
+  the graph's view.
+- Letters are hotkeys here, so typing does not jump between rows. Use the
+  search box to find a node.
+
+## Instance View
+
+The Instance View shows a node's instance connections and nothing else.
+Turn it on from **Window > Instance View**.
+
+- It shows what the node instances from, back to the first source, on the
+  left, and every node that instances it, and those that instance them, on
+  the right, joined by the graph's instance lines. Nodes that only share a
+  source with it are left out.
+- Nodes are grey cards so they can be told from the graph at a glance. The
+  layer colors are in a strip along the top: the strongest layer's across
+  it, and a chip for each weaker one at its right end, as on the node in
+  the graph. Each card shows the node's name and path, and the node shown
+  has a light edge.
+- **Follow Selection** shows whichever node is selected in the graph or the
+  Outliner. With it off, select a node and press **Show Selected**. Double
+  click a node in the view to show its connections instead.
+- **Sync Selection** selects the nodes you pick in the Instance View in the
+  graph and the Outliner too. Both toggles are remembered.
+- Scroll to zoom, drag with the middle mouse button to pan, drag to box
+  select, and press `F` to frame everything.
+
 ## Property Editor, History View, Output Log and Workflow Tools
 
 See the [tutorial videos](tutorials.md) for a tour of these. The History
 View lists every step on the undo stack, including reference edits and
 reloads.
+
+In the Property Editor's attribute table, each row is in the color of the
+layer its value comes from, lighter where the selected node sets the value
+itself and darker where it inherits it. Instanced values are in italics.
+
+Darker layer colors can be hard to read as text, so **View > Options >
+Neutral Property Text** shows the rows in neutral text instead: bright,
+in bold across the row, where the node sets the value, and a softer grey where it
+inherits it. The row header on the left is filled with the layer's color,
+and stays in view however far you scroll the table. The source looks like a
+button only under the mouse; click it to go to that node. It is off by
+default and remembered with your preferences.
 
 # Terms and Definitions
 
@@ -547,6 +747,15 @@ To begin execution from a given node, the first node is run, followed by a depth
 All of the layers in your file are composited together to produce final code to execute. Each layer has the power to change as much or as little as is needed to customize the composited node’s attributes and code block. These changes are stored in the file they are made on, keeping referenced files safe to use for many purposes.
 
 Layer color propagates into nodes an also attributes.
+
+A layer can be any color. **Change Color** picks from the full spectrum: the
+layer palette, a field of every hue and saturation, a shade bar from black
+to the hue at its brightest, and a hex field. The layer is given exactly the
+color picked, and by default every color is shown exactly as it is. How
+layer colors are shown is your own view, see
+[Layer Color View](#layer-color-view). **In
+your view** in Change Color shows how the color you are choosing will look
+to you.
 
 ![attribute_color.PNG](images/attribute_color.PNG)
 

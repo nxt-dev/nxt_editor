@@ -18,7 +18,7 @@ from Qt import QtCore, QtWidgets
 
 # Internal
 import nxt_editor
-from nxt_editor import user_dir
+from nxt_editor import theme, user_dir
 from nxt_editor.ai import (chat_render, chats, claude_code, codex, context,
                            graph_actions, providers, tools)
 from nxt_editor.ai.memory import Memory
@@ -28,19 +28,19 @@ from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 ACCENT = '#4f86d6'
-STYLE = '''
+STYLE = theme.fill('''
 #aiPanel QLabel#aiMuted { color: #8a8a8a; }
 #aiPanel QLabel#aiHeading { color: #8a8a8a; font-weight: bold;
     letter-spacing: 1px; font-size: 11px; }
-#aiPanel QPushButton#aiGhost { background: #2b2b2b; color: #d4d4d4;
+#aiPanel QPushButton#aiGhost { background: {RAISED}; color: {TEXT};
     border: 1px solid #3c3c3c; border-radius: 5px; padding: 3px 10px; }
 #aiPanel QPushButton#aiGhost:hover { background: #343434;
     border-color: #555555; }
-#aiPanel QPushButton#aiGhost:pressed { background: #262626; }
+#aiPanel QPushButton#aiGhost:pressed { background: {RAISED}; }
 #aiPanel QPushButton#aiGhost:disabled { color: #6a6a6a;
-    border-color: #333333; }
-#aiPanel QListWidget#aiChats { background: #1e1e1e;
-    border: 1px solid #333333; border-radius: 6px; padding: 3px;
+    border-color: {BORDER}; }
+#aiPanel QListWidget#aiChats { background: {GRAPH};
+    border: 1px solid {BORDER}; border-radius: 6px; padding: 3px;
     outline: 0; }
 #aiPanel QListWidget#aiChats::item { color: #d0d0d0; padding: 5px 8px;
     border-radius: 4px; margin: 1px 0; }
@@ -50,15 +50,15 @@ STYLE = '''
 #aiPanel QListWidget#aiChats::item:disabled { background: transparent;
     color: #7c7c7c; padding: 6px 8px 2px 8px; }
 #aiPanel QTextBrowser#aiTranscript { background: #1c1c1c;
-    border: 1px solid #333333; border-radius: 6px; padding: 4px; }
-#aiPanel QFrame#aiComposer { background: #1e1e1e;
-    border: 1px solid #3a3a3a; border-radius: 8px; }
+    border: 1px solid {BORDER}; border-radius: 6px; padding: 4px; }
+#aiPanel QFrame#aiComposer { background: {GRAPH};
+    border: 1px solid {BORDER}; border-radius: 8px; }
 #aiPanel QPlainTextEdit#aiInput { background: transparent; border: none;
     color: #e6e6e6; }
-#aiPanel QPushButton#aiChip { background: #262626; color: #9a9a9a;
-    border: 1px solid #3a3a3a; border-radius: 10px; padding: 0px 9px;
+#aiPanel QPushButton#aiChip { background: {RAISED}; color: {TEXT_DIM};
+    border: 1px solid {BORDER}; border-radius: 10px; padding: 0px 9px;
     min-height: 18px; font-size: 11px; }
-#aiPanel QPushButton#aiChip:hover { border-color: #5a5a5a;
+#aiPanel QPushButton#aiChip:hover { border-color: {BORDER_STRONG};
     color: #c8c8c8; }
 #aiPanel QPushButton#aiChip:checked { background: #26344a;
     color: #cfe0ff; border-color: #4a6f9e; }
@@ -79,7 +79,7 @@ STYLE = '''
 #aiPanel QLabel#aiAskTitle { color: #f0d9a8; font-weight: bold; }
 #aiPanel QLabel#aiAskPath { color: #ffffff; font-family: Consolas,
     'DejaVu Sans Mono', Menlo, monospace; }
-'''.replace('ACCENT', ACCENT)
+''').replace('ACCENT', ACCENT)
 
 
 def _button(text, name):

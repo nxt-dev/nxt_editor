@@ -10,10 +10,11 @@ from Qt import QtCore, QtGui, QtWidgets
 # Internal
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
-from nxt_editor import user_dir
+from nxt_editor import user_dir, wires
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
-from nxt_editor import colors, finder, file_search, file_browser
+from nxt_editor import colors, exec_icons, finder, file_search, file_browser
+from nxt_editor.layer_color_dialog import LayerColorDialog
 
 logger = logging.getLogger('nxt')
 
@@ -334,6 +335,32 @@ class AppActions(NxtActionContainer):
         self.output_log_action.setWhatsThis('Toggle the output log widget.')
         self.available_without_model.append(self.output_log_action)
 
+        # Stage view
+        self.stage_view_action = NxtAction(text='Stage View', parent=self)
+        self.stage_view_action.setCheckable(True)
+        self.stage_view_action.setShortcutContext(context)
+        self.stage_view_action.setWhatsThis('Toggle the graph.')
+        self.available_without_model.append(self.stage_view_action)
+
+        # Outliner
+        self.outliner_action = NxtAction(text='Outliner', parent=self)
+        self.outliner_action.setCheckable(True)
+        self.outliner_action.setShortcutContext(context)
+        self.outliner_action.setWhatsThis('Toggle the outliner, the graph\'s '
+                                          'nodes as a tree in the order they '
+                                          'run.')
+        self.available_without_model.append(self.outliner_action)
+
+        # Instance View
+        self.instance_view_action = NxtAction(text='Instance View',
+                                              parent=self)
+        self.instance_view_action.setCheckable(True)
+        self.instance_view_action.setShortcutContext(context)
+        self.instance_view_action.setWhatsThis(
+            'Toggle the Instance View, the nodes the selected node '
+            'instances from and those that instance it.')
+        self.available_without_model.append(self.instance_view_action)
+
         # Hotkey editor
         self.hotkey_editor_action = NxtAction(text='Hotkey Editor',
                                               parent=self)
@@ -379,6 +406,17 @@ class AppActions(NxtActionContainer):
         self.ai_settings_action.setShortcutContext(context)
         self.available_without_model.append(self.ai_settings_action)
 
+        self.color_range_action = NxtAction(text='Layer Color View...',
+                                            parent=self)
+        self.color_range_action.setWhatsThis(
+            'How layer and backdrop colors are shown to you: white text '
+            'safe, the default, or every hue at one lightness and chroma. '
+            'It does not change the color of any layer.')
+        self.color_range_action.triggered.connect(
+            self.main_window.open_color_range)
+        self.color_range_action.setShortcutContext(context)
+        self.available_without_model.append(self.color_range_action)
+
         def find_node():
             if not self.main_window.model:
                 return
@@ -386,8 +424,10 @@ class AppActions(NxtActionContainer):
 
         self.find_node_action = NxtAction(text='Find Node',
                                           parent=self)
-        self.find_node_action.setWhatsThis('Search for, select, and focus '
-                                           'nodes in the view')
+        self.find_node_action.setWhatsThis('Find nodes by name, with * for '
+                                           'anything and commas between '
+                                           'names, then select and frame '
+                                           'them.')
         self.find_node_action.setShortcut('/')
         self.find_node_action.triggered.connect(find_node)
         self.find_node_action.setShortcutContext(context)
@@ -475,6 +515,9 @@ class AppActions(NxtActionContainer):
                                      self.history_view_action,
                                      self.build_view_action,
                                      self.output_log_action,
+                                     self.stage_view_action,
+                                     self.outliner_action,
+                                     self.instance_view_action,
                                      self.hotkey_editor_action,
                                      self.workflow_tools_action,
                                      self.ai_assistant_action,
@@ -601,16 +644,11 @@ class LayerActions(NxtActionContainer):
                 layer = self.main_window.model.target_layer
             if not layer:
                 return
-            cd = QtWidgets.QColorDialog()
-            cd.setOption(QtWidgets.QColorDialog.DontUseNativeDialog)
-            for i, c in enumerate(colors.LAYER_COLORS):
-                cd.setCustomColor(i, c)
-            cd.setCurrentColor(QtGui.QColor(layer.color))
-            cd.exec_()
-            color = cd.currentColor()
-            if color.isValid():
-                color_name = color.name()
-                model = self.main_window.model
+            # Only colors white text reads on, see LayerColorDialog.
+            model = self.main_window.model
+            color_name = LayerColorDialog.get_color(
+                model.get_layer_color(layer), parent=self.main_window)
+            if color_name:
                 model.set_layer_color(layer_path=layer.real_path,
                                       color=color_name)
         self.change_color_action.triggered.connect(change_color)
@@ -804,11 +842,24 @@ class NodeActions(NxtActionContainer):
         # delete nodes
         def del_nodes(recursive=False):
             # A selected backdrop is deleted on its own, never together
-            # with nodes.
+            # with nodes. Points on lines go with the nodes a box picked
+            # up alongside them, as one undo.
             view = self.main_window.view
+            model = self.main_window.model
+            if view and view.selected_points:
+                if not model.selection:
+                    view.delete_selected_points()
+                    return
+                model.undo_stack.beginMacro('Delete')
+                try:
+                    view.delete_selected_points()
+                    model.delete_nodes(recursive=recursive)
+                finally:
+                    model.undo_stack.endMacro()
+                return
             if view and view.delete_selected_backdrops():
                 return
-            self.main_window.model.delete_nodes(recursive=recursive)
+            model.delete_nodes(recursive=recursive)
         self.delete_node_action = NxtAction(text='Delete Node', parent=self)
         self.delete_node_action.setShortcut('Del')
         self.delete_node_action.setWhatsThis('Delete the selected node(s).')
@@ -980,8 +1031,16 @@ class NodeActions(NxtActionContainer):
         # Rename node
 
         def rename_node():
+            # Renamed where it was asked for: in its Outliner row when the
+            # Outliner has focus, else on the node in the graph.
+            outliner = getattr(self.main_window, 'outliner', None)
+            if outliner is not None and outliner.tree.hasFocus():
+                outliner.rename_selected()
+                return
             self.main_window.view.rename_node()
         self.rename_node_action = NxtAction(text='Rename Node', parent=self)
+        self.rename_node_action.setShortcut('F2')
+        self.rename_node_action.setWhatsThis('Rename the selected node.')
         self.rename_node_action.triggered.connect(rename_node)
         # Disable node
 
@@ -1383,6 +1442,23 @@ class StageViewActions(NxtActionContainer):
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Active, QtGui.QIcon.On)
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.implicit_action.setIcon(lines_icon)
+
+        # Straight or curved lines, saved with the graph.
+        def toggle_curved():
+            view = self.main_window.view
+            if not view:
+                return
+            curved = self.curved_action.isChecked()
+            view.model.set_connection_style(
+                wires.CURVED if curved else wires.STRAIGHT)
+
+        self.curved_action = NxtAction(text='Curved Connections',
+                                       parent=self)
+        self.curved_action.setWhatsThis('Draws this graph\'s connections as '
+                                        'curves rather than straight '
+                                        'lines. Saved with the graph.')
+        self.curved_action.setCheckable(True)
+        self.curved_action.triggered.connect(toggle_curved)
         # FRAME
         # Frame all
         self.frame_all_action = NxtAction(text='Frame All',
@@ -1543,7 +1619,27 @@ class StageViewActions(NxtActionContainer):
         tt_state = user_dir.user_prefs.get(user_dir.USER_PREF.NODE_TOOLTIPS,
                                            True)
         self.tooltip_action.setChecked(tt_state)
+        def toggle_neutral_property_text(state):
+            from nxt_editor.dockwidgets import property_editor
+            property_editor.set_neutral_text(state)
+            editor = getattr(self.main_window, 'property_editor', None)
+            if editor is not None:
+                property_editor.refresh_neutral_text(editor)
+        self.neutral_property_text_action = NxtAction(
+            text='Neutral Property Text', parent=self)
+        self.neutral_property_text_action.setWhatsThis(
+            'Show the Property Editor\'s attributes in neutral text, bright '
+            'where the node sets the value and softer where it inherits '
+            'it, with the color of the layer each comes from in the row '
+            'header. Off, rows are in their layer\'s color.')
+        self.neutral_property_text_action.setCheckable(True)
+        self.neutral_property_text_action.setChecked(bool(
+            user_dir.user_prefs.get(
+                user_dir.USER_PREF.NEUTRAL_PROPERTY_TEXT, False)))
+        self.neutral_property_text_action.toggled.connect(
+            toggle_neutral_property_text)
         self.action_display_order = [self.tooltip_action,
+                                     self.neutral_property_text_action,
                                      self.frame_all_action,
                                      self.frame_selection_action,
                                      self.hide_attrs_action,
@@ -1553,6 +1649,7 @@ class StageViewActions(NxtActionContainer):
                                      self.grid_action, self.mini_map_action,
                                      self.animation_action,
                                      self.implicit_action,
+                                     self.curved_action,
                                      self.pick_walk_up_action,
                                      self.pick_walk_down_action,
                                      self.pick_walk_left_action,
@@ -1590,6 +1687,11 @@ class ExecuteActions(NxtActionContainer):
         self.execute_selected_action.setAutoRepeat(False)
         self.execute_selected_action.setShortcut('Enter')
         self.execute_selected_action.setIconText('Exec Sel')
+        self.execute_selected_action.setIcon(exec_icons.execute_selected())
+        self.execute_selected_action.setToolTip(
+            'Execute Selected (Enter): run only the selected nodes.')
+        self.execute_selected_action.setWhatsThis(
+            'Run only the selected nodes.')
 
         def exec_selected():
             if not self.main_window.model:
@@ -1600,12 +1702,15 @@ class ExecuteActions(NxtActionContainer):
         # Execute from selected
         self.execute_from_action = NxtAction(text='Execute '
                                                   'From Selected', parent=self)
-        self.execute_from_action.setToolTip('Execute')
+        self.execute_from_action.setToolTip(
+            'Execute From Selected: run the selected node, then on down its '
+            'exec chain.')
         self.execute_from_action.setWhatsThis('Execute from the currently '
                                               'selected node and continue '
                                               'down the exec chain.')
         self.execute_from_action.setAutoRepeat(False)
         self.execute_from_action.setIconText('Exec From Sel')
+        self.execute_from_action.setIcon(exec_icons.execute_from())
 
         def exec_from_sel():
             if not self.main_window.model:
@@ -1619,6 +1724,12 @@ class ExecuteActions(NxtActionContainer):
                                                   parent=self)
         self.execute_hierarchy_action.setAutoRepeat(False)
         self.execute_hierarchy_action.setIconText('Exec Hierarchy')
+        self.execute_hierarchy_action.setIcon(exec_icons.execute_hierarchy())
+        self.execute_hierarchy_action.setToolTip(
+            'Execute Hierarchy: run the selected node and every node under '
+            'it.')
+        self.execute_hierarchy_action.setWhatsThis(
+            'Run the selected node and every node under it.')
 
         def exec_hierarchy():
             if not self.main_window.model:

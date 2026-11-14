@@ -24,6 +24,7 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
+from nxt_editor import theme
 from nxt_editor.constants import FONTS
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -38,15 +39,15 @@ PARAGRAPH_SEP = u'\u2029'
 WORD_BOUNDARY = '\\b'
 
 MARGIN = 10
-PANEL_QSS = '''
+PANEL_QSS = theme.fill('''
 QFrame#editorOverlay {
     background-color: #313131;
-    border: 1px solid #4C4C4C;
+    border: 1px solid {BORDER_STRONG};
     border-radius: 4px;
 }
 QFrame#editorOverlay QLineEdit {
-    background-color: #232323;
-    border: 1px solid #4C4C4C;
+    background-color: {BASE};
+    border: 1px solid {BORDER_STRONG};
     border-radius: 2px;
     color: #DCDCDC;
     selection-background-color: #2A5A8A;
@@ -59,7 +60,7 @@ QFrame#editorOverlay QLineEdit[invalid="true"] {
     border: 1px solid #B14A4A;
 }
 QFrame#editorOverlay QLabel {
-    color: #9A9A9A;
+    color: {TEXT_DIM};
     background: transparent;
 }
 QFrame#editorOverlay QToolButton {
@@ -83,7 +84,7 @@ QFrame#editorOverlay QToolButton#overlayChevron:checked {
 QFrame#editorOverlay QToolButton:disabled {
     color: #6A6A6A;
 }
-'''
+''')
 
 
 class OverlayLineEdit(QtWidgets.QLineEdit):
@@ -322,7 +323,7 @@ class FindOverlay(EditorOverlay):
             painter.setPen(QtGui.QColor('#6D946F'))
             painter.drawRoundedRect(0, 0, width - 1, height - 1, 3, 3)
         painter.setFont(font)
-        painter.setPen(QtGui.QColor('#E0E0E0' if checked else '#9A9A9A'))
+        painter.setPen(QtGui.QColor(theme.TEXT if checked else theme.TEXT_DIM))
         painter.drawText(pixmap.rect(), QtCore.Qt.AlignCenter, text)
         painter.end()
         return QtGui.QIcon(pixmap)

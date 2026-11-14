@@ -8,7 +8,7 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import user_dir
+from nxt_editor import theme, user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
 
@@ -637,7 +637,8 @@ class LetterCheckboxDelegeate(QtWidgets.QStyledItemDelegate):
         painter.setBrush(option.backgroundBrush)
         if option.checkState == QtCore.Qt.CheckState.Checked:
             painter.drawRoundedRect(inner_rect, 2, 2)
-            painter.setPen(QtCore.Qt.white)
+            painter.setPen(theme.readable_text(
+                option.backgroundBrush.color()))
         else:
             painter.setPen(QtCore.Qt.gray)
         painter.drawText(inner_rect, QtCore.Qt.AlignCenter, self.letter)
@@ -701,7 +702,7 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
                 painter.setBrush(bg_brush)
         painter.drawRoundedRect(rect, 2, 2)
 
-    def paint_text(self, painter, text, text_rect):
+    def paint_text(self, painter, text, text_rect, background=None):
         if self.soloed:
             font = painter.font()
             font.setBold(True)
@@ -712,7 +713,12 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
             painter.setFont(font)
         if self.unsaved:
             text += '*'
-        painter.setPen(QtCore.Qt.white)
+        # Only the target layer's row is filled with its color. Its text is
+        # light or dark, whichever reads on that color.
+        if self.is_tgt and not self.muted and background is not None:
+            painter.setPen(theme.readable_text(background))
+        else:
+            painter.setPen(QtCore.Qt.white)
         painter.drawText(text_rect, QtCore.Qt.AlignVCenter, text)
 
     def paint(self, painter, option, index):
@@ -748,7 +754,8 @@ class AliasDelegate(QtWidgets.QStyledItemDelegate):
         painter.setBrush(QtCore.Qt.NoBrush)
         text_rect = inner_rect.adjusted(inner_rect.height() + 4, 0, 0, 0)
         pre_text_font = painter.font()
-        self.paint_text(painter, option.text, text_rect)
+        self.paint_text(painter, option.text, text_rect,
+                        option.backgroundBrush.color())
         painter.setFont(pre_text_font)
 
     def sizeHint(self, option, index):

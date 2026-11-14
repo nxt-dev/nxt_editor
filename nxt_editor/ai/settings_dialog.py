@@ -11,6 +11,7 @@ from Qt import QtCore, QtWidgets
 # Internal
 import nxt_editor
 from nxt_editor import user_dir
+from nxt_editor.constants import FONTS
 from nxt_editor.ai import claude_code, codex, providers, secret_store
 from nxt_editor.ai.memory_page import MemoryPage
 from nxt_editor.ai.workers import TaskThread
@@ -33,8 +34,7 @@ class WaitDialog(QtWidgets.QDialog):
         self.label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         layout.addWidget(self.label)
         self.code_label = QtWidgets.QLabel()
-        font = self.code_label.font()
-        font.setPointSize(font.pointSize() * 2)
+        font = FONTS.default_font(FONTS.DEFAULT_SIZE * 2)
         font.setBold(True)
         self.code_label.setFont(font)
         self.code_label.setAlignment(QtCore.Qt.AlignCenter)

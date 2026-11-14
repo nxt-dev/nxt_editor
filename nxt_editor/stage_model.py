@@ -10,6 +10,7 @@ import sys
 # External
 from Qt import QtWidgets
 from Qt import QtCore
+from Qt import QtGui
 
 # Internal
 from nxt import clean_json, nxt_io
@@ -19,8 +20,9 @@ from nxt.constants import API_VERSION, is_standalone
 from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
                  NODE_ERRORS, GRID_SIZE)
 import nxt_editor
-from nxt_editor import DIRECTIONS, StringSignaler, user_dir
+from nxt_editor import DIRECTIONS, StringSignaler, color_range, theme, user_dir
 from nxt_editor import backdrops
+from nxt_editor import wires
 from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
                           get_node_enabled)
@@ -81,6 +83,7 @@ class StageModel(QtCore.QObject):
     skips_changed = QtCore.Signal(tuple)  # new skip point paths
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
     backdrops_changed = QtCore.Signal()
+    wires_changed = QtCore.Signal()  # line style or points
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
     request_ding = QtCore.Signal()
@@ -128,6 +131,10 @@ class StageModel(QtCore.QObject):
         self._selection = []
         self._node_focus = None
         self.selection_changed.connect(self.update_node_focus)
+        # Break and skip points of a graph not saved yet, which has no file
+        # to keep them by in the user's prefs. {'breaks': {None: [paths]}}
+        self._unsaved_points = {'breaks': {}, 'skips': {}}
+        self.layer_saved.connect(self._keep_unsaved_points)
         # attribute display state
         # {/node/path: STATE_INT}
         # 0 = no attributes
@@ -596,6 +603,11 @@ class StageModel(QtCore.QObject):
         if not layer:
             logger.error('Cannot set color for invalid layer: {}'.format(layer))
             return
+        if color is not None:
+            # Exactly the color chosen; how it is shown is each user's view.
+            chosen = QtGui.QColor(color)
+            if chosen.isValid():
+                color = chosen.name()
         if layer is self.top_layer:
             cur_color = layer.get_color(local=True)
         else:
@@ -720,7 +732,10 @@ class StageModel(QtCore.QObject):
             layer_color = colors.LAYER_COLORS[idx % len(colors.LAYER_COLORS)].name()
             layer.color = layer_color
             return layer_color
-        return color
+        # Shown as the user views layer colors, see color_range. A color
+        # saved before colors were kept to ones white text reads on, or set
+        # from a script, is shown as the nearest one in that.
+        return color_range.shown(color).name()
 
     def get_layer_locked(self, layer_path):
         layer = self.lookup_layer(layer_path)
@@ -833,7 +848,8 @@ class StageModel(QtCore.QObject):
         sibiling_paths = layer.children(parent_path, layer.RETURNS.Path)
         return sibiling_paths
 
-    def get_layers_with_opinion(self, node_path, attr_name=None):
+    def get_layers_with_opinion(self, node_path, attr_name=None,
+                                as_layers=False):
         """Returns all layer paths in the current comp that contain the given
         node. Ordered with the top layer at 0.
 
@@ -842,7 +858,11 @@ class StageModel(QtCore.QObject):
         :param attr_name: Optional: name of specific attr that must have an
         opinion at the given node path.
         :type attr_name: str
-        :return: list of layer paths
+        :param as_layers: the layers themselves rather than their paths. A
+            path can name the wrong layer, or none: a new layer has no file
+            yet, and two layers can be the same file.
+        :type as_layers: bool
+        :return: list of layer paths, or layers
         :rtype: list
         """
         s, e = self.comp_layer._layer_range
@@ -850,6 +870,8 @@ class StageModel(QtCore.QObject):
         layers = nxt_layer.get_active_layers(comp_layers)
         layers = self.stage.get_layers_with_opinion(node_path, layers,
                                                     attr_name)
+        if as_layers:
+            return list(layers)
         return [self.get_layer_path(l) for l in layers]
 
     def get_node_color(self, node_path, layer=None):
@@ -862,6 +884,11 @@ class StageModel(QtCore.QObject):
         layer = layer or self.target_layer
         if self.node_exists(node_path):
             node = layer.lookup(node_path)
+            if node is None:
+                # The node exists, just not in this layer.
+                node = self.comp_layer.lookup(node_path)
+            if node is None:
+                return self.get_layer_color(layer)
             source_layer = self.stage.get_node_source_layer(node)
             return self.get_layer_color(source_layer)
         elif self.node_is_implied(node_path):
@@ -2023,33 +2050,34 @@ class StageModel(QtCore.QObject):
 
     def toggle_node_collapse(self, node_paths, recursive_down=False,
                              recursive_up=False, layer_path=None):
-        layer = self.lookup_layer(layer_path) or self.top_layer
+        """Collapse or expand nodes, each the opposite of what it is.
+
+        Recursively, the nodes below (or above) one are all set to its new
+        state, so a hierarchy is collapsed or expanded as a whole rather
+        than each node in it flipped, which left a mixed one mixed.
+
+        Each node's state is the one shown, the comp's: a layer below can
+        have a node collapsed that the top layer says nothing about, and
+        flipping the top layer's own state collapsed it again.
+        """
         comp_layer = self.comp_layer
-        set_true = []
-        set_false = []
+        layer = (self.lookup_layer(layer_path) if layer_path
+                 else comp_layer)
+        new_states = {}
         for node_path in node_paths:
-            prev_state = self.get_node_collapse(node_path, layer)
-            if prev_state:
-                set_false.append(node_path)
-            else:
-                set_true.append(node_path)
+            state = not self.get_node_collapse(node_path, layer)
+            new_states[node_path] = state
+            related = []
             if recursive_down:
-                all_descendants = self.get_descendants(node_path, comp_layer)
-                for descendant_path in all_descendants:
-                    prev_state = self.get_node_collapse(descendant_path, layer)
-                    if prev_state:
-                        set_false.append(descendant_path)
-                    else:
-                        set_true.append(descendant_path)
+                related += self.get_descendants(node_path, comp_layer)
             if recursive_up:
-                all_ancestors = comp_layer.ancestors(node_path)
-                for ancestor_node in all_ancestors:
-                    ancestor_path = comp_layer.get_node_path(ancestor_node)
-                    prev_state = self.get_node_collapse(ancestor_path, layer)
-                    if prev_state:
-                        set_false.append(ancestor_path)
-                    else:
-                        set_true.append(ancestor_path)
+                related += [comp_layer.get_node_path(ancestor)
+                            for ancestor in comp_layer.ancestors(node_path)]
+            for path in related:
+                if self.get_node_collapse(path, layer) != state:
+                    new_states[path] = state
+        set_true = [path for path, state in new_states.items() if state]
+        set_false = [path for path, state in new_states.items() if not state]
         if set_true or set_false:
             count = len(set_true + set_false)
             self.undo_stack.beginMacro('Toggle collapse for {} '
@@ -2079,14 +2107,26 @@ class StageModel(QtCore.QObject):
         return None
 
     def select_and_frame(self, node_path):
-        if not (self.node_exists(node_path) or self.node_is_implied(node_path)):
+        self.select_and_frame_nodes([node_path])
+
+    def select_and_frame_nodes(self, node_paths):
+        """Select the nodes and frame them in the graph, expanding any
+        collapsed node they are under so they show."""
+        node_paths = [path for path in node_paths
+                      if self.node_exists(path) or self.node_is_implied(path)]
+        if not node_paths:
             return
-        self.undo_stack.beginMacro('Select and frame {}'.format(node_path))
-        if self.get_collapsed_ancestor(node_path):
-            parent = nxt_path.get_parent_path(node_path)
-            self.set_node_collapse([parent], False, recursive_up=True)
-        self.set_selection([node_path])
-        self.frame_items.emit((node_path,))
+        if len(node_paths) == 1:
+            text = 'Select and frame {}'.format(node_paths[0])
+        else:
+            text = 'Select and frame {} nodes'.format(len(node_paths))
+        self.undo_stack.beginMacro(text)
+        for node_path in node_paths:
+            if self.get_collapsed_ancestor(node_path):
+                parent = nxt_path.get_parent_path(node_path)
+                self.set_node_collapse([parent], False, recursive_up=True)
+        self.set_selection(list(node_paths))
+        self.frame_items.emit(tuple(node_paths))
         self.undo_stack.endMacro()
 
     def set_nodes_pos(self, node_positions, layer=None):
@@ -2121,7 +2161,7 @@ class StageModel(QtCore.QObject):
         :return: the new backdrop's id
         """
         backdrop_id = backdrop_id or backdrops.new_id()
-        self.set_backdrops({backdrop_id: backdrops.clean(record)},
+        self.set_backdrops({backdrop_id: self._safe_backdrop(record)},
                            text='Add backdrop "{}"'.format(
                                record.get(backdrops.TITLE, '')))
         return backdrop_id
@@ -2132,7 +2172,19 @@ class StageModel(QtCore.QObject):
         if record is None:
             return
         record.update(fields)
-        self.set_backdrops({backdrop_id: backdrops.clean(record)}, text=text)
+        self.set_backdrops({backdrop_id: self._safe_backdrop(record)},
+                           text=text)
+
+    @staticmethod
+    def _safe_backdrop(record):
+        """A clean record. Its color is kept as chosen, written the way
+        colors are; how it is shown is each user's view, see color_range."""
+        record = backdrops.clean(record)
+        if record is not None:
+            color = QtGui.QColor(record[backdrops.COLOR])
+            if color.isValid():
+                record[backdrops.COLOR] = color.name()
+        return record
 
     def remove_backdrops(self, backdrop_ids):
         """Take backdrops away. The nodes in them stay where they are."""
@@ -2164,6 +2216,200 @@ class StageModel(QtCore.QObject):
         cmd = SetBackdrops(changes, model=self,
                            layer_path=self.top_layer.real_path, text=text)
         self.undo_stack.push(cmd)
+
+    # Line style and points, see nxt_editor.wires ------------------------
+
+    @staticmethod
+    def preferred_connection_style():
+        """How lines are drawn in a graph that does not save its own
+        choice: the user's preference, else straight."""
+        style = user_dir.user_prefs.get(user_dir.USER_PREF.CONNECTION_STYLE)
+        if style in wires.STYLES:
+            return style
+        return wires.DEFAULT_STYLE
+
+    def get_connection_style(self):
+        """Whether this graph draws its lines straight or curved."""
+        return wires.merged_style(self.stage._sub_layers,
+                                  self.preferred_connection_style())
+
+    def set_connection_style(self, style):
+        """Draw this graph's lines straight or curved, saved on the top
+        layer, and remembered as the user's preference for graphs that do
+        not save one."""
+        if style not in wires.STYLES:
+            return
+        if style == self.get_connection_style():
+            # Nothing to see change, but remembered for the graphs to come.
+            user_dir.user_prefs[user_dir.USER_PREF.CONNECTION_STYLE] = style
+            return
+        # Saved on the graph unless it is what the lower layers, or a user
+        # with no preference, would see anyway.
+        lower = wires.merged_style(self.stage._sub_layers[1:])
+        if style == lower:
+            # What the lower layers say already, so nothing to keep.
+            saved = wires.ABSENT
+        else:
+            saved = style
+        if style == wires.CURVED:
+            text = 'Curved connections'
+        else:
+            text = 'Straight connections'
+        cmd = SetWires(model=self, layer_path=self.top_layer.real_path,
+                       style=saved, text=text, preference=style)
+        self.undo_stack.push(cmd)
+
+    def get_line_points(self, key=None):
+        """The points lines are routed through.
+
+        :param key: one line's key, see wires.line_key, or None for all
+        :return: [[x, y], ...] for one line, else {key: points}
+        """
+        shown = wires.merged_points(self.stage._sub_layers)
+        if key is None:
+            return shown
+        return shown.get(key, [])
+
+    def set_line_points(self, key, points, text='Edit connection points'):
+        """Route one line through the given points, as one undo. No points
+        takes them all away."""
+        points = wires.clean_points(points) or []
+        if points == self.get_line_points(key):
+            return
+        if points:
+            change = points
+        elif key in wires.merged_points(self.stage._sub_layers[1:]):
+            # A lower layer's, and only the top layer is written.
+            change = None
+        else:
+            change = wires.ABSENT
+        cmd = SetWires(model=self, layer_path=self.top_layer.real_path,
+                       points={key: change}, text=text)
+        self.undo_stack.push(cmd)
+
+    def break_connections(self, lines, text=None):
+        """Break connections, as one undo.
+
+        What a line came from is taken out of where it went, and nothing
+        else is left in its place: an exec input or instance is cleared,
+        and an attribute loses the reference, keeping any other text it
+        has, and is left empty when that was all it held. Should a weaker
+        layer still make the connection, the target layer is given an
+        empty value over it. The line's points go too.
+
+        :param lines: (source path, target attr path) pairs, as the graph
+            draws them
+        :return: how many were broken
+        """
+        breakable = []
+        for src, tgt in lines:
+            if not self._breakable(tgt):
+                continue
+            owner = self._connection_layer(tgt)
+            if owner is not None and owner != self.target_layer.real_path:
+                # nxt reads an empty exec input or instance as no opinion,
+                # so a stronger layer cannot clear a weaker one's. It is
+                # broken on the layer that made it.
+                logger.warning(
+                    'The connection into {} is made on {}. Make that the '
+                    'target layer to break it.'.format(tgt, owner),
+                    links=[nxt_path.node_path_from_attr_path(tgt)])
+                continue
+            breakable.append((src, tgt))
+        lines = breakable
+        if not lines:
+            return 0
+        if text is None:
+            text = ('Break connection' if len(lines) == 1 else
+                    'Break {} connections'.format(len(lines)))
+        self.undo_stack.beginMacro(text)
+        try:
+            for src, tgt in lines:
+                self._break_connection(src, tgt)
+                self.set_line_points(wires.line_key(src, tgt), [],
+                                     text=text)
+        finally:
+            self.undo_stack.endMacro()
+        return len(lines)
+
+    @staticmethod
+    def _breakable(tgt_path):
+        """Whether a line into this attr can be broken from the graph.
+
+        A line into a node's code is drawn for a reference written in the
+        code, which is the code editor's to change.
+        """
+        attr = nxt_path.attr_name_from_attr_path(tgt_path)
+        return bool(attr) and attr != INTERNAL_ATTRS.COMPUTE
+
+    def _connection_layer(self, tgt_path):
+        """The path of the layer whose opinion makes a connection, or None
+        when it cannot be told."""
+        node_path = nxt_path.node_path_from_attr_path(tgt_path)
+        attr = nxt_path.attr_name_from_attr_path(tgt_path)
+        node = self.comp_layer.lookup(node_path)
+        if node is None:
+            return None
+        try:
+            layer_path, _ = self.stage.get_node_attr_source(node, attr)
+        except (AttributeError, TypeError, ValueError):
+            return None
+        return layer_path
+
+    def _break_connection(self, src_path, tgt_path):
+        node_path = nxt_path.node_path_from_attr_path(tgt_path)
+        attr = nxt_path.attr_name_from_attr_path(tgt_path)
+        layer = self.target_layer
+        if attr == INTERNAL_ATTRS.EXECUTE_IN:
+            self._clear_link(node_path, attr, layer,
+                             lambda value: self.set_node_exec_in(
+                                 node_path, value, layer),
+                             lambda: self.get_node_exec_in(node_path,
+                                                           self.comp_layer))
+            return
+        if attr == INTERNAL_ATTRS.INSTANCE_PATH:
+            # An empty instance path is how an instance is removed, see
+            # the Remove Instance action.
+            self.set_node_instance(node_path, '', layer)
+            return
+        value = self.get_node_attr_value(node_path, attr, self.comp_layer,
+                                         data_state=DATA_STATE.RAW)
+        kept = self._without_reference(value, src_path, node_path)
+        if kept is not None and str(kept).strip():
+            self.set_node_attr_value(node_path, attr, kept, layer)
+            return
+        self._clear_link(node_path, attr, layer,
+                         lambda value: self.set_node_attr_value(
+                             node_path, attr, value, layer),
+                         lambda: src_path in (
+                             self.get_node_attr_external_sources(
+                                 node_path, attr, self.comp_layer) or []))
+
+    @staticmethod
+    def _clear_link(node_path, attr, layer, write, still_linked):
+        """Clear an attr on the layer, and if a weaker layer's value then
+        still links it, write an empty one over that."""
+        write(None)
+        if still_linked():
+            write('')
+
+    def _without_reference(self, value, src_path, node_path):
+        """An attr value with every reference to src_path taken out.
+
+        :return: what is left, or None when nothing is
+        """
+        if value is None:
+            return None
+        text = str(value)
+        attr_tokens = self.stage.get_tokens_from(
+            text, token_type=tokens.TOKENTYPE.ATTR)
+        for token in attr_tokens:
+            ref = tokens.get_token_content(token)
+            if not nxt_path.is_attr_path(ref):
+                continue
+            if nxt_path.expand_relative_node_path(ref, node_path) == src_path:
+                text = text.replace(token, '')
+        return text if text.strip() else None
 
     def get_node_pos(self, node_path):
         default = [0.0, 0.0]
@@ -2341,9 +2587,47 @@ class StageModel(QtCore.QObject):
                              layer_path=LAYERS.TARGET)
         self.undo_stack.push(cmd)
 
+    def _breaks(self, layer_path):
+        """Where the breakpoints of the layer at layer_path are kept: the
+        user's prefs, by the layer's file, or for a layer not saved yet
+        this session, until it is."""
+        if layer_path:
+            return user_dir.breakpoints
+        return self._unsaved_points['breaks']
+
+    def _skips(self, layer_path):
+        """Where the skip points of the layer at layer_path are kept, see
+        _breaks."""
+        if layer_path:
+            return user_dir.skippoints
+        return self._unsaved_points['skips']
+
+    def _keep_unsaved_points(self, layer_path):
+        """The graph was saved for the first time: its break and skip
+        points go to the user's prefs, by its new file."""
+        if not layer_path or layer_path != self.top_layer.real_path:
+            return
+        for name, prefs in (('breaks', user_dir.breakpoints),
+                            ('skips', user_dir.skippoints)):
+            points = self._unsaved_points[name].pop(None, None)
+            if points:
+                prefs[layer_path] = points
+
+    def get_breakpoints(self, layer=None):
+        """The paths of the nodes with a breakpoint, on layer or the top
+        layer."""
+        layer_path = (layer or self.top_layer).real_path
+        return list(self._breaks(layer_path).get(layer_path, []))
+
+    def get_skippoints(self, layer_path=None):
+        """The paths of the nodes with a skip point, on the layer at
+        layer_path or the top layer."""
+        layer_path = self._skip_key(layer_path)
+        return list(self._skips(layer_path).get(layer_path, []))
+
     def get_is_node_breakpoint(self, node_path, layer=None):
         layer = layer or self.top_layer
-        layer_breaks = user_dir.breakpoints.get(layer.real_path, [])
+        layer_breaks = self._breaks(layer.real_path).get(layer.real_path, [])
         return node_path in layer_breaks
 
     def get_node_is_proxy(self, node_path):
@@ -2362,9 +2646,8 @@ class StageModel(QtCore.QObject):
         layer_path = self.get_layer_path(layer,
                                          fallback=self.top_layer.real_path)
         if not layer_path:
-            logger.warning('Please save your graph to use breaks.')
-            self.request_ding.emit()
-            return
+            # Not saved yet, see _breaks.
+            layer_path = LAYERS.TOP
         on = []
         off = []
         for node_path in node_paths:
@@ -2396,7 +2679,8 @@ class StageModel(QtCore.QObject):
 
     def clear_breakpoints(self, layer=None):
         layer = layer or self.top_layer
-        cmd = ClearBreakpoints(model=self, layer_path=layer.real_path)
+        cmd = ClearBreakpoints(model=self,
+                               layer_path=layer.real_path or LAYERS.TOP)
         self.undo_stack.push(cmd)
         self.breaks_changed.emit([])
 
@@ -2409,13 +2693,14 @@ class StageModel(QtCore.QObject):
         if not node_path:
             return
         node_path = str(node_path)
-        layer_path = str(layer.real_path)
-        layer_breaks = user_dir.breakpoints.get(layer_path, [])
+        layer_path = layer.real_path and str(layer.real_path)
+        breaks = self._breaks(layer_path)
+        layer_breaks = breaks.get(layer_path, [])
         if node_path in layer_breaks:
             # no need to re-write existing data to pref
             return
         layer_breaks.append(node_path)
-        user_dir.breakpoints[layer_path] = layer_breaks
+        breaks[layer_path] = layer_breaks
         self.breaks_changed.emit(layer_breaks)
 
     def _remove_breakpoint(self, node_path, layer):
@@ -2426,11 +2711,12 @@ class StageModel(QtCore.QObject):
         :return: None
         """
         layer_path = layer.real_path
-        layer_breaks = user_dir.breakpoints.get(layer_path)
+        breaks = self._breaks(layer_path)
+        layer_breaks = breaks.get(layer_path)
         if not layer_breaks:
             return
         if not node_path:
-            user_dir.breakpoints.pop(layer_path)
+            breaks.pop(layer_path)
             return
         try:
             layer_breaks.remove(node_path)
@@ -2438,7 +2724,7 @@ class StageModel(QtCore.QObject):
             # Can return without the below save in this case. If the node
             # path is not present, it's already "removed"
             return
-        user_dir.breakpoints[layer_path] = layer_breaks
+        breaks[layer_path] = layer_breaks
         self.breaks_changed.emit(layer_breaks)
 
     def toggle_skippoints(self, node_paths, layer_path=None):
@@ -2450,11 +2736,8 @@ class StageModel(QtCore.QObject):
         :type layer_path: str, optional
         """
         if not layer_path:
-            layer_path = self.top_layer.real_path
-        if not layer_path:
-            logger.warning('Please save your graph to use skips.')
-            self.request_ding.emit()
-            return
+            # Not saved yet, see _skips.
+            layer_path = self.top_layer.real_path or LAYERS.TOP
         on = []
         off = []
         for node_path in node_paths:
@@ -2487,11 +2770,8 @@ class StageModel(QtCore.QObject):
         :type layer_path: str, optional
         """
         if not layer_path:
-            layer_path = self.top_layer.real_path
-        if not layer_path:
-            logger.warning('Please save your graph to use skips.')
-            self.request_ding.emit()
-            return
+            # Not saved yet, see _skips.
+            layer_path = self.top_layer.real_path or LAYERS.TOP
         node_count = len(node_paths)
         if node_count > 1:
             msg = ('Set skippoint for {} and '
@@ -2516,11 +2796,8 @@ class StageModel(QtCore.QObject):
         :type layer_path: str, optional
         """
         if not layer_path:
-            layer_path = self.top_layer.real_path
-        if not layer_path:
-            logger.warning('Please save your graph to use skips.')
-            self.request_ding.emit()
-            return
+            # Not saved yet, see _skips.
+            layer_path = self.top_layer.real_path or LAYERS.TOP
         cmd = SetNodesAreSkipPoints(node_paths, to_skip, layer_path, self)
         self.undo_stack.push(cmd)
 
@@ -2534,10 +2811,16 @@ class StageModel(QtCore.QObject):
         :return: Whether given node is a skip.
         :rtype: bool
         """
-        if not layer_path:
-            layer_path = self.top_layer.real_path
-        layer_skips = user_dir.skippoints.get(layer_path, [])
+        layer_path = self._skip_key(layer_path)
+        layer_skips = self._skips(layer_path).get(layer_path, [])
         return node_path in layer_skips
+
+    def _skip_key(self, layer_path):
+        """The key the skip points of layer_path are kept by: its file, or
+        None for the top layer before it is saved."""
+        if not layer_path or layer_path == LAYERS.TOP:
+            return self.top_layer.real_path
+        return layer_path
 
     def _add_skippoint(self, node_path, layer_path):
         """Internal(not undo-able) method to make a node a skip point.
@@ -2551,13 +2834,14 @@ class StageModel(QtCore.QObject):
         if not (node_path and layer_path):
             raise ValueError("Must provide node and layer path.")
         node_path = str(node_path)
-        layer_path = str(layer_path)
-        layer_skips = user_dir.skippoints.get(layer_path, [])
+        layer_path = self._skip_key(str(layer_path))
+        skips = self._skips(layer_path)
+        layer_skips = skips.get(layer_path, [])
         if node_path in layer_skips:
             # no need to re-write existing data to pref
             return
         layer_skips.append(node_path)
-        user_dir.skippoints[layer_path] = layer_skips
+        skips[layer_path] = layer_skips
         if layer_path == self.top_layer.real_path:
             self.skips_changed.emit([])
 
@@ -2573,8 +2857,9 @@ class StageModel(QtCore.QObject):
         if not (node_path and layer_path):
             raise ValueError("Must provide node and layer path.")
         node_path = str(node_path)
-        layer_path = str(layer_path)
-        layer_skips = user_dir.skippoints.get(layer_path, [])
+        layer_path = self._skip_key(str(layer_path))
+        skips = self._skips(layer_path)
+        layer_skips = skips.get(layer_path, [])
         if not layer_skips:
             return
         try:
@@ -2585,7 +2870,7 @@ class StageModel(QtCore.QObject):
             if layer_path == self.top_layer.real_path:
                 self.skips_changed.emit([])
             return
-        user_dir.skippoints[layer_path] = layer_skips
+        skips[layer_path] = layer_skips
         if layer_path == self.top_layer.real_path:
             self.skips_changed.emit([])
 
@@ -3499,8 +3784,9 @@ class StageModel(QtCore.QObject):
         start = self.last_built_idx+1
         stop = len(self.current_build_order)
 
-        breaks = user_dir.breakpoints.get(self.top_layer.real_path, [])[:]
-        skips = user_dir.skippoints.get(self.top_layer.real_path, [])[:]
+        top_path = self.top_layer.real_path
+        breaks = self._breaks(top_path).get(top_path, [])[:]
+        skips = self._skips(top_path).get(top_path, [])[:]
         first_path = self.current_build_order[start]
         skip_pref_key = user_dir.USER_PREF.SKIP_INITIAL_BREAK
         skip_first_break = user_dir.user_prefs.get(skip_pref_key, True)

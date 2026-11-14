@@ -16,6 +16,7 @@ import token
 import tokenize
 
 # Internal
+from nxt_editor import theme
 from nxt_editor.dockwidgets.syntax import PythonHighlighter
 
 STYLES = PythonHighlighter.styles
@@ -24,15 +25,15 @@ MONO = "Consolas, 'DejaVu Sans Mono', Menlo, monospace"
 COLORS = {
     'user_bg': '#2c3a4c',
     'user_name': '#8fb8ff',
-    'reply_bg': '#262626',
+    'reply_bg': theme.RAISED,
     'reply_name': '#e3a35f',
     'code_bg': '#1a1a1a',
     'code_label': '#7a7a7a',
-    'inline_code_bg': '#3a3a3a',
+    'inline_code_bg': theme.HOVER,
     'inline_code': '#e6c07b',
     'link': '#6fb3ff',
     'quote': '#a0a0a0',
-    'heading': '#f0f0f0',
+    'heading': theme.TEXT,
     'done_bg': '#1f3324',
     'done_name': '#7fd18b',
     'failed_bg': '#3a2222',

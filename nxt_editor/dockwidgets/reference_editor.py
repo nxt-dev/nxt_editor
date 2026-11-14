@@ -31,15 +31,17 @@ from Qt import QtCore, QtWidgets, QtGui
 
 # Internal
 import nxt_editor
+from nxt_editor import theme
 from nxt import nxt_io
 from nxt_editor.reference_paths import stored_reference_path
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
-# From the application palette, so this dialog belongs to nxt rather than
-# resembling it: #787878 is the secondary text, #B14A4A the warning red.
+# From the editor's theme, so this dialog belongs to nxt rather than
+# resembling it: faint text for what a path resolved to, and the warning
+# red.
 MISSING_COLOR = QtGui.QColor('#B14A4A')
-RESOLVED_COLOR = QtGui.QColor('#787878')
+RESOLVED_COLOR = QtGui.QColor(theme.TEXT_FAINT)
 
 # The stored path lives on the item, because what the item says is the
 # resolved path half the time and the two must not be confused.
