@@ -4,14 +4,21 @@ This page summarises what is new in recent releases of **nxt_editor**, and
 in **nxt_core 0.21**. Each item links to the part of the docs that explains
 it in full.
 
+## nxt_editor 4.6.1
+
+- Only proxy nodes are striped again, as before 4.6.0: nodes made by an
+  instance that have nothing of their own yet. An instance, or a node that
+  overrides anything its instance gives it, looks like any other node, in
+  the graph and the Outliner. See [How nodes look](reference.md#how-nodes-look).
+
 ## nxt_editor 4.6
 
 ### A new look, the same everywhere
 
 The editor is drawn in neutral dark greys, so the only color on screen is
 your layers'. Nodes are rounded cards in their layer's color with white
-names, a selected node has an amber outline, and instanced nodes are
-striped. It ships its own fonts and colors, so it looks the same on every
+names, a selected node has an amber outline, and proxy nodes, made by an
+instance and not yet changed, are striped. It ships its own fonts and colors, so it looks the same on every
 platform and in every host. See [How nodes look](reference.md#how-nodes-look).
 
 ### Outliner
