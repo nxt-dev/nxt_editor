@@ -16,7 +16,7 @@ import unittest
 from unittest import mock
 
 # External
-from Qt import QtWidgets
+from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from nxt_editor import stage_model, user_dir
@@ -174,6 +174,70 @@ class Striped(InstanceViewCase):
                        actions.execute_hierarchy_action):
             self.assertFalse(action.icon().isNull(), action.text())
             self.assertIn(action.text().split()[0], action.toolTip())
+
+
+class FocusIcon(InstanceViewCase):
+    """The node the view is drawn from has a target, and only it."""
+
+    def focused(self):
+        return sorted(path for path, item in self.view.items.items()
+                      if item.focus)
+
+    def test_the_selected_node_has_it(self):
+        self.open_view()
+        self.select(['/arm'])
+        self.assertEqual(['/arm'], self.focused())
+        self.select(['/arm_L'])
+        self.assertEqual(['/arm_L'], self.focused())
+
+    def test_show_selected_moves_it(self):
+        self.open_view()
+        self.view.follow_button.setChecked(False)
+        self.select(['/arm'])
+        self.view.show_button.click()
+        app.processEvents()
+        self.assertEqual(['/arm'], self.focused())
+        self.select(['/arm_R'])
+        self.assertEqual(['/arm'], self.focused())
+        self.view.show_button.click()
+        app.processEvents()
+        self.assertEqual(['/arm_R'], self.focused())
+
+    def test_a_double_click_here_moves_it(self):
+        from Qt import QtTest
+        self.open_view()
+        self.view.follow_button.setChecked(False)
+        self.view.set_focus_path('/arm')
+        app.processEvents()
+        view = self.view.view
+        item = self.view.items['/arm_R']
+        center = item.mapToScene(item.boundingRect().center())
+        QtTest.QTest.mouseDClick(view.viewport(), QtCore.Qt.LeftButton,
+                                 QtCore.Qt.NoModifier,
+                                 view.mapFromScene(center))
+        app.processEvents()
+        self.assertEqual('/arm_R', self.view.focus_path)
+        self.assertEqual(['/arm_R'], self.focused())
+        self.assertIn('drawn from', self.view.items['/arm_R'].toolTip())
+        self.assertNotIn('drawn from', self.view.items['/arm'].toolTip())
+
+    def test_the_target_is_drawn(self):
+        from nxt_editor.dockwidgets.instance_view import (
+            InstanceNodeItem, NODE_WIDTH, NODE_HEIGHT)
+
+        def render(focus):
+            item = InstanceNodeItem('/arm', ['#3166e4'], focus=focus)
+            image = QtGui.QImage(NODE_WIDTH, NODE_HEIGHT,
+                                 QtGui.QImage.Format_ARGB32)
+            image.fill(QtCore.Qt.black)
+            painter = QtGui.QPainter(image)
+            item.paint(painter, QtWidgets.QStyleOptionGraphicsItem())
+            painter.end()
+            return image
+        on, off = render(True), render(False)
+        # Where the target sits, at the right end of the name.
+        x, y = NODE_WIDTH - 17, 6 + 4 + 10
+        self.assertNotEqual(on.pixel(x, y), off.pixel(x, y))
 
 
 class Syncing(InstanceViewCase):
