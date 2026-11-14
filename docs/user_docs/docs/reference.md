@@ -50,8 +50,10 @@ and Blender.
   changed for you alone, see [Layer Color View](#layer-color-view)
   below.
 - Names are white. A disabled node's title is faded and struck through, and
-  a node that is an instance, or was made by one, has its name in italics
-  and diagonal stripes across its title.
+  an instance has its name in italics. A proxy node, one made by an
+  instance that has nothing of its own yet, has diagonal stripes across its
+  title. Change anything on it and it becomes a node of its own, drawn like
+  any other.
 - A selected node has an amber outline, and the node under the mouse a thin
   white one.
 - Start, skip and break points sit on the node's exec input: a green
@@ -530,8 +532,8 @@ on from **Window > Outliner**.
   above them stay so you can see where they are, and `Enter` frames the
   first match.
 - Text is white, as on the node in the graph, and a disabled node's is
-  faded and in italics. An instanced node's row is striped, as its title
-  is in the graph. Hovering a row outlines it in white and selecting
+  faded and in italics. A proxy node's row is striped, as its title is
+  in the graph. Hovering a row outlines it in white and selecting
   it outlines it in amber, the row's color staying as it is.
 - Start, break and skip points show before the name as they do on the
   node in the graph: the start icon, a red square for a breakpoint and an
