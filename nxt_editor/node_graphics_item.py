@@ -14,7 +14,7 @@ import nxt_editor
 from nxt import nxt_path, nxt_node
 from nxt.nxt_layer import LAYERS
 from nxt_editor.constants import FONTS
-from . import colors
+from . import colors, theme
 from nxt.stage import INTERNAL_ATTRS
 from .label_edit import NameEditDialog
 from .user_dir import USER_PREF, user_prefs
@@ -33,8 +33,12 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
     ATTR_PLUG_RADIUS = 4
     EXEC_PLUG_RADIUS = 6
-    ROUND_X = 2.
-    ROUND_Y = 2.
+    # A chip of a weaker layer's color at the title bar's right end.
+    LAYER_CHIP = 8
+    ROUND_X = theme.NODE_RADIUS
+    ROUND_Y = theme.NODE_RADIUS
+    # Room around a root node for its shadow: left, top, right, bottom.
+    SHADOW_MARGIN = (-6, -4, 6, 10)
 
     def __init__(self, model, node_path, view):
         super(NodeGraphicsItem, self).__init__()
@@ -58,9 +62,10 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.setAcceptHoverEvents(True)
 
         # draw settings
-        self.title_font = QtGui.QFont(FONTS.MONOSPACE, 14)
-        self.attr_font = QtGui.QFont(FONTS.MONOSPACE, 9)
-        self.title_rect_height = 39
+        self.title_font = theme.font(theme.NODE_TITLE_PX,
+                                     QtGui.QFont.Medium)
+        self.attr_font = theme.font(theme.NODE_ATTR_PX)
+        self.title_rect_height = 40
         self.attr_rect_height = 26
         self.attr_rect_opacity = 0.9
         self.attr_plug_side_margin = 0
@@ -77,6 +82,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.error_list = []
         self.error_item = None
         self.is_build_focus = False
+        self.header_text = theme.color(theme.NODE_TEXT)
 
         # local attributes
         self.user_attr_names = []
@@ -92,6 +98,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
         self.model.build_idx_changed.connect(self.update_build_focus)
         self.model.executing_changed.connect(self.update_build_focus)
+        self.xChanged.connect(self._moved)
+        self.yChanged.connect(self._moved)
         # draw node
         self.update_from_model()
 
@@ -184,16 +192,18 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         if not self.parentItem() or not self.parentItem().parentItem():
             y_move = 0.0
         else:
-            y_move = (self.parentItem().boundingRect().height() * -1.0) * .5
+            y_move = (self.parentItem().get_selection_rect().height()
+                      * -1.0) * .5
         self.pos_anim.setEndValue(QtCore.QPointF(x_move, y_move))
         self.out_anim_group.start()
 
     def update_color(self):
-        layers = self.model.get_layers_with_opinion(self.node_path)
+        layers = self.model.get_layers_with_opinion(self.node_path,
+                                                    as_layers=True)
         n_colors = []
         if layers:
-            for l_path in layers:
-                n_colors += [self.model.get_node_color(self.node_path, l_path)]
+            for layer in layers:
+                n_colors += [self.model.get_node_color(self.node_path, layer)]
         elif not self.model.node_is_implied(self.node_path):
             disp_layer = self.model.comp_layer
             n_colors = [self.model.get_node_color(self.node_path, disp_layer)]
@@ -250,30 +260,57 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         y = global_pos.y() + viewport_pos.y()
         return QtCore.QPointF(x, y)
 
-    def itemChange(self, change, value):
-        """Override of QtWidgets.QGraphicsItem itemChange."""
-        # keep connections drawing to node as it moves
-        if change is QtWidgets.QGraphicsItem.ItemPositionChange:
-            graphics = self.view.get_node_connection_graphics(self.node_path)
+    # There is deliberately no itemChange here. With PySide6 6.9 any
+    # Python itemChange, even one handing back the value it was given,
+    # makes setParentItem quietly do nothing, so child nodes were never
+    # stacked under their parent and were left behind when it moved. Moves
+    # are followed through the xChanged and yChanged signals instead, and
+    # snapping happens while dragging, see mouseMoveEvent.
+
+    def _moved(self):
+        """Keep connections drawing to this node, and to the children
+        stacked under it, as it moves."""
+        if self.scene() is None:
+            return
+        stack = [self]
+        while stack:
+            node = stack.pop()
+            graphics = self.view.get_node_connection_graphics(node.node_path)
             for connection in graphics:
                 connection.rebuild_line()
-        # TODO: Take into account the positions of every selected node and snap them all to a grid as soon as
-        #  the user preses shift. This will avoid the weird wavy snapping effect we have right now
-        if change == QtWidgets.QGraphicsItem.ItemPositionChange and self.scene():
-            ml = QtWidgets.QApplication.mouseButtons() == QtCore.Qt.LeftButton
-            shift = QtWidgets.QApplication.keyboardModifiers() == QtCore.Qt.ShiftModifier
-            force_snap = self.view.alignment_actions.snap_action.isChecked()
-            if (ml & shift) or force_snap and not self.get_is_animating():
-                value = self.closest_grid_point(value)
-                return value
+            stack += [c for c in node.childItems()
+                      if isinstance(c, NodeGraphicsItem)]
 
-        return super(NodeGraphicsItem, self).itemChange(change, value)
+    def mouseMoveEvent(self, event):
+        """Drag the selected nodes, snapped to the grid while Shift is held
+        or grid snapping is on."""
+        super(NodeGraphicsItem, self).mouseMoveEvent(event)
+        shift = event.modifiers() == QtCore.Qt.ShiftModifier
+        force_snap = self.view.alignment_actions.snap_action.isChecked()
+        if not (shift or force_snap) or not self.scene():
+            return
+        for item in self.scene().selectedItems():
+            if not isinstance(item, NodeGraphicsItem):
+                continue
+            if not item.flags() & QtWidgets.QGraphicsItem.ItemIsMovable:
+                continue
+            if item.get_is_animating():
+                continue
+            item.setPos(item.closest_grid_point(item.pos()))
 
     def boundingRect(self):
         """Override of QtWidgets.QGraphicsItem boundingRect. If this rectangle does not encompass the entire
         drawn item, artifacting will happen.
         """
-        return self.get_selection_rect()
+        # The same whether or not the node is stacked under another and
+        # has a shadow, so it does not change size when it is reparented.
+        return self.get_selection_rect().adjusted(*self.SHADOW_MARGIN)
+
+    def shape(self):
+        """Only the node itself takes clicks, not the shadow around it."""
+        path = QtGui.QPainterPath()
+        path.addRect(self.get_selection_rect())
+        return path
 
     def paint(self, painter, option, widget):
         """Override of QtWidgets.QGraphicsItem paint. Handles all visuals of the Node. Split up into 3
@@ -288,6 +325,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
             painter.setRenderHints(QtGui.QPainter.Antialiasing |
                                    QtGui.QPainter.TextAntialiasing |
                                    QtGui.QPainter.SmoothPixmapTransform, False)
+        self.draw_card(painter, lod)
         self.draw_title(painter, lod)
         self.draw_attributes(painter, lod)
         self.draw_border(painter, lod)
@@ -296,40 +334,128 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         snapped_pos = self.model.snap_pos_to_grid((position.x(), position.y()))
         return QtCore.QPointF(*snapped_pos)
 
+    def card_rect(self):
+        """Where the node is drawn: its title and attributes, less a pixel
+        at the bottom so nodes stacked under each other stay apart."""
+        rect = self.get_title_and_attrs_rect()
+        return rect.adjusted(0, 0, 0, -1)
+
+    def card_path(self, rect=None):
+        path = QtGui.QPainterPath()
+        path.addRoundedRect(rect or self.card_rect(), self.ROUND_X,
+                            self.ROUND_Y)
+        return path
+
+    def draw_card(self, painter, lod=1.):
+        """The node's shadow and body, under its title and attributes.
+
+        Only nodes at the root have a shadow. Stacked nodes sit right on
+        top of each other, where one would fall across the next.
+        """
+        painter.setPen(QtCore.Qt.NoPen)
+        rect = self.card_rect()
+        if self.parentItem() is None and self.is_real and lod > MIN_LOD:
+            for grow, drop, alpha in ((4, 5, 0.10), (2, 3, 0.16),
+                                      (0, 1.5, 0.28)):
+                shadow = rect.adjusted(-grow, -grow + drop, grow, grow + drop)
+                painter.setBrush(QtGui.QColor(0, 0, 0, int(255 * alpha)))
+                painter.drawRoundedRect(shadow, self.ROUND_X + grow,
+                                        self.ROUND_Y + grow)
+        body = theme.color(theme.NODE_BODY)
+        if not self.is_real:
+            body.setAlphaF(self.color_alpha)
+        painter.setBrush(body)
+        painter.drawPath(self.card_path(rect))
+
     def draw_border(self, painter, lod=1.):
         """Draws border, called exclusively by paint.
 
         :param painter: painter from paint.
         :type painter: QtGui.QPainter
         """
-
+        rect = self.card_rect()
         if self.model.is_selected(self.node_path):
-            color = colors.SELECTED
+            color, width = theme.color(theme.SELECTED), 2.0
         elif self.is_build_focus:
-            color = QtCore.Qt.red
+            color, width = QtGui.QColor(QtCore.Qt.red), 2.0
         elif self.is_hovered:
-            color = QtCore.Qt.white
+            color, width = theme.color(theme.HOVERED, 0.55), 1.0
         else:
-            painter.setPen(QtCore.Qt.NoPen)
-            return
-        if self.is_proxy:
-            pen = QtGui.QPen(color, 1, QtCore.Qt.PenStyle.DashLine)
-        else:
-            pen = QtGui.QPen(color)
+            # A faint edge, so a dark node still has an outline on the
+            # dark graph.
+            color, width = QtGui.QColor(255, 255, 255, 22), 1.0
         if self.locked:
             c = QtGui.QColor(self.colors[-1])
             c.setAlphaF(.3)
-            b = QtGui.QBrush(c)
-            painter.setBrush(b)
+            painter.setBrush(c)
             painter.setPen(QtCore.Qt.NoPen)
-        else:
-            painter.setPen(pen)
-            painter.setBrush(QtCore.Qt.NoBrush)
-        rect = QtCore.QRectF(self.get_selection_rect().x() + 1,
-                             self.get_selection_rect().y() + 1,
-                             self.get_selection_rect().width() - 2,
-                             self.get_selection_rect().height() - 2)
-        painter.drawRoundedRect(rect, self.ROUND_X, self.ROUND_Y)
+            painter.drawPath(self.card_path(rect))
+        pen = QtGui.QPen(color, width)
+        if self.is_proxy:
+            pen.setStyle(QtCore.Qt.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(QtCore.Qt.NoBrush)
+        inset = width / 2.0
+        painter.drawRoundedRect(rect.adjusted(inset, inset, -inset, -inset),
+                                self.ROUND_X - inset, self.ROUND_Y - inset)
+
+    def draw_header(self, painter):
+        """The title bar, in the color of the layer with the strongest
+        opinion. Each weaker layer adds a chip of its color at the right
+        end, the chips side by side.
+
+        Instanced nodes are striped, locked nodes stippled, and nodes that are
+        only implied by their children see through.
+        """
+        title_rect = QtCore.QRectF(0, 0, self.max_width,
+                                   self.title_rect_height)
+        painter.save()
+        clip = self.card_path().intersected(self._rect_path(title_rect))
+        painter.setClipPath(clip)
+        colors_ = [QtGui.QColor(c) for c in self.colors]
+        if not self.is_real or self.locked:
+            for c in colors_:
+                c.setAlphaF(self.color_alpha if not self.is_real else 0.35)
+        top = colors_[-1]
+        # The layer's own color, as it is everywhere else the layer shows.
+        fill = top.darker(self.dim_factor)
+        if not self.node_enabled:
+            fill = theme.mix(fill, theme.NODE_BODY, 0.55)
+        # Text and markers on the title bar are white on every color.
+        self.header_text = theme.color(theme.NODE_TEXT)
+        painter.fillRect(title_rect, fill)
+        # A lighter line along the top edge, as light falling on it.
+        painter.fillRect(QtCore.QRectF(0, 0, self.max_width, 1),
+                         QtGui.QColor(255, 255, 255, 40))
+        if self.is_proxy or self.node_instance:
+            # Instanced, made by its parent's instance or one itself.
+            theme.paint_stripes(painter, title_rect, fill)
+        if self.locked:
+            stipple = QtGui.QColor(0, 0, 0, 90)
+            painter.fillRect(title_rect,
+                             QtGui.QBrush(stipple, QtCore.Qt.Dense5Pattern))
+        chip = self.LAYER_CHIP
+        for i, color in enumerate(reversed(colors_[:-1])):
+            x = self.max_width - (i + 1) * chip
+            painter.fillRect(QtCore.QRectF(x, 0, chip,
+                                           self.title_rect_height),
+                             color.darker(self.dim_factor))
+        if self.user_attr_names:
+            # Where the title meets the attributes.
+            painter.fillRect(QtCore.QRectF(0, self.title_rect_height - 1,
+                                           self.max_width, 1),
+                             QtGui.QColor(0, 0, 0, 70))
+        painter.restore()
+
+    def chips_width(self):
+        """How much of the title bar's right end the layer chips take."""
+        return max(len(self.colors) - 1, 0) * self.LAYER_CHIP
+
+    @staticmethod
+    def _rect_path(rect):
+        path = QtGui.QPainterPath()
+        path.addRect(rect)
+        return path
 
     def draw_title(self, painter, lod=1.):
         """Draw title of the node. Called exclusively in paint.
@@ -339,47 +465,11 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         """
         # draw bg
         painter.setPen(QtCore.Qt.NoPen)
-        bg = painter.background()
-        bgm = painter.backgroundMode()
         if self.error_item:
             self.scene().removeItem(self.error_item)
             self.error_item.deleteLater()
         self.error_item = None
-        if self.is_real and not self.locked:
-            painter.setBackgroundMode(QtCore.Qt.OpaqueMode)
-        else:
-            painter.setBackgroundMode(QtCore.Qt.TransparentMode)
-            [c.setAlphaF(self.color_alpha) for c in self.colors]
-        color_count = len(self.colors)
-        color_band_width = 10
-        for i in range(color_count):
-            color = self.colors[i]
-            if self.is_proxy:
-                painter.setBackground(color.darker(self.dim_factor))
-                brush = QtGui.QBrush(color.darker(self.dim_factor*2),
-                                     QtCore.Qt.FDiagPattern)
-            else:
-                brush = QtGui.QBrush(color.darker(self.dim_factor))
-            if self.locked:
-                c = color.darker(self.dim_factor)
-                c.setAlphaF(.5)
-                painter.setBackground(c)
-                brush = QtGui.QBrush(c.darker(self.dim_factor * 2),
-                                     QtCore.Qt.Dense1Pattern)
-            painter.setBrush(brush)
-            # Top Opinion
-            if i+1 == color_count:
-                remaining_width = self.max_width - (i*color_band_width)
-                rect = QtCore.QRectF(0, 0, remaining_width,
-                                     self.title_rect_height)
-            # Lower Opinions
-            else:
-                x_pos = self.max_width - (i+1)*color_band_width
-                rect = QtCore.QRectF(x_pos, 0, color_band_width,
-                                     self.title_rect_height)
-            painter.drawRoundedRect(rect, self.ROUND_X, self.ROUND_Y)
-        painter.setBackground(bg)
-        painter.setBackgroundMode(bgm)
+        self.draw_header(painter)
         # draw exec plugs
         exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
         exec_in_pos = self.get_attr_in_pos(exec_attr, scene=False)
@@ -388,41 +478,37 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.exec_in_plug.setPos(exec_in_pos)
         if lod > MIN_LOD:
             # draw attr dots
-            offset = -6
+            offset = -5
+            dots_color = QtGui.QColor(self.header_text)
+            dots_color.setAlphaF(0.6)
             for fill in self.attr_dots:
-                painter.setBrush(QtCore.Qt.white)
-                if fill:
-                    painter.setBrush(QtCore.Qt.white)
-                else:
-                    painter.setBrush(QtCore.Qt.NoBrush)
-                dots_color = QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor)
-                painter.setPen(QtGui.QPen(dots_color, 0.5))
-                dot_x = self.max_width - 15
+                painter.setBrush(dots_color if fill else QtCore.Qt.NoBrush)
+                painter.setPen(QtGui.QPen(dots_color, 0.8))
+                dot_x = self.max_width - 14 - self.chips_width()
                 dot_y = (self.title_rect_height / 2) + offset
-                painter.drawEllipse(QtCore.QPointF(dot_x, dot_y), 2, 2)
-                offset += 6
+                painter.drawEllipse(QtCore.QPointF(dot_x, dot_y), 1.6, 1.6)
+                offset += 5
 
         # draw title
 
         painter.setFont(self.title_font)
         title_str = nxt_path.node_name_from_node_path(self.node_path)
         font_metrics = QtGui.QFontMetrics(self.title_font)
-        width = self.max_width - 40
+        width = self.max_width - 40 - self.chips_width()
         if self.error_list:
             width -= 20
+        # Light or dark, whichever reads on this layer's color.
+        text_color = QtGui.QColor(self.header_text)
+        if not self.node_enabled:
+            text_color.setAlphaF(0.5)
         if lod > MIN_LOD:
-            painter.setPen(
-                QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor))
-            if not self.node_enabled:
-                painter.setPen(QtGui.QColor(QtCore.Qt.white).darker(150))
+            painter.setPen(text_color)
             title = font_metrics.elidedText(title_str,
                                             QtCore.Qt.ElideRight, width)
-            painter.drawText(15, 0, self.max_width - 15, self.title_rect_height,
+            painter.drawText(14, 0, self.max_width - 14, self.title_rect_height,
                              QtCore.Qt.AlignVCenter, title)
         else:
-            painter.setBrush(QtGui.QColor(QtCore.Qt.white).darker(self.dim_factor))
-            if not self.node_enabled:
-                painter.setBrush(QtGui.QColor(QtCore.Qt.white).darker(150))
+            painter.setBrush(text_color)
             proxy_rect = font_metrics.boundingRect(title_str)
             r_width = proxy_rect.width() * .8
             height = proxy_rect.height()
@@ -433,9 +519,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
             # draw error
             if self.error_list:
                 pos = QtCore.QPointF(self.max_width-45, self.title_rect_height/4)
-                font_size = user_prefs.get(USER_PREF.FONT_SIZE, 16)
-                error_item = ErrorItem(font=QtGui.QFont('Roboto',
-                                                        font_size, 75),
+                error_item = ErrorItem(font=theme.font(14,
+                                                       QtGui.QFont.Bold),
                                        pos=pos, text='!')
                 error_item.setParentItem(self)
                 error_item.setZValue(50)
@@ -465,7 +550,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                     center_offset = (arrow_width * (num * .5) - arrow_width * .5)
                     cur_offset = (i * arrow_width)
                     pos = ((self.max_width * .5) + center_offset - cur_offset)
-                    arrow.setPos(pos, self.boundingRect().height())
+                    arrow.setPos(pos, self.get_selection_rect().height())
                     self.collapse_arrows += [arrow]
                     i += 1
 
@@ -475,12 +560,15 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         :param painter: painter from paint.
         :type painter: QtGui.QPainter
         """
+        card = self.card_path()
         for attr_name in self.user_attr_names:
-            # draw bg rect
+            # draw bg rect, inside the card's rounded corners
             attr_details = self._attribute_draw_details[attr_name]
-            painter.setBrush(attr_details['bg_color'])
+            painter.save()
+            painter.setClipPath(card)
+            painter.fillRect(attr_details['bg_rect'], attr_details['bg_color'])
+            painter.restore()
             painter.setPen(QtCore.Qt.NoPen)
-            painter.drawRect(attr_details['bg_rect'])
 
             # draw connection points
             target_color = attr_details['plug_color']
@@ -531,7 +619,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                             self.max_width - 20)
             if lod > MIN_LOD:
                 painter.setPen(attr_details['title_color'])
-                painter.drawText(rect.x() + 10, rect.y() - 1, rect.width(),
+                painter.drawText(rect.x() + 12, rect.y(), rect.width(),
                                  rect.height(), QtCore.Qt.AlignVCenter, title)
             else:
                 proxy_rect = font_metrics.boundingRect(title)
@@ -566,8 +654,15 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
             # background color
             color = self.model.get_node_attr_color(self.node_path, attr_name,
                                                    comp_layer)
-            bg_color = QtGui.QColor(color).darker(150).darker(self.dim_factor)
-            bg_color.setAlphaF(self.attr_rect_opacity)
+            # The body, with a hint of the attribute's color, alternating
+            # so rows are easy to follow across.
+            body = theme.NODE_BODY
+            if index % 2:
+                body = theme.mix(body, '#ffffff', 0.025)
+            bg_color = theme.mix(body, QtGui.QColor(color), 0.18)
+            bg_color = bg_color.darker(self.dim_factor)
+            if not self.is_real:
+                bg_color.setAlphaF(self.color_alpha)
             draw_details['bg_color'] = bg_color
             # plug color
             type_ = self.model.get_node_attr_type(self.node_path, attr_name,
@@ -578,13 +673,14 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
             attr_is_instance = self.model.node_attr_is_instance(self.node_path,
                                                                 attr_name,
                                                                 comp_layer)
-            dim_title = 150 if attr_is_instance else self.dim_factor
-            white = QtGui.QColor(QtCore.Qt.white)
-            draw_details['title_color'] = white.darker(dim_title)
+            if attr_is_instance:
+                title_color = theme.color(theme.TEXT_FAINT)
+            else:
+                title_color = theme.color(theme.TEXT_DIM).darker(
+                    self.dim_factor)
+            draw_details['title_color'] = title_color
             # font
-            font = QtGui.QFont(self.attr_font.family(),
-                               self.attr_font.pointSize(),
-                               italic=attr_is_instance)
+            font = theme.font(theme.NODE_ATTR_PX, italic=attr_is_instance)
             draw_details['title_font'] = font
 
             self._attribute_draw_details[attr_name] = draw_details
@@ -788,21 +884,32 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
     def rename_node(self):
         """Presents a rename dialog pop-up over the node item. The new name is sent to the model."""
+        # The box opens on the node, so the node has to be on screen. A
+        # node renamed from elsewhere, such as the Outliner, may not be.
+        title_scene = self.mapToScene(self.title_bounding_rect).boundingRect()
+        shown = self.view.mapToScene(
+            self.view.viewport().rect()).boundingRect()
+        if not shown.contains(title_scene):
+            self.view.centerOn(title_scene.center())
         # get dialog geometry
         scale_factor = self.view.transform().m11()
         scale = scale_factor if scale_factor > 0.75 else 0.75
         title_rect = self.title_bounding_rect.toRect()
-        width = title_rect.width() * scale
-        height = title_rect.height() * scale
+        width = int(title_rect.width() * scale)
+        height = int(title_rect.height() * scale)
         pos = self.screen_pos
-        geometry = QtCore.QRect(pos.x(), pos.y(), width, height)
+        geometry = QtCore.QRect(int(pos.x()), int(pos.y()), width, height)
 
         # rename dialog
         name = nxt_path.node_name_from_node_path(self.node_path)
         dialog = NameEditDialog(name=name, geometry=geometry, parent=None)
+        # Looks like the title it replaces.
         color_name = self.colors[-1].name()
-        dialog.setStyleSheet('background-color: %s; color: white' % color_name)
-        font = QtGui.QFont(self.title_font.family(), self.title_font.pointSizeF() * scale)
+        dialog.line_edit.setStyleSheet(
+            'background-color: %s; color: %s; border: 1px solid %s;' % (
+                color_name, theme.NODE_TEXT, theme.SELECTED))
+        font = QtGui.QFont(self.title_font)
+        font.setPixelSize(max(1, int(self.title_font.pixelSize() * scale)))
         dialog.line_edit.setFont(font)
         dialog.exec_()
 
@@ -912,7 +1019,7 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
         """Override of QtWidgets.QGraphicsItem boundingRect. If this rectangle does not encompass the entire
         drawn item, artifacting will happen.
         """
-        offset = self.hover_width * 8
+        offset = max(self.hover_width * 8, 3)
         return QtCore.QRect((self.radius + offset) * -1,
                             (self.radius + offset) * -1,
                             (self.radius + offset) * 2,
@@ -933,12 +1040,16 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
     def paint(self, painter, option, widget):
         """Override of QtWidgets.QGraphicsItem paint. Handles all visuals of the Plug."""
         self._apply_lod_to_painter(painter)
-        if self.is_hovered:
-            painter.setPen(QtGui.QPen(QtCore.Qt.white, self.hover_width, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap, QtCore.Qt.RoundJoin))
-        else:
-            painter.setPen(QtCore.Qt.NoPen)
+        # A ring in the graph's color sets the plug apart from the edge of
+        # the node it sits on.
+        painter.setPen(QtGui.QPen(theme.color(theme.GRAPH), 1.5))
         painter.setBrush(self.color)
         painter.drawEllipse(QtCore.QPointF(0, 0), self.radius, self.radius)
+        if self.is_hovered:
+            painter.setPen(QtGui.QPen(QtCore.Qt.white, 1.0))
+            painter.setBrush(QtCore.Qt.NoBrush)
+            painter.drawEllipse(QtCore.QPointF(0, 0), self.radius + 2,
+                                self.radius + 2)
 
     def itemChange(self, change, value):
         """Override of QtWidgets.QGraphicsItem itemChange."""

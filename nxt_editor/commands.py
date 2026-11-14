@@ -8,8 +8,10 @@ import time
 from Qt.QtWidgets import QUndoCommand
 
 # Internal
+from nxt_editor import backdrops
 from nxt_editor import colors
 from nxt_editor import user_dir
+from nxt_editor import wires
 from nxt_editor.reference_paths import stored_reference_path
 from nxt import nxt_path
 from nxt.nxt_layer import LAYERS, SAVE_KEY
@@ -733,6 +735,99 @@ class SetNodesPosition(NxtCommand):
                 else:
                     nodes_str = 'nodes'
                 self.setText('Move {} {}'.format(nodes_str, delta_str))
+        self.redo_effected_layer(layer.real_path)
+
+
+class SetBackdrops(NxtCommand):
+
+    """Add, change or remove backdrops on one layer."""
+
+    def __init__(self, changes, model, layer_path, text='Edit backdrop'):
+        """
+        :param changes: {id: record, None or backdrops.ABSENT}, see
+            nxt_editor.backdrops.write
+        """
+        super(SetBackdrops, self).__init__(model)
+        self.layer_path = layer_path
+        self.new = copy.deepcopy(changes)
+        layer = model.lookup_layer(layer_path)
+        current = backdrops.layer_backdrops(layer)
+        self.old = {}
+        for backdrop_id in changes:
+            self.old[backdrop_id] = copy.deepcopy(
+                current.get(backdrop_id, backdrops.ABSENT))
+        self.setText(text)
+
+    @processing
+    def undo(self):
+        layer = self.model.lookup_layer(self.layer_path)
+        backdrops.write(layer, self.old)
+        self.model.backdrops_changed.emit()
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self.model.lookup_layer(self.layer_path)
+        backdrops.write(layer, self.new)
+        self.model.backdrops_changed.emit()
+        self.redo_effected_layer(layer.real_path)
+
+
+class SetWires(NxtCommand):
+
+    """Change how lines are drawn on one layer: the graph's style, and the
+    points lines are routed through."""
+
+    def __init__(self, model, layer_path, points=None, style=None,
+                 text='Edit connection points', preference=None):
+        """
+        :param points: {line key: points, None or wires.ABSENT}, see
+            nxt_editor.wires.write_points
+        :param style: a wires style, wires.ABSENT, or None to leave it
+        :param preference: a wires style to remember as the user's
+            preference, put back as it was on undo, or None to leave it
+        """
+        super(SetWires, self).__init__(model)
+        self.layer_path = layer_path
+        layer = model.lookup_layer(layer_path)
+        self.new_points = copy.deepcopy(points or {})
+        current = wires.layer_points(layer)
+        self.old_points = {}
+        for key in self.new_points:
+            self.old_points[key] = copy.deepcopy(
+                current.get(key, wires.ABSENT))
+        self.new_style = style
+        self.old_style = wires.layer_style(layer)
+        self.new_preference = preference
+        self.old_preference = user_dir.user_prefs.get(
+            user_dir.USER_PREF.CONNECTION_STYLE)
+        self.setText(text)
+
+    def _write(self, points, style, preference):
+        layer = self.model.lookup_layer(self.layer_path)
+        if points:
+            wires.write_points(layer, points)
+        if self.new_style is not None:
+            wires.write_style(layer, style)
+        if self.new_preference is not None:
+            key = user_dir.USER_PREF.CONNECTION_STYLE
+            if preference is None:
+                if key in user_dir.user_prefs:
+                    user_dir.user_prefs.pop(key)
+            else:
+                user_dir.user_prefs[key] = preference
+        self.model.wires_changed.emit()
+        return layer
+
+    @processing
+    def undo(self):
+        self._write(self.old_points, self.old_style, self.old_preference)
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self._write(self.new_points, self.new_style,
+                            self.new_preference)
         self.redo_effected_layer(layer.real_path)
 
 
@@ -1466,15 +1561,20 @@ class ClearBreakpoints(QUndoCommand):
 
     @processing
     def undo(self):
-        user_dir.breakpoints[self.layer_path] = self.prev_breaks
+        layer_path = self.model.lookup_layer(self.layer_path).real_path
+        self.model._breaks(layer_path)[layer_path] = self.prev_breaks
         self.model.nodes_changed.emit(tuple(self.prev_breaks))
+        self.model.breaks_changed.emit(self.prev_breaks)
 
     @processing
     def redo(self):
-        self.prev_breaks = user_dir.breakpoints.get(self.layer_path, [])
-        if self.layer_path in list(user_dir.breakpoints.keys()):
-            user_dir.breakpoints.pop(self.layer_path)
+        layer_path = self.model.lookup_layer(self.layer_path).real_path
+        breaks = self.model._breaks(layer_path)
+        self.prev_breaks = breaks.get(layer_path, [])
+        if layer_path in list(breaks.keys()):
+            breaks.pop(layer_path)
         self.model.nodes_changed.emit(tuple(self.prev_breaks))
+        self.model.breaks_changed.emit([])
         self.setText("Clear all breakpoints")
 
 

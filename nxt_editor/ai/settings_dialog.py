@@ -11,7 +11,8 @@ from Qt import QtCore, QtWidgets
 # Internal
 import nxt_editor
 from nxt_editor import user_dir
-from nxt_editor.ai import claude_code, providers, secret_store
+from nxt_editor.constants import FONTS
+from nxt_editor.ai import claude_code, codex, providers, secret_store
 from nxt_editor.ai.memory_page import MemoryPage
 from nxt_editor.ai.workers import TaskThread
 
@@ -33,8 +34,7 @@ class WaitDialog(QtWidgets.QDialog):
         self.label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         layout.addWidget(self.label)
         self.code_label = QtWidgets.QLabel()
-        font = self.code_label.font()
-        font.setPointSize(font.pointSize() * 2)
+        font = FONTS.default_font(FONTS.DEFAULT_SIZE * 2)
         font.setBold(True)
         self.code_label.setFont(font)
         self.code_label.setAlignment(QtCore.Qt.AlignCenter)
@@ -62,6 +62,10 @@ class WaitDialog(QtWidgets.QDialog):
         self.copy_button = QtWidgets.QPushButton('Copy Code')
         self.copy_button.hide()
         buttons.addWidget(self.copy_button)
+        self.other_account_button = QtWidgets.QPushButton(
+            'Use Another Account or Workspace')
+        self.other_account_button.hide()
+        buttons.addWidget(self.other_account_button)
         buttons.addStretch()
         cancel = QtWidgets.QPushButton('Cancel')
         cancel.clicked.connect(self.reject)
@@ -89,6 +93,8 @@ class WaitDialog(QtWidgets.QDialog):
 class ProviderBox(QtWidgets.QGroupBox):
     """Sign in, API key and model for one provider."""
     changed = QtCore.Signal()
+    # Something was saved in the secure store.
+    stored = QtCore.Signal()
 
     def __init__(self, provider, parent=None):
         super(ProviderBox, self).__init__(provider.label, parent)
@@ -102,7 +108,7 @@ class ProviderBox(QtWidgets.QGroupBox):
 
         # Web
         self.web_button = QtWidgets.QPushButton()
-        self.web_button.clicked.connect(self.sign_in)
+        self.web_button.clicked.connect(lambda _=False: self.sign_in())
         layout.addWidget(self.web_button, 1, 0, 1, 2)
         self.sign_out_button = QtWidgets.QPushButton('Sign Out')
         self.sign_out_button.clicked.connect(self.sign_out)
@@ -110,9 +116,9 @@ class ProviderBox(QtWidgets.QGroupBox):
         self.web_button.setVisible(provider.web_sign_in)
         self.sign_out_button.setVisible(provider.web_sign_in)
         self.locate_button = QtWidgets.QPushButton('Locate...')
-        self.locate_button.setToolTip('Show nxt where Claude Code is '
-                                      'installed.')
-        self.locate_button.clicked.connect(self.locate_claude_code)
+        self.locate_button.setToolTip('Show nxt where {} is installed.'.format(
+            provider.app_name))
+        self.locate_button.clicked.connect(self.locate_app)
         self.locate_button.hide()
         layout.addWidget(self.locate_button, 1, 3)
 
@@ -135,7 +141,8 @@ class ProviderBox(QtWidgets.QGroupBox):
             layout.addWidget(self.find_button, 1, 2)
 
         # API key
-        layout.addWidget(QtWidgets.QLabel('API key'), 2, 0)
+        key_label = QtWidgets.QLabel('API key')
+        layout.addWidget(key_label, 2, 0)
         self.key_edit = QtWidgets.QLineEdit()
         self.key_edit.setEchoMode(QtWidgets.QLineEdit.Password)
         self.key_edit.returnPressed.connect(self.save_key)
@@ -151,6 +158,9 @@ class ProviderBox(QtWidgets.QGroupBox):
                 '<a href="{}">Get an API key</a>'.format(provider.keys_url))
             keys_link.setOpenExternalLinks(True)
             layout.addWidget(keys_link, 3, 1, 1, 3)
+        for widget in (key_label, self.key_edit, self.save_key_button,
+                       self.remove_key_button):
+            widget.setVisible(provider.takes_api_key)
 
         # Which one
         self.use_web = QtWidgets.QRadioButton('Use the sign in')
@@ -190,8 +200,10 @@ class ProviderBox(QtWidgets.QGroupBox):
         self.status_label.setText(text)
 
     @property
-    def uses_claude_code(self):
-        return isinstance(self.provider, providers.Anthropic)
+    def uses_app(self):
+        """True when signing in runs the provider's own app (Claude Code or
+        Codex)."""
+        return self.provider.app is not None
 
     @property
     def is_local(self):
@@ -236,19 +248,33 @@ class ProviderBox(QtWidgets.QGroupBox):
         provider = self.provider
         if not provider.web_sign_in:
             return
-        missing = self.uses_claude_code and not provider.cli
+        missing = self.uses_app and not provider.cli
         self.locate_button.setVisible(missing)
         if missing:
-            text = 'Install Claude Code to Sign In'
-            tip = ('Anthropic only lets a Claude account be used through '
-                   'its own apps. Install Claude Code, then sign in here '
-                   'with any Claude account. If it is installed, press '
-                   'Locate and choose it.')
+            text = 'Install {} to Sign In'.format(provider.app_name)
+            if provider.app is codex:
+                tip = ('Codex signs in with your ChatGPT account, and nxt '
+                       'uses it the same way. Install Codex, then sign in '
+                       'here. If it is installed, press Locate and choose '
+                       'it.')
+            else:
+                tip = ('Anthropic only lets a Claude account be used '
+                       'through its own apps. Install Claude Code, then '
+                       'sign in here with any Claude account. If it is '
+                       'installed, press Locate and choose it.')
         elif has_web:
             text = 'Switch Account'
             tip = 'Sign in with a different {} account.'.format(
                 provider.label)
-        elif self.uses_claude_code:
+            if isinstance(provider, providers.OpenAI):
+                tip = ('Sign in with a different ChatGPT account, or the '
+                       'same account in another workspace.')
+        elif provider.app is codex:
+            text = 'Sign in with Codex'
+            tip = ('Opens Codex, which signs in in your browser with your '
+                   'ChatGPT account. Chats count against that plan\'s '
+                   'Codex limits.')
+        elif self.uses_app:
             text = 'Sign in with Claude Code'
             tip = ('Opens Claude Code, which signs in in your browser with '
                    'any Claude account: Pro, Max, Ultra, Team or '
@@ -259,18 +285,50 @@ class ProviderBox(QtWidgets.QGroupBox):
                    '{} plan.'.format(provider.web_plan))
         self.web_button.setText(text)
         self.web_button.setToolTip(tip)
+        self.web_button.setMenu(self.accounts_menu(has_web))
+
+    def accounts_menu(self, has_web):
+        """For ChatGPT, the accounts signed in here before and a way to add
+        another. None when there is nothing to pick from."""
+        provider = self.provider
+        if not isinstance(provider, providers.OpenAI):
+            return None
+        accounts = provider.saved_accounts()
+        if not accounts:
+            return None
+        current = None
+        if has_web:
+            current = (provider.web_record() or {}).get('client_id')
+        menu = QtWidgets.QMenu(self)
+        for account in accounts:
+            label = provider.account_label(account)
+            action = menu.addAction(label)
+            if account['client_id'] == current:
+                action.setText(label + ' (signed in)')
+                action.setEnabled(False)
+            else:
+                action.triggered.connect(
+                    lambda _=False, a=account: self.sign_in(account=a))
+        menu.addSeparator()
+        other = menu.addAction('Another Account or Workspace...')
+        other.setToolTip('Each ChatGPT workspace needs its own sign in.')
+        other.triggered.connect(
+            lambda _=False: self.sign_in(account=providers.NEW_ACCOUNT))
+        # The old one is kept by the button until it is replaced.
+        self._accounts_menu = menu
+        return menu
 
     def refresh(self):
         provider = self.provider
         store_ok = provider.store.available
-        if self.uses_claude_code:
+        if self.uses_app:
             has_web = bool(provider.web_record())
         else:
             has_web = bool(provider.web_record()) if store_ok else False
         has_key = bool(provider.saved_api_key()) if store_ok else False
         self.set_status(provider.status())
         self.refresh_web_button(has_web)
-        self.web_button.setEnabled(store_ok or self.uses_claude_code)
+        self.web_button.setEnabled(store_ok or self.uses_app)
         self.sign_out_button.setEnabled(has_web)
         self.key_edit.setEnabled(store_ok)
         self.save_key_button.setEnabled(store_ok)
@@ -293,7 +351,8 @@ class ProviderBox(QtWidgets.QGroupBox):
         self.use_key.setChecked(provider.method == providers.KEY)
         self.use_web.blockSignals(False)
         if provider.status() == 'Not set up.':
-            self.set_models([], 'Sign in or add a key first')
+            self.set_models([], 'Sign in or add a key first'
+                            if provider.takes_api_key else 'Sign in first')
         else:
             models = provider.cached_models()
             if models is None:
@@ -320,10 +379,12 @@ class ProviderBox(QtWidgets.QGroupBox):
         try:
             self.provider.save_api_key(api_key)
         except secret_store.SecretStoreError as err:
-            self.set_status(str(err), error=True)
+            self.set_status('Could not save the key: {}'.format(err),
+                            error=True)
             return
         self.refresh()
         self.changed.emit()
+        self.stored.emit()
         self.check()
 
     def remove_key(self):
@@ -332,14 +393,20 @@ class ProviderBox(QtWidgets.QGroupBox):
         self.changed.emit()
 
     def sign_out(self):
-        if self.uses_claude_code:
+        name = self.provider.app_name
+        if self.uses_app:
             answer = QtWidgets.QMessageBox.question(
-                self, 'Sign Out of Claude Code',
-                'This signs Claude Code out on this computer, not just in '
-                'nxt. Sign out?')
+                self, 'Sign Out of {}'.format(name),
+                'This signs {} out on this computer, not just in nxt. Sign '
+                'out?'.format(name))
             if answer != QtWidgets.QMessageBox.Yes:
                 return
-        self.provider.sign_out()
+        try:
+            self.provider.sign_out()
+        except Exception as err:
+            self.set_status('Could not sign out: {}'.format(err),
+                            error=True)
+            return
         self.refresh()
         self.changed.emit()
 
@@ -360,65 +427,105 @@ class ProviderBox(QtWidgets.QGroupBox):
             self.wait_dialog.done(0)
             self.wait_dialog = None
 
-    def sign_in(self):
+    def sign_in(self, account=None):
         provider = self.provider
-        if self.uses_claude_code:
-            self.sign_in_with_claude_code()
+        if self.uses_app:
+            self.sign_in_with_app()
             return
+        text = 'Finish signing in in your web browser.'
+        # Signing in to an account made before, which OpenAI keeps to the
+        # workspace it was made in.
+        reusing = (isinstance(provider, providers.OpenAI) and
+                   account is not providers.NEW_ACCOUNT and
+                   bool(account or provider.web_record()))
+        if reusing:
+            text += ('\n\nIf OpenAI says the app is only for members of '
+                     'its workspace, press Use Another Account or '
+                     'Workspace.')
         self.wait_dialog = WaitDialog(
-            'Sign in with {}'.format(provider.web_plan),
-            'Finish signing in in your web browser.', self)
+            'Sign in with {}'.format(provider.web_plan), text, self)
         self.wait_dialog.rejected.connect(self.cancel_sign_in)
+        if reusing:
+            self.wait_dialog.other_account_button.show()
+            self.wait_dialog.other_account_button.clicked.connect(
+                self.sign_in_another_account)
         if isinstance(provider, providers.XAI):
             self._run(lambda cancelled: provider.start_sign_in(),
                       self.on_xai_code)
+        elif isinstance(provider, providers.OpenAI):
+            def sign_in(cancelled):
+                return provider.sign_in(open_url, cancelled=cancelled,
+                                        account=account)
+            self._run(sign_in, self.on_signed_in)
         else:
             def sign_in(cancelled):
                 return provider.sign_in(open_url, cancelled=cancelled)
             self._run(sign_in, self.on_signed_in)
         self.wait_dialog.show()
 
-    def locate_claude_code(self):
-        name = 'claude.exe' if sys.platform == 'win32' else 'claude'
+    def sign_in_another_account(self):
+        """Give up on this sign in and add a new account instead."""
+        wait = self.wait_dialog
+        self.cancel_sign_in()
+        if wait:
+            wait.done(0)
+        self.sign_in(account=providers.NEW_ACCOUNT)
+
+    def locate_app(self):
+        provider = self.provider
+        program = 'codex' if provider.app is codex else 'claude'
+        name = program + '.exe' if sys.platform == 'win32' else program
         path = QtWidgets.QFileDialog.getOpenFileName(
-            self, 'Where is Claude Code?', os.path.expanduser('~'),
+            self, 'Where is {}?'.format(provider.app_name),
+            os.path.expanduser('~'),
             '{0} ({0});;All files (*)'.format(name))[0]
         if not path:
             return
-        self.provider.prefs[user_dir.USER_PREF.AI_CLAUDE_CODE_PATH] = path
-        claude_code.forget_status()
+        provider.prefs[provider.app_path_pref] = path
+        provider.app.forget_status()
         self.refresh()
         self.changed.emit()
 
-    def sign_in_with_claude_code(self):
+    def sign_in_with_app(self):
         provider = self.provider
+        name = provider.app_name
         if not provider.cli:
-            open_url(claude_code.INSTALL_URL)
-            self.set_status('Install Claude Code from the page that opened, '
-                            'then press Sign in with Claude Code. Or paste '
-                            'an API key below.')
+            open_url(provider.app.INSTALL_URL)
+            text = ('Install {0} from the page that opened, then press Sign '
+                    'in with {0}.'.format(name))
+            if provider.takes_api_key:
+                text += ' Or paste an API key below.'
+            self.set_status(text)
             return
         try:
             login = provider.start_sign_in()
-        except (OSError, claude_code.ClaudeCodeError) as err:
-            self.set_status(str(err), error=True)
+        except (OSError, claude_code.ClaudeCodeError,
+                codex.CodexError) as err:
+            self.set_status('Could not start {}: {}'.format(name, err),
+                            error=True)
             return
         self.login = login
-        self.wait_dialog = WaitDialog(
-            'Sign in with Claude Code',
-            'Your web browser is opening the Claude sign in. Sign in with '
-            'any Claude account: Pro, Max, Ultra, Team or Enterprise. This '
-            'closes by itself once you are signed in.', self)
+        if provider.app is codex:
+            text = ('Your web browser is opening the ChatGPT sign in for '
+                    'Codex. This closes by itself once you are signed in.')
+        else:
+            text = ('Your web browser is opening the Claude sign in. Sign in '
+                    'with any Claude account: Pro, Max, Ultra, Team or '
+                    'Enterprise. This closes by itself once you are signed '
+                    'in.')
+        self.wait_dialog = WaitDialog('Sign in with {}'.format(name), text,
+                                      self)
         self.wait_dialog.rejected.connect(self.cancel_sign_in)
-        self.wait_dialog.paste_widget.show()
+        if hasattr(login, 'send_code'):
+            self.wait_dialog.paste_widget.show()
 
-        def send_code():
-            login.send_code(self.wait_dialog.paste_edit.text())
-            self.wait_dialog.paste_edit.clear()
-            self.wait_dialog.paste_edit.setPlaceholderText(
-                'Code sent. Finishing the sign in...')
-        self.wait_dialog.paste_button.clicked.connect(send_code)
-        self.wait_dialog.paste_edit.returnPressed.connect(send_code)
+            def send_code():
+                login.send_code(self.wait_dialog.paste_edit.text())
+                self.wait_dialog.paste_edit.clear()
+                self.wait_dialog.paste_edit.setPlaceholderText(
+                    'Code sent. Finishing the sign in...')
+            self.wait_dialog.paste_button.clicked.connect(send_code)
+            self.wait_dialog.paste_edit.returnPressed.connect(send_code)
 
         def show_link():
             if self.wait_dialog and login.url:
@@ -463,6 +570,7 @@ class ProviderBox(QtWidgets.QGroupBox):
         self.close_wait()
         self.refresh()
         self.changed.emit()
+        self.stored.emit()
         self.check()
 
     def check(self):
@@ -543,17 +651,10 @@ class AiSettingsDialog(QtWidgets.QDialog):
         about.setWordWrap(True)
         layout.addWidget(about)
 
-        if self.store.available:
-            where = 'Keys and sign ins are kept in {}.'.format(
-                self.store.name)
-        else:
-            where = ('There is no secure storage on this computer, so keys '
-                     'and sign ins can not be saved. Set ANTHROPIC_API_KEY, '
-                     'OPENAI_API_KEY or XAI_API_KEY before starting nxt '
-                     'instead.')
-        self.store_label = QtWidgets.QLabel(where)
+        self.store_label = QtWidgets.QLabel()
         self.store_label.setWordWrap(True)
         layout.addWidget(self.store_label)
+        self.refresh_store_label()
 
         self.body = QtWidgets.QTabWidget()
         layout.addWidget(self.body, 1)
@@ -583,6 +684,7 @@ class AiSettingsDialog(QtWidgets.QDialog):
         for provider in self.providers:
             box = ProviderBox(provider, self)
             box.changed.connect(self.settings_changed.emit)
+            box.stored.connect(self.refresh_store_label)
             body_layout.addWidget(box)
             self.boxes.append(box)
         body_layout.addStretch()
@@ -593,8 +695,19 @@ class AiSettingsDialog(QtWidgets.QDialog):
         self.body.setEnabled(self.enable_check.isChecked())
         self.setMinimumWidth(560)
 
+    def refresh_store_label(self):
+        if self.store.available:
+            where = self.store.describe()
+        else:
+            where = ('There is no secure storage on this computer, so keys '
+                     'and sign ins can not be saved. Set ANTHROPIC_API_KEY, '
+                     'OPENAI_API_KEY or XAI_API_KEY before starting nxt '
+                     'instead.')
+        self.store_label.setText(where)
+
     def refresh_sign_ins(self, older_than=0):
         claude_code.forget_status(older_than)
+        codex.forget_status(older_than)
         for box in self.boxes:
             if not (box.thread and box.thread.isRunning()):
                 box.refresh()

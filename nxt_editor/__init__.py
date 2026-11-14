@@ -4,7 +4,7 @@ import logging
 import sys
 
 # External
-from Qt import QtCore, QtWidgets, QtGui
+from Qt import QtCompat, QtCore, QtWidgets, QtGui
 
 # Internal
 import nxt
@@ -54,10 +54,22 @@ from nxt_editor import qt_resources
 qt_resources.register()
 
 STYLESHEET = ':styles/styles/dark/dark.qss'
+MODERN_STYLESHEET = ':styles/styles/dark/modern.qss'
 
 
 def stylesheet():
-    """The editor's dark stylesheet, as text.
+    """The editor's stylesheet, as text.
+
+    The original dark sheet, in the theme's colors, with the modern layer
+    after it so the modern one wins where both style something.
+    """
+    from nxt_editor import theme
+    return (theme.restyle(_read_resource(STYLESHEET)) + '\n' +
+            theme.fill(_read_resource(MODERN_STYLESHEET)))
+
+
+def _read_resource(path):
+    """A text file from the editor's resources.
 
     str() of the QByteArray Qt reads gives a bytes literal in PySide6,
     "b'...'" with its line breaks escaped, which Qt cannot parse.
@@ -66,7 +78,7 @@ def stylesheet():
     widgets have only their own, so they lost its padding and the workflow
     tools their rounded buttons.
     """
-    style_file = QtCore.QFile(STYLESHEET)
+    style_file = QtCore.QFile(path)
     if not style_file.open(QtCore.QFile.ReadOnly):
         return ''
     try:
@@ -110,6 +122,9 @@ def launch_editor(paths=None, start_rpc=False):
     app.setActiveWindow(instance)
     if not existing:
         app.exec_()
+        # Delete the window while Qt is still running. Left to Python's
+        # exit, Qt's objects can go in the wrong order and crash.
+        QtCompat.delete(instance)
     return instance
 
 

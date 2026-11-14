@@ -5,7 +5,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 ## Application Actions
 |        Name         |                   What's this                   |      Tool tip       |   Shortcut   |
 | :------------------ | :---------------------------------------------: | :------------------ | :----------: |
-| Find Node           | Search for, select, and focus nodes in the view | Find Node           |      /       |
+| Find Node           | Find nodes by name (`*` for anything, commas between names), then select and frame them | Find Node           |      /       |
 | New Graph           |                New empty graph.                 | New Graph           |    Ctrl+N    |
 | Open Graph          |                 Open nxt file.                  | Open Graph          |    Ctrl+O    |
 | Undo                |               Undo last command.                | Undo                |    Ctrl+Z    |
@@ -84,6 +84,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | :----------------------------- | :-------------------------------------------------------------------------: | :----------------------------- | :----------: |
 | Select All Nodes               |                                                                             | Select All Nodes               |    Ctrl+A    |
 | Add Node                       |                     Add a new node to the current graph                     | Add Node                       |      N       |
+| Add Backdrop                   |   Add a backdrop around the selected nodes, or an empty one when none are selected.   | Add Backdrop                   |      C       |
 | Delete Node                    |                        Delete the selected node(s).                         | Delete Node                    |     Del      |
 | Recursive Delete Node          |        Delete selected node and all of its descendants recursively.         | Recursive Delete Node          |  Shift+Del   |
 | Cut                            |                                                                             | Cut                            |    Ctrl+X    |
@@ -100,8 +101,8 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Move up in child order         |                                                                             | Move up in child order         |   Ctrl+Up    |
 | Move down in child order       |                                                                             | Move down in child order       |  Ctrl+Down   |
 | Toggle Node Collapse           |             Toggle the collapse state for the selected node(s).             | Toggle Node Collapse           |    Alt+C     |
-| Recursive Toggle Node Collapse |       Recursively toggle the collapse state for the selected node(s).       | Recursive Toggle Node Collapse | Alt+Shift+C  |
-| Rename Node                    |                                                                             | Rename Node                    |              |
+| Recursive Toggle Node Collapse |  Collapse or expand the selected node(s) and everything below, together.  | Recursive Toggle Node Collapse | Alt+Shift+C  |
+| Rename Node                    |               Rename the selected node, where you are working.              | Rename Node                    |      F2      |
 | Revert child order             |                                                                             | Revert child order             |              |
 
 ## Property Editor
@@ -127,9 +128,9 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | :--------------------------- | :------------------------------------------------------------------------: | :--------------------------- | :------: |
 | Run Build                    |          Runs build specified by the current value of build view.          | Run Build                    |          |
 | Execute Graph                |                                                                            | Execute Graph                |          |
-| Execute Selected             |                                                                            | Execute Selected             |  Enter   |
-| Execute From Selected        | Execute from the currently selected node and continue down the exec chain. | Execute                      |          |
-| Execute Hierarchy            |                                                                            | Execute Hierarchy            |          |
+| Execute Selected             | Run only the selected nodes.                                               | Execute Selected             |  Enter   |
+| Execute From Selected        | Execute from the currently selected node and continue down the exec chain. | Execute From Selected        |          |
+| Execute Hierarchy            | Run the selected node and every node under it.                             | Execute Hierarchy            |          |
 | Add Start Point              |                                                                            | Add Start Point              |          |
 | Remove Start Point           |                                                                            | Remove Start Point           |          |
 | Revert Start Point           |                                                                            | Revert Start Point           |          |

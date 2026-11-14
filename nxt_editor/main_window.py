@@ -17,7 +17,7 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import file_browser, user_dir
+from nxt_editor import file_browser, theme, user_dir, wires
 from nxt_editor.ai import providers as ai_providers
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
@@ -35,6 +35,8 @@ from nxt_editor.dockwidgets import (
     BuildView,
     FindRepDockWidget,
     AiAssistant,
+    Outliner,
+    InstanceView,
 )
 from nxt_editor.dockwidgets.output_log import FileTailingThread, QtLogStreamHandler
 from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
@@ -166,7 +168,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # set style sheet
         self.stylesheet = nxt_editor.stylesheet()
         self.setStyleSheet(self.stylesheet)
-        self.setFont(FONTS.default_font())
+        self._font_size = FONTS.DEFAULT_SIZE
+        self.setFont(theme.font())
 
         # nxt object in charge of loaded graphs
         self.nxt = Session()
@@ -216,6 +219,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # graph tabs
         self.open_files_tab_widget.currentChanged.connect(self.on_tab_change)
         self.setCentralWidget(self.open_files_tab_widget)
+        if not user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_STAGE_VIEW,
+                                       True):
+            self.open_files_tab_widget.hide()
         self.splash_screen.showMessage(
             "Setting up dockwidgets...", QtCore.Qt.AlignCenter, QtCore.Qt.white
         )
@@ -258,6 +264,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.workflow_tools = WidgetBuilder(parent=self)
         self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.workflow_tools)
 
+        # Outliner, opt in from the Window menu.
+        self.outliner = Outliner(parent=self)
+        self.addDockWidget(QtCore.Qt.LeftDockWidgetArea, self.outliner)
+        self.outliner.hide()
+
+        # Instance View, opt in from the Window menu.
+        self.instance_view = InstanceView(parent=self)
+        self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.instance_view)
+        self.instance_view.hide()
+
         # AI assistant, opt in. Made either way so the saved layout has a
         # place for it, but hidden while the assistant is off.
         self.ai_assistant = AiAssistant(parent=self)
@@ -279,9 +295,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_bar = QtWidgets.QStatusBar()
         self.status_bar.setSizeGripEnabled(False)
         self.status_bar.setContentsMargins(4, 4, 4, 4)
-        self.status_bar.setStyleSheet(
-            "color: lightGrey; background-color: #232323; border: 4px solid #3E3E3E"
-        )
+        self.status_bar.setStyleSheet(theme.fill(
+            "QStatusBar { color: {TEXT_DIM}; background-color: {BASE};"
+            " border: none; border-top: 1px solid {BORDER}; }"
+        ))
         self.setStatusBar(self.status_bar)
 
         self.log_button = QtWidgets.QPushButton("Show Log")
@@ -431,11 +448,15 @@ class MainWindow(QtWidgets.QMainWindow):
         if absolute:
             font_size = delta
         else:
-            font_size = self.font().pointSize() + delta
+            font_size = self._font_size + delta
             self.font_size_changed.emit(delta)
+        self._font_size = font_size
         if save:
             user_dir.user_prefs[user_dir.USER_PREF.FONT_SIZE] = font_size
-        font = QtGui.QFont(FONTS.DEFAULT_FAMILY, font_size)
+        # The preference counts in points, as it always has. The font is
+        # made in pixels, at the size a point is on a 96 dpi screen, so it
+        # is that size in every host and on every platform.
+        font = theme.font(theme.points_to_px(font_size))
         if nxt_editor.owns_qapp():
             app = QtWidgets.QApplication.instance()
             app.setFont(font)
@@ -626,6 +647,7 @@ QCheckBox::indicator {
         # used to end up with a model that never told the window its
         # colors had changed, for as long as the session lasted.
         model.layer_color_changed.connect(self.update_target_color)
+        model.wires_changed.connect(self.update_curved_action)
         model.target_layer_changed.connect(self.update_target_color)
         model.comp_layer_changed.connect(self.update_target_color)
         if update:
@@ -920,11 +942,16 @@ QCheckBox::indicator {
             self.build_view.set_stage_model(model)
             self.find_rep.set_stage_model(model)
             self.ai_assistant.set_stage_model(model)
+            self.outliner.set_stage_model(model)
+            self.instance_view.set_stage_model(model)
             self.output_log.set_stage_model(model)
             self.update_target_color()
             logger.debug("Successfully set up new tab.")
             self.last_focused_tab = tab_index
             self.update_implicit_action()
+            self.update_curved_action()
+            # The preferred style may have changed in another tab since.
+            view.draw_wires()
             view.toggle_grid(
                 user_dir.user_prefs.get(user_dir.USER_PREF.SHOW_GRID, True)
             )
@@ -970,6 +997,14 @@ QCheckBox::indicator {
         self.execute_actions.enable_cmd_port_action.setChecked(state)
         self.execute_actions.enable_cmd_port_action.blockSignals(False)
 
+    def update_curved_action(self):
+        if not self.model:
+            return
+        curved = self.model.get_connection_style() == wires.CURVED
+        self.view_actions.curved_action.blockSignals(True)
+        self.view_actions.curved_action.setChecked(curved)
+        self.view_actions.curved_action.blockSignals(False)
+
     def update_implicit_action(self):
         self.view_actions.implicit_action.blockSignals(True)
         state = self.model.implicit_connections
@@ -983,8 +1018,10 @@ QCheckBox::indicator {
         color = self.model.get_layer_color(disp_layer)
 
         # update widgets
+        # The target layer's color, as a line under the file tabs.
         self.open_files_tab_widget.setStyleSheet(
-            "padding: 1; border: 1px solid %s" % color
+            "QTabWidget::pane { border: none; border-top: 2px solid %s; }"
+            % color
         )
         self.open_files_tab_widget.update()
         self.code_editor.update_border_color()
@@ -1059,6 +1096,31 @@ QCheckBox::indicator {
         """Restore all dock widgets and toolbars to the default layout."""
         self.restoreState(self.default_layout_state)
         self.state_last_hidden = None
+
+    def set_stage_view_visible(self, visible):
+        """Show or hide the graph, and remember it for next time."""
+        self.open_files_tab_widget.setVisible(visible)
+        user_dir.user_prefs[user_dir.USER_PREF.SHOW_STAGE_VIEW] = visible
+
+    def open_color_range(self):
+        """View > Options > Layer Color View."""
+        from nxt_editor.color_range_dialog import ColorRangeDialog
+        dialog = ColorRangeDialog(parent=self,
+                                  apply=self.refresh_layer_colors)
+        dialog.exec_()
+        return dialog
+
+    def refresh_layer_colors(self):
+        """Redraw everything shown in a layer's color, after the range
+        colors are shown in changed."""
+        for open_file in self.open_files.values():
+            model = open_file.get('model')
+            if model is not None:
+                model.layer_color_changed.emit(nxt_layer.LAYERS.TOP)
+        self.layer_manager.layer_tree.viewport().update()
+        editor = self.property_editor
+        if getattr(editor, 'stage_model', None):
+            editor.set_represented_node()
 
     def open_ai_settings(self):
         """Options > AI Assistant."""
@@ -1423,6 +1485,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addAction(self.display_actions.cached_action)
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.view_actions.implicit_action)
+        self.view_menu.addAction(self.view_actions.curved_action)
         self.view_menu.addAction(self.view_actions.grid_action)
         self.view_menu.addAction(self.view_actions.mini_map_action)
         self.view_menu.addAction(self.view_actions.animation_action)
@@ -1433,6 +1496,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_opt_menu = self.view_menu.addMenu("Options")
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
+        self.view_opt_menu.addAction(self.app_actions.color_range_action)
+        self.view_opt_menu.addAction(
+            self.view_actions.neutral_property_text_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
         self.view_opt_menu.addAction(self.ce_actions.overlay_message_action)
         self.view_opt_menu.addAction(self.ce_actions.show_data_state_action)
@@ -1470,6 +1536,10 @@ class MenuBar(QtWidgets.QMenuBar):
         self.app_actions.history_view_action.setData(parent.history_view)
         self.app_actions.build_view_action.setData(parent.build_view)
         self.app_actions.output_log_action.setData(parent.output_log)
+        self.app_actions.stage_view_action.setData(
+            parent.open_files_tab_widget)
+        self.app_actions.outliner_action.setData(parent.outliner)
+        self.app_actions.instance_view_action.setData(parent.instance_view)
         self.app_actions.hotkey_editor_action.setData(parent.hotkey_editor)
         self.app_actions.workflow_tools_action.setData(parent.workflow_tools)
         self.app_actions.ai_assistant_action.setData(parent.ai_assistant)
@@ -1479,6 +1549,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.window_menu.aboutToShow.connect(self.populate_window_menu)
         self.window_menu.triggered.connect(self.window_action_triggered)
         self.window_menu_actions = [
+            self.app_actions.stage_view_action,
+            self.app_actions.outliner_action,
+            self.app_actions.instance_view_action,
             self.app_actions.layer_manager_action,
             self.app_actions.property_editor_action,
             self.app_actions.code_editor_action,
@@ -1590,6 +1663,9 @@ class MenuBar(QtWidgets.QMenuBar):
     def window_action_triggered(self, action=None):
         if not action:
             # Sometimes Qt sends us this signal with no action.
+            return
+        if action is self.app_actions.stage_view_action:
+            self.main_window.set_stage_view_visible(action.isChecked())
             return
         widget = action.data()
         tab_index = self.main_window.open_files_tab_widget.indexOf(widget)
