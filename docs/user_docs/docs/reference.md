@@ -569,8 +569,11 @@ Turn it on from **Window > Instance View**.
 - Nodes are grey cards so they can be told from the graph at a glance. The
   layer colors are in a strip along the top: the strongest layer's across
   it, and a chip for each weaker one at its right end, as on the node in
-  the graph. Each card shows the node's name and path, and the node shown
-  has a light edge.
+  the graph. Each card shows the node's name and path.
+- The node the view is drawn from has a target at the end of its name, the
+  same target as on **Follow Selection**, and a light edge. It moves to
+  whichever node you show, from the graph, the Outliner, **Show Selected**
+  or a double click in the view.
 - **Follow Selection** shows whichever node is selected in the graph or the
   Outliner. With it off, select a node and press **Show Selected**. Double
   click a node in the view to show its connections instead.
