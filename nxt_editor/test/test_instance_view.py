@@ -66,6 +66,10 @@ class InstanceViewCase(unittest.TestCase):
         self.view = self.win.instance_view
 
     def tearDown(self):
+        # Closed, as the editor saves its layout on close and the next
+        # window would open with the view showing.
+        self.view.hide()
+        app.processEvents()
         unsaved = mock.patch.object(stage_model.StageModel,
                                     'get_unsaved_changes', return_value=[])
         with unsaved:
@@ -138,6 +142,8 @@ class Showing(InstanceViewCase):
                          item.layer_colors)
 
     def test_hidden_it_does_no_work(self):
+        self.view.hide()
+        app.processEvents()
         with mock.patch.object(self.view, 'rebuild') as rebuild:
             self.select(['/arm'])
             app.processEvents()
