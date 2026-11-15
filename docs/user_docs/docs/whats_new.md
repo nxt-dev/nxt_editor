@@ -18,6 +18,13 @@ it in full.
 - **Select All** has an icon on the toolbar, and its tooltip shows its
   shortcut.
 
+## nxt_editor 4.7.0
+
+- The [Instance View](reference.md#instance-view) marks the node it is drawn
+  from with a target at the end of its name, the same target as on
+  **Follow Selection**. It moves to whichever node you show, from the
+  graph, the Outliner, **Show Selected** or a double click in the view.
+
 ## nxt_editor 4.6.1
 
 - Only proxy nodes are striped again, as before 4.6.0: nodes made by an
@@ -25,7 +32,7 @@ it in full.
   overrides anything its instance gives it, looks like any other node, in
   the graph and the Outliner. See [How nodes look](reference.md#how-nodes-look).
 
-## nxt_editor 4.6
+## nxt_editor 4.6.0
 
 ### A new look, the same everywhere
 
@@ -88,6 +95,26 @@ it is shown again.
   white, and keeps the next node to run red.
 - Break and skip points work on graphs that have not been saved yet.
 - The list of layers to save on close shows their colors and checkboxes.
+
+## nxt_editor 4.5.0
+
+- **[AI Assistant](reference.md#ai-assistant)**, an opt in panel to chat with
+  Claude, OpenAI, Grok or a local model about the open graph. It looks over,
+  searches, changes and runs the graph with tools, and shows each step it
+  takes. Every chat is kept, to go back to, pin or delete.
+
+  ![The AI Assistant](images/ai_assistant.png)
+- **The editor looks the same in Maya as it does on its own.** The workflow
+  buttons, tabs and panels lost their styling in a host.
+- **Every change to a layer shows on it as it happens.** Taking something off
+  a node, such as a local attribute, now marks the layer as changed in the
+  Layer Manager too.
+- **Stop puts the build back.** Stopping a build no longer empties the build
+  list or leaves the editor looking like it is still running, and in Maya
+  the next node no longer runs after Stop.
+- **Saving a layer no longer fails on a damaged editor cache** ("Ran out of
+  input"). The editor's prefs and cache are written whole, and one that can
+  not be read is put right on the next save.
 
 ## nxt_editor 4.4.2
 
