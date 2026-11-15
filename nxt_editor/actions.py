@@ -10,7 +10,7 @@ from Qt import QtCore, QtGui, QtWidgets
 # Internal
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
-from nxt_editor import user_dir, wires
+from nxt_editor import align, layout_icons, user_dir, wires
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, exec_icons, finder, file_search, file_browser
@@ -1027,6 +1027,19 @@ class NodeActions(NxtActionContainer):
         self.select_all_action.setShortcut('Ctrl+A')
         self.select_all_action.triggered.connect(select_all)
         self.select_all_action.setIconText('Select All')
+        self.select_all_action.setIcon(layout_icons.select_all_icon())
+
+        def select_all_tip():
+            # With the shortcut, kept up to date when it is rebound.
+            tip = 'Select all nodes'
+            keys = self.select_all_action.shortcut().toString(
+                QtGui.QKeySequence.NativeText)
+            if keys:
+                tip += ' ({})'.format(keys)
+            if self.select_all_action.toolTip() != tip:
+                self.select_all_action.setToolTip(tip)
+        select_all_tip()
+        self.select_all_action.changed.connect(select_all_tip)
 
         # Rename node
 
@@ -1265,7 +1278,87 @@ class AlignmentActions(NxtActionContainer):
         snap_icon.addPixmap(snap_pixmap_off, QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.snap_action.setIcon(snap_icon)
 
-        self.action_display_order = [self.snap_action]
+        # Align and distribute the selected nodes and points.
+        def add(text, shortcut, icon, tip, call):
+            action = NxtAction(text=text, parent=self)
+            if shortcut:
+                action.setShortcut(shortcut)
+            action.setAutoRepeat(False)
+            action.setIcon(icon)
+            action.setWhatsThis(tip)
+            action.triggered.connect(call)
+            return action
+
+        def view_call(name, arg):
+            def call():
+                view = self.main_window.view
+                if view is not None:
+                    getattr(view, name)(arg)
+            return call
+        self.align_left_action = add(
+            'Align Left', 'Shift+A', layout_icons.align_icon(align.LEFT),
+            'Line the selected nodes and points up on the left most one.',
+            view_call('align', align.LEFT))
+        self.align_hcenter_action = add(
+            'Align Center', 'Alt+Shift+S',
+            layout_icons.align_icon(align.HCENTER),
+            'Line the selected nodes and points up on a line down the '
+            'middle of them.', view_call('align', align.HCENTER))
+        self.align_right_action = add(
+            'Align Right', 'Shift+D', layout_icons.align_icon(align.RIGHT),
+            'Line the selected nodes and points up on the right most one.',
+            view_call('align', align.RIGHT))
+        self.align_top_action = add(
+            'Align Top', 'Shift+W', layout_icons.align_icon(align.TOP),
+            'Line the selected nodes and points up on the top most one.',
+            view_call('align', align.TOP))
+        self.align_vcenter_action = add(
+            'Align Middle', 'Alt+Shift+W',
+            layout_icons.align_icon(align.VCENTER),
+            'Line the selected nodes and points up on a line across the '
+            'middle of them.', view_call('align', align.VCENTER))
+        self.align_bottom_action = add(
+            'Align Bottom', 'Shift+S', layout_icons.align_icon(align.BOTTOM),
+            'Line the selected nodes and points up on the bottom most one.',
+            view_call('align', align.BOTTOM))
+        self.distribute_horizontal_action = add(
+            'Distribute Horizontally', 'Alt+Shift+A',
+            layout_icons.distribute_icon(align.HORIZONTAL),
+            'Space the selected nodes and points out evenly from left to '
+            'right, leaving the ends where they are.',
+            view_call('distribute', align.HORIZONTAL))
+        self.distribute_vertical_action = add(
+            'Distribute Vertically', 'Alt+Shift+D',
+            layout_icons.distribute_icon(align.VERTICAL),
+            'Space the selected nodes and points out evenly from top to '
+            'bottom, leaving the ends where they are.',
+            view_call('distribute', align.VERTICAL))
+        self.align_actions = [self.align_left_action,
+                              self.align_hcenter_action,
+                              self.align_right_action,
+                              self.align_top_action,
+                              self.align_vcenter_action,
+                              self.align_bottom_action]
+        self.distribute_actions = [self.distribute_horizontal_action,
+                                   self.distribute_vertical_action]
+
+        self.action_display_order = [self.snap_action] + \
+            self.align_actions + self.distribute_actions
+
+    def align_menu(self, parent=None):
+        """The Align menu: every way to line up and space out the selected
+        nodes and points, for the right click menus and the toolbar.
+
+        :rtype: QtWidgets.QMenu
+        """
+        menu = QtWidgets.QMenu('Align', parent)
+        menu.setIcon(layout_icons.align_icon(align.LEFT))
+        menu.addActions(self.align_actions[:3])
+        menu.addSeparator()
+        menu.addActions(self.align_actions[3:])
+        menu.addSeparator()
+        menu.addActions(self.distribute_actions)
+        return menu
 
 
 class DisplayActions(NxtActionContainer):
