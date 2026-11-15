@@ -4,6 +4,20 @@ This page summarises what is new in recent releases of **nxt_editor**, and
 in **nxt_core 0.21**. Each item links to the part of the docs that explains
 it in full.
 
+## nxt_editor 4.8.0
+
+- **Align and distribute** nodes and the points on their lines: Align
+  Left, Center, Right, Top, Middle and Bottom, and Distribute
+  Horizontally and Vertically, from **Align** in the right click menu, a
+  new Align button on the toolbar, or `Shift+W`/`A`/`S`/`D` and
+  `Alt+Shift+W`/`S`/`A`/`D`. See
+  [Aligning nodes and points](reference.md#aligning-nodes-and-points).
+- **Points turn with the line**: a curved line runs smoothly through each
+  point in the direction it is going, instead of looping back round it.
+  See [Lines between nodes](reference.md#lines-between-nodes).
+- **Select All** has an icon on the toolbar, and its tooltip shows its
+  shortcut.
+
 ## nxt_editor 4.6.1
 
 - Only proxy nodes are striped again, as before 4.6.0: nodes made by an
