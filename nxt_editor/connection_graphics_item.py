@@ -21,27 +21,60 @@ CURVE_PULL = 0.5
 CURVE_MIN_PULL = 40.0
 # How close a double click has to be to a line to land on it.
 HIT_WIDTH = 10.0
+# Which way a curved line passes through an anchor: going right, as it
+# leaves an out plug and meets an in plug, or going left.
+RIGHT = 1
+LEFT = -1
+# How far the line's ends have to cross before a point turns round, so it
+# does not flip back and forth as something is dragged past.
+TURN_MARGIN = 8.0
 
 
-def line_path(anchors, curved):
+def point_direction(previous, following, direction=None):
+    """Which way a curved line passes through a point: going right while
+    the anchor it goes on to is to the right of the one it comes from, and
+    going left once it is to the left. The point's own place does not
+    matter. It turns round only once they cross by TURN_MARGIN.
+
+    :param previous: QPointF, the anchor the line comes from
+    :param following: QPointF, the anchor the line goes on to
+    :param direction: RIGHT or LEFT, the way it passes now, or None
+    :return: RIGHT or LEFT
+    """
+    across = following.x() - previous.x()
+    if direction is None:
+        return RIGHT if across >= 0 else LEFT
+    if direction == RIGHT and across < -TURN_MARGIN:
+        return LEFT
+    if direction == LEFT and across > TURN_MARGIN:
+        return RIGHT
+    return direction
+
+
+def line_path(anchors, curved, directions=None):
     """The path a line takes through its anchors.
 
     Straight, it is a line from each anchor to the next. Curved, each piece
     leaves and arrives going across, the way it leaves an out plug and
-    meets an in plug, so it bends smoothly through every point.
+    meets an in plug, so it bends smoothly through every point. A point
+    the line runs through going left is left and arrived at going left.
 
     :param anchors: QPointFs, the source first and the target last
     :param curved: bool
+    :param directions: RIGHT or LEFT for each anchor, all RIGHT if None
     :return: QPainterPath
     """
+    if directions is None:
+        directions = [RIGHT] * len(anchors)
     path = QtGui.QPainterPath(anchors[0])
-    for start, end in zip(anchors, anchors[1:]):
+    pieces = zip(anchors, anchors[1:], directions, directions[1:])
+    for start, end, leaving, arriving in pieces:
         if not curved:
             path.lineTo(end)
             continue
         pull = max(abs(end.x() - start.x()) * CURVE_PULL, CURVE_MIN_PULL)
-        path.cubicTo(QtCore.QPointF(start.x() + pull, start.y()),
-                     QtCore.QPointF(end.x() - pull, end.y()), end)
+        path.cubicTo(QtCore.QPointF(start.x() + pull * leaving, start.y()),
+                     QtCore.QPointF(end.x() - pull * arriving, end.y()), end)
     return path
 
 
@@ -159,7 +192,15 @@ class AttrConnectionGraphic(QtWidgets.QGraphicsPathItem):
         anchors = [QtCore.QPointF(self.src_pos)] + self.points + \
             [QtCore.QPointF(self.tgt_pos)]
         curved = self.view.connection_style == wires.CURVED
-        self.setPath(line_path(anchors, curved))
+        # Each point keeps the way the line passes through it, and only
+        # turns round once the anchors either side of it cross over.
+        for previous, graphic, following in zip(anchors, self.point_graphics,
+                                                anchors[2:]):
+            graphic.direction = point_direction(previous, following,
+                                                graphic.direction)
+        directions = [RIGHT] + [g.direction for g in self.point_graphics] + \
+            [RIGHT]
+        self.setPath(line_path(anchors, curved, directions))
         # I don't want this
         self.update()
 
@@ -220,6 +261,8 @@ class WirePointGraphic(QtWidgets.QGraphicsItem):
         self.setFlag(QtWidgets.QGraphicsItem.ItemIgnoresTransformations)
         self.connection = connection
         self.selected = False
+        # RIGHT or LEFT, the way the line passes through; set by the line.
+        self.direction = None
 
     def boundingRect(self):
         size = self.RADIUS + 2
