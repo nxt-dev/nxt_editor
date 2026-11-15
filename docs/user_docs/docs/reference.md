@@ -175,6 +175,13 @@ was.
   can have as many points as you like, and the line passes through them in
   order. Hold `Shift`, or turn on grid snapping, to snap a point to the
   grid.
+- **Points turn with the line**: on a curved line, each point is passed
+  going right while the next point or plug is to the right of the one
+  before, and going left once it is to the left, so the line runs
+  smoothly through the point instead of looping back round it. A point
+  only turns round once the things either side of it have crossed over,
+  so it does not flicker back and forth while you drag.
+
 - **Remove a point** by double clicking it, or select it and press `Del`.
   `Shift` click adds points to or takes them out of the selection.
 - **Select points with a box**: dragging a selection box picks up the
@@ -197,6 +204,40 @@ Points stay where you put them when nodes move. Like backdrops, they are
 saved in the top layer's meta data, and points from referenced layers are
 shown too. A line's points belong to that one connection, so if the
 connection is removed and made again its points come back.
+
+### Aligning nodes and points
+
+Line up the selected nodes and the points on their lines, or space them
+out evenly. Select them together with a box, or `Ctrl+Shift` click to add
+to the selection, then pick a way from **Align** in the right click menu,
+from the Align button on the toolbar, or with its shortcut. Each is one
+step on the undo stack, nodes and points together.
+
+| Action | Shortcut | What it does |
+| :----- | :------: | :----------- |
+| Align Left | `Shift+A` | Moves everything to the left most left edge. |
+| Align Center | `Alt+Shift+S` | Lines everything up on a line down the middle of them all. |
+| Align Right | `Shift+D` | Moves everything to the right most right edge. |
+| Align Top | `Shift+W` | Moves everything to the top most top edge. |
+| Align Middle | `Alt+Shift+W` | Lines everything up on a line across the middle of them all. |
+| Align Bottom | `Shift+S` | Moves everything to the bottom most bottom edge. |
+| Distribute Horizontally | `Alt+Shift+A` | Leaves the left and right most where they are and evens out the gaps between the rest. |
+| Distribute Vertically | `Alt+Shift+D` | Leaves the top and bottom most where they are and evens out the gaps between the rest. |
+
+A node is lined up by the box it is drawn in, and a point by its center.
+Only top level nodes move: a child stays stacked under its parent.
+**Align** is greyed out until there are two things selected, and the
+distributes need three. The shortcuts only work while the graph has focus,
+so typing in the code editor never moves anything, and they can be changed
+in the [Hotkey Editor](hotkeys.md#alignment).
+
+Aligning a line's point with the nodes either side of it straightens the
+line. For example, **Align Middle** on three nodes and the point between
+two of them puts them all in a straight line.
+
+The Align button sits on the toolbar just before **Select All**, with the
+same menu. **Select All** (`Ctrl+A`) is the icon of two nodes in a dashed
+box, and hovering it shows its shortcut.
 
 ### Animate Nodes
 

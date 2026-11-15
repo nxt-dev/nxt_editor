@@ -27,6 +27,14 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 |         Name         |                What's this                |      Tool tip       | Shortcut |
 | :------------------- | :---------------------------------------: | :------------------ | :------: |
 | Toggle Grid Snapping | Toggles grid snapping while moving nodes. | Toggle snap to grid |  Ctrl+G  |
+| Align Left | Line the selected nodes and points up on the left most one. | Align Left | Shift+A |
+| Align Center | Line the selected nodes and points up on a line down the middle of them. | Align Center | Alt+Shift+S |
+| Align Right | Line the selected nodes and points up on the right most one. | Align Right | Shift+D |
+| Align Top | Line the selected nodes and points up on the top most one. | Align Top | Shift+W |
+| Align Middle | Line the selected nodes and points up on a line across the middle of them. | Align Middle | Alt+Shift+W |
+| Align Bottom | Line the selected nodes and points up on the bottom most one. | Align Bottom | Shift+S |
+| Distribute Horizontally | Space the selected nodes and points out evenly from left to right, leaving the ends where they are. | Distribute Horizontally | Alt+Shift+A |
+| Distribute Vertically | Space the selected nodes and points out evenly from top to bottom, leaving the ends where they are. | Distribute Vertically | Alt+Shift+D |
 
 ## Display
 |     Name      |               What's this                |       Tool tip       | Shortcut |
