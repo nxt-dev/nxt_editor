@@ -19,6 +19,10 @@ Each item links to the part of the docs that explains it in full.
 - **Select All** has an icon on the toolbar, and its tooltip shows its
   shortcut.
 
+**Fixes**
+- Docked panel tabs no longer shift over and cut their names short when
+  hovered; only their outline changes color.
+
 ## nxt_editor 4.11.0
 
 **New**
