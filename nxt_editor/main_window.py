@@ -848,30 +848,6 @@ QCheckBox::indicator {
         self.last_focused_start += 1
         self.model.select_and_frame(start_nodes[idx])
 
-    def align_left(self):
-        logger.info("align left")
-
-    def align_hcenter(self):
-        logger.info("align hcenter")
-
-    def align_right(self):
-        logger.info("align right")
-
-    def align_top(self):
-        logger.info("align top")
-
-    def align_vcenter(self):
-        logger.info("align vcenter")
-
-    def align_bottom(self):
-        logger.info("align bottom")
-
-    def distribute_horizontal(self):
-        logger.info("distribute horizontal")
-
-    def distribute_vertical(self):
-        logger.info("distribute vertical")
-
     def undo(self):
         current_view = self.get_current_view()
         if current_view:
@@ -1322,6 +1298,18 @@ class NodeAuthoringToolBar(ToolBar):
         # revert node
         self.addAction(self.node_actions.revert_node_action)
         self.addSeparator()
+        # align, one button with every way in its menu
+        alignment = self.main_window.alignment_actions
+        self.align_menu = alignment.align_menu(self)
+        self.align_button = QtWidgets.QToolButton(self)
+        self.align_button.setIcon(self.align_menu.icon())
+        self.align_button.setToolTip('Align and distribute the selected '
+                                     'nodes and points')
+        self.align_button.setMenu(self.align_menu)
+        self.align_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.align_button.setIconSize(self.iconSize())
+        self.iconSizeChanged.connect(self.align_button.setIconSize)
+        self.addWidget(self.align_button)
         # select all
         self.addAction(self.node_actions.select_all_action)
 
@@ -1334,8 +1322,7 @@ class AlignDistributeToolBar(ToolBar):
         )
         self.setObjectName("Alignment Tools")
         self.main_window = parent
-        # ACTIONS
-        self.addActions(self.main_window.alignment_actions.actions())
+        self.addAction(self.main_window.alignment_actions.snap_action)
 
 
 class ExecuteToolBar(ToolBar):

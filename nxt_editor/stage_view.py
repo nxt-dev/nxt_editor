@@ -18,7 +18,7 @@ from nxt_editor.constants import FONTS
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.backdrop_graphics_item import (BackdropGraphicsItem,
                                                BackdropEditDialog)
-from nxt_editor import backdrops, theme
+from nxt_editor import align, backdrops, theme
 from nxt_editor.connection_graphics_item import (AttrConnectionGraphic,
                                                   WirePointGraphic,
                                                   HIT_WIDTH)
@@ -1341,6 +1341,85 @@ class StageView(QtWidgets.QGraphicsView):
         node_paths = list(self._node_graphics.keys())
         self.model.set_selection(paths=node_paths)
 
+    # Aligning, see nxt_editor.align -----------------------------------------
+
+    def layout_boxes(self):
+        """The selected top level nodes and points, as boxes to line up.
+
+        :return: {('node', path) or ('point', (key, index)):
+                  (left, top, right, bottom)}
+        """
+        boxes = {}
+        for path in self.model.get_selected_nodes():
+            if nxt_path.get_root_path(path) != path:
+                # Only top level nodes have a place of their own.
+                continue
+            graphic = self.get_node_graphic(path)
+            if graphic is None:
+                continue
+            rect = node_scene_rect(graphic)
+            boxes[('node', path)] = (rect.left(), rect.top(), rect.right(),
+                                     rect.bottom())
+        points = {}
+        for connection in self._connection_graphics:
+            for index, graphic in enumerate(connection.point_graphics):
+                points[(connection.key, index)] = graphic.pos()
+        for ref in self._selected_points:
+            pos = points.get(ref)
+            if pos is not None:
+                boxes[('point', ref)] = (pos.x(), pos.y(), pos.x(), pos.y())
+        return boxes
+
+    def align(self, edge):
+        """Line the selected nodes and points up on an edge, as one undo.
+
+        :param edge: one of nxt_editor.align.EDGES
+        """
+        names = {align.LEFT: 'left', align.HCENTER: 'center',
+                 align.RIGHT: 'right', align.TOP: 'top',
+                 align.VCENTER: 'middle', align.BOTTOM: 'bottom'}
+        offsets = align.align_offsets(self.layout_boxes(), edge)
+        self.move_by(offsets, 'Align {}'.format(names[edge]))
+
+    def distribute(self, axis):
+        """Space the selected nodes and points out evenly, as one undo.
+
+        :param axis: nxt_editor.align.HORIZONTAL or VERTICAL
+        """
+        offsets = align.distribute_offsets(self.layout_boxes(), axis)
+        self.move_by(offsets, 'Distribute {}'.format(axis))
+
+    def move_by(self, offsets, text):
+        """Move nodes and points by the given amounts, as one undo.
+
+        :param offsets: {box key from layout_boxes: (dx, dy)}
+        :param text: the undo's name
+        """
+        if not offsets:
+            return
+        node_positions = {}
+        by_line = {}
+        for (kind, ref), (dx, dy) in offsets.items():
+            if kind == 'node':
+                graphic = self.get_node_graphic(ref)
+                node_positions[ref] = [graphic.pos().x() + dx,
+                                       graphic.pos().y() + dy]
+            else:
+                by_line.setdefault(ref[0], {})[ref[1]] = (dx, dy)
+        stack = self.model.undo_stack
+        stack.beginMacro(text)
+        if node_positions:
+            self.model.set_nodes_pos(node_positions,
+                                     layer=self._position_layer())
+        for key, moves in by_line.items():
+            points = [list(p) for p in self.model.get_line_points(key)]
+            for index, (dx, dy) in moves.items():
+                if index < len(points):
+                    points[index] = [points[index][0] + dx,
+                                     points[index][1] + dy]
+            self.model.set_line_points(key, points, text=text)
+        stack.endMacro()
+
     def keyPressEvent(self, event):
         key = event.key()
         if key not in self._held_keys:
@@ -1815,7 +1894,8 @@ class StageView(QtWidgets.QGraphicsView):
                 if line.src_path == path]
 
     def lines_menu(self, lines):
-        """The right click menu for lines: break them."""
+        """The right click menu for lines: break them, and line up the
+        selected points."""
         menu = QtWidgets.QMenu(self)
         if len(lines) == 1:
             text = 'Break Connection'
@@ -1825,6 +1905,10 @@ class StageView(QtWidgets.QGraphicsView):
         pairs = [(line.src_path, line.tgt_path) for line in lines]
         action.triggered.connect(
             lambda: self.model.break_connections(pairs))
+        if self._selected_points:
+            # Right clicked on a point, to line it up with the others.
+            menu.addSeparator()
+            self.add_align_menu(menu)
         menu.exec_(self.mapToGlobal(self._initial_click_pos))
 
     def contextMenuEvent(self, event):
@@ -1896,6 +1980,8 @@ class StageView(QtWidgets.QGraphicsView):
             menu.addAction(self.authoring_actions.instance_node_action)
             menu.addAction(self.authoring_actions.remove_instance_action)
             menu.addSeparator()
+            self.add_align_menu(menu)
+            menu.addSeparator()
             menu.addAction(self.authoring_actions.localize_node_action)
             if nodes_only_on_tgt:
                 menu.addAction(self.authoring_actions.revert_node_action)
@@ -1918,6 +2004,13 @@ class StageView(QtWidgets.QGraphicsView):
             menu.addAction(self.exec_actions.toggle_break_action)
             menu.addAction(self.exec_actions.toggle_skip_action)
         return menu
+
+    def add_align_menu(self, menu):
+        """Add the Align submenu, greyed out until there are two things
+        selected to line up."""
+        align_menu = self.alignment_actions.align_menu(menu)
+        align_menu.setEnabled(len(self.layout_boxes()) > 1)
+        menu.addMenu(align_menu)
 
     @staticmethod
     def get_sel_path_for_graphic(graphic):
