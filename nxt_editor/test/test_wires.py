@@ -18,7 +18,7 @@ from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from nxt.session import Session
-from nxt_editor import stage_model, user_dir, wires
+from nxt_editor import connection_graphics_item, stage_model, user_dir, wires
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
@@ -199,6 +199,36 @@ class PointTests(ModelCase):
         model = stage_model.StageModel(Session().load_file(filepath=path))
         self.assertEqual(wires.CURVED, model.get_connection_style())
         self.assertEqual({LOWER_KEY: [[5.0, 5.0]]}, model.get_line_points())
+
+
+class PointDirection(unittest.TestCase):
+    """A curved line passes through a point the way it goes from the
+    anchor before it to the one after."""
+
+    def direction(self, previous_x, current=None):
+        return connection_graphics_item.point_direction(
+            QtCore.QPointF(previous_x, 0), QtCore.QPointF(0, 0), current)
+
+    def test_going_on_to_the_right_it_goes_right(self):
+        self.assertEqual(connection_graphics_item.RIGHT, self.direction(-50))
+
+    def test_going_on_to_the_left_it_goes_left(self):
+        self.assertEqual(connection_graphics_item.LEFT, self.direction(50))
+
+    def test_it_only_turns_round_past_the_margin(self):
+        margin = connection_graphics_item.TURN_MARGIN
+        right, left = connection_graphics_item.RIGHT, \
+            connection_graphics_item.LEFT
+        self.assertEqual(right, self.direction(margin - 1, right))
+        self.assertEqual(left, self.direction(margin + 1, right))
+        self.assertEqual(left, self.direction(1 - margin, left))
+        self.assertEqual(right, self.direction(-margin - 1, left))
+
+    def test_without_directions_every_piece_goes_right(self):
+        anchors = [QtCore.QPointF(0, 0), QtCore.QPointF(100, 0)]
+        path = connection_graphics_item.line_path(anchors, True)
+        self.assertEqual(50.0, path.elementAt(1).x)
+        self.assertEqual(50.0, path.elementAt(2).x)
 
 
 class ViewCase(unittest.TestCase):
@@ -423,6 +453,52 @@ class LinesInTheView(ViewCase):
         self.model.set_nodes_pos({'/second': [900.0, 500.0]})
         app.processEvents()
         self.assertEqual((400.0, 0.0), self.path_points()[1])
+
+    def curve_through_point(self):
+        """The pull the line arrives at its one point with, the point, and
+        the pull it leaves with, as x positions."""
+        points = self.path_points()
+        return points[2][0], points[3][0], points[4][0]
+
+    def test_a_point_ahead_of_the_line_is_passed_going_right(self):
+        self.win.view_actions.curved_action.trigger()
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0]])
+        app.processEvents()
+        arrive, point, leave = self.curve_through_point()
+        self.assertLess(arrive, point)
+        self.assertGreater(leave, point)
+
+    def test_a_point_behind_the_source_still_goes_toward_the_target(self):
+        # The ends decide which way, not where the point is.
+        self.win.view_actions.curved_action.trigger()
+        self.model.set_line_points(EXEC_KEY, [[-300.0, 200.0]])
+        app.processEvents()
+        self.assertEqual(connection_graphics_item.RIGHT,
+                         self.line.point_graphics[0].direction)
+
+    def test_a_target_behind_the_source_is_reached_going_left(self):
+        self.win.view_actions.curved_action.trigger()
+        self.model.set_nodes_pos({'/second': [-800.0, 400.0]})
+        self.model.set_line_points(EXEC_KEY, [[-300.0, 200.0]])
+        app.processEvents()
+        self.assertEqual(connection_graphics_item.LEFT,
+                         self.line.point_graphics[0].direction)
+        arrive, point, leave = self.curve_through_point()
+        self.assertGreater(arrive, point)
+        self.assertLess(leave, point)
+
+    def test_a_point_turns_round_when_its_ends_cross(self):
+        self.win.view_actions.curved_action.trigger()
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0]])
+        app.processEvents()
+        graphic = self.line.point_graphics[0]
+        self.assertEqual(connection_graphics_item.RIGHT, graphic.direction)
+        self.model.set_nodes_pos({'/first': [1000.0, 0.0]})
+        app.processEvents()
+        self.assertEqual(connection_graphics_item.LEFT, graphic.direction)
+        arrive, point, leave = self.curve_through_point()
+        self.assertGreater(arrive, point)
+        self.assertLess(leave, point)
 
     def test_a_new_line_is_drawn_through_its_saved_points(self):
         self.model.set_line_points(EXEC_KEY, [[400.0, 0.0]])
