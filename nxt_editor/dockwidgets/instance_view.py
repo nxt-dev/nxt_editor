@@ -35,6 +35,7 @@ STRIP = 6            # the layer colors along a node's top
 CHIP = 10
 COLUMN_GAP = 90
 ROW_GAP = 22
+FOCUS_ICON = 14      # the target on the node the view is drawn from
 
 
 def instance_sources(model):
@@ -123,6 +124,35 @@ def icon_button(icon, tooltip, checked_icon=None):
     return button
 
 
+def paint_focus_icon(painter, rect, color):
+    """A target, as on Follow Selection: a ring with a dot in it and a
+    tick out from each side. It marks the node the view is drawn from.
+
+    :param painter: QPainter to draw with
+    :param rect: QRectF to draw the target in
+    :param color: QColor of the target
+    """
+    painter.save()
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    center = rect.center()
+    size = min(rect.width(), rect.height())
+    pen = QtGui.QPen(color, max(1.0, size / 9.0))
+    pen.setCapStyle(QtCore.Qt.FlatCap)
+    painter.setPen(pen)
+    painter.setBrush(QtCore.Qt.NoBrush)
+    ring = size * 0.32
+    painter.drawEllipse(center, ring, ring)
+    tick = size / 2.0
+    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        painter.drawLine(center + QtCore.QPointF(dx * ring, dy * ring),
+                         center + QtCore.QPointF(dx * tick, dy * tick))
+    painter.setPen(QtCore.Qt.NoPen)
+    painter.setBrush(color)
+    dot = size * 0.14
+    painter.drawEllipse(center, dot, dot)
+    painter.restore()
+
+
 class InstanceNodeItem(QtWidgets.QGraphicsItem):
     """A grey card for a node, its layers' colors along the top."""
 
@@ -135,8 +165,10 @@ class InstanceNodeItem(QtWidgets.QGraphicsItem):
         self.hovered = False
         self.setFlag(QtWidgets.QGraphicsItem.ItemIsSelectable)
         self.setAcceptHoverEvents(True)
-        self.setToolTip(node_path if exists else
-                        node_path + '\nNot in the graph')
+        tip = node_path if exists else node_path + '\nNot in the graph'
+        if focus:
+            tip += '\nThe node this view is drawn from'
+        self.setToolTip(tip)
 
     def boundingRect(self):
         return QtCore.QRectF(-2, -2, NODE_WIDTH + 4, NODE_HEIGHT + 4)
@@ -177,7 +209,15 @@ class InstanceNodeItem(QtWidgets.QGraphicsItem):
         name_font = theme.font(theme.TEXT_PX + 1, QtGui.QFont.DemiBold)
         painter.setFont(name_font)
         painter.setPen(text_color)
-        text_rect = QtCore.QRectF(10, STRIP + 4, NODE_WIDTH - 20, 20)
+        text_right = NODE_WIDTH - 10
+        if self.focus:
+            # Room for the target at the end of the name.
+            text_right -= FOCUS_ICON + 6
+            icon_rect = QtCore.QRectF(NODE_WIDTH - 10 - FOCUS_ICON,
+                                      STRIP + 4 + (20 - FOCUS_ICON) / 2.0,
+                                      FOCUS_ICON, FOCUS_ICON)
+            paint_focus_icon(painter, icon_rect, text_color)
+        text_rect = QtCore.QRectF(10, STRIP + 4, text_right - 10, 20)
         painter.drawText(text_rect, QtCore.Qt.AlignVCenter,
                          QtGui.QFontMetrics(name_font).elidedText(
                              name, QtCore.Qt.ElideRight,
@@ -191,7 +231,7 @@ class InstanceNodeItem(QtWidgets.QGraphicsItem):
                              self.node_path, QtCore.Qt.ElideLeft,
                              int(path_rect.width())))
         # Edges: amber selected, white under the mouse, and a light one on
-        # the node the view is about.
+        # the node the view is drawn from, which also has the target.
         edge = None
         if self.isSelected():
             edge = QtGui.QPen(colors.SELECTED, 2)
