@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 # External
-from Qt import QtWidgets
+from Qt import QtCore, QtWidgets
 
 # Internal
 from nxt_editor import align, stage_model
@@ -132,6 +132,72 @@ class InTheView(unittest.TestCase):
         menu = self.view.node_menu()
         submenu = [a for a in menu.actions() if a.text() == 'Align'][0]
         self.assertFalse(submenu.isEnabled())
+
+    def point_menu(self):
+        """The menu a right click on the line's point shows."""
+        point = self.view.point_at(self.view.mapFromScene(
+            QtCore.QPointF(250.0, 50.0)))
+        return self.view.make_point_menu(point)
+
+    def align_action(self, menu):
+        return [a for a in menu.actions() if a.text() == 'Align'][0]
+
+    def test_a_points_menu_aligns_it_with_the_selected_nodes(self):
+        self.model.set_selection(['/c'])
+        menu = self.point_menu()
+        self.assertEqual([(LINE, 0)], self.view.selected_points)
+        self.assertEqual(['/c'], self.model.selection)
+        self.assertTrue(self.align_action(menu).isEnabled())
+        top = [a for a in self.align_action(menu).menu().actions()
+               if a.text() == 'Align Top'][0]
+        top.trigger()
+        app.processEvents()
+        self.assertEqual(self.model.get_line_points(LINE)[0][1],
+                         self.top('/c'))
+
+    def test_a_lone_point_has_align_greyed_out(self):
+        self.model.set_selection([])
+        self.assertFalse(self.align_action(self.point_menu()).isEnabled())
+
+    def test_a_points_menu_removes_it(self):
+        menu = self.point_menu()
+        [a for a in menu.actions() if a.text() == 'Remove Point'][0].trigger()
+        app.processEvents()
+        self.assertEqual([], self.model.get_line_points(LINE))
+
+    def right_click(self, scene_pos):
+        """What a right click at scene_pos shows, by the menu it would
+        exec."""
+        shown = []
+        self.view._initial_click_pos = self.view.mapFromScene(
+            QtCore.QPointF(*scene_pos))
+        event = mock.Mock()
+        with mock.patch.object(QtWidgets.QMenu, 'exec_',
+                               lambda menu, *args: shown.append(menu)):
+            self.view.block_context_menu = False
+            self.view.contextMenuEvent(event)
+        return shown[0]
+
+    def test_off_the_selected_points_their_menu_still_shows(self):
+        self.model.set_selection([])
+        self.view.select_points([(LINE, 0)])
+        menu = self.right_click((-2000.0, -2000.0))
+        texts = [a.text() for a in menu.actions()]
+        self.assertIn('Align', texts)
+        self.assertIn('Remove Point', texts)
+
+    def test_a_lines_menu_has_no_align(self):
+        line = [l for l in self.view._connection_graphics
+                if l.key == LINE][0]
+        self.view.select_points([(LINE, 0)])
+        menu = self.view.make_lines_menu([line])
+        self.assertNotIn('Align', [a.text() for a in menu.actions()])
+
+    def test_a_nodes_menu_aligns_the_selected_points_too(self):
+        self.model.set_selection(['/b'])
+        self.view.select_points([(LINE, 0)])
+        menu = self.view.node_menu('/b')
+        self.assertTrue(self.align_action(menu).isEnabled())
 
     def test_the_toolbar_has_align_before_select_all(self):
         toolbar = self.win.authoring_toolbar

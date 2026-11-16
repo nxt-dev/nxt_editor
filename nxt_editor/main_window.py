@@ -17,7 +17,8 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import file_browser, theme, user_dir, wires
+from nxt_editor import (connection_graphics_item, file_browser, theme,
+                        user_dir, wires)
 from nxt_editor.ai import providers as ai_providers
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
@@ -983,7 +984,7 @@ QCheckBox::indicator {
 
     def update_implicit_action(self):
         self.view_actions.implicit_action.blockSignals(True)
-        state = self.model.implicit_connections
+        state = connection_graphics_item.lines_shown()
         self.view_actions.implicit_action.setChecked(state)
         self.view_actions.implicit_action.blockSignals(False)
 
@@ -1373,7 +1374,15 @@ class DisplayToolBar(ToolBar):
         self.addSeparator()
         # Connection view
         self.addAction(self.view_actions.grid_action)
-        self.addAction(self.view_actions.implicit_action)
+        self.lines_menu = self.view_actions.lines_menu(self)
+        self.lines_button = QtWidgets.QToolButton(self)
+        self.lines_button.setIcon(self.view_actions.lines_icon)
+        self.lines_button.setToolTip('Choose which lines are shown')
+        self.lines_button.setMenu(self.lines_menu)
+        self.lines_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.lines_button.setIconSize(self.iconSize())
+        self.iconSizeChanged.connect(self.lines_button.setIconSize)
+        self.addWidget(self.lines_button)
         self.addSeparator()
         self.addAction(self.view_actions.frame_all_action)
         self.addAction(self.view_actions.frame_selection_action)
@@ -1471,7 +1480,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.addAction(self.display_actions.resolve_action)
         self.view_menu.addAction(self.display_actions.cached_action)
         self.view_menu.addSeparator()
-        self.view_menu.addAction(self.view_actions.implicit_action)
+        self.view_menu.addMenu(self.view_actions.lines_menu(self.view_menu))
         self.view_menu.addAction(self.view_actions.curved_action)
         self.view_menu.addAction(self.view_actions.grid_action)
         self.view_menu.addAction(self.view_actions.mini_map_action)
@@ -1641,11 +1650,19 @@ class MenuBar(QtWidgets.QMenuBar):
             action.setChecked(widget.isVisible())
             self.window_menu.addAction(action)
         self.window_menu.addSeparator()
+        current = self.main_window.get_current_view()
         for file_dict in self.main_window.open_files.values():
             widget = file_dict["view"]
             name = file_dict["model"].top_layer.get_alias()
+            if widget is current:
+                # The graph being viewed stands out, without a check box.
+                name = u'▸ ' + name
             new_action = self.window_menu.addAction(name)
             new_action.setData(widget)
+            if widget is current:
+                font = new_action.font()
+                font.setBold(True)
+                new_action.setFont(font)
 
     def window_action_triggered(self, action=None):
         if not action:

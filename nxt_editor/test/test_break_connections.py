@@ -28,8 +28,10 @@ from nxt_editor.main_window import MainWindow  # noqa: E402
 BASE = {
     'version': '1.17', 'alias': 'base',
     'nodes': {
-        # A connection the top layer did not make.
+        # Connections the top layer did not make.
         '/below': {'execute_in': '/first'},
+        '/source': {},
+        '/copy': {'instance': '/source'},
     },
 }
 TOP = {
@@ -53,6 +55,7 @@ EXEC = ('/first', '/second._execute_in')
 PLAIN = ('/first.value', '/user.plain')
 MIXED = ('/first.value', '/user.mixed')
 BELOW = ('/first', '/below._execute_in')
+COPY = ('/source', '/copy._instance')
 
 
 class BreakCase(unittest.TestCase):
@@ -135,6 +138,27 @@ class Breaking(BreakCase):
         self.assertFalse(self.model.get_node_exec_in(
             '/below', self.model.comp_layer))
 
+    def test_a_weaker_layers_instance_is_removed_from_the_top(self):
+        # An empty instance path is an opinion, so unlike an exec input
+        # an instance is removed whichever layer made it.
+        self.assertEqual(1, self.model.break_connections([COPY]))
+        app.processEvents()
+        self.assertFalse(self.model.get_node_instance_path(
+            '/copy', self.model.comp_layer))
+        self.model.undo_stack.undo()
+        app.processEvents()
+        self.assertEqual('/source', self.model.get_node_instance_path(
+            '/copy', self.model.comp_layer))
+
+    def test_an_instance_made_here_leaves_no_empty_value(self):
+        self.model.set_node_instance('/second', '/first')
+        self.assertEqual(1, self.model.break_connections(
+            [('/first', '/second._instance')]))
+        node = self.model.target_layer.lookup('/second')
+        self.assertIsNone(getattr(node, '_instance', None))
+        self.assertFalse(self.model.get_node_instance_path(
+            '/second', self.model.comp_layer))
+
     def test_breaking_several_is_one_undo(self):
         count = self.model.undo_stack.count()
         self.assertEqual(2, self.model.break_connections([EXEC, PLAIN]))
@@ -178,6 +202,34 @@ class RightClick(BreakCase):
     def test_open_space_finds_nothing(self):
         self.assertEqual([], self.view.lines_at(
             self.view_pos((-3000.0, -3000.0))))
+
+
+class ShowingAttributes(BreakCase):
+
+    def line(self):
+        return [line for line in self.view._connection_graphics
+                if (line.src_path, line.tgt_path) == PLAIN][0]
+
+    def test_a_line_moves_to_the_plug_its_node_shows(self):
+        first = self.view.get_node_graphic('/first')
+        self.model.set_attr_display_state(['/first'], 0)
+        app.processEvents()
+        self.assertEqual(first.get_attr_out_pos('_execute_in'),
+                         self.line().src_pos)
+        # Shown again, the line starts at the attribute, without the node
+        # having to move first.
+        self.model.set_attr_display_state(['/first'], 3)
+        app.processEvents()
+        self.assertEqual(first.get_attr_out_pos('value'),
+                         self.line().src_pos)
+
+    def test_a_line_moves_off_a_plug_its_target_hides(self):
+        user = self.view.get_node_graphic('/user')
+        self.assertEqual(user.get_attr_in_pos('plain'), self.line().tgt_pos)
+        self.model.set_attr_display_state(['/user'], 0)
+        app.processEvents()
+        self.assertEqual(user.get_attr_in_pos('_execute_in'),
+                         self.line().tgt_pos)
 
 
 if __name__ == '__main__':

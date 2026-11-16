@@ -201,6 +201,31 @@ class PointTests(ModelCase):
         self.assertEqual({LOWER_KEY: [[5.0, 5.0]]}, model.get_line_points())
 
 
+
+class InstanceArrow(unittest.TestCase):
+
+    def test_the_line_stops_where_the_arrow_starts(self):
+        anchors = [QtCore.QPointF(0, 0), QtCore.QPointF(200, 0)]
+        path, arrow = connection_graphics_item.arrow_line(anchors, False)
+        tip = 200 - connection_graphics_item.ARROW_GAP
+        base = tip - connection_graphics_item.ARROW_LENGTH
+        self.assertEqual(QtCore.QPointF(tip, 0), arrow[0])
+        self.assertAlmostEqual(base, path.currentPosition().x())
+
+    def test_a_curved_line_arrives_going_right(self):
+        anchors = [QtCore.QPointF(0, 0), QtCore.QPointF(-100, 300)]
+        path, arrow = connection_graphics_item.arrow_line(anchors, True)
+        self.assertAlmostEqual(arrow[0].y(), 300)
+        self.assertAlmostEqual(arrow[1].x(), arrow[2].x())
+        self.assertLess(arrow[1].x(), arrow[0].x())
+
+    def test_zoomed_out_the_arrow_is_twice_as_long(self):
+        anchors = [QtCore.QPointF(0, 0), QtCore.QPointF(200, 0)]
+        _, arrow = connection_graphics_item.arrow_line(anchors, False,
+                                                        scale=2.0)
+        self.assertAlmostEqual(arrow[0].x() - arrow[1].x(),
+                               connection_graphics_item.ARROW_LENGTH * 2)
+
 class PointDirection(unittest.TestCase):
     """A curved line passes through a point the way it goes from the
     anchor before it to the one after."""
@@ -367,6 +392,44 @@ class LinesInTheView(ViewCase):
                          sorted(self.view._node_graphics))
         self.assertEqual([], self.model.get_selected_nodes())
 
+    def test_dragging_one_selected_point_moves_them_all(self):
+        self.model.add_node(name='third', pos=[1600.0, 0.0])
+        self.model.set_node_exec_in('/third', '/second')
+        other_key = '/second>/third._execute_in'
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0], [400.0, 300.0]])
+        self.model.set_line_points(other_key, [[1200.0, 200.0]])
+        app.processEvents()
+        self.click((400, 0))
+        self.click((400, 300), self.view.SEL_TOGGLE_MODIFIERS)
+        self.click((1200, 200), self.view.SEL_TOGGLE_MODIFIERS)
+        self.assertEqual(3, len(self.view.selected_points))
+        count = self.model.undo_stack.count()
+        self.drag((400, 0), (450, 100))
+        self.assertEqual(count + 1, self.model.undo_stack.count())
+        moved = self.model.get_line_points(EXEC_KEY) + \
+            self.model.get_line_points(other_key)
+        for (x, y), (start_x, start_y) in zip(
+                moved, [(400, 0), (400, 300), (1200, 200)]):
+            self.assertAlmostEqual(start_x + 50, x, delta=10)
+            self.assertAlmostEqual(start_y + 100, y, delta=10)
+        # They stay selected, and one undo puts them all back.
+        self.assertEqual(3, len(self.view.selected_points))
+        self.model.undo_stack.undo()
+        app.processEvents()
+        self.assertEqual([[400.0, 0.0], [400.0, 300.0]],
+                         self.model.get_line_points(EXEC_KEY))
+        self.assertEqual([[1200.0, 200.0]],
+                         self.model.get_line_points(other_key))
+
+    def test_dragging_an_unselected_point_moves_only_it(self):
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0], [400.0, 300.0]])
+        app.processEvents()
+        self.click((400, 300))
+        self.drag((400, 0), (450, 100))
+        points = self.model.get_line_points(EXEC_KEY)
+        self.assertAlmostEqual(450, points[0][0], delta=10)
+        self.assertEqual([400.0, 300.0], points[1])
+
     def test_double_clicking_a_point_removes_it(self):
         self.model.set_line_points(EXEC_KEY, [[400.0, 0.0], [400.0, 300.0]])
         app.processEvents()
@@ -399,6 +462,17 @@ class LinesInTheView(ViewCase):
         self.assertEqual([(EXEC_KEY, 0), (EXEC_KEY, 1)],
                          self.view.selected_points)
         self.assertEqual([], self.model.get_selected_nodes())
+
+    def test_a_box_starts_in_the_space_a_bent_line_goes_round(self):
+        # Bent through a point, the line goes round a triangle of open
+        # space, which a box can still be started in.
+        self.model.set_line_points(EXEC_KEY, [[400.0, 0.0]])
+        app.processEvents()
+        inside = QtCore.QPointF(487, 143)
+        self.assertTrue(self.line.path().contains(inside))
+        self.assertGreater(self.line.distance(inside), 20)
+        self.box((487, 143), (350, -60))
+        self.assertEqual([(EXEC_KEY, 0)], self.view.selected_points)
 
     def test_a_box_with_shift_toggles_points(self):
         self.model.set_line_points(EXEC_KEY, [[400.0, 0.0], [400.0, 300.0]])

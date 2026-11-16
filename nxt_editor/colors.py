@@ -22,6 +22,8 @@ GRAPH_BG_COLOR = QColor(theme.GRAPH)
 START_COLOR = QColor("#1bd40b")
 SKIP_COLOR = QColor("#f0880a")
 BREAK_COLOR = QColor(255, 0, 0)
+# Instance lines, a blue no attribute type or exec line uses.
+INSTANCE_LINE = QColor('#4fc3f7')
 
 # Layer colors: hues spread evenly around the circle, in OKLCH so the steps
 # look even, each made dark enough for white text (theme.white_text_safe),

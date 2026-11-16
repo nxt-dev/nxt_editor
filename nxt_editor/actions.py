@@ -10,7 +10,8 @@ from Qt import QtCore, QtGui, QtWidgets
 # Internal
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
-from nxt_editor import align, layout_icons, user_dir, wires
+from nxt_editor import (align, connection_graphics_item, layout_icons,
+                        user_dir, wires)
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, exec_icons, finder, file_search, file_browser
@@ -1506,24 +1507,48 @@ class StageViewActions(NxtActionContainer):
                                            'takes noticeably longer to open.')
         self.animation_action.triggered.connect(toggle_animations)
         # TOGGLE CONNECTION LINES
+        # Lines, and each kind of line but exec lines, which always show,
+        # can be hidden, remembered for the tabs opened after this one and
+        # the next session, the way the grid is.
 
-        def toggle_lines():
-            state = self.implicit_action.isChecked()
-            self.main_window.view.toggle_implicit_connections(state)
-            # Remembered for the tabs opened after this one, and the next
-            # session, the way the grid is.
-            user_dir.user_prefs[user_dir.USER_PREF.SHOW_IMPLICIT] = state
+        def lines_action(kind, text, tip):
+            action = NxtAction(text=text, parent=self)
+            action.setToolTip(tip)
+            action.setWhatsThis(tip)
+            action.setCheckable(True)
+            action.setChecked(connection_graphics_item.lines_shown(kind))
 
-        self.implicit_action = NxtAction(text='Toggle Implicit Connections',
-                                         parent=self)
-        self.implicit_action.setShortcut('Ctrl+L')
-        self.implicit_action.setToolTip('Show / Hide Implicit Connections')
-        self.implicit_action.setWhatsThis('Shows or hides the implicit '
-                                          'connections for this tab.')
-        self.implicit_action.setCheckable(True)
-        self.implicit_action.setChecked(user_dir.user_prefs.get(
-            user_dir.USER_PREF.SHOW_IMPLICIT, True))
-        self.implicit_action.triggered.connect(toggle_lines)
+            def toggle():
+                state = action.isChecked()
+                view = self.main_window.view
+                if view:
+                    view.show_lines(kind, state)
+                else:
+                    connection_graphics_item.show_lines(kind, state)
+            action.triggered.connect(toggle)
+            return action
+
+        # Ctrl+L shows or hides every line but exec lines, leaving each
+        # kind on or off as it was, so they come back as they were.
+        self.lines_action = lines_action(
+            None, 'Show Lines',
+            'Show / Hide all lines but exec lines (Ctrl+L)')
+        self.lines_action.setShortcut('Ctrl+L')
+        self.implicit_action = self.lines_action
+        self.property_lines_action = lines_action(
+            connection_graphics_item.PROPERTY_LINES, 'Property Lines',
+            'Show / Hide the lines from properties to the properties that '
+            'use them')
+        self.instance_lines_action = lines_action(
+            connection_graphics_item.INSTANCE_LINES, 'Instance Lines',
+            'Show / Hide the lines from nodes to their instances')
+        self.code_lines_action = lines_action(
+            connection_graphics_item.CODE_LINES, 'Code Lines',
+            'Show / Hide the lines to nodes from the properties their code '
+            'uses')
+        self.lines_actions = [self.property_lines_action,
+                              self.instance_lines_action,
+                              self.code_lines_action]
         lines_icon = QtGui.QIcon()
         lines_icn_on = QtGui.QPixmap(
             ':icons/icons/implicit_connections_pressed.png')
@@ -1534,7 +1559,7 @@ class StageViewActions(NxtActionContainer):
         lines_icon.addPixmap(lines_icn_hov, QtGui.QIcon.Active, QtGui.QIcon.Off)
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Active, QtGui.QIcon.On)
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        self.implicit_action.setIcon(lines_icon)
+        self.lines_icon = lines_icon
 
         # Straight or curved lines, saved with the graph.
         def toggle_curved():
@@ -1741,7 +1766,10 @@ class StageViewActions(NxtActionContainer):
                                      self.disp_all_attrs_action,
                                      self.grid_action, self.mini_map_action,
                                      self.animation_action,
-                                     self.implicit_action,
+                                     self.lines_action,
+                                     self.property_lines_action,
+                                     self.instance_lines_action,
+                                     self.code_lines_action,
                                      self.curved_action,
                                      self.pick_walk_up_action,
                                      self.pick_walk_down_action,
@@ -1751,6 +1779,18 @@ class StageViewActions(NxtActionContainer):
                                      self.nudge_down_action,
                                      self.nudge_up_action]
 
+
+    def lines_menu(self, parent=None):
+        """The Lines menu: which kinds of line the graph shows.
+
+        :rtype: QtWidgets.QMenu
+        """
+        menu = QtWidgets.QMenu('Lines', parent)
+        menu.setIcon(self.lines_icon)
+        menu.addAction(self.lines_action)
+        menu.addSeparator()
+        menu.addActions(self.lines_actions)
+        return menu
 
 class ExecuteActions(NxtActionContainer):
     def __init__(self, main_window):

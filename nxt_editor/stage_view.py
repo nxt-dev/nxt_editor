@@ -20,9 +20,9 @@ from nxt_editor.backdrop_graphics_item import (BackdropGraphicsItem,
                                                BackdropEditDialog)
 from nxt_editor import align, backdrops, theme
 from nxt_editor.connection_graphics_item import (AttrConnectionGraphic,
-                                                  WirePointGraphic,
-                                                  HIT_WIDTH)
-from nxt_editor import wires
+                                                  WirePointGraphic)
+from nxt_editor import connection_graphics_item as lines
+from nxt_editor import user_dir, wires
 from nxt_editor.dialogs import NxtWarningDialog
 from nxt_editor.layer_color_dialog import LayerColorDialog
 from nxt_editor.mini_map import MiniMap, node_scene_rect
@@ -418,10 +418,11 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene().clear()
 
     def toggle_implicit_connections(self, state=None):
+        """Show or hide instance lines."""
         if state is None:
-            state = not self.model.implicit_connections
+            state = not lines.lines_shown(lines.INSTANCE_LINES)
         self.model.implicit_connections = state
-        self.update_view()
+        self.show_lines(lines.INSTANCE_LINES, state)
 
     def toggle_grid(self, state=None):
         if state is None:
@@ -510,10 +511,12 @@ class StageView(QtWidgets.QGraphicsView):
 
     def draw_connections(self, node_path):
         # remove items
-        target_node_item = self.get_node_graphic(node_path)
         self._draw_exec_connections(node_path)
-        self._draw_attr_connections(node_path,
-                                    target_node_item.user_attr_names)
+        # Every property, shown or not: a line shows while either of its
+        # ends is, see line_shown.
+        self._draw_attr_connections(
+            node_path, self.model.get_node_attr_names(node_path,
+                                                      self.model.comp_layer))
         self._draw_code_connections(node_path)
         self._draw_inst_connections(node_path)
 
@@ -548,12 +551,8 @@ class StageView(QtWidgets.QGraphicsView):
         for attr_name in attr_names:
             self.remove_attr_connection_graphics(node_path, attr_name,
                                                  side=CONNECTION_SIDES.IN)
-            source_path = self.model.get_node_attr_source_path(node_path,
-                                                               attr_name,
-                                                               comp_layer)
-            if source_path != node_path:
-                # Only draw connections for local attrs.
-                continue
+            # Inherited properties get lines too, dotted, see
+            # AttrConnectionGraphic.inherited.
             sources = self.model.get_node_attr_external_sources(node_path,
                                                                 attr_name,
                                                                 comp_layer)
@@ -587,8 +586,6 @@ class StageView(QtWidgets.QGraphicsView):
                                                       layer=comp)
         if not inst_path:
             return
-        if not self.model.implicit_connections:
-            return
         self.register_attr_concern(inst_path, None,
                                    node_path, inst_attr)
         if not self.get_node_graphic(inst_path):
@@ -608,8 +605,6 @@ class StageView(QtWidgets.QGraphicsView):
         # draw compute connections
         sources = self.model.get_node_code_external_sources(node_path, comp)
         if not sources:
-            return
-        if not self.model.implicit_connections:
             return
         for src_attr_path in sources:
             split = nxt_path.path_attr_partition(src_attr_path)
@@ -735,6 +730,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.scene().addItem(graphic)
         graphic.setZValue(self.CONNECTION_DEPTH)
         self._connection_graphics += [graphic]
+        graphic.drawn = True
+        graphic.setVisible(self.line_shown(graphic))
         points = self._line_points.get(graphic.key)
         if points:
             graphic.set_points(points)
@@ -816,18 +813,62 @@ class StageView(QtWidgets.QGraphicsView):
                 return item
         return None
 
+    def line_shown(self, line):
+        """Whether a line is shown. Exec lines always are. Others when
+        lines are, its kind is, and for a property line, the property is
+        showing on at least one of its nodes, so with every node's
+        properties hidden there are none."""
+        kind = line.kind
+        if kind == lines.EXEC_LINES:
+            return True
+        if not (lines.lines_shown() and lines.lines_shown(kind)):
+            return False
+        if kind != lines.PROPERTY_LINES:
+            return True
+        for path, attr in ((line.src_node_path, line.src_attr_name),
+                           (line.tgt_node_path, line.tgt_attr_name)):
+            graphic = self.get_node_graphic(path)
+            if graphic and attr in graphic.user_attr_names:
+                return True
+        return False
+
+    def show_lines(self, kind, shown):
+        """Show or hide a kind of line, or with kind None all lines,
+        remembered for every graph."""
+        lines.show_lines(kind, shown)
+        self.update_lines_shown()
+
+    def update_lines_shown(self):
+        for line in self._connection_graphics:
+            line.setVisible(self.line_shown(line))
+
+    def go_to_node(self, node_path):
+        """Select a node, everywhere it is shown, and bring it into view
+        here without zooming."""
+        self.model.set_selection([node_path])
+        graphic = self.get_node_graphic(node_path)
+        if graphic:
+            self.centerOn(node_scene_rect(graphic).center())
+
     def connection_at(self, scene_pos):
-        """The line a click at scene_pos lands on, allowing some room."""
-        size = HIT_WIDTH
-        area = QtCore.QRectF(scene_pos.x() - size / 2,
-                             scene_pos.y() - size / 2, size, size)
-        for item in self.scene().items(area):
-            if (isinstance(item, AttrConnectionGraphic) and
+        """The line a click at scene_pos lands on, allowing a few pixels on
+        screen whatever the zoom, and the nearest where lines are close."""
+        room = lines.HIT_PIXELS / (self.scale_factor or 1.0)
+        area = QtCore.QRectF(scene_pos.x() - room, scene_pos.y() - room,
+                             room * 2, room * 2)
+        nearest, best = None, None
+        # By their boxes, as a thin line's own outline can miss the area.
+        for item in self.scene().items(
+                area, QtCore.Qt.IntersectsItemBoundingRect):
+            if not (isinstance(item, AttrConnectionGraphic) and
+                    item.isVisible() and
                     item is not self.potential_connection and
-                    item in self._connection_graphics and
-                    item.hit(scene_pos)):
-                return item
-        return None
+                    item.drawn):
+                continue
+            gap = item.distance(scene_pos) - item.thickness / 2.0
+            if gap <= room and (best is None or gap < best):
+                nearest, best = item, gap
+        return nearest
 
     def add_line_point(self, connection, scene_pos):
         """Add a point to a line where it was double clicked."""
@@ -892,35 +933,60 @@ class StageView(QtWidgets.QGraphicsView):
             self.select_points([ref])
         self.select_backdrops([])
         self.model.clear_selection()
+        # Every selected point moves with the one dragged, as nodes do.
+        moving = [g for c in self._connection_graphics
+                  for g in c.point_graphics
+                  if self._point_ref(g) in self._selected_points]
+        if graphic not in moving:
+            moving.append(graphic)
         self._point_drag = {'graphic': graphic,
                             'start': self.mapToScene(event.pos()),
                             'pos': QtCore.QPointF(graphic.pos()),
+                            'moving': [(g, QtCore.QPointF(g.pos()))
+                                       for g in moving],
                             'moved': False}
         return True
 
     def point_drag_move(self, event):
         drag = self._point_drag
-        graphic = drag['graphic']
         new_pos = drag['pos'] + (self.mapToScene(event.pos()) - drag['start'])
         shift = event.modifiers() & QtCore.Qt.ShiftModifier
         if shift or self.alignment_actions.snap_action.isChecked():
             new_pos = QtCore.QPointF(*self.model.snap_pos_to_grid(
                 (new_pos.x(), new_pos.y())))
-        graphic.setPos(new_pos)
-        graphic.connection.rebuild_line()
+        # The others keep their places around the one dragged.
+        offset = new_pos - drag['pos']
+        connections = []
+        for graphic, start in drag['moving']:
+            graphic.setPos(start + offset)
+            if graphic.connection not in connections:
+                connections.append(graphic.connection)
+        for connection in connections:
+            connection.rebuild_line()
         drag['moved'] = True
         self.mini_map.mark_dirty()
 
     def point_release(self):
-        """Save where a point was dragged to, as one undo."""
+        """Save where the points were dragged to, as one undo."""
         drag = self._point_drag
         self._point_drag = None
         if not drag['moved']:
             return
-        connection = drag['graphic'].connection
-        points = [[p.x(), p.y()] for p in connection.points]
-        self.model.set_line_points(connection.key, points,
-                                   text='Move connection point')
+        connections = []
+        for graphic, _ in drag['moving']:
+            if graphic.connection not in connections:
+                connections.append(graphic.connection)
+        multiple = len(drag['moving']) > 1
+        text = 'Move connection points' if multiple else \
+            'Move connection point'
+        # Read them all before saving any, as saving one redraws its line.
+        moved = [(c.key, [[p.x(), p.y()] for p in c.points])
+                 for c in connections]
+        stack = self.model.undo_stack
+        stack.beginMacro(text)
+        for key, points in moved:
+            self.model.set_line_points(key, points, text=text)
+        stack.endMacro()
 
     # Screen pixels between minor grid lines below which they are left out.
     MIN_GRID_SPACING = 4
@@ -1467,8 +1533,10 @@ class StageView(QtWidgets.QGraphicsView):
                                      self.backdrop_press(event)):
                 event.accept()
                 return
-            # get item under event
-            item = self.itemAt(event.pos())
+            # get item under event. A line is no more than open space to a
+            # left press, so a box can start on or between lines.
+            item = next((i for i in self.items(event.pos())
+                         if not isinstance(i, AttrConnectionGraphic)), None)
 
             # click event in open area of scene could be start of
             # rubber band action. position recorded as rubber band origin.
@@ -1855,8 +1923,8 @@ class StageView(QtWidgets.QGraphicsView):
         """The lines a right click at view_pos is about.
 
         On a plug, every line into or out of it. On a line, or a point on
-        one, that line. Lines into a node's code are left out, see
-        StageModel.break_connections.
+        one, that line. Only lines that are shown. Lines into a node's code
+        can be gone to but not broken, see StageModel.break_connections.
 
         :return: list of AttrConnectionGraphic
         """
@@ -1874,8 +1942,7 @@ class StageView(QtWidgets.QGraphicsView):
             else:
                 line = self.connection_at(self.mapToScene(view_pos))
                 found = [line] if line else []
-        return [line for line in found
-                if self.model._breakable(line.tgt_path)]
+        return [line for line in found if line.isVisible()]
 
     def plug_lines(self, plug):
         node_path = plug.parentItem().node_path
@@ -1894,27 +1961,70 @@ class StageView(QtWidgets.QGraphicsView):
                 if line.src_path == path]
 
     def lines_menu(self, lines):
-        """The right click menu for lines: break them, and line up the
-        selected points."""
-        menu = QtWidgets.QMenu(self)
-        if len(lines) == 1:
-            text = 'Break Connection'
-        else:
-            text = 'Break {} Connections'.format(len(lines))
-        action = menu.addAction(text)
-        pairs = [(line.src_path, line.tgt_path) for line in lines]
-        action.triggered.connect(
-            lambda: self.model.break_connections(pairs))
-        if self._selected_points:
-            # Right clicked on a point, to line it up with the others.
-            menu.addSeparator()
-            self.add_align_menu(menu)
+        """Show the right click menu for lines."""
+        menu = self.make_lines_menu(lines)
         menu.exec_(self.mapToGlobal(self._initial_click_pos))
+
+    def make_lines_menu(self, lines):
+        """The right click menu for lines: break them, or go to either end
+        of one."""
+        menu = QtWidgets.QMenu(self)
+        pairs = [(line.src_path, line.tgt_path) for line in lines
+                 if self.model._breakable(line.tgt_path)]
+        if pairs:
+            if len(pairs) == 1:
+                text = 'Break Connection'
+            else:
+                text = 'Break {} Connections'.format(len(pairs))
+            action = menu.addAction(text)
+            action.triggered.connect(
+                lambda: self.model.break_connections(pairs))
+        if len(lines) == 1:
+            line = lines[0]
+            if pairs:
+                menu.addSeparator()
+            for text, path in (('Go to Source', line.src_node_path),
+                               ('Go to Target', line.tgt_node_path)):
+                go = menu.addAction('{}: {}'.format(text, path))
+                go.triggered.connect(partial(self.go_to_node, path))
+        return menu
+
+    def point_menu(self, point=None):
+        """Show the right click menu for a point on a line, or with none,
+        for the selected points."""
+        menu = self.make_point_menu(point)
+        menu.exec_(self.mapToGlobal(self._initial_click_pos))
+
+    def make_point_menu(self, point=None):
+        """The right click menu for points on lines: line them up with each
+        other and the selected nodes, or remove them.
+
+        A point right clicked that is not selected is selected first,
+        alongside any selected nodes. With no point, it is for the points
+        already selected, as a right click off them is, the way the node
+        menu is for the selected nodes.
+        """
+        if point is not None:
+            ref = self._point_ref(point)
+            if ref not in self._selected_points:
+                self.select_points([ref])
+        menu = QtWidgets.QMenu(self)
+        self.add_align_menu(menu)
+        menu.addSeparator()
+        count = len(self._selected_points)
+        text = 'Remove Point' if count == 1 else             'Remove {} Points'.format(count)
+        remove = menu.addAction(text)
+        remove.triggered.connect(self.delete_selected_points)
+        return menu
 
     def contextMenuEvent(self, event):
         if self.block_context_menu:  # Check if we shouldn't spawn the menu
             return
         item = self.itemAt(self._initial_click_pos)
+        point = self.point_at(self._initial_click_pos)
+        if point is not None:
+            self.point_menu(point)
+            return
         lines = self.lines_at(self._initial_click_pos)
         if lines:
             self.lines_menu(lines)
@@ -1922,6 +2032,13 @@ class StageView(QtWidgets.QGraphicsView):
         if isinstance(item, BackdropGraphicsItem):
             self.backdrop_menu(item)
             self.block_context_menu = True
+            return
+        if (self._selected_points and
+                not isinstance(item, NodeGraphicsItem) and
+                not self.model.get_selected_nodes()):
+            # Off the selected points, still about them. With nodes
+            # selected too, the node menu's Align takes in the points.
+            self.point_menu()
             return
         hov_path = None
         if isinstance(item, NodeGraphicsItem):
@@ -2109,6 +2226,11 @@ class StageView(QtWidgets.QGraphicsView):
             graphic.arrange_descendants()
         for node_path in updated_paths:
             self.draw_connections(node_path)
+        # Lines start and end at a node's attribute plugs, which move or
+        # come and go as its attributes are shown and hidden.
+        for node_path in updated_paths:
+            for line in self.get_node_connection_graphics(node_path):
+                line.rebuild_line()
 
     def handle_attrs_changed(self, attr_paths):
         """Handler for the model signal 'attrs_changes'.

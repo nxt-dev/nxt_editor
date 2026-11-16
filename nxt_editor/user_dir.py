@@ -198,7 +198,15 @@ class USER_PREF():
     COLOR_RANGE_MODE = 'color_range_mode'
     COLOR_RANGE_LIGHTNESS = 'color_range_lightness'
     COLOR_RANGE_CHROMA = 'color_range_chroma'
+    # Whether the graph shows lines other than exec lines, which always
+    # show, and which kinds. The lines toggle once hid instance and code
+    # lines together, under SHOW_IMPLICIT, which those two still start
+    # from.
     SHOW_IMPLICIT = 'show_implicit_connections'
+    SHOW_LINES = 'show_lines'
+    SHOW_INSTANCE_LINES = 'show_instance_lines'
+    SHOW_PROPERTY_LINES = 'show_property_lines'
+    SHOW_CODE_LINES = 'show_code_lines'
     SHOW_MINI_MAP = 'show_mini_map'
     FONT_SIZE = 'font_size'
     # Whether the graph is shown. On unless turned off in the Window menu.

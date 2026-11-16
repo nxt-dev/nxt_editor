@@ -2295,7 +2295,8 @@ class StageModel(QtCore.QObject):
         and an attribute loses the reference, keeping any other text it
         has, and is left empty when that was all it held. Should a weaker
         layer still make the connection, the target layer is given an
-        empty value over it. The line's points go too.
+        empty value over it. An instance is removed from the node whichever
+        layer made it, as Remove Instance does. The line's points go too.
 
         :param lines: (source path, target attr path) pairs, as the graph
             draws them
@@ -2305,11 +2306,14 @@ class StageModel(QtCore.QObject):
         for src, tgt in lines:
             if not self._breakable(tgt):
                 continue
+            attr = nxt_path.attr_name_from_attr_path(tgt)
             owner = self._connection_layer(tgt)
-            if owner is not None and owner != self.target_layer.real_path:
-                # nxt reads an empty exec input or instance as no opinion,
-                # so a stronger layer cannot clear a weaker one's. It is
-                # broken on the layer that made it.
+            if (attr != INTERNAL_ATTRS.INSTANCE_PATH and owner is not None and
+                    owner != self.target_layer.real_path):
+                # nxt reads an empty exec input as no opinion, so a
+                # stronger layer cannot clear a weaker one's. It is broken
+                # on the layer that made it. An empty instance path is an
+                # opinion, so an instance is removed on any layer.
                 logger.warning(
                     'The connection into {} is made on {}. Make that the '
                     'target layer to break it.'.format(tgt, owner),
@@ -2369,8 +2373,16 @@ class StageModel(QtCore.QObject):
             return
         if attr == INTERNAL_ATTRS.INSTANCE_PATH:
             # An empty instance path is how an instance is removed, see
-            # the Remove Instance action.
-            self.set_node_instance(node_path, '', layer)
+            # the Remove Instance action. It is only written when a weaker
+            # layer would still instance the node.
+            def write(value):
+                if value is not None:
+                    self.set_node_instance(node_path, value, layer)
+                elif layer.lookup(node_path) is not None:
+                    self.revert_node_instance(node_path, layer)
+            self._clear_link(node_path, attr, layer, write,
+                             lambda: bool(self.get_node_instance_path(
+                                 node_path, self.comp_layer)))
             return
         value = self.get_node_attr_value(node_path, attr, self.comp_layer,
                                          data_state=DATA_STATE.RAW)

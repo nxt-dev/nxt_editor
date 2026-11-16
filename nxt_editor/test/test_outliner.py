@@ -752,5 +752,32 @@ class StageViewTests(WindowCase):
         self.assertIsNone(view.get_node_graphic('/build/rig'))
 
 
+class OpenGraphsTests(WindowCase):
+
+    def graph_items(self):
+        menu = self.win.menuBar().window_menu
+        menu.aboutToShow.emit()
+        found = []
+        for action in menu.actions():
+            if action.data() in [f['view'] for f in
+                                 self.win.open_files.values()]:
+                found.append(action)
+        return found
+
+    def test_the_graph_being_viewed_is_marked_without_a_check_box(self):
+        self.win.new_tab()
+        app.processEvents()
+        items = self.graph_items()
+        self.assertEqual(2, len(items))
+        current = [a for a in items if a.data() is self.win.view]
+        other = [a for a in items if a.data() is not self.win.view]
+        self.assertTrue(current[0].font().bold())
+        self.assertTrue(current[0].text().startswith(u'▸ '))
+        self.assertFalse(other[0].font().bold())
+        self.assertFalse(other[0].text().startswith(u'▸'))
+        for action in items:
+            self.assertFalse(action.isCheckable())
+
+
 if __name__ == '__main__':
     unittest.main()
