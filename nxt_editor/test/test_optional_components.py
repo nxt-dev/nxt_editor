@@ -384,10 +384,11 @@ class TestEditor(DialogTest):
         menu = self.win.menu_bar.options_menu
         self.assertIn(self.win.app_actions.optional_components_action,
                       menu.actions())
-        with mock.patch.object(oc.OptionalComponentsDialog, 'show'):
-            self.win.app_actions.optional_components_action.trigger()
-        self.assertIsInstance(self.win.optional_components_dialog,
-                              oc.OptionalComponentsDialog)
+        self.win.app_actions.optional_components_action.trigger()
+        dialog = self.win.optional_components_dialog
+        self.assertIsInstance(dialog, oc.OptionalComponentsDialog)
+        self.assertTrue(dialog.isVisible())
+        dialog.hide()
 
     def test_jedi_installed_from_the_dialog_is_used_at_once(self):
         actions = self.win.code_editor_actions
@@ -395,8 +396,8 @@ class TestEditor(DialogTest):
         action = actions.complete_jedi_action
         self.assertFalse(action.isChecked())
         self.assertFalse(code_completion.JEDI.available())
-        with mock.patch.object(oc.OptionalComponentsDialog, 'show'):
-            dialog = self.win.open_optional_components('jedi')
+        dialog = self.win.open_optional_components('jedi')
+        self.addCleanup(dialog.hide)
         dialog.process_factory = FakeProcess
         dialog.install(deps.JEDI)
         FakeProcess.made[-1].install_jedi(real=True)
@@ -415,17 +416,22 @@ class TestEditor(DialogTest):
         self.assertFalse(action.isChecked())
 
     def test_the_hint_is_asked_once_a_session(self):
+        # A real dialog that runs a stand in pip, given to the window
+        # before it needs one. Patching the dialog's class instead left
+        # PySide holding methods that were swapped back, and connecting to
+        # them later crashed Python 3.13 on macOS.
+        dialog = oc.OptionalComponentsDialog(parent=self.win,
+                                             process_factory=FakeProcess)
+        self.win.optional_components_dialog = dialog
+        self.addCleanup(dialog.hide)
         with mock.patch.object(oc.Hint, 'exec_',
-                               return_value=QtWidgets.QDialog.Accepted), \
-                mock.patch.object(oc.OptionalComponentsDialog,
-                                  'show'), \
-                mock.patch.object(oc.OptionalComponentsDialog,
-                                  'install') as install:
+                               return_value=QtWidgets.QDialog.Accepted):
             self.win.code_editor_actions.refresh_jedi_action()
             self.win.code_editor_actions.complete_jedi_action.trigger()
-            install.assert_called_once_with(deps.JEDI)
-        with mock.patch.object(oc.Hint, 'exec_') as hint, \
-                mock.patch.object(oc.OptionalComponentsDialog, 'show'):
+        self.assertEqual(1, len(FakeProcess.made))
+        self.assertIn('jedi', ' '.join(FakeProcess.made[0].args))
+        dialog.cancel(deps.JEDI)
+        with mock.patch.object(oc.Hint, 'exec_') as hint:
             self.win.code_editor_actions.complete_jedi_action.trigger()
         hint.assert_not_called()
 
