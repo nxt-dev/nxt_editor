@@ -1227,7 +1227,10 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         """
         namespace = {}
         if self.completion_source_enabled('complete_node_action'):
-            namespace.update(code_completion.RUNTIME_GLOBALS)
+            model = self.ce_widget.stage_model
+            namespace.update(code_completion.runtime_namespace(
+                getattr(model, 'current_rt_layer', None),
+                self.ce_widget.node_path))
         if self.completion_source_enabled('complete_host_action'):
             namespace.update(code_completion.host_modules())
         if self.completion_source_enabled('complete_modules_action'):
@@ -1252,7 +1255,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         # inside os.path rather than os.
         parts = rest.split('.')
         for part in parts[:-1]:
-            module = getattr(module, part, None)
+            module = code_completion.attr_for_completion(module, part)
             if module is None:
                 return []
             walked += '.' + part
@@ -1381,7 +1384,11 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         source = text[:position] + text[cursor.position():]
         line = cursor.blockNumber() + 1
         column = cursor.positionInBlock() - len(name)
-        key = (source, position, self.world_source())
+        # A build gives STAGE and self something new to complete on, so what
+        # was said before it is not kept.
+        model = self.ce_widget.stage_model
+        built = id(getattr(model, 'current_rt_layer', None))
+        key = (source, position, self.world_source(), built)
         return source, line, column, key, root + dot
 
     def jedi_completions(self, prefix, ask=False, fresh=False):
