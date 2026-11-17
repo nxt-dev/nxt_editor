@@ -139,6 +139,9 @@ class StageView(QtWidgets.QGraphicsView):
         self._connection_graphics = []
         self._attr_concerns = {}
         self._backdrop_graphics = {}
+        # Whether a layer was hidden the last time visibility was applied,
+        # so a graph with every layer showing never pays for the check.
+        self._layers_were_hidden = False
         # What a backdrop being moved or resized started from, see
         # backdrop_press.
         self._backdrop_drag = None
@@ -184,6 +187,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.frame_items.connect(self.frame_nodes)
         self.model.collapse_changed.connect(self.handle_collapse_changed)
         self.model.backdrops_changed.connect(self.draw_backdrops)
+        self.model.layer_visibility_changed.connect(
+            self.apply_layer_visibility)
         self.model.wires_changed.connect(self.draw_wires)
         # A reloaded or muted layer can bring or take away points.
         self.model.comp_layer_changed.connect(self.draw_wires)
@@ -444,7 +449,46 @@ class StageView(QtWidgets.QGraphicsView):
         self.hud_layout.setContentsMargins(0, 0, 0, bottom)
 
     def frame_all(self):
-        self.frame_rect(self.scene().itemsBoundingRect())
+        if not self._layers_were_hidden:
+            self.frame_rect(self.scene().itemsBoundingRect())
+            return
+        # itemsBoundingRect counts items that are not showing.
+        rect = QtCore.QRectF()
+        for item in self.scene().items():
+            if item.isVisible() and item.parentItem() is None:
+                rect = rect.united(item.sceneBoundingRect())
+        self.frame_rect(rect)
+
+    def apply_layer_visibility(self):
+        """Show or hide what belongs to layers hidden in the Layer Manager.
+
+        Root nodes, with everything under them, the lines to and from
+        them, and the backdrops only those layers draw. Nothing is removed:
+        the items are there, drawn or not.
+        """
+        hiding = bool(self.model.hidden_layer_paths())
+        if not hiding and not self._layers_were_hidden:
+            return
+        self._layers_were_hidden = hiding
+        hidden_roots = {}
+
+        def root_hidden(node_path):
+            root = nxt_path.get_root_path(node_path)
+            if root not in hidden_roots:
+                hidden_roots[root] = self.model.is_node_hidden(root)
+            return hidden_roots[root]
+
+        for node_path, graphic in list(self._node_graphics.items()):
+            if graphic.parentItem() is None:
+                graphic.setVisible(not root_hidden(node_path))
+        for graphic in self._connection_graphics:
+            ends = (getattr(graphic, 'src_node_path', None),
+                    getattr(graphic, 'tgt_node_path', None))
+            graphic.setVisible(not any(root_hidden(path) for path in ends
+                                       if path))
+        for backdrop_id, graphic in self._backdrop_graphics.items():
+            graphic.setVisible(not self.model.is_backdrop_hidden(backdrop_id))
+        self.mini_map.mark_dirty()
 
     def frame_selection(self):
         self.frame_nodes(self.model.selection)
@@ -1057,6 +1101,7 @@ class StageView(QtWidgets.QGraphicsView):
                          key=lambda g: -(g.width * g.height))
         for index, graphic in enumerate(by_area):
             graphic.setZValue(self.BACKDROP_DEPTH + (index * .01))
+        self.apply_layer_visibility()
         self.mini_map.mark_dirty()
 
     def get_backdrop_graphic(self, backdrop_id):
@@ -2016,6 +2061,7 @@ class StageView(QtWidgets.QGraphicsView):
             graphic.arrange_descendants()
         for node_path in updated_paths:
             self.draw_connections(node_path)
+        self.apply_layer_visibility()
 
     def handle_attrs_changed(self, attr_paths):
         """Handler for the model signal 'attrs_changes'.

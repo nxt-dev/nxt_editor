@@ -74,6 +74,7 @@ class LayerTreeView(QtWidgets.QTreeView):
         self.mute_delgate = LetterCheckboxDelegeate('M')
         self.solo_delegate = LetterCheckboxDelegeate('S')
         self.lock_delegate = LetterCheckboxDelegeate('L')
+        self.visible_delegate = EyeCheckboxDelegate()
         self.setItemDelegateForColumn(LayerModel.ALIAS_COLUMN,
                                       self.alias_delegate)
         self.setItemDelegateForColumn(LayerModel.TARGET_COLUMN,
@@ -86,6 +87,8 @@ class LayerTreeView(QtWidgets.QTreeView):
                                       self.solo_delegate)
         self.setItemDelegateForColumn(LayerModel.LOCK_COLUMN,
                                       self.lock_delegate)
+        self.setItemDelegateForColumn(LayerModel.VISIBLE_COLUMN,
+                                      self.visible_delegate)
         self.setHeaderHidden(True)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.custom_context_menu)
@@ -207,6 +210,13 @@ class LayerTreeView(QtWidgets.QTreeView):
         text = 'Un-Mute' if muted else 'Mute'
         menu.addAction(text, self.actions.mute_layer_action.trigger)
 
+        hidden = stage_model.get_layer_hidden(layer.real_path)
+
+        def toggle_hidden():
+            stage_model.set_layer_hidden(layer.real_path, not hidden)
+        menu.addAction('Show In Graph' if hidden else 'Hide In Graph',
+                       toggle_hidden)
+
         menu.addSeparator()
         self.actions.new_layer_above_action.setData(layer)
         menu.addAction(self.actions.new_layer_above_action)
@@ -234,14 +244,17 @@ class LayerModel(QtCore.QAbstractItemModel):
     MUTE_COLUMN = 3
     SOLO_COLUMN = 4
     LOCK_COLUMN = 5
-    HAS_SELECTED_COLUMN = 6
-    UNSAVED = 7
+    VISIBLE_COLUMN = 6
+    HAS_SELECTED_COLUMN = 7
+    UNSAVED = 8
 
     def __init__(self, stage_model):
         super(LayerModel, self).__init__()
         self.stage_model = stage_model
         self.stage_model.layer_mute_changed.connect(self.on_mute_changed)
         self.stage_model.layer_solo_changed.connect(self.on_solo_changed)
+        self.stage_model.layer_visibility_changed.connect(
+            self.on_visibility_changed)
         self.stage_model.disp_layer_changed.connect(self.on_disp_changed)
         self.stage_model.target_layer_changed.connect(self.on_tgt_changed)
         self.stage_model.layer_color_changed.connect(self.on_color_changed)
@@ -362,6 +375,9 @@ class LayerModel(QtCore.QAbstractItemModel):
         idx = self.createIndex(layer_index.row(), self.ALIAS_COLUMN)
         self.dataChanged.emit(idx, idx)
 
+    def on_visibility_changed(self):
+        self.emit_columns_changed([self.VISIBLE_COLUMN])
+
     def on_mute_changed(self, layer_paths):
         for path in layer_paths:
             layer = self.stage_model.lookup_layer(path)
@@ -480,7 +496,7 @@ class LayerModel(QtCore.QAbstractItemModel):
         """Returns number of columns in the model.
         Part of QAbstractItemModel
         """
-        return 6
+        return 7
 
     def data(self, index, role=None):
         """Returns the data continaed at given model index with given role.
@@ -511,6 +527,9 @@ class LayerModel(QtCore.QAbstractItemModel):
                 return layer.get_soloed()
             if column == self.LOCK_COLUMN:
                 return is_locked
+            if column == self.VISIBLE_COLUMN:
+                return not self.stage_model.get_layer_hidden(
+                    layer.real_path)
             if column == self.HAS_SELECTED_COLUMN:
                 return layer in self.layers_with_selected
             if column == self.UNSAVED:
@@ -529,6 +548,9 @@ class LayerModel(QtCore.QAbstractItemModel):
                 return QtCore.Qt.Checked if soloed else QtCore.Qt.Unchecked
             if column == self.LOCK_COLUMN:
                 return QtCore.Qt.Checked if is_locked else QtCore.Qt.Unchecked
+            if column == self.VISIBLE_COLUMN:
+                hidden = self.stage_model.get_layer_hidden(layer.real_path)
+                return QtCore.Qt.Unchecked if hidden else QtCore.Qt.Checked
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
         """Allows editing of layers via qt model interface.
@@ -564,12 +586,21 @@ class LayerModel(QtCore.QAbstractItemModel):
                 self.stage_model.set_layer_locked(layer_path,
                                                   lock=not layer.get_locked())
                 return True
+            if column == self.VISIBLE_COLUMN:
+                # Toggled, like mute, solo and lock. The value a click
+                # sends is not to be trusted: the delegate works it out
+                # from a style option that was never filled in.
+                hidden = self.stage_model.get_layer_hidden(layer.real_path)
+                self.stage_model.set_layer_hidden(layer.real_path,
+                                                  hidden=not hidden)
+                return True
         return False
 
     def flags(self, index):
         column = index.column()
         if column in (self.TARGET_COLUMN, self.DISPLAY_COLUMN,
-                      self.MUTE_COLUMN, self.SOLO_COLUMN, self.LOCK_COLUMN):
+                      self.MUTE_COLUMN, self.SOLO_COLUMN, self.LOCK_COLUMN,
+                      self.VISIBLE_COLUMN):
             return (QtCore.Qt.ItemIsEnabled |
                     QtCore.Qt.ItemIsUserCheckable)
         return (QtCore.Qt.ItemIsEnabled |
@@ -654,6 +685,41 @@ class LetterCheckboxDelegeate(QtWidgets.QStyledItemDelegate):
         prev_checked = option.checkState == QtCore.Qt.CheckState.Checked
         model.setData(index, not prev_checked, role=QtCore.Qt.CheckStateRole)
         return True
+
+
+class EyeCheckboxDelegate(LetterCheckboxDelegeate):
+    def __init__(self):
+        """Paints an eye: open when the layer's nodes are shown in the
+        graph, shut and grey when they are hidden.
+
+        Hiding is only a way of looking at the graph. The layer still
+        comps and runs, which is what sets this apart from mute.
+        """
+        super(EyeCheckboxDelegate, self).__init__('')
+
+    def paint(self, painter, option, index):
+        self.initStyleOption(option, index)
+        rect = QtCore.QRectF(option.rect).marginsRemoved(
+            QtCore.QMarginsF(5, 7, 5, 7))
+        mid_y = rect.center().y()
+        shown = option.checkState == QtCore.Qt.CheckState.Checked
+        color = QtGui.QColor(theme.TEXT if shown else theme.TEXT_FAINT)
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtGui.QPen(color, 1.4))
+        painter.setBrush(QtCore.Qt.NoBrush)
+        lower = QtGui.QPainterPath(QtCore.QPointF(rect.left(), mid_y))
+        lower.quadTo(rect.center().x(), rect.bottom() + rect.height() * .5,
+                     rect.right(), mid_y)
+        painter.drawPath(lower)
+        if shown:
+            upper = QtGui.QPainterPath(QtCore.QPointF(rect.left(), mid_y))
+            upper.quadTo(rect.center().x(), rect.top() - rect.height() * .5,
+                         rect.right(), mid_y)
+            painter.drawPath(upper)
+            painter.setBrush(color)
+            painter.drawEllipse(rect.center(), 2.2, 2.2)
+        painter.restore()
 
 
 class AliasDelegate(QtWidgets.QStyledItemDelegate):

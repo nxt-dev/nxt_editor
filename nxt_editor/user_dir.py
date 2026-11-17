@@ -233,6 +233,7 @@ class EDITOR_CACHE():
     MAIN_WIN_GEO = 'main_window_geo'
     LAST_CLOSED = 'last_closed'
     NODE_PROPERTY_STATE = 'node_property_state'
+    HIDDEN_LAYERS = 'hidden_layers'
 
 
 class PrefFile(dict):
