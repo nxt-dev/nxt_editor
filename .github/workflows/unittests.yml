@@ -37,7 +37,7 @@ jobs:
       - name: Install nxt-core from the matching branch
         shell: bash
         run: |
-          case "${{ github.base_ref || github.ref_name }}" in
+          case "${{ github.head_ref || github.ref_name }}" in
             release) branch=release ;;
             next) branch=next ;;
             *) branch=dev ;;
