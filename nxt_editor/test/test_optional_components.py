@@ -22,6 +22,18 @@ from nxt_editor.test.test_optional_deps import ENV_VARS, make_jedi
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
+
+def dispose(widget):
+    """Finish with a window now, rather than leaving it to the collector.
+
+    close() only hides it. Left for garbage collection, its widgets are
+    freed at whatever later moment something else collects, which on macOS
+    can crash the test that happens to be running then.
+    """
+    widget.close()
+    widget.deleteLater()
+    app.processEvents()
+
 from nxt_editor import optional_components as oc  # noqa: E402
 from nxt_editor.dockwidgets import code_completion  # noqa: E402
 
@@ -121,7 +133,7 @@ class DialogTest(unittest.TestCase):
     def dialog(self, host='maya'):
         dialog = oc.OptionalComponentsDialog(host=host, crt=(14, 44, 0),
                                              process_factory=FakeProcess)
-        self.addCleanup(dialog.close)
+        self.addCleanup(dispose, dialog)
         return dialog
 
     def visible(self, widget):
@@ -192,7 +204,7 @@ class TestCards(DialogTest):
         dialog = oc.OptionalComponentsDialog(host='blender', crt=(14, 44, 0),
                                              process_factory=FakeProcess,
                                              status_func=status)
-        self.addCleanup(dialog.close)
+        self.addCleanup(dispose, dialog)
         self.assertFalse(self.visible(dialog.card('pyside6').button))
         dialog.status_func = lambda comp: deps.Status(
             comp, deps.Status.UPDATE, '6.5.0', '/deps/py311', '>=6,<6.12',
@@ -346,11 +358,13 @@ class TestEditor(DialogTest):
 
     @classmethod
     def tearDownClass(cls):
-        cls.win.close()
+        dispose(cls.win)
         cls.win = None
 
     def setUp(self):
         super(TestEditor, self).setUp()
+        if self.win.optional_components_dialog is not None:
+            dispose(self.win.optional_components_dialog)
         self.win.optional_components_dialog = None
         self.win.jedi_offered = False
         if code_completion.Jedi.installed():
