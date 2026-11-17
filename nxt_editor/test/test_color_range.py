@@ -260,8 +260,14 @@ class ThePicker(RangeCase):
                          dialog.view_preview.color.name())
         self.even(0.75, 0.1)
         dialog = self.open('#991c24')
+        # Shown again under the settings as they are now: in a full run a
+        # window an earlier test left open can reload them while this one
+        # opens, between the preview being drawn and the check below.
+        dialog.show_color()
         self.assertEqual(color_range.shown(dialog.color).name(),
                          dialog.view_preview.color.name())
+        self.assertNotEqual(dialog.color.name(),
+                            dialog.view_preview.color.name())
 
 
 class TheEditor(RangeCase):
