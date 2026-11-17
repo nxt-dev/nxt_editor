@@ -1642,18 +1642,22 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         code = self.toPlainText()
         return world + '\n' + code if world else code
 
-    def completion_namespace(self):
+    def completion_namespace(self, live=True):
         """Names the compute can use without importing them itself.
 
+        :param live: include STAGE and self as the last build left them.
+            jedi is never given those: it would call their __getattr__ and
+            read them from wherever it runs, while a build may be using them.
         :return: {name: object}, from each source that is switched on
         :rtype: dict
         """
         namespace = {}
         if self.completion_source_enabled('complete_node_action'):
             model = self.ce_widget.stage_model
+            rt_layer = (getattr(model, 'current_rt_layer', None)
+                        if live else None)
             namespace.update(code_completion.runtime_namespace(
-                getattr(model, 'current_rt_layer', None),
-                self.ce_widget.node_path))
+                rt_layer, self.ce_widget.node_path))
         if self.completion_source_enabled('complete_host_action'):
             namespace.update(code_completion.host_modules())
         if self.completion_source_enabled('complete_modules_action'):
@@ -1670,7 +1674,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if '.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX):
             return []
         root, _, rest = prefix.partition('.')
-        module = self.completion_namespace().get(root)
+        if root in code_completion.LIVE_GLOBALS:
+            return self.live_completions(prefix)
+        module = self.completion_namespace(live=False).get(root)
         if module is None:
             return []
         walked = root
@@ -1684,6 +1690,33 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             walked += '.' + part
         return ['%s.%s' % (walked, name) for name in dir(module)
                 if not name.startswith('_')]
+
+    def live_completions(self, prefix):
+        """Names after STAGE. or self., from what the last build left there.
+
+        Read fresh on every key, so a build that has moved on since is what
+        completes, and read without running any of the graph's code. Not
+        while a node is running, since the build is using these right then.
+
+        :param prefix: the partial word being typed, like STAGE.rig.bu
+        :type prefix: str
+        :rtype: list
+        """
+        root, dot, rest = prefix.partition('.')
+        if not dot or root not in code_completion.LIVE_GLOBALS:
+            return []
+        if not self.completion_source_enabled('complete_node_action'):
+            return []
+        model = self.ce_widget.stage_model
+        if getattr(model, '_running_node', False):
+            return []
+        obj = code_completion.runtime_namespace(
+            getattr(model, 'current_rt_layer', None),
+            self.ce_widget.node_path).get(root)
+        if obj is None:
+            return []
+        return [root + dot + name
+                for name in code_completion.live_completions(obj, rest)]
 
     @staticmethod
     def node_attr_names(model, node_path):
@@ -1810,11 +1843,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         source = text[:position] + text[cursor.position():]
         line = cursor.blockNumber() + 1
         column = cursor.positionInBlock() - len(name)
-        # A build gives STAGE and self something new to complete on, so what
-        # was said before it is not kept.
-        model = self.ce_widget.stage_model
-        built = id(getattr(model, 'current_rt_layer', None))
-        key = (source, position, self.world_source(), built)
+        key = (source, position, self.world_source())
         return source, line, column, key, root + dot
 
     def jedi_completions(self, prefix, ask=False, fresh=False):
@@ -1829,16 +1858,20 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         question = self.jedi_question(prefix)
         if question is None:
             return []
+        # jedi never sees STAGE or self as the build left them, so what
+        # follows them comes from the build instead. That is read fresh on
+        # every key and never kept, so a build that moves on is seen.
+        live = self.live_completions(prefix)
         source, line, column, key, before = question
         names = None if fresh else code_completion.JEDI.cached(key)
         if names is None:
             if not ask:
                 self.jedi_timer.start()
-                return []
+                return live
             names = code_completion.JEDI.complete(
-                source, line, column, self.completion_namespace(), key,
-                fresh=fresh)
-        return [before + name for name in names]
+                source, line, column, self.completion_namespace(live=False),
+                key, fresh=fresh)
+        return live + [before + name for name in names]
 
     def ask_jedi(self, fresh=False, force=False):
         """Typing paused: ask jedi on a worker thread, and show what it
@@ -1864,8 +1897,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.jedi_busy = True
         self.jedi_force = force
         # The names are gathered here, on the main thread; jedi only reads
-        # them on the worker.
-        namespace = self.completion_namespace()
+        # them on the worker. STAGE and self are left out, see
+        # completion_namespace.
+        namespace = self.completion_namespace(live=False)
         answer = self.jedi_answer
 
         def work():

@@ -13,6 +13,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import types
 import unittest
 
@@ -46,6 +47,56 @@ class Rig(object):
         return types.SimpleNamespace(inside=1)
 
 
+class Sneaky(object):
+    """Something whose own code would run if completion asked it things.
+
+    Each way in is written down, so a test can say none of them ran.
+    """
+
+    def __init__(self):
+        self.ran = []
+        self.visible = 1
+
+    def __dir__(self):
+        self.ran.append('__dir__')
+        return ['from_dir']
+
+    def __getattr__(self, name):
+        self.ran.append('__getattr__ ' + name)
+        return Sneaky()
+
+    @property
+    def __class__(self):
+        self.ran.append('__class__')
+        return Sneaky
+
+
+class Raiser(object):
+    """Something that raises whenever it is asked anything."""
+    visible = 1
+
+    def __dir__(self):
+        raise RuntimeError('dir')
+
+    def __getattr__(self, name):
+        raise RuntimeError('getattr')
+
+
+class Slotted(object):
+    __slots__ = ('inside', 'empty')
+
+    def __init__(self):
+        self.inside = Rig()
+
+
+class Big(object):
+    """A rig that keeps a great many things on itself."""
+
+    def __init__(self, count):
+        for i in range(count):
+            setattr(self, 'attr_%05d' % i, i)
+
+
 def write_graph(path):
     data = {
         "version": "1.17", "alias": "runtime", "mute": False,
@@ -56,6 +107,7 @@ def write_graph(path):
                 "STAGE.rig = test_completion_runtime.Rig()"]},
             "/reader": {"attrs": {"local": {"value": "7"}}, "code": [""]},
             "/other": {"attrs": {"elsewhere": {"value": "1"}}},
+            "/writer": {"code": ["STAGE.later = 1"]},
         },
     }
     with open(path, 'w') as file_object:
@@ -135,9 +187,11 @@ class CompletionOnARunGraph(unittest.TestCase):
 
     def test_walks_into_what_is_on_stage(self):
         self.build()
-        got = self.editor.module_completions('STAGE.rig.bu')
+        got = self.editor.module_completions('STAGE.rig.')
         self.assertIn('STAGE.rig.build_guides', got)
         self.assertIn('STAGE.rig.modules', got)
+        self.assertEqual(['STAGE.rig.build_guides'],
+                         self.editor.module_completions('STAGE.rig.bu'))
 
     def test_self_is_the_node_being_edited(self):
         # The console's own self is whichever node ran last.
@@ -165,6 +219,158 @@ class CompletionOnARunGraph(unittest.TestCase):
         got = self.editor.jedi_completions('STAGE.rig.', ask=True)
         self.assertIn('STAGE.rig.build_guides', got)
         self.assertFalse(runtime._console.globals['STAGE'].rig.touched)
+
+    # -- what a build left is never asked to run code ---------------------
+
+    def stage(self):
+        return self.build()._console.globals['STAGE']
+
+    def complete_everywhere(self, prefix):
+        """Every way the editor completes, as typing and Ctrl+Space do."""
+        self.load(prefix)
+        self.editor.module_completions(prefix)
+        self.editor.jedi_completions(prefix)
+        self.editor.jedi_completions(prefix, ask=True, fresh=True)
+        self.editor.update_completions(force=True)
+
+    def test_no_dunder_dir_or_getattr_is_called(self):
+        sneaky = Sneaky()
+        self.stage().sneaky = sneaky
+        for prefix in ('STAGE.sneaky.', 'STAGE.sneaky.vi',
+                       'STAGE.sneaky.missing.', 'STAGE.sneaky.ran.'):
+            self.complete_everywhere(prefix)
+        self.assertEqual([], sneaky.ran)
+        got = self.editor.module_completions('STAGE.sneaky.')
+        self.assertIn('STAGE.sneaky.visible', got)
+        self.assertNotIn('STAGE.sneaky.from_dir', got)
+
+    def test_one_that_raises_does_not_break_completion(self):
+        self.stage().raiser = Raiser()
+        for prefix in ('STAGE.raiser.', 'STAGE.raiser.nope.'):
+            self.complete_everywhere(prefix)
+        self.assertEqual(['STAGE.raiser.visible'],
+                         self.editor.module_completions('STAGE.raiser.'))
+
+    def test_jedi_is_never_given_what_the_build_left(self):
+        stage = self.stage()
+        given = []
+        real = code_completion.JEDI.complete
+
+        def complete(source, line, column, namespace, key, fresh=False):
+            given.append(namespace)
+            return []
+        code_completion.JEDI.complete = complete
+        try:
+            for prefix in ('STAGE.', 'STAGE.rig.', 'self.', 'os.'):
+                self.load(prefix)
+                self.editor.jedi_completions(prefix, ask=True, fresh=True)
+        finally:
+            code_completion.JEDI.complete = real
+        if not code_completion.Jedi.installed():
+            self.assertEqual([], given)
+            return
+        self.assertEqual(4, len(given))
+        for namespace in given:
+            for name in code_completion.LIVE_GLOBALS:
+                self.assertNotIn(name, namespace)
+            for value in namespace.values():
+                self.assertIsNot(stage, value)
+
+    def test_a_huge_stage_completes_quickly(self):
+        self.stage().big = Big(20000)
+        self.editor.module_completions('STAGE.big.')
+        start = time.perf_counter()
+        got = self.editor.module_completions('STAGE.big.')
+        took = time.perf_counter() - start
+        self.assertEqual(code_completion.LIVE_NAME_LIMIT, len(got))
+        self.assertLess(took, 0.05)
+        # The limit is applied to what matches what is typed, so nothing is
+        # out of reach.
+        self.assertEqual(['STAGE.big.attr_19999'],
+                         self.editor.module_completions(
+                             'STAGE.big.attr_19999'))
+
+    def test_a_build_that_moves_on_is_seen(self):
+        runtime = self.build()
+        self.load('STAGE.la')
+        self.assertEqual([], self.editor.module_completions('STAGE.la'))
+        self.assertEqual([], self.editor.jedi_completions('STAGE.la',
+                                                          ask=True))
+        # The next step of the same build, on the same runtime layer.
+        self.model.stage.execute_nodes(['/writer'], runtime)
+        self.assertEqual(['STAGE.later'],
+                         self.editor.module_completions('STAGE.la'))
+        if code_completion.Jedi.installed():
+            self.assertIn('STAGE.later', self.editor.jedi_completions(
+                'STAGE.la', ask=True))
+
+    def test_nothing_is_read_while_a_node_runs(self):
+        self.build()
+        self.model._running_node = True
+        try:
+            self.assertEqual([], self.editor.module_completions('STAGE.r'))
+        finally:
+            self.model._running_node = False
+        self.assertEqual(['STAGE.rig'],
+                         self.editor.module_completions('STAGE.r'))
+
+
+class StaticReads(unittest.TestCase):
+    """Reading a live object without running any of its code."""
+
+    def test_names_come_from_the_dicts_not_dir(self):
+        sneaky = Sneaky()
+        names = code_completion.static_names(sneaky)
+        self.assertIn('visible', names)
+        self.assertIn('ran', names)
+        self.assertNotIn('from_dir', names)
+        self.assertEqual([], sneaky.ran)
+
+    def test_slots_are_listed_and_read(self):
+        slotted = Slotted()
+        self.assertEqual(['empty', 'inside'],
+                         sorted(code_completion.static_names(slotted)))
+        self.assertIs(slotted.inside,
+                      code_completion.static_attr(slotted, 'inside'))
+        self.assertIsNone(code_completion.static_attr(slotted, 'empty'))
+
+    def test_a_property_stops_the_walk(self):
+        rig = Rig()
+        self.assertIsNone(code_completion.static_attr(rig, 'expensive'))
+        self.assertEqual([], code_completion.live_completions(
+            rig, 'expensive.'))
+        self.assertFalse(rig.touched)
+
+    def test_a_property_wins_over_the_own_value(self):
+        rig = Rig()
+        rig.__dict__['expensive'] = 'stale'
+        self.assertIsNone(code_completion.static_attr(rig, 'expensive'))
+
+    def test_a_dict_property_is_not_run(self):
+        ran = []
+
+        class Odd(object):
+            @property
+            def __dict__(self):
+                ran.append(True)
+                return {'made_up': 1}
+        self.assertNotIn('made_up', code_completion.static_names(Odd()))
+        self.assertEqual([], ran)
+
+    def test_a_class_lists_its_own_attributes(self):
+        frame = type('frame', (), {'local': 7})
+        self.assertIn('local', code_completion.static_names(frame))
+        self.assertEqual(7, code_completion.static_attr(frame, 'local'))
+
+    def test_the_limit(self):
+        names = code_completion.static_names(Big(50), limit=10)
+        self.assertEqual(10, len(names))
+        self.assertEqual(['attr_00049'], code_completion.static_names(
+            Big(50), 'attr_00049', limit=10))
+
+    def test_a_module_on_stage_is_walked_too(self):
+        self.assertIn('os.path.join', code_completion.live_completions(
+            types.SimpleNamespace(os=os), 'os.path.jo'))
 
 
 class AttrForCompletion(unittest.TestCase):
