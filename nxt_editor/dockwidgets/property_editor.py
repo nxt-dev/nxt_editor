@@ -299,8 +299,10 @@ class PropertyEditor(DockWidgetBase):
         self.positionX_field.setSingleStep(1)
         self.positionX_field.setMaximum(10000)
         self.positionX_field.setMinimum(-10000)
-        self.positionX_field.stepChanged.connect(self.edit_position)
-        self.positionX_field.editingFinished.connect(self.edit_position)
+        self.positionX_field.stepChanged.connect(
+            partial(self.step_position, 0))
+        self.positionX_field.valueTyped.connect(
+            partial(self.edit_position, 0))
         self.position_layout.addWidget(self.positionX_field, 0, QtCore.Qt.AlignLeft)
 
         self.positionY_field = NodePositionSpinbox(parent=self)
@@ -308,8 +310,10 @@ class PropertyEditor(DockWidgetBase):
         self.positionY_field.setSingleStep(1)
         self.positionY_field.setMaximum(10000)
         self.positionY_field.setMinimum(-10000)
-        self.positionY_field.stepChanged.connect(self.edit_position)
-        self.positionY_field.editingFinished.connect(self.edit_position)
+        self.positionY_field.stepChanged.connect(
+            partial(self.step_position, 1))
+        self.positionY_field.valueTyped.connect(
+            partial(self.edit_position, 1))
         self.position_layout.addWidget(self.positionY_field, 0,
                                        QtCore.Qt.AlignLeft)
         spacer = QtWidgets.QSpacerItem(10, 0, QtWidgets.QSizePolicy.Expanding,
@@ -896,16 +900,68 @@ class PropertyEditor(DockWidgetBase):
         if self.stage_model:
             self.stage_model.revert_node_enabled(self.node_path)
 
-    def edit_position(self):
+    def positioned_nodes(self):
+        """The nodes the position fields move: every selected root node,
+        and the node shown here whether it is selected or not. Only root
+        nodes have a position of their own.
+
+        :rtype: list
+        """
+        node_paths = [self.node_path]
+        for node_path in self.stage_model.get_selected_nodes():
+            if node_path not in node_paths:
+                node_paths.append(node_path)
+        return [path for path in node_paths
+                if nxt_path.get_root_path(path) == path]
+
+    def edit_position(self, axis):
+        """A value was typed in one of the position fields. Every selected
+        node goes to it on that axis and keeps where it is on the other,
+        as one undo.
+
+        :param axis: 0 for x, 1 for y
+        :type axis: int
+        """
         if self.locked:
             return
-        x = self.positionX_field.value()
-        y = self.positionY_field.value()
         if not self.node_path or not self.stage_model.node_exists(self.node_path, self.stage_model.comp_layer):
             self.clear()
             return
-        self.node_pos = (x, y)
-        self.stage_model.set_nodes_pos({self.node_path: self.node_pos})
+        field = (self.positionX_field, self.positionY_field)[axis]
+        value = field.value()
+        node_positions = {}
+        for node_path in self.positioned_nodes():
+            pos = list(self.stage_model.get_node_pos(node_path))
+            if pos[axis] == value:
+                continue
+            pos[axis] = value
+            node_positions[node_path] = pos
+        if node_positions:
+            self.stage_model.set_nodes_pos(node_positions)
+
+    def step_position(self, axis, delta):
+        """A position field's arrows, arrow keys or the mouse wheel moved
+        it by delta. Every selected node moves by the same amount on that
+        axis, as one undo, so they keep their places relative to each
+        other.
+
+        :param axis: 0 for x, 1 for y
+        :type axis: int
+        :param delta: how far the field moved
+        :type delta: int
+        """
+        if self.locked:
+            return
+        if not self.node_path or not self.stage_model.node_exists(self.node_path, self.stage_model.comp_layer):
+            self.clear()
+            return
+        node_positions = {}
+        for node_path in self.positioned_nodes():
+            pos = list(self.stage_model.get_node_pos(node_path))
+            pos[axis] += delta
+            node_positions[node_path] = pos
+        if node_positions:
+            self.stage_model.set_nodes_pos(node_positions)
 
     def accept_edit_comment(self):
         comment = self.comment_field.toPlainText()
@@ -1839,13 +1895,42 @@ class HistoricalContextMenu(QtWidgets.QMenu):
 
 
 class NodePositionSpinbox(QtWidgets.QSpinBox):
-    stepChanged = QtCore.Signal()
+    """A position field, telling a step apart from a typed value.
+
+    stepChanged says how far the arrows, the arrow keys or the wheel moved
+    it, so selected nodes can all be offset by that much. valueTyped says
+    a value was typed and accepted, with Return or by leaving the field,
+    so they can all be put there. Leaving a field nobody typed in says
+    nothing, where editingFinished would.
+    """
+    stepChanged = QtCore.Signal(int)
+    valueTyped = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        super(NodePositionSpinbox, self).__init__(parent)
+        self.typed = False
+        self.lineEdit().textEdited.connect(self.on_text_edited)
+        self.editingFinished.connect(self.on_editing_finished)
+
+    def on_text_edited(self, *args):
+        self.typed = True
+
+    def on_editing_finished(self):
+        if not self.typed:
+            return
+        self.typed = False
+        self.valueTyped.emit()
 
     def stepBy(self, step):
+        if self.typed:
+            # Stepping from a half typed value: take what was typed first,
+            # so the step is from there.
+            self.interpretText()
+            self.on_editing_finished()
         value = self.value()
-        super(QtWidgets.QSpinBox, self).stepBy(step)
+        super(NodePositionSpinbox, self).stepBy(step)
         if self.value() != value:
-            self.stepChanged.emit()
+            self.stepChanged.emit(self.value() - value)
 
 
 class LineEdit(QtWidgets.QLineEdit):

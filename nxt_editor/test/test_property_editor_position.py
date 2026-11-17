@@ -2,6 +2,11 @@
 
 They follow a node while it is dragged, rather than only once it is let
 go, and nothing goes on the undo stack until it is.
+
+With several nodes selected they move all of them: a typed value puts
+every one of them there on that axis, and a step of the arrows, the arrow
+keys or the wheel moves every one of them by that much. Either is one
+undo.
 """
 # Builtin
 import json
@@ -13,7 +18,8 @@ import unittest
 from unittest import mock
 
 # External
-from Qt import QtWidgets
+from Qt import QtCore, QtWidgets
+from Qt.QtTest import QTest
 
 # Internal
 from nxt_editor import stage_model
@@ -25,7 +31,8 @@ app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 from nxt_editor.main_window import MainWindow  # noqa: E402
 
 GRAPH = {'version': '1.17', 'alias': 'positions', 'color': '#0052aa',
-         'positions': {'/a': [0.0, 0.0], '/b': [200.0, 50.0]},
+         'meta_data': {'positions': {'/a': [0.0, 0.0],
+                                     '/b': [200.0, 50.0]}},
          'nodes': {'/a': {}, '/b': {}, '/a/child': {}}}
 
 
@@ -93,6 +100,66 @@ class FieldsFollowADrag(PositionFieldsBase):
         self.item('/b').setPos(500, 500)
         app.processEvents()
         self.assertEqual(self.fields(), (0, 0))
+
+
+class FieldsMoveEverySelectedNode(PositionFieldsBase):
+
+    def type_into(self, field, text):
+        line_edit = field.lineEdit()
+        line_edit.selectAll()
+        QTest.keyClicks(line_edit, text)
+        QTest.keyClick(line_edit, QtCore.Qt.Key_Return)
+        app.processEvents()
+
+    def test_a_typed_x_sets_every_selected_node(self):
+        self.select('/a', '/b')
+        undo_count = self.model.undo_stack.count()
+        self.type_into(self.editor.positionX_field, '120')
+        self.assertEqual(self.model.get_node_pos('/a'), [120, 0.0])
+        self.assertEqual(self.model.get_node_pos('/b'), [120, 50.0],
+                         'the other selected node kept its x')
+        self.assertEqual(self.model.undo_stack.count(), undo_count + 1,
+                         'setting both should be one undo')
+        self.model.undo()
+        self.assertEqual(self.model.get_node_pos('/a'), [0.0, 0.0])
+        self.assertEqual(self.model.get_node_pos('/b'), [200.0, 50.0])
+
+    def test_a_typed_y_sets_every_selected_node(self):
+        self.select('/a', '/b')
+        self.type_into(self.editor.positionY_field, '-30')
+        self.assertEqual(self.model.get_node_pos('/a'), [0.0, -30])
+        self.assertEqual(self.model.get_node_pos('/b'), [200.0, -30])
+
+    def test_a_step_offsets_every_selected_node(self):
+        self.select('/a', '/b')
+        undo_count = self.model.undo_stack.count()
+        self.editor.positionX_field.stepBy(5)
+        app.processEvents()
+        self.assertEqual(self.model.get_node_pos('/a'), [5.0, 0.0])
+        self.assertEqual(self.model.get_node_pos('/b'), [205.0, 50.0],
+                         'a step moves every node by the same amount')
+        self.assertEqual(self.model.undo_stack.count(), undo_count + 1)
+        self.editor.positionY_field.stepBy(-3)
+        app.processEvents()
+        self.assertEqual(self.model.get_node_pos('/a'), [5.0, -3.0])
+        self.assertEqual(self.model.get_node_pos('/b'), [205.0, 47.0])
+        self.model.undo()
+        self.model.undo()
+        self.assertEqual(self.model.get_node_pos('/b'), [200.0, 50.0])
+
+    def test_child_nodes_in_the_selection_are_left_alone(self):
+        self.select('/a', '/a/child')
+        self.type_into(self.editor.positionX_field, '40')
+        self.assertEqual(self.model.get_node_pos('/a'), [40, 0.0])
+        self.assertNotIn('/a/child', self.model.comp_layer.positions)
+
+    def test_leaving_an_untouched_field_moves_nothing(self):
+        self.select('/a', '/b')
+        undo_count = self.model.undo_stack.count()
+        self.editor.positionX_field.editingFinished.emit()
+        app.processEvents()
+        self.assertEqual(self.model.undo_stack.count(), undo_count)
+        self.assertEqual(self.model.get_node_pos('/b'), [200.0, 50.0])
 
 
 if __name__ == '__main__':

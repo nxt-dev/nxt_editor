@@ -797,6 +797,13 @@ The **Position** fields show where the selected root node is in the
 graph, and follow it while you drag it. The move goes on the undo stack
 once, when you let go.
 
+With several nodes selected, the fields move all of them. Typing a value
+puts every selected node there on that axis, each keeping its place on
+the other one. Stepping with the arrows, the arrow keys or the mouse
+wheel moves every selected node by the same amount, so they keep their
+places relative to each other. Either is one undo. Child nodes in the
+selection are left where they are under their parents.
+
 # Terms and Definitions
 
 ## Stage
