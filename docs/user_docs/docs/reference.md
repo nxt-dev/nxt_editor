@@ -433,7 +433,10 @@ Two items on this menu change what a layer pulls in from disk:
   instead. A picked file that sits next to the layer, or in a folder below
   it, is stored relative to the layer; one under a file root is stored
   relative to that root, unless an earlier root holds a file of the same
-  name; anything else is stored as a full path. A relative path is looked for under your file roots before the
+  name; one in a folder that an [env file](extensions.md#env-files) variable
+  names is stored from that variable, as `$PROJECT_GRAPHS/rig.nxt`; anything
+  else is stored as a full path. A relative path is looked for under your
+  file roots before the
   layer's folder, so check the resolved view if a root might hold a file of
   the same name.
 - **+** adds an empty row and puts the cursor in the field, ready to type.
