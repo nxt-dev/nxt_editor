@@ -359,6 +359,19 @@ While you edit, brackets and quotes come in pairs:
 - Accepting a token completion inside `${}` does not leave a spare `}`
   behind.
 
+### Dropping files
+
+While you edit, drop a file from your file browser into the code to write
+a `${contents::}` token for it where it lands, such as
+`${contents::D:/scripts/setup.py}`. The compute then reads the file each
+time it runs, so it keeps up as the file changes. Hold `Ctrl` as you drop
+to write the text in the file instead. Dropping several files writes one
+line for each. Dropped text is inserted as usual.
+
+The token holds the file's full path. To keep a graph portable, you can
+change it to a path relative to the layer, as in
+`${contents::${file::setup.py}}`; see [Tokens](#tokens).
+
 ### Following tokens
 
 ![Hovering a token shows its value](images/code_editor_token_hover.png)

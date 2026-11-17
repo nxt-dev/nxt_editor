@@ -1,8 +1,10 @@
 # Builtin
 import builtins
 import importlib
+import io
 import keyword
 import logging
+import os
 import re
 import sys
 import threading
@@ -21,6 +23,7 @@ from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors, theme, user_dir
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path, tokens
+from nxt.tokens import TOKENTYPE
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
 from nxt_editor.dockwidgets import code_completion
@@ -788,11 +791,97 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self._cursor_before_token = None
 
     def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat("text/plain"):
+        mime = event.mimeData()
+        if mime.hasFormat("text/plain") or self.dropped_files(mime):
             event.acceptProposedAction()
             self.setFocus()
             return
         super(NxtCodeEditor, self).dragEnterEvent(event)
+
+    @staticmethod
+    def dropped_files(mime):
+        """The files, not folders, on this computer that are being dropped.
+
+        :param mime: QMimeData of the drag
+        :return: their paths
+        :rtype: list
+        """
+        if not mime.hasUrls():
+            return []
+        paths = []
+        for url in mime.urls():
+            if not url.isLocalFile():
+                continue
+            path = url.toLocalFile()
+            if os.path.isfile(path):
+                paths.append(path)
+        return paths
+
+    @staticmethod
+    def file_drop_text(paths, contents=False):
+        """What dropping files into the code writes.
+
+        A ${contents::} token for each file, so the compute reads the file
+        when it runs and keeps up with it as it changes. Or, with
+        ``contents``, the text in the files as it is now.
+
+        :param paths: the dropped files
+        :type paths: list
+        :param contents: True to write what is in the files
+        :type contents: bool
+        :rtype: str
+        """
+        pieces = []
+        for path in paths:
+            if not contents:
+                path = path.replace(os.path.sep, '/')
+                token = tokens.make_token_str(TOKENTYPE.CONTENTS.prefix +
+                                              path)
+                pieces.append(token)
+                continue
+            try:
+                with io.open(path, 'r', encoding='utf-8',
+                             errors='replace') as fp:
+                    text = fp.read()
+            except (IOError, OSError):
+                logger.warning('Could not read {}'.format(path))
+                continue
+            # The editor's lines end in \n whatever the file used.
+            pieces.append(text.replace('\r\n', '\n').replace('\r', '\n'))
+        return '\n'.join(pieces)
+
+    def canInsertFromMimeData(self, source):
+        # Without this Qt shows files can not be dropped here, since they
+        # carry no text of their own.
+        if self.dropped_files(source):
+            return True
+        return super(NxtCodeEditor, self).canInsertFromMimeData(source)
+
+    def dropEvent(self, event):
+        """Dropping files writes a ${contents::} token for each where they
+        land, or with Ctrl held the text in them. Anything else, such as
+        dragged text, drops the usual way.
+        """
+        paths = self.dropped_files(event.mimeData())
+        if not paths or self.isReadOnly():
+            super(NxtCodeEditor, self).dropEvent(event)
+            return
+        # Qt 6 renamed both of these.
+        if hasattr(event, 'position'):
+            pos = event.position().toPoint()
+        else:
+            pos = event.pos()
+        if hasattr(event, 'modifiers'):
+            modifiers = event.modifiers()
+        else:
+            modifiers = event.keyboardModifiers()
+        contents = bool(modifiers & QtCore.Qt.ControlModifier)
+        text = self.file_drop_text(paths, contents=contents)
+        cursor = self.cursorForPosition(pos)
+        cursor.insertText(text)
+        self.setTextCursor(cursor)
+        event.acceptProposedAction()
+        self.setFocus()
 
     def get_text_changed(self):
         """Check if the text has changed since editing was entered.

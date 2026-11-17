@@ -691,5 +691,81 @@ class TestScrollKept(CodeEditorTestCase):
         self.assertEqual(0, self.scrollbar.value())
 
 
+class TestFileDrop(CodeEditorTestCase):
+    """Dropping a file in writes a ${contents::} token, or with Ctrl held
+    the text in the file."""
+
+    def setUp(self):
+        import tempfile
+        self.folder = tempfile.mkdtemp(prefix='nxt_drop_')
+        self.path = os.path.join(self.folder, 'external.py')
+        with open(self.path, 'w') as fp:
+            fp.write('print("from a file")\nvalue = 2\n')
+        self.load('first\nsecond')
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.folder, ignore_errors=True)
+        self.ce.editing_active = False
+        self.editor.setReadOnly(True)
+
+    def drop(self, mime, position, modifiers=QtCore.Qt.NoModifier):
+        """Drop mime data on the character at position in the document."""
+        cursor = self.editor.textCursor()
+        cursor.setPosition(position)
+        point = self.editor.cursorRect(cursor).center()
+        event = QtGui.QDropEvent(QtCore.QPointF(point),
+                                 QtCore.Qt.CopyAction, mime,
+                                 QtCore.Qt.LeftButton, modifiers)
+        self.editor.dropEvent(event)
+        app.processEvents()
+        return event
+
+    def file_mime(self, *paths):
+        mime = QtCore.QMimeData()
+        mime.setUrls([QtCore.QUrl.fromLocalFile(p) for p in paths])
+        return mime
+
+    def test_drop_writes_contents_token_where_it_lands(self):
+        self.drop(self.file_mime(self.path), len('first\n'))
+        token = '${contents::%s}' % self.path.replace(os.path.sep, '/')
+        self.assertEqual('first\n' + token + 'second',
+                         self.editor.toPlainText())
+
+    def test_ctrl_drop_writes_the_file_text(self):
+        self.drop(self.file_mime(self.path), len('first\n'),
+                  QtCore.Qt.ControlModifier)
+        self.assertEqual('first\nprint("from a file")\nvalue = 2\nsecond',
+                         self.editor.toPlainText())
+
+    def test_several_files_each_get_a_line(self):
+        other = os.path.join(self.folder, 'other.py')
+        with open(other, 'w') as fp:
+            fp.write('')
+        self.drop(self.file_mime(self.path, other), 0)
+        lines = self.editor.toPlainText().split('\n')
+        self.assertTrue(lines[0].endswith('external.py}'))
+        self.assertTrue(lines[1].startswith('${contents::'))
+        self.assertTrue(lines[1].endswith('other.py}first'))
+
+    def test_files_are_accepted_for_dropping(self):
+        mime = self.file_mime(self.path)
+        self.assertTrue(self.editor.canInsertFromMimeData(mime))
+        folder_only = self.file_mime(self.folder)
+        self.assertEqual([], self.editor.dropped_files(folder_only))
+
+    def test_text_drop_still_inserts_text(self):
+        mime = QtCore.QMimeData()
+        mime.setText('dropped ')
+        self.drop(mime, len('first\n'))
+        self.assertEqual('first\ndropped second', self.editor.toPlainText())
+
+    def test_read_only_editor_is_not_changed(self):
+        self.editor.setReadOnly(True)
+        self.ce.editing_active = False
+        self.drop(self.file_mime(self.path), 0)
+        self.assertEqual('first\nsecond', self.editor.toPlainText())
+
+
 if __name__ == '__main__':
     unittest.main()
