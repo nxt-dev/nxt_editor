@@ -746,13 +746,25 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.update()
         super(NodeGraphicsItem, self).hoverLeaveEvent(event)
 
-    def update_build_focus(self):
+    def update_build_focus(self, *signal_args, force=False):
+        """Draw this node as the one running, or not.
+
+        Every node hears about every step of a build, so only the ones
+        whose look changes are redrawn. Redrawing them all made a build
+        cost the square of its length in drawing, which a host, running
+        nodes on the thread that draws, spent stalled.
+
+        :param signal_args: what the signal calling this carried, unused
+        :param force: redraw even if nothing changed here
+        """
+        was_focus = self.is_build_focus
         if not self.model.executing:
             self.is_build_focus = False
+        else:
+            focus = self.model.get_build_focus()
+            self.is_build_focus = self.node_path == focus
+        if force or self.is_build_focus != was_focus:
             self.update()
-            return
-        self.is_build_focus = self.node_path == self.model.get_build_focus()
-        self.update()
 
     def update_from_model(self):
         """Sync the visible state of this node with the model."""
@@ -770,7 +782,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                                            comp)
         self.node_enabled = self.model.get_node_enabled(self.node_path)
         self.update_color()
-        self.update_build_focus()
+        self.update_build_focus(force=True)
         self._update_collapse()
         self.error_list = self.model.get_node_error(node_path, comp)
         self.update_fonts()
