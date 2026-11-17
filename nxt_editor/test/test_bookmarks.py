@@ -10,7 +10,7 @@ import unittest
 from unittest import mock
 
 # External
-from Qt import QtWidgets
+from Qt import QtGui, QtWidgets
 
 # Internal
 from nxt.session import Session
@@ -176,7 +176,11 @@ class InTheView(unittest.TestCase):
         self.look_at(3000, 2000)
         self.view.add_bookmark('Far away')
         texts = self.menu_texts(menu)
-        self.assertEqual('Far away\tCtrl+1', texts[1])
+        # The menu shows the shortcut as the platform writes it, which on
+        # macOS is the command key's symbol rather than Ctrl.
+        native = QtGui.QKeySequence('Ctrl+1').toString(
+            QtGui.QKeySequence.NativeText)
+        self.assertEqual('Far away\t' + native, texts[1])
         self.assertEqual(['Rename Bookmark', 'Delete Bookmark'], texts[2:])
         self.look_at(0, 0)
         [a for a in menu.actions() if a.text() == texts[1]][0].trigger()
