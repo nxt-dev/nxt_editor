@@ -790,6 +790,17 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.viewport().setMouseTracking(True)
         self._cursor_before_token = None
 
+        # code folding, see the folding section below
+        self.folding = False
+        self.document().contentsChange.connect(self.unfold_edited)
+        self.cursorPositionChanged.connect(self.unfold_at_cursor)
+        self.ce_actions.fold_block_action.triggered.connect(
+            self.fold_current)
+        self.ce_actions.unfold_block_action.triggered.connect(
+            self.unfold_current)
+        self.ce_actions.fold_all_action.triggered.connect(self.fold_all)
+        self.ce_actions.unfold_all_action.triggered.connect(self.unfold_all)
+
     def dragEnterEvent(self, event):
         mime = event.mimeData()
         if mime.hasFormat("text/plain") or self.dropped_files(mime):
@@ -937,8 +948,275 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.document().setDefaultTextOption(option)
 
     def get_lines(self):
-        doc = self.document()
-        return [str(doc.findBlockByLineNumber(i).text()) for i in range(doc.lineCount())]
+        # Every block, folded away or not. The document's line count only
+        # counts the lines on show, so reading by line number would leave
+        # folded code out of what is saved.
+        lines = []
+        block = self.document().firstBlock()
+        while block.isValid():
+            lines.append(str(block.text()))
+            block = block.next()
+        return lines
+
+    def setPlainText(self, text):
+        # The code is set again on every refresh of the node, entering
+        # editing among them. When it is the same code, what was folded
+        # stays folded.
+        folded = []
+        if text == self.toPlainText():
+            folded = self.folded_block_numbers()
+        super(NxtCodeEditor, self).setPlainText(text)
+        document = self.document()
+        for number in folded:
+            self.fold_block(document.findBlockByNumber(number))
+
+    # -- folding ----------------------------------------------------------
+    # Folding hides the lines of an indented block behind the line that
+    # opens it. It only hides them from view: they are still in the
+    # document, so what is saved and run is the whole code. Nothing about
+    # a fold is stored either. A line is folded when it shows and the line
+    # after it does not, so the document itself is the only state.
+
+    @staticmethod
+    def block_indent(block):
+        """How far a line is indented, or None for a blank line, which
+        belongs to whichever block is around it."""
+        text = block.text().expandtabs(4)
+        stripped = text.lstrip()
+        if not stripped:
+            return None
+        return len(text) - len(stripped)
+
+    def fold_end(self, block):
+        """The last line of the indented block this line opens.
+
+        :param block: QTextBlock of the opening line
+        :return: QTextBlock, or None if the line opens no block
+        """
+        indent = self.block_indent(block)
+        if indent is None:
+            return None
+        last = None
+        following = block.next()
+        while following.isValid():
+            following_indent = self.block_indent(following)
+            if following_indent is not None:
+                if following_indent <= indent:
+                    break
+                # Blank lines after the block stay out of it.
+                last = following
+            following = following.next()
+        return last
+
+    def opens_fold(self, block):
+        """Whether the line is followed by lines indented further."""
+        indent = self.block_indent(block)
+        if indent is None:
+            return False
+        following = block.next()
+        while following.isValid():
+            following_indent = self.block_indent(following)
+            if following_indent is not None:
+                return following_indent > indent
+            following = following.next()
+        return False
+
+    @staticmethod
+    def is_folded(block):
+        following = block.next()
+        return (block.isVisible() and following.isValid() and
+                not following.isVisible())
+
+    def folded_block_numbers(self):
+        numbers = []
+        block = self.document().firstBlock()
+        while block.isValid():
+            if self.is_folded(block):
+                numbers.append(block.blockNumber())
+            block = block.next()
+        return numbers
+
+    def set_blocks_visible(self, first, last, visible):
+        """Show or hide the lines from first to last, both included."""
+        document = self.document()
+        block = first
+        end = last.blockNumber()
+        self.folding = True
+        try:
+            while block.isValid() and block.blockNumber() <= end:
+                block.setVisible(visible)
+                block = block.next()
+            start = first.position()
+            length = last.position() + last.length() - start
+            length = min(length, document.characterCount() - start)
+            document.markContentsDirty(start, length)
+        finally:
+            self.folding = False
+        self.viewport().update()
+        if self.display_line_numbers:
+            self.number_bar.update()
+
+    def fold_block(self, block):
+        """Fold away the indented block this line opens.
+
+        :return: True if there was one to fold
+        :rtype: bool
+        """
+        if not block.isValid() or not block.isVisible():
+            return False
+        last = self.fold_end(block)
+        if last is None:
+            return False
+        first = block.next()
+        cursor = self.textCursor()
+        hidden_start = first.position()
+        hidden_end = last.position() + last.length()
+        if (hidden_start <= cursor.position() < hidden_end or
+                hidden_start <= cursor.anchor() < hidden_end):
+            # The cursor would be left in lines that are not on show.
+            cursor = QtGui.QTextCursor(block)
+            cursor.movePosition(QtGui.QTextCursor.EndOfBlock)
+            self.setTextCursor(cursor)
+        self.set_blocks_visible(first, last, False)
+        return True
+
+    def unfold_block(self, block):
+        """Show the lines folded away behind this line.
+
+        :return: True if it was folded
+        :rtype: bool
+        """
+        if not self.is_folded(block):
+            return False
+        first = block.next()
+        last = first
+        while last.next().isValid() and not last.next().isVisible():
+            last = last.next()
+        self.set_blocks_visible(first, last, True)
+        return True
+
+    def toggle_fold(self, block):
+        if not self.unfold_block(block):
+            self.fold_block(block)
+
+    def fold_header(self, block):
+        """The line on show that a hidden line is folded behind."""
+        while block.isValid() and not block.isVisible():
+            block = block.previous()
+        return block
+
+    def fold_current(self):
+        """Fold the block the cursor is in, or the one its line opens."""
+        block = self.textCursor().block()
+        if self.opens_fold(block) and not self.is_folded(block):
+            self.fold_block(block)
+            return
+        indent = self.block_indent(block)
+        opener = block.previous()
+        while opener.isValid():
+            opener_indent = self.block_indent(opener)
+            if (opener_indent is not None and
+                    (indent is None or opener_indent < indent) and
+                    self.opens_fold(opener)):
+                last = self.fold_end(opener)
+                if (last is not None and
+                        last.blockNumber() >= block.blockNumber()):
+                    self.fold_block(opener)
+                    return
+                if indent is None:
+                    # A blank line past the end of a block is in no block.
+                    return
+            opener = opener.previous()
+
+    def unfold_current(self):
+        self.unfold_block(self.textCursor().block())
+
+    def fold_all(self):
+        """Fold every outermost block. The ones inside them go with them."""
+        block = self.document().firstBlock()
+        while block.isValid():
+            if block.isVisible() and self.opens_fold(block):
+                last = self.fold_end(block)
+                self.fold_block(block)
+                block = last.next()
+                continue
+            block = block.next()
+
+    def unfold_all(self):
+        document = self.document()
+        self.set_blocks_visible(document.firstBlock(), document.lastBlock(),
+                                True)
+
+    def unfold_edited(self, position, removed, added):
+        """Show any fold an edit touches.
+
+        Editing the line that opens a fold, or text that lands in or next
+        to hidden lines, puts the hidden lines on show rather than leaving
+        changes out of sight.
+        """
+        if self.folding:
+            return
+        document = self.document()
+        edited_first = document.findBlock(position)
+        edited_last = document.findBlock(position + added)
+        if not edited_last.isValid():
+            edited_last = document.lastBlock()
+        last = edited_last.blockNumber()
+        block = edited_first
+        while block.isValid() and block.blockNumber() <= last:
+            if not block.isVisible():
+                self.unfold_block(self.fold_header(block))
+            elif self.is_folded(block):
+                # Also catches removing the line that opened a fold, which
+                # leaves its hidden lines behind the line before it.
+                self.unfold_block(block)
+            block = block.next()
+
+    def unfold_at_cursor(self):
+        """The cursor never sits in a hidden line: find, go to line and
+        the arrow keys can all take it there, so the fold opens."""
+        block = self.textCursor().block()
+        if not block.isVisible():
+            self.unfold_block(self.fold_header(block))
+
+    def paintEvent(self, event):
+        super(NxtCodeEditor, self).paintEvent(event)
+        self.paint_fold_markers(event)
+
+    def paint_fold_markers(self, event):
+        """Draw a small ... box after each line with code folded behind it."""
+        block = self.firstVisibleBlock()
+        if not block.isValid():
+            return
+        painter = None
+        offset = self.contentOffset()
+        bottom = event.rect().bottom()
+        metrics = self.fontMetrics()
+        while block.isValid():
+            geometry = self.blockBoundingGeometry(block).translated(offset)
+            if geometry.top() > bottom:
+                break
+            if block.isVisible() and self.is_folded(block):
+                if painter is None:
+                    painter = QtGui.QPainter(self.viewport())
+                    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+                    painter.setFont(self.font())
+                line = block.layout().lineAt(0)
+                left = (geometry.left() + line.x() +
+                        line.naturalTextWidth() +
+                        metrics.horizontalAdvance(' '))
+                label = '...'
+                width = metrics.horizontalAdvance(label) + 8
+                rect = QtCore.QRectF(left, geometry.top() + 1, width,
+                                     metrics.height() - 2)
+                painter.setPen(QtGui.QColor(theme.BORDER_STRONG))
+                painter.setBrush(QtGui.QColor(theme.RAISED))
+                painter.drawRoundedRect(rect, 3, 3)
+                painter.setPen(QtGui.QColor(theme.TEXT_DIM))
+                painter.drawText(rect, QtCore.Qt.AlignCenter, label)
+            block = block.next()
+        if painter is not None:
+            painter.end()
 
     def resizeEvent(self, *e):
         """overload resizeEvent handler"""
@@ -1965,6 +2243,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         edit_menu.addAction(self.ce_actions.delete_line)
         edit_menu.addAction(self.ce_actions.expand_selection)
         edit_menu.setEnabled(not self.isReadOnly())
+        # Folding only changes what is on show, so it works read only too.
+        fold_menu = self.standard_menu.addMenu('Folding')
+        fold_menu.addAction(self.ce_actions.fold_block_action)
+        fold_menu.addAction(self.ce_actions.unfold_block_action)
+        fold_menu.addAction(self.ce_actions.fold_all_action)
+        fold_menu.addAction(self.ce_actions.unfold_all_action)
 
         self.standard_menu.exec_(event.globalPos())
 
@@ -2503,7 +2787,13 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
 
 class NumberBar(QtWidgets.QWidget):
-    """class that defines textEditor numberBar"""
+    """class that defines textEditor numberBar
+
+    Also holds the fold markers, in a column on the right of the numbers:
+    one on each line that opens an indented block, pointing down while the
+    block shows and right while it is folded. Clicking a line with a
+    marker folds or unfolds it.
+    """
 
     width_changed = QtCore.Signal()
 
@@ -2514,7 +2804,13 @@ class NumberBar(QtWidgets.QWidget):
         self.editor.blockCountChanged.connect(self.update_width)
         self.editor.updateRequest.connect(self.update_contents)
         self.color = QtGui.QColor(color)
+        # Tracked so the pointer can show which lines can be clicked.
+        self.setMouseTracking(True)
         self.update_width()
+
+    def fold_width(self):
+        """Width of the fold marker column."""
+        return self.fontMetrics().height()
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -2524,14 +2820,19 @@ class NumberBar(QtWidgets.QWidget):
             changed_lines = self.editor.changed_lines[:]
         else:
             changed_lines = []
+        fold_width = self.fold_width()
         # Iterate over all visible text blocks in the document.
         while block.isValid():
+            if not block.isVisible():
+                # Folded away, there is no line to number.
+                block = block.next()
+                continue
             self.font().setBold(False)
             block_number = block.blockNumber()
             block_top = self.editor.blockBoundingGeometry(block).translated(
                 self.editor.contentOffset()).top()
             # Check if the position of the block is out side of the visible area
-            if not block.isVisible() or block_top >= event.rect().bottom():
+            if block_top >= event.rect().bottom():
                 break
             # We want the line number for the selected line to be bold.
             painter.setPen(QtGui.QColor(colors.LIGHTER_TEXT))
@@ -2548,9 +2849,16 @@ class NumberBar(QtWidgets.QWidget):
                 painter.setPen(colors.LIGHTEST_TEXT)
                 changed_lines.remove(block_number)
             painter.setFont(self.font())
-            text_rect = paint_rect.marginsAdded(QtCore.QMargins(0, 0, -4, 0))
+            text_rect = paint_rect.marginsAdded(
+                QtCore.QMargins(0, 0, -fold_width, 0))
             painter.drawText(text_rect, QtCore.Qt.AlignRight,
                              str(block_number + 1))
+            if self.editor.opens_fold(block):
+                folded = self.editor.is_folded(block)
+                marker_rect = QtCore.QRectF(
+                    paint_rect.right() - fold_width + 1, paint_rect.top(),
+                    fold_width, paint_rect.height())
+                self.paint_fold_marker(painter, marker_rect, folded)
             painter.setPen(QtCore.Qt.NoPen)
             block = block.next()
             if not block.isValid() and changed_lines:
@@ -2564,10 +2872,73 @@ class NumberBar(QtWidgets.QWidget):
 
         QtWidgets.QWidget.paintEvent(self, event)
 
+    @staticmethod
+    def paint_fold_marker(painter, rect, folded):
+        """A small triangle, pointing right when folded and down when not."""
+        size = min(rect.width(), rect.height()) * 0.45
+        center = rect.center()
+        if folded:
+            points = [QtCore.QPointF(center.x() - size * 0.45,
+                                     center.y() - size * 0.6),
+                      QtCore.QPointF(center.x() + size * 0.55, center.y()),
+                      QtCore.QPointF(center.x() - size * 0.45,
+                                     center.y() + size * 0.6)]
+            color = QtGui.QColor(theme.TEXT_DIM)
+        else:
+            points = [QtCore.QPointF(center.x() - size * 0.6,
+                                     center.y() - size * 0.4),
+                      QtCore.QPointF(center.x() + size * 0.6,
+                                     center.y() - size * 0.4),
+                      QtCore.QPointF(center.x(), center.y() + size * 0.55)]
+            color = QtGui.QColor(colors.DEFAULT_TEXT)
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawPolygon(QtGui.QPolygonF(points))
+        painter.restore()
+
+    def block_at(self, y):
+        """The line on show at a height in this bar, or None."""
+        block = self.editor.firstVisibleBlock()
+        offset = self.editor.contentOffset()
+        while block.isValid():
+            if block.isVisible():
+                geometry = self.editor.blockBoundingGeometry(
+                    block).translated(offset)
+                if geometry.top() > y:
+                    return None
+                if y < geometry.bottom():
+                    return block
+            block = block.next()
+        return None
+
+    def foldable_block_at(self, y):
+        block = self.block_at(y)
+        if block is not None and self.editor.opens_fold(block):
+            return block
+        return None
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            block = self.foldable_block_at(event.pos().y())
+            if block is not None:
+                self.editor.toggle_fold(block)
+                event.accept()
+                return
+        super(NumberBar, self).mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.foldable_block_at(event.pos().y()) is not None:
+            self.setCursor(QtCore.Qt.PointingHandCursor)
+        else:
+            self.unsetCursor()
+        super(NumberBar, self).mouseMoveEvent(event)
+
     def get_width(self):
         count = self.editor.blockCount()
-        width = self.fontMetrics().horizontalAdvance(str(count)) + 10
-        return width
+        width = self.fontMetrics().horizontalAdvance(str(count)) + 6
+        return width + self.fold_width()
 
     def update_width(self):
         width = self.get_width()

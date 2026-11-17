@@ -284,6 +284,8 @@ editor's right click menu, with the line commands under **Line**.
 | Move Line Up / Down | `Alt+Up` / `Alt+Down` | |
 | Delete Line | `Ctrl+Shift+K` | |
 | Expand Selection | `Ctrl+D` | The word under the cursor, then the line, then everything |
+| Fold / Unfold Block | `Ctrl+Shift+[` / `Ctrl+Shift+]` | See [Folding](#folding) |
+| Fold All / Unfold All | `Ctrl+K, Ctrl+0` / `Ctrl+K, Ctrl+J` | |
 | Complete Word | `Ctrl+Space` | See [Completion](#completion) |
 | Go to a token's node | `Ctrl+click` | See [Following tokens](#following-tokens) |
 | Indent / Un-Indent Line | `Tab` / `Shift+Tab` | Works on several lines at once |
@@ -358,6 +360,28 @@ While you edit, brackets and quotes come in pairs:
 - Keyboard layouts that type `[` and `{` with `AltGr` pair them too.
 - Accepting a token completion inside `${}` does not leave a spare `}`
   behind.
+
+### Folding
+
+A line that opens an indented block, such as a `def`, a `class`, an `if` or
+a `for`, has a small arrow in the gutter next to its line number. Click the
+arrow, or anywhere on that line's number, to fold the block away behind the
+line, which then ends in a `...` marker. Click it again to show the block.
+Blank lines after a block stay on show.
+
+- `Ctrl+Shift+[` folds the block the cursor is in, and `Ctrl+Shift+]`
+  unfolds the folded line the cursor is on.
+- `Ctrl+K, Ctrl+0` folds every outermost block, and `Ctrl+K, Ctrl+J` shows
+  everything again.
+- The same commands are under **Folding** in the right click menu.
+
+Folding only changes what is on show. The folded lines are still part of
+the code, so they are saved and run as usual, and copying across a fold
+copies them too. Folding works while the code is read only, and what is
+folded stays folded when you double click to edit. Editing a folded line,
+or moving the cursor into a fold, for example with find or go to line,
+opens it. Selecting another node, or the code changing, shows everything
+again.
 
 ### Dropping files
 

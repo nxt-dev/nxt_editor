@@ -181,6 +181,10 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Move Line Down             | Swap the selected line(s) with the line below. | Move Line Down | Alt+Down |
 | Delete Line                | Delete the selected line(s). | Delete Line | Ctrl+Shift+K |
 | Expand Selection           | Grow the selection from the word under the cursor, to the line, to everything. | Expand Selection | Ctrl+D |
+| Fold Block                 | Fold away the indented block the cursor is in. | Fold Block | Ctrl+Shift+[ |
+| Unfold Block               | Show the block folded away behind the line the cursor is on. | Unfold Block | Ctrl+Shift+] |
+| Fold All                   | Fold away every indented block. | Fold All | Ctrl+K, Ctrl+0 |
+| Unfold All                 | Show every folded block. | Unfold All | Ctrl+K, Ctrl+J |
 | Complete Word              | Offer completions for the word being typed. | Complete Word | Ctrl+Space |
 | Code Editor Autocomplete   | When on, completions are offered as you type. Ctrl+Space always offers them either way. | Code Editor Autocomplete | |
 

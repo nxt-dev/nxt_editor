@@ -2255,6 +2255,22 @@ class CodeEditorActions(NxtActionContainer):
                                            'under the cursor, to the line, to '
                                            'everything.')
         self.expand_selection.setShortcut('Ctrl+D')
+        # folding, which only changes what is on show, never the code
+        self.fold_block_action = NxtAction('Fold Block', parent=self)
+        self.fold_block_action.setWhatsThis('Fold away the indented block '
+                                            'the cursor is in.')
+        self.fold_block_action.setShortcut('Ctrl+Shift+[')
+        self.unfold_block_action = NxtAction('Unfold Block', parent=self)
+        self.unfold_block_action.setWhatsThis('Show the block folded away '
+                                              'behind the line the cursor '
+                                              'is on.')
+        self.unfold_block_action.setShortcut('Ctrl+Shift+]')
+        self.fold_all_action = NxtAction('Fold All', parent=self)
+        self.fold_all_action.setWhatsThis('Fold away every indented block.')
+        self.fold_all_action.setShortcut('Ctrl+K, Ctrl+0')
+        self.unfold_all_action = NxtAction('Unfold All', parent=self)
+        self.unfold_all_action.setWhatsThis('Show every folded block.')
+        self.unfold_all_action.setShortcut('Ctrl+K, Ctrl+J')
         # completion
         self.complete_action = NxtAction('Complete Word', parent=self)
         self.complete_action.setWhatsThis('Offer completions for the word '
@@ -2472,6 +2488,10 @@ class CodeEditorActions(NxtActionContainer):
                                      self.duplicate_line,
                                      self.move_line_up, self.move_line_down,
                                      self.delete_line, self.expand_selection,
+                                     self.fold_block_action,
+                                     self.unfold_block_action,
+                                     self.fold_all_action,
+                                     self.unfold_all_action,
                                      self.complete_action,
                                      self.run_line_global_action,
                                      self.run_line_local_action]

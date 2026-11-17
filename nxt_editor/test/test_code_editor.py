@@ -767,5 +767,174 @@ class TestFileDrop(CodeEditorTestCase):
         self.assertEqual('first\nsecond', self.editor.toPlainText())
 
 
+FOLD_SAMPLE = "\n".join([
+    "import os",                    # 0
+    "def run(value):",              # 1
+    "    if value:",                # 2
+    "        print(value)",         # 3
+    "",                             # 4
+    "        return 1",             # 5
+    "    return 2",                 # 6
+    "",                             # 7
+    "class Thing(object):",         # 8
+    "    pass",                     # 9
+    "done = True",                  # 10
+])
+
+
+class TestFolding(CodeEditorTestCase):
+
+    def setUp(self):
+        self.load(FOLD_SAMPLE)
+        self.document = self.editor.document()
+
+    def tearDown(self):
+        self.editor.unfold_all()
+        self.ce.editing_active = False
+        self.editor.setReadOnly(True)
+
+    def block(self, number):
+        return self.document.findBlockByNumber(number)
+
+    def hidden(self):
+        return [n for n in range(self.document.blockCount())
+                if not self.block(n).isVisible()]
+
+    def test_fold_hides_the_indented_block(self):
+        self.assertTrue(self.editor.fold_block(self.block(1)))
+        # The blank line after the block stays on show.
+        self.assertEqual([2, 3, 4, 5, 6], self.hidden())
+        self.assertTrue(self.editor.is_folded(self.block(1)))
+
+    def test_folding_never_changes_the_code(self):
+        self.editor.fold_all()
+        self.assertTrue(self.hidden())
+        self.assertEqual(FOLD_SAMPLE, self.editor.toPlainText())
+        # What accepting an edit saves.
+        self.assertEqual(FOLD_SAMPLE.split('\n'), self.editor.get_lines())
+
+    def test_lines_that_open_folds(self):
+        opens = [n for n in range(self.document.blockCount())
+                 if self.editor.opens_fold(self.block(n))]
+        self.assertEqual([1, 2, 8], opens)
+
+    def test_fold_current_folds_the_enclosing_block(self):
+        self.put_cursor(self.block(3).position() + 4)
+        self.editor.fold_current()
+        self.assertEqual([3, 4, 5], self.hidden())
+        # The cursor is moved out of the lines that are no longer on show.
+        self.assertEqual(2, self.editor.textCursor().blockNumber())
+        self.editor.fold_current()
+        self.assertEqual([2, 3, 4, 5, 6], self.hidden())
+
+    def test_unfold_current(self):
+        self.editor.fold_block(self.block(8))
+        self.put_cursor(self.block(8).position())
+        self.editor.unfold_current()
+        self.assertEqual([], self.hidden())
+
+    def test_fold_all_and_unfold_all(self):
+        self.editor.fold_all()
+        self.assertEqual([2, 3, 4, 5, 6, 9], self.hidden())
+        self.editor.unfold_all()
+        self.assertEqual([], self.hidden())
+
+    def test_actions_fold_and_unfold(self):
+        self.editor.setFocus()
+        self.ce_actions = self.editor.ce_actions
+        self.ce_actions.fold_all_action.trigger()
+        self.assertEqual([2, 3, 4, 5, 6, 9], self.hidden())
+        self.ce_actions.unfold_all_action.trigger()
+        self.assertEqual([], self.hidden())
+        self.put_cursor(self.block(9).position())
+        self.ce_actions.fold_block_action.trigger()
+        self.assertEqual([9], self.hidden())
+        self.ce_actions.unfold_block_action.trigger()
+        self.assertEqual([], self.hidden())
+
+    def test_editing_a_folded_line_unfolds_it(self):
+        self.editor.fold_block(self.block(1))
+        cursor = QtGui.QTextCursor(self.block(1))
+        cursor.movePosition(QtGui.QTextCursor.EndOfBlock)
+        cursor.insertText(' # note')
+        app.processEvents()
+        self.assertEqual([], self.hidden())
+
+    def test_deleting_the_folded_line_unfolds_it(self):
+        self.editor.fold_block(self.block(8))
+        cursor = QtGui.QTextCursor(self.block(7))
+        cursor.movePosition(QtGui.QTextCursor.EndOfBlock)
+        cursor.setPosition(self.block(8).position() + len(self.block(8).text()),
+                           QtGui.QTextCursor.KeepAnchor)
+        cursor.removeSelectedText()
+        app.processEvents()
+        self.assertEqual([], self.hidden())
+
+    def test_editing_elsewhere_keeps_the_fold(self):
+        self.editor.fold_block(self.block(8))
+        cursor = QtGui.QTextCursor(self.block(0))
+        cursor.insertText('import sys\n')
+        app.processEvents()
+        self.assertEqual([10], self.hidden())
+
+    def test_cursor_into_hidden_line_unfolds(self):
+        self.editor.fold_block(self.block(1))
+        self.put_cursor(self.block(4).position())
+        self.assertEqual([], self.hidden())
+
+    def test_folds_survive_the_same_code_being_set_again(self):
+        self.editor.fold_block(self.block(8))
+        self.editor.setPlainText(FOLD_SAMPLE)
+        self.assertEqual([9], self.hidden())
+        self.editor.setPlainText(FOLD_SAMPLE + '\n')
+        self.assertEqual([], self.hidden())
+
+    def test_clicking_the_marker_toggles_the_fold(self):
+        from Qt import QtTest
+        bar = self.editor.number_bar
+        self.editor.verticalScrollBar().setValue(0)
+        app.processEvents()
+        geometry = self.editor.blockBoundingGeometry(self.block(8)).translated(
+            self.editor.contentOffset())
+        point = QtCore.QPoint(bar.width() - 4, int(geometry.center().y()))
+        QtTest.QTest.mouseClick(bar, QtCore.Qt.LeftButton,
+                                QtCore.Qt.NoModifier, point)
+        self.assertEqual([9], self.hidden())
+        QtTest.QTest.mouseClick(bar, QtCore.Qt.LeftButton,
+                                QtCore.Qt.NoModifier, point)
+        self.assertEqual([], self.hidden())
+
+    def test_folded_editor_paints(self):
+        self.editor.fold_all()
+        self.assertFalse(self.editor.grab().isNull())
+        self.assertFalse(self.editor.number_bar.grab().isNull())
+
+    def test_fold_shortcuts_are_bound(self):
+        bound = {a.text(): a.shortcut().toString()
+                 for a in self.editor.ce_actions.actions()}
+        self.assertEqual('Ctrl+Shift+[', bound['Fold Block'])
+        self.assertEqual('Ctrl+Shift+]', bound['Unfold Block'])
+        self.assertEqual('Ctrl+K, Ctrl+0', bound['Fold All'])
+        self.assertEqual('Ctrl+K, Ctrl+J', bound['Unfold All'])
+
+    def test_fold_keys_reach_the_editor(self):
+        from Qt import QtTest
+        self.win.activateWindow()
+        self.editor.setFocus()
+        app.processEvents()
+        if not self.editor.hasFocus():
+            self.skipTest('No keyboard focus on this platform')
+        ctrl = QtCore.Qt.ControlModifier
+        QtTest.QTest.keyClick(self.editor, QtCore.Qt.Key_K, ctrl)
+        QtTest.QTest.keyClick(self.editor, QtCore.Qt.Key_0, ctrl)
+        app.processEvents()
+        self.assertEqual([2, 3, 4, 5, 6, 9], self.hidden())
+        QtTest.QTest.keyClick(self.editor, QtCore.Qt.Key_K, ctrl)
+        QtTest.QTest.keyClick(self.editor, QtCore.Qt.Key_J, ctrl)
+        app.processEvents()
+        self.assertEqual([], self.hidden())
+        self.assertEqual(FOLD_SAMPLE, self.editor.toPlainText())
+
+
 if __name__ == '__main__':
     unittest.main()
