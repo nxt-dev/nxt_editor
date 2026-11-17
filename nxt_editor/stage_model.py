@@ -1101,47 +1101,73 @@ class StageModel(QtCore.QObject):
             self._store_hidden_layers(self._hidden_graph, show=[layer_path])
         self.layer_visibility_changed.emit()
 
-    def hidden_roots(self):
-        """Root paths hidden in the graph.
+    def hidden_nodes(self):
+        """Paths of the nodes hidden in the graph.
 
-        Decided a root node at a time, so a tree is shown or hidden whole.
-        A root is hidden when every layer that says anything about it, or
-        about a node under it, is hidden. One opinion from a layer that is
-        showing keeps it in view: hiding the layer a build's first node
-        comes from must not take away what other layers put under it.
+        Decided a node at a time. A node is hidden when every layer that
+        says anything about that node itself is hidden, and nothing under
+        it is shown. So hiding a layer takes away the nodes it adds, even
+        inside a tree other layers add to, while a node a layer that is
+        showing also has an opinion on stays, and so does every node above
+        one that is shown.
+
+        A proxy node, made by an instance and with no opinion of its own on
+        any layer, goes with the node it is stacked under: what an instance
+        brings with it is shown with the instance, wherever its source is.
 
         Worked out in one pass over every layer's nodes, so ask once and
         look each node up in the answer.
 
         :rtype: frozenset
         """
-        hidden = self.hidden_layer_paths()
+        hidden_layers = self.hidden_layer_paths()
+        if not hidden_layers:
+            return frozenset()
+        world = nxt_path.WORLD
+        get_parent = nxt_path.get_parent_path
+        shown = set()
+        hidden = set()
+        for layer in self.stage._sub_layers:
+            if layer.real_path in hidden_layers:
+                hidden.update(layer._nodes_path_as_key)
+            else:
+                shown.update(layer._nodes_path_as_key)
+        # Up from every node, to take in the parents only implied by the
+        # nodes under them, and to show every parent of a shown node. A
+        # walk stops at a parent already known, which was or will be
+        # walked up from itself.
+        for found in (shown, hidden):
+            for path in list(found):
+                parent = get_parent(path)
+                while parent != world and parent not in found:
+                    found.add(parent)
+                    parent = get_parent(parent)
+        hidden -= shown
+        hidden.discard(world)
         if not hidden:
             return frozenset()
-        shown_roots = set()
-        hidden_roots = set()
-        get_root = nxt_path.get_root_path
-        for layer in self.stage._sub_layers:
-            if layer.real_path in hidden:
-                found = hidden_roots
-            else:
-                found = shown_roots
-            found.update(get_root(path)
-                         for path in layer._nodes_path_as_key)
-        return frozenset(hidden_roots - shown_roots)
+        # Proxies, parents first, so each one's parent is decided.
+        proxies = [path for path in self.comp_layer._nodes_path_as_key
+                   if path != world and path not in shown and
+                   path not in hidden]
+        proxies.sort(key=lambda path: path.count(nxt_path.NODE_SEP))
+        for path in proxies:
+            if get_parent(path) in hidden:
+                hidden.add(path)
+        return frozenset(hidden)
 
-    def is_node_hidden(self, node_path, hidden_roots=None):
+    def is_node_hidden(self, node_path, hidden_nodes=None):
         """Whether a node is out of sight because its layers are hidden.
-        See hidden_roots.
+        See hidden_nodes.
 
         :param node_path: any node path
         :type node_path: str
-        :param hidden_roots: hidden_roots, when it is already known
+        :param hidden_nodes: hidden_nodes, when it is already known
         :rtype: bool
         """
-        if hidden_roots is None:
-            hidden_roots = self.hidden_roots()
-        return nxt_path.get_root_path(node_path) in hidden_roots
+        if hidden_nodes is None:
+            hidden_nodes = self.hidden_nodes()
+        return node_path in hidden_nodes
 
     def hidden_backdrop_ids(self):
         """Ids of the backdrops only hidden layers draw.
@@ -1179,8 +1205,8 @@ class StageModel(QtCore.QObject):
         layer_path = layer.real_path
         if not self.get_layer_hidden(layer_path):
             return
-        hidden_roots = self.hidden_roots()
-        if not any(self.is_node_hidden(path, hidden_roots)
+        hidden_nodes = self.hidden_nodes()
+        if not any(self.is_node_hidden(path, hidden_nodes)
                    for path in node_paths):
             return
         self.set_layer_hidden(layer_path, False)

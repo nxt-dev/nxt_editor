@@ -650,9 +650,16 @@ The eye at the end of each row hides that layer's nodes in the graph, for
 example a library layer of nodes that are only there to be instanced. Click
 it again, or use **Show In Graph** on the layer's menu, to bring them back.
 
-- Only what that layer alone has is hidden: its root nodes with everything
-  under them, the lines to and from them, and its backdrops. A node that a
-  layer still showing also adds to stays in view.
+- Only what that layer alone has is hidden, a node at a time: a node goes
+  when every layer with an opinion on it is hidden, along with the lines to
+  and from it, and the backdrops only hidden layers draw. A node that a
+  layer still showing also has an opinion on stays in view, and so does a
+  parent while anything under it is showing. So hiding a layer that adds
+  steps under a shared node such as `/load` hides just those steps.
+- A hidden child takes no room: the children under the same parent close
+  up, and open up again when it is shown. A node made by an instance goes
+  with the node it is under, so an instance that is showing shows what it
+  brings, whichever layer that comes from.
 - It is a way of looking at the graph. The layer still composites and
   runs, which is the difference from **Mute**, and its nodes are still in
   the Outliner.
