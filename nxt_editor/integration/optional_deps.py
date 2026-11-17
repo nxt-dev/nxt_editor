@@ -456,7 +456,7 @@ def pending(comp, root=None, crt=None):
                         folder_name(comp, crt))
     marker = os.path.join(path, PENDING_MARKER)
     if os.path.isfile(marker):
-        with open(marker) as handle:
+        with open(marker, encoding='utf-8') as handle:
             if handle.read().strip() == comp.id:
                 return path
     return None
@@ -802,7 +802,8 @@ def finish_install(comp, staging, crt=None, root=None):
             discard(waiting)
         os.makedirs(os.path.dirname(waiting), exist_ok=True)
         os.replace(staging, waiting)
-        with open(os.path.join(waiting, PENDING_MARKER), 'w') as handle:
+        with open(os.path.join(waiting, PENDING_MARKER), 'w',
+                  encoding='utf-8') as handle:
             handle.write(comp.id)
         return 'restart'
     if find_distribution(comp, target) is not None:
@@ -826,7 +827,7 @@ def apply_pending(root):
         marker = os.path.join(waiting, PENDING_MARKER)
         if not os.path.isfile(marker):
             continue
-        with open(marker) as handle:
+        with open(marker, encoding='utf-8') as handle:
             comp = component(handle.read().strip())
         target = os.path.join(root, name)
         if find_distribution(comp, target) is not None:
