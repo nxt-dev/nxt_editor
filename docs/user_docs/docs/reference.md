@@ -731,6 +731,10 @@ See the [tutorial videos](tutorials.md) for a tour of these. The History
 View lists every step on the undo stack, including reference edits and
 reloads.
 
+The Output Log follows new text while it is scrolled to the bottom, and
+resizing it keeps it there. Scroll up to read something and it stays where
+you left it; scroll back to the bottom and it follows again.
+
 In the Property Editor's attribute table, each row is in the color of the
 layer its value comes from, lighter where the selected node sets the value
 itself and darker where it inherits it. Instanced values are in italics.

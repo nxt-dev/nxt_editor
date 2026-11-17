@@ -1,5 +1,6 @@
 # Built-in
 import codecs
+import contextlib
 import logging
 import re
 from code import InteractiveConsole
@@ -355,15 +356,9 @@ class OutputLog(DockWidgetBase):
         :param val: Text to add to textedit
         :type val: str
         """
-        _max = self.raw_output_textedit.verticalScrollBar().maximum()
-        cur = self.raw_output_textedit.verticalScrollBar().value()
-        self.raw_output_textedit.moveCursor(QtGui.QTextCursor.End)
-        self.raw_output_textedit.insertPlainText(val)
-        if _max == cur:
-            new_max = self.raw_output_textedit.verticalScrollBar().maximum()
-            self.raw_output_textedit.verticalScrollBar().setValue(new_max)
-        else:
-            self.raw_output_textedit.verticalScrollBar().setValue(cur)
+        with self.raw_output_textedit.stick_to_bottom.writing():
+            self.raw_output_textedit.moveCursor(QtGui.QTextCursor.End)
+            self.raw_output_textedit.insertPlainText(val)
 
     def write_rich_output(self, val, level=None):
         """Neighbor to write_raw_output. Use of write as naming is specific,
@@ -374,33 +369,29 @@ class OutputLog(DockWidgetBase):
         :param level: logging level to color text as, defaults to None
         :type level: int, optional
         """
-        _max = self.rich_output_textedit.verticalScrollBar().maximum()
-        cur = self.rich_output_textedit.verticalScrollBar().value()
-        self.rich_output_textedit.moveCursor(QtGui.QTextCursor.End)
-        if val == '\n':
-            self.rich_output_textedit.append('')
-        else:
-            final_newline = False
-            if val.endswith('\n'):
-                final_newline = True
-                text = val[:-1]
+        rich = self.rich_output_textedit
+        with rich.stick_to_bottom.writing():
+            rich.moveCursor(QtGui.QTextCursor.End)
+            if val == '\n':
+                rich.append('')
             else:
-                text = val
-            color = colors.LOGGING_COLORS.get(level, 'white')
-            html = '<font face="{}" color="{}">'.format(FONTS.MONOSPACE, color)
-            style = ("<style type='text/css'> "
-                     "pre {margin: 0; font-family: '%s';} "
-                     "</style>" % (FONTS.DEFAULT_FAMILY,))
-            text = style + ("<pre>{}</pre>".format(text))
-            html += text + '</font>'
-            self.rich_output_textedit.insertHtml(html)
-            if final_newline:
-                self.rich_output_textedit.append('')
-        if _max == cur:
-            new_max = self.rich_output_textedit.verticalScrollBar().maximum()
-            self.rich_output_textedit.verticalScrollBar().setValue(new_max)
-        else:
-            self.rich_output_textedit.verticalScrollBar().setValue(cur)
+                final_newline = False
+                if val.endswith('\n'):
+                    final_newline = True
+                    text = val[:-1]
+                else:
+                    text = val
+                color = colors.LOGGING_COLORS.get(level, 'white')
+                html = '<font face="{}" color="{}">'.format(FONTS.MONOSPACE,
+                                                            color)
+                style = ("<style type='text/css'> "
+                         "pre {margin: 0; font-family: '%s';} "
+                         "</style>" % (FONTS.DEFAULT_FAMILY,))
+                text = style + ("<pre>{}</pre>".format(text))
+                html += text + '</font>'
+                rich.insertHtml(html)
+                if final_newline:
+                    rich.append('')
 
     def tail_file_for_raw_output(self, file_path):
         """Treats the given file as what should be displayed in "raw output"
@@ -460,10 +451,68 @@ class OutputLog(DockWidgetBase):
         super(OutputLog, self).closeEvent(event)
 
 
+class StickToBottom(QtCore.QObject):
+    """Keeps a log scrolled to the bottom while the user leaves it there.
+
+    Whether to follow new text used to be decided by comparing the scroll
+    bar to its maximum just before each write. Resizing the log re-wraps
+    its lines, which moves the maximum without moving the bar, so after a
+    resize the bar no longer looked like it was at the bottom and the log
+    stopped following. Now the decision is only changed by the bar moving,
+    and whenever the range changes, a log that was at the bottom is put
+    back there.
+    """
+
+    def __init__(self, text_edit):
+        super(StickToBottom, self).__init__(text_edit)
+        self.text_edit = text_edit
+        self.bar = text_edit.verticalScrollBar()
+        #: Whether the log follows new text to the bottom.
+        self.stuck = True
+        self.busy = False
+        self.bar.valueChanged.connect(self.on_value_changed)
+        self.bar.rangeChanged.connect(self.on_range_changed)
+
+    def on_value_changed(self, value):
+        if self.busy:
+            return
+        self.stuck = value >= self.bar.maximum()
+
+    def on_range_changed(self, minimum, maximum):
+        if self.stuck:
+            self.set_value(maximum)
+
+    def set_value(self, value):
+        """Move the bar without it counting as the user scrolling."""
+        busy = self.busy
+        self.busy = True
+        try:
+            self.bar.setValue(value)
+        finally:
+            self.busy = busy
+
+    @contextlib.contextmanager
+    def writing(self):
+        """Wrap a write: follows it to the bottom if the log was there,
+        otherwise leaves the view where the user scrolled it, even though
+        writing moves the text cursor to the end.
+        """
+        stuck = self.stuck
+        value = self.bar.value()
+        self.busy = True
+        try:
+            yield
+        finally:
+            self.busy = False
+            self.stuck = stuck
+            self.set_value(self.bar.maximum() if stuck else value)
+
+
 class OutputTextEdit(QtWidgets.QTextEdit):
     def __init__(self, parent):
         super(OutputTextEdit, self).__init__(parent=parent)
         self._parent = parent
+        self.stick_to_bottom = StickToBottom(self)
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setReadOnly(True)
         self.setFont(FONTS.monospace_font(10))
@@ -479,6 +528,7 @@ class OutputTextBrowser(QtWidgets.QTextBrowser):
     def __init__(self, parent):
         super(OutputTextBrowser, self).__init__(parent=parent)
         self._parent = parent
+        self.stick_to_bottom = StickToBottom(self)
         self.anchorClicked.connect(self.parent().link_clicked)
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setOpenLinks(False)
