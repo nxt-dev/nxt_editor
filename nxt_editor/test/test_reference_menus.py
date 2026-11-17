@@ -18,6 +18,8 @@ import unittest
 from Qt import QtWidgets
 
 # Internal
+from nxt import nxt_io
+from nxt.plugins import file_fallbacks
 from nxt.session import Session
 from nxt_editor import stage_model
 from nxt_editor.reference_paths import stored_reference_path
@@ -90,6 +92,54 @@ class ReferenceMenus(unittest.TestCase):
         # With no folder of its own there is nothing to be relative to.
         self.assertEqual(self.beside.replace(os.sep, '/'),
                          stored_reference_path(self.beside, None))
+
+
+@unittest.skipUnless(hasattr(nxt_io, 'compact_reference_path'),
+                     'needs an nxt core that writes paths under a root')
+class PickedFromUnderARoot(ReferenceMenus):
+    """A file under one of NXT_FILE_ROOTS is stored the way it would have
+    been typed, relative to the root, so it loads on another machine."""
+
+    def setUp(self):
+        super(PickedFromUnderARoot, self).setUp()
+        self.saved_roots = os.environ.get(file_fallbacks.NXT_FILE_ROOTS)
+        os.environ[file_fallbacks.NXT_FILE_ROOTS] = self.far_dir
+        file_fallbacks._ENV_ROOTS_CACHE.clear()
+
+    def tearDown(self):
+        if self.saved_roots is None:
+            os.environ.pop(file_fallbacks.NXT_FILE_ROOTS, None)
+        else:
+            os.environ[file_fallbacks.NXT_FILE_ROOTS] = self.saved_roots
+        file_fallbacks._ENV_ROOTS_CACHE.clear()
+        super(PickedFromUnderARoot, self).tearDown()
+
+    def test_a_file_elsewhere_is_stored_whole(self):
+        # Elsewhere is under a root in this class. See the next test.
+        pass
+
+    def test_a_file_under_a_root_is_stored_relative_to_it(self):
+        self.model.reference_layer(self.far, idx=1, chdir=self.graph_dir)
+        self.assertIn('far.nxt', self.stored_references())
+
+    def test_the_saved_graph_finds_it_from_another_root(self):
+        self.model.reference_layer(self.far, idx=1, chdir=self.graph_dir)
+        self.model.stage.top_layer.save()
+        moved = os.path.join(self.tmp, 'another_machines_root')
+        shutil.move(self.far_dir, moved)
+        os.environ[file_fallbacks.NXT_FILE_ROOTS] = moved
+        file_fallbacks._ENV_ROOTS_CACHE.clear()
+        stage = Session().load_file(self.top)
+        aliases = [layer.get_alias() for layer in stage._sub_layers]
+        self.assertIn('far', aliases)
+
+    def test_an_unsaved_layer_keeps_the_whole_path(self):
+        # Beside nothing, and under no root.
+        self.assertEqual(self.beside.replace(os.sep, '/'),
+                         stored_reference_path(self.beside, None))
+
+    def test_an_unsaved_layer_can_still_use_a_root(self):
+        self.assertEqual('far.nxt', stored_reference_path(self.far, None))
 
 
 if __name__ == '__main__':

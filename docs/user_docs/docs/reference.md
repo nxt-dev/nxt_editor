@@ -613,8 +613,9 @@ Two items on this menu change what a layer pulls in from disk:
   [file roots](#how-references-are-found) keeps working on other machines.
   The folder button next to the field picks a file with a file browser
   instead. A picked file that sits next to the layer, or in a folder below
-  it, is stored relative to the layer; anything else is stored as a full
-  path. A relative path is looked for under your file roots before the
+  it, is stored relative to the layer; one under a file root is stored
+  relative to that root, unless an earlier root holds a file of the same
+  name; anything else is stored as a full path. A relative path is looked for under your file roots before the
   layer's folder, so check the resolved view if a root might hold a file of
   the same name.
 - **+** adds an empty row and puts the cursor in the field, ready to type.
