@@ -1,0 +1,14 @@
+name: Stage Release
+
+# Builds nxt_editor into the studio rez packages as a stage version, for
+# trying a build without releasing it.
+on:
+  workflow_dispatch:
+
+jobs:
+  stage-release:
+    secrets: inherit
+    uses: squarebit-studios/sbgitworkflows/.github/workflows/stage_release.yml@main
+    with:
+      # build/ holds this repo's own build graphs, and rez would empty it.
+      build-directory: ".rez_build"

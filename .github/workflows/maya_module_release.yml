@@ -1,0 +1,180 @@
+# Build nxt and nxt_editor into per-host packages and publish them.
+#
+# Upstream's release.yml publishes to PyPI, which is the right shape for a
+# python package and the wrong one for a DCC: an artist needs a folder with a
+# .mod file in it, not a pip install. This produces that instead.
+#
+# The assembly itself is build/make_maya_plugin.nxt, which already knows how to
+# do it - it copies nxt_editor/integration/maya as the module template, drops
+# both packages under scripts/, and stamps the version into nxt.mod. This
+# workflow's job is to give that graph the two source trees and to publish what
+# it produces.
+#
+# nxt comes from the released rez package rather than from a checkout of the
+# other repository. That is what removes the need for a secret: GITHUB_TOKEN
+# only reaches the repository a workflow runs in, so reading squarebit-studios/
+# nxt, which is private, used to need a personal token that somebody owns and
+# has to rotate. Taking it from rez needs nothing, and packages what was
+# actually released rather than whatever is at the tip of that repository's
+# release branch.
+name: Host packages
+
+# Runs on the version tag, not on the push to release, so the archive lands on
+# the tag the rez release already made rather than needing a second one of its
+# own. Waiting for the tag also keeps this out of a race with the workflow that
+# creates it, and means nxt_core has been released by the time this resolves.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Pinned to this fork. Upstream releases through PyPI and should not start
+    # publishing host packages because a fork added a workflow.
+    if: github.repository == 'squarebit-studios/nxt_editor'
+    # macOS only, the same as the tests: the Windows runner is not set up to
+    # resolve these yet. A zip does not care which one builds it.
+    runs-on: [self-hosted, macOS]
+
+    # Publishing the release uses the built in token, which is read only by
+    # default in this org. This is the whole of what it needs; it is scoped to
+    # this repository and there is nothing to set up.
+    permissions:
+      contents: write
+
+    defaults:
+      run:
+        # A login shell, so rez is on PATH. Same as the org's other workflows.
+        shell: bash -leo pipefail {0}
+
+    steps:
+      - name: Checkout nxt_editor
+        uses: actions/checkout@v4
+        with:
+          path: nxt_editor
+
+      # The packaging graph reaches for ../nxt/nxt, beside the repository.
+      # This puts the released package there. rez is asked where nxt is rather
+      # than a path being guessed, so it keeps working wherever the packages
+      # live.
+      - name: Put the released nxt beside it
+        run: |
+          NXT_DIR=$(rez-env nxt_core -- python -c \
+            "import os, nxt; print(os.path.dirname(os.path.abspath(nxt.__file__)))")
+          echo "released nxt: $NXT_DIR"
+          rm -rf nxt && mkdir -p nxt
+          cp -R "$NXT_DIR" nxt/nxt
+          rez-env nxt_core -- python -c \
+            "import json; d=json.load(open('nxt/nxt/version.json'))['API']; \
+             print('packaging nxt_core %s.%s.%s' % (d['MAJOR'], d['MINOR'], d['PATCH']))"
+
+      - name: Read the version, and check the tag agrees
+        id: version
+        working-directory: nxt_editor
+        run: |
+          VERSION=$(python3 -c \
+            "import json; d=json.load(open('nxt_editor/version.json'))['EDITOR']; \
+             print('%s.%s.%s' % (d['MAJOR'], d['MINOR'], d['PATCH']))")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "$VERSION" != "$TAG" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version.json ($VERSION). Refusing to publish a package that says one thing and hangs off a tag saying another."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building host packages at $VERSION"
+
+      - name: Build the Maya module
+        working-directory: nxt_editor
+        run: |
+          rez-env nxt_core -- python -m nxt.cli -vv exec build/make_maya_plugin.nxt \
+            -s /make_module_folder \
+            -p /.src local
+
+      - name: Build the Unreal plugin
+        working-directory: nxt_editor
+        # The plugin carries nxt, nxt_editor and Qt.py in Content/Python.
+        run: |
+          rez-env nxt_core -- python -m nxt.cli -vv exec build/make_unreal_plugin.nxt \
+            -s /make_plugin
+
+      - name: Build the Blender addon
+        working-directory: nxt_editor
+        # Produces build/nxt_blender.zip, which is what Blender installs.
+        run: |
+          python3 build/make_blender_addon.py ../nxt/nxt
+
+      - name: Package them together
+        working-directory: nxt_editor
+        run: |
+          V="${{ steps.version.outputs.version }}"
+          STAGE="build/nxt_$V"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          mv build/nxt_maya "$STAGE/maya"
+          mv build/nxt_unreal "$STAGE/unreal"
+          mkdir -p "$STAGE/blender"
+          mv build/nxt_blender.zip "$STAGE/blender/"
+          cp nxt_editor/integration/blender/README.md "$STAGE/blender/"
+
+          # Every host carries its own nxt, nxt_editor and Qt.py, or it
+          # cannot load: Blender and Unreal ship no Qt.py at all. The
+          # editor's icons and styles are read from resources/ at startup,
+          # so the qrc and what it lists have to be there too.
+          unzip -q "$STAGE/blender/nxt_blender.zip" -d build/check_blender
+          fail=0
+          for dir in "$STAGE/maya/scripts" "$STAGE/unreal/Content/Python" \
+                     build/check_blender/nxt_blender/lib; do
+            for f in nxt/__init__.py nxt_editor/__init__.py \
+                     nxt_editor/qt_resources.py \
+                     nxt_editor/resources/resources.qrc Qt/__init__.py; do
+              if [ ! -s "$dir/$f" ]; then
+                echo "::error::$dir/$f is missing"
+                fail=1
+              fi
+            done
+            if [ -e "$dir/nxt_editor/qresources.py" ]; then
+              echo "::error::$dir/nxt_editor/qresources.py is rcc output from an old build and should not ship"
+              fail=1
+            fi
+            if [ -s "$dir/Qt/__init__.py" ] && \
+               [ "$(wc -c < "$dir/Qt/__init__.py")" -lt 10000 ]; then
+              echo "::error::$dir/Qt/__init__.py is too small to be Qt.py"
+              fail=1
+            fi
+          done
+          rm -rf build/check_blender
+          [ "$fail" = 0 ] || exit 1
+          (cd build && zip -qr "nxt_$V.zip" "nxt_$V")
+          echo "packaged nxt_${V}.zip"
+
+      - name: Publish onto the version tag
+        # Only when there is a tag to publish onto. Running this by hand
+        # on a branch is how the archive gets checked without a release
+        # being made, and it used to make one named after the branch.
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: nxt ${{ steps.version.outputs.version }}
+          files: nxt_editor/build/nxt_${{ steps.version.outputs.version }}.zip
+          # Adding to whatever the release on this tag already says rather
+          # than replacing it.
+          append_body: true
+          body: |
+            nxt and nxt_editor for every host, in one archive. Each folder
+            inside is ready to install; use the one for your host.
+
+            - **maya/** - point `MAYA_MODULE_PATH` at it, or drop it into your
+              Maya modules directory.
+            - **unreal/** - drop it into your project's `Plugins` folder.
+            - **blender/** - install `nxt_blender.zip` from Edit >
+              Preferences > Add-ons > Install from Disk.
+
+            Blender and Unreal have no Qt of their own. The first time,
+            use the nxt menu's **Install Qt (PySide6)**, or set
+            `NXT_QT_DEPS` to a folder where PySide6 is already installed.
+
+            Built from squarebit-studios/nxt_editor at this tag, with the
+            nxt_core that rez resolves for it.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
