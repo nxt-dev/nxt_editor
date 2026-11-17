@@ -3,6 +3,15 @@ import os
 import logging
 import sys
 
+# Optional components installed in nxt's own folder, jedi say, made
+# importable before anything asks for them. See optional_deps.
+from nxt_editor.integration import optional_deps as _optional_deps
+try:
+    _optional_deps.add_to_path()
+except Exception as _error:
+    logging.getLogger('nxt.nxt_editor').warning(
+        'Could not add the optional components to the path: %s', _error)
+
 # External
 from Qt import QtCompat, QtCore, QtWidgets, QtGui
 

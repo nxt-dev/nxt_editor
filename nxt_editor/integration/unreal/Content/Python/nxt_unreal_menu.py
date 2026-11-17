@@ -11,7 +11,9 @@ fetched whatever PyPI had rather than the one this plugin shipped with,
 and needed internet access and write access to the engine.
 
 Unreal ships no Qt, so PySide6 is installed once, into a folder outside the
-engine; the menu offers to do it. See nxt_editor/integration/qt_deps.py.
+engine; the menu offers to do it. See nxt_editor/integration/optional_deps.py.
+The other optional components, jedi say, are installed from the editor's
+Options > Optional Components.
 """
 import functools
 import importlib.util
@@ -100,7 +102,7 @@ def install_qt():
     with unreal.ScopedSlowTask(1, 'Installing PySide6 for nxt') as task:
         task.make_dialog()
         try:
-            deps.install()
+            deps.install(on_line=unreal.log)
         except RuntimeError as error:
             unreal.log_error(str(error))
             return

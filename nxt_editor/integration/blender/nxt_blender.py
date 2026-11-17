@@ -13,7 +13,8 @@ how it is developed.
 
 **Qt.** Blender ships no Qt and the editor is a Qt application, so PySide6
 has to be installed once; the menu offers to do it, into a folder outside
-Blender (see ``nxt_editor/integration/qt_deps.py``). Graphs run without
+Blender (see ``nxt_editor/integration/optional_deps.py``). The editor's
+Options > Optional Components does the rest, jedi say. Graphs run without
 it. Only the editor window needs it.
 
 **Blender owns the event loop.** Maya is a Qt application already, so an
@@ -414,7 +415,7 @@ class NXT_OT_install_qt(bpy.types.Operator):
         deps = qt_deps()
         print("nxt: installing PySide6 into {}".format(deps.deps_dir()))
         try:
-            where = deps.install()
+            where = deps.install(on_line=print)
         except RuntimeError as error:
             print(error)
             self.report({"ERROR"},
