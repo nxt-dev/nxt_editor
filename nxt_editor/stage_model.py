@@ -2236,6 +2236,40 @@ class StageModel(QtCore.QObject):
                                layer_path=layer.real_path)
         self.undo_stack.push(cmd)
 
+    def push_node_positions(self, node_paths=None, layer=None):
+        """Write where nodes are shown onto a layer, the target layer by
+        default, as one undo. Moving a node only ever writes its position
+        to the top layer, so a layer below keeps where the nodes were when
+        it was last the top, or nothing. Only top level nodes have a
+        position: children are stacked under their root.
+
+        :param node_paths: the nodes, the selected ones by default
+        :param layer: the layer to write to
+        :return: how many positions were written
+        """
+        layer = layer or self.target_layer
+        if node_paths is None:
+            node_paths = self.get_selected_nodes()
+        positions = {}
+        for path in node_paths:
+            if nxt_path.get_root_path(path) != path:
+                continue
+            if not (self.node_exists(path) or self.node_is_implied(path)):
+                continue
+            positions[path] = list(self.get_node_pos(path))
+        if not positions:
+            return 0
+        if len(positions) == 1:
+            text = 'Push position of {} to {}'.format(
+                list(positions)[0], layer.get_alias())
+        else:
+            text = 'Push {} positions to {}'.format(len(positions),
+                                                    layer.get_alias())
+        cmd = PushNodePositions(positions, model=self,
+                                layer_path=layer.real_path, text=text)
+        self.undo_stack.push(cmd)
+        return len(positions)
+
     # Backdrops, see nxt_editor.backdrops ----------------------------------
 
     def get_backdrops(self):

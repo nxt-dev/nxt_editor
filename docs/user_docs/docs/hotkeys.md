@@ -116,6 +116,7 @@ is not in the Hotkey Editor; see [Moving around](reference.md#moving-around).
 | Remove Instance                | Removes instance path from node overloading weaker layer instance opinions. | Removes Instance               | Ctrl+Shift+I |
 | Localize Node                  |                                                                             | Localize Node                  |              |
 | Revert Node                    |                                                                             | Revert Node                    |              |
+| Push Positions to Target Layer | Write where the selected nodes are now onto the target layer, so it keeps this layout without the layers above it. | Push Positions to Target Layer | |
 | Enable/Disable Node            |                                                                             | Enable/Disable Node            |      D       |
 | Parent                         |                               Parent node(s).                               | Parent                         |      P       |
 | Un-Parent                      |                             Un-parent node(s).                              | Un-Parent                      |   Shift+P    |

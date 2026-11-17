@@ -282,6 +282,16 @@ descendants.
 Pasting nodes (`Ctrl+V`) is a single step on the undo stack however many
 nodes are pasted.
 
+### Pushing positions to a lower layer
+
+Moving a node always saves where it is on the top layer, so a layer below
+keeps the layout it had when it was last the top, or none. To give a lower
+layer the layout you see, make it the target layer, select the nodes and
+pick **Push Positions to Target Layer** from the right click menu. It
+writes where the selected top level nodes are now onto the target layer,
+as one undo, and nothing moves. It is greyed out while the top layer is
+the target, as that is where positions go already.
+
 ## Code Editor
 
 The code editor shows the compute of the selected node. It is read only

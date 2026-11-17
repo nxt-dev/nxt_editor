@@ -738,6 +738,46 @@ class SetNodesPosition(NxtCommand):
         self.redo_effected_layer(layer.real_path)
 
 
+class PushNodePositions(NxtCommand):
+
+    """Write where nodes are shown onto one layer's own positions."""
+
+    def __init__(self, node_positions, model, layer_path, text):
+        """
+        :param node_positions: {root node path: [x, y]}
+        """
+        super(PushNodePositions, self).__init__(model)
+        self.layer_path = layer_path
+        self.new = copy.deepcopy(node_positions)
+        layer = model.lookup_layer(layer_path)
+        # What the layer itself had, None where it had nothing, so undo
+        # takes away what it did not have rather than leave a copy.
+        self.old = {}
+        for path in node_positions:
+            old = layer.positions.get(path)
+            self.old[path] = copy.deepcopy(old) if old is not None else None
+        self.setText(text)
+
+    def _write(self, positions):
+        layer = self.model.lookup_layer(self.layer_path)
+        for path, pos in positions.items():
+            if pos is None:
+                layer.positions.pop(path, None)
+            else:
+                layer.positions[path] = list(pos)
+        return layer
+
+    @processing
+    def undo(self):
+        self._write(self.old)
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self._write(self.new)
+        self.redo_effected_layer(layer.real_path)
+
+
 class SetBackdrops(NxtCommand):
 
     """Add, change or remove backdrops on one layer."""

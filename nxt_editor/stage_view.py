@@ -2279,6 +2279,12 @@ class StageView(QtWidgets.QGraphicsView):
             menu.addAction(self.authoring_actions.localize_node_action)
             if nodes_only_on_tgt:
                 menu.addAction(self.authoring_actions.revert_node_action)
+            # Positions are written to the top layer, so there is only
+            # somewhere else to push them with a lower layer the target.
+            push = self.authoring_actions.push_positions_action
+            push.setEnabled(self.model.target_layer is not
+                            self.model.top_layer)
+            menu.addAction(push)
         has_start = False
         for path in selected_nodes:
             if self.model.get_is_node_start(path):

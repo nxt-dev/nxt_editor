@@ -1028,6 +1028,18 @@ class NodeActions(NxtActionContainer):
         revert_icon.addPixmap(revert_pixmap_on, QtGui.QIcon.Normal,
                                 QtGui.QIcon.On)
         self.revert_node_action.setIcon(revert_icon)
+        # Push positions to the target layer
+
+        def push_positions():
+            self.main_window.model.push_node_positions()
+        self.push_positions_action = NxtAction(
+            text='Push Positions to Target Layer', parent=self)
+        self.push_positions_action.setToolTip(
+            'Push Positions to Target Layer')
+        self.push_positions_action.setWhatsThis(
+            'Write where the selected nodes are now onto the target layer, '
+            'so it keeps this layout without the layers above it.')
+        self.push_positions_action.triggered.connect(push_positions)
         # Select all
 
         def select_all():
@@ -1174,6 +1186,7 @@ class NodeActions(NxtActionContainer):
                                      self.remove_instance_action,
                                      self.localize_node_action,
                                      self.revert_node_action,
+                                     self.push_positions_action,
                                      self.disable_node_action,
                                      self.parent_nodes_action,
                                      self.unparent_nodes_action,
