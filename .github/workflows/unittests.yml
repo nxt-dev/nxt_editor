@@ -1,12 +1,9 @@
 name: Unittests
 
-# Runs the suite the way the rest of the org does: inside a rez resolve on
-# the studio runners, where nxt_editor's own requires supply everything the
-# tests need. Nothing is cloned from another repo, so nothing needs a token.
-#
-# This replaces the workflow inherited from nxt-dev, which pip installed
-# nxt-core straight from GitHub. That worked only while these repos were
-# public.
+# The nxt-dev copy of squarebit-studios' dev: the suite on hosted
+# runners. The squarebit job and its release workflows use private
+# shared workflows and studio runners, which can't run here.
+
 on:
   workflow_dispatch:
   pull_request:
@@ -15,35 +12,9 @@ on:
     branches-ignore: [ release ]
 
 jobs:
-  test-package:
-    # Studio runners and private shared workflows: squarebit only.
-    if: github.repository_owner == 'squarebit-studios'
-    secrets: inherit
-    uses: squarebit-studios/sbgitworkflows/.github/workflows/package_run_tests.yml@main
-    with:
-      package-name: "nxt_editor"
-      tests-path: "nxt_editor/test"
-      # The interpreters the hosts use: 3.11 for Maya 2025/2026, Blender 4
-      # and Unreal 5, 3.13 for Maya 2027 and Blender 5. They also resolve
-      # different Qt stacks here, PySide6 6.7 with Qt.py 1.4 on 3.11 and
-      # PySide6 6.11 with Qt.py 2 on 3.13, so between them both ends of
-      # what the package allows are covered. 3.12 is allowed but no host
-      # uses it, and there is no macOS python-3.12 rez package to test on.
-      python_versions: '[ "3.11", "3.13" ]'
-      # macOS only, by choice. The windows runner resolves fine (the missing
-      # package cache it reports is only a warning), but its rez repository
-      # is not the one releases go to: the mac runner releases into a
-      # Dropbox rez folder that had stopped syncing to the windows machines,
-      # which then lacked nxt_core 0.19+ and the python 3.13 test packages.
-      # Once that folder syncs, adding the windows runner here should work.
-      # Keep its rez package cache, local packages and work folder on the
-      # E: drive when it is: C: on that machine has little room.
-      runners: '[ [ "self-hosted", "macOS" ] ]'
-
   # The same suite on hosted runners, for the copies of this repo outside
   # squarebit-studios (nxt-dev), which can't reach the studio runners.
   test-public:
-    if: github.repository_owner != 'squarebit-studios'
     strategy:
       matrix:
         os: [ubuntu-24.04, windows-latest]
