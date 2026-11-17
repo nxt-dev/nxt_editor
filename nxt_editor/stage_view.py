@@ -61,6 +61,8 @@ class StageView(QtWidgets.QGraphicsView):
     # How far past a plug's edge, in pixels on screen whatever the zoom, a
     # line being dragged still snaps to it, see snap_plug_near.
     PLUG_SNAP_PIXELS = 12
+    # Held down, a left drag pans the graph as a middle drag does.
+    PAN_KEY = QtCore.Qt.Key_Space
 
     def __init__(self, model, parent=None):
         super(StageView, self).__init__(parent=parent)
@@ -125,6 +127,10 @@ class StageView(QtWidgets.QGraphicsView):
         self._clicked_something_locked = False
         self.new_node_selected = False
         self.panning = False
+        # Space held down turns a left drag into panning, for anyone
+        # without a middle button. See PAN_KEY.
+        self._pan_key_held = False
+        self._pan_key_panning = False
         self.zooming = False
         self._num_scheduled_scalings = 0
         self.zoom_start_pos = QtCore.QPointF(.0, .0)
@@ -261,6 +267,10 @@ class StageView(QtWidgets.QGraphicsView):
         self.zoom_keys_down = False
         self._held_keys = []
         self.zoom_button_down = False
+        # The pan key's release goes to whatever has focus now.
+        self._pan_key_held = False
+        if not self.panning:
+            self.update_pan_cursor()
         super(StageView, self).focusOutEvent(event)
 
     def dragEnterEvent(self, event):
@@ -1500,8 +1510,37 @@ class StageView(QtWidgets.QGraphicsView):
             self.model.set_line_points(key, points, text=text)
         stack.endMacro()
 
+    def update_pan_cursor(self):
+        """A closed hand while panning, an open one while the pan key is
+        held ready to, and otherwise the usual arrow."""
+        if self.panning:
+            self.viewport().setCursor(QtCore.Qt.ClosedHandCursor)
+        elif self._pan_key_held:
+            self.viewport().setCursor(QtCore.Qt.OpenHandCursor)
+        else:
+            self.viewport().unsetCursor()
+
+    def start_panning(self):
+        self.panning = True
+        self._previous_mouse_pos = None
+        self.update_pan_cursor()
+
+    def stop_panning(self):
+        self._previous_mouse_pos = None
+        self.panning = False
+        self._pan_key_panning = False
+        self._current_pan_distance = 0.0
+        self.update_pan_cursor()
+
     def keyPressEvent(self, event):
         key = event.key()
+        if key == self.PAN_KEY and self.scene().focusItem() is None:
+            # Held down, a key repeats, so it is only taken the first time.
+            if not event.isAutoRepeat():
+                self._pan_key_held = True
+                self.update_pan_cursor()
+            event.accept()
+            return
         if key not in self._held_keys:
             self._held_keys.append(key)
         self.zooming = False
@@ -1513,6 +1552,12 @@ class StageView(QtWidgets.QGraphicsView):
 
     def keyReleaseEvent(self, event):
         key = event.key()
+        if key == self.PAN_KEY and self._pan_key_held:
+            if not event.isAutoRepeat():
+                self._pan_key_held = False
+                self.update_pan_cursor()
+            event.accept()
+            return
         if key in self._held_keys:
             self._held_keys.remove(key)
         self.zooming = False
@@ -1540,6 +1585,15 @@ class StageView(QtWidgets.QGraphicsView):
             self.zoom_start_pos = event.pos()
             self._previous_mouse_pos = event.pos()
             event.accept()
+
+        if (event.button() == QtCore.Qt.LeftButton and self._pan_key_held
+                and not self.zooming):
+            # The pan key held turns a left drag into panning, and keeps
+            # it from selecting or moving anything.
+            self._pan_key_panning = True
+            self.start_panning()
+            event.accept()
+            return
 
         # left button event
         if event.button() == QtCore.Qt.LeftButton:
@@ -1590,8 +1644,7 @@ class StageView(QtWidgets.QGraphicsView):
         # middle and right button events
         elif event.button() == QtCore.Qt.MiddleButton:
             # start panning action
-            self.panning = True
-            self._previous_mouse_pos = None
+            self.start_panning()
             event.accept()
             return
 
@@ -1663,7 +1716,10 @@ class StageView(QtWidgets.QGraphicsView):
         super(StageView, self).mouseMoveEvent(event)
         item = self.itemAt(event.pos())
         app = QtWidgets.QApplication
-        if item and hasattr(item, 'locked') and item.locked:
+        if self._pan_key_held:
+            # Ready to pan, not to click anything.
+            app.restoreOverrideCursor()
+        elif item and hasattr(item, 'locked') and item.locked:
             if not app.overrideCursor():
                 app.setOverrideCursor(QtCore.Qt.ForbiddenCursor)
         else:
@@ -1671,6 +1727,11 @@ class StageView(QtWidgets.QGraphicsView):
 
     def mouseReleaseEvent(self, event):
         if self.mini_map.handle_mouse_release(event):
+            return
+        if (self._pan_key_panning and
+                event.button() == QtCore.Qt.LeftButton):
+            self.stop_panning()
+            event.accept()
             return
         if (self._point_drag is not None and
                 event.button() == QtCore.Qt.LeftButton):
@@ -1836,9 +1897,7 @@ class StageView(QtWidgets.QGraphicsView):
             self.contextMenuEvent(event)
         # complete panning action
         if self.panning and event.button() == QtCore.Qt.MiddleButton:
-            self._previous_mouse_pos = None
-            self.panning = False
-            self._current_pan_distance = 0.0
+            self.stop_panning()
             event.accept()
             return
         super(StageView, self).mouseReleaseEvent(event)

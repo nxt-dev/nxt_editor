@@ -75,6 +75,10 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Nudge left                  |                                                       | Nudge left                       | Shift+Left  |
 | Nudge right                 |                                                       | Nudge right                      | Shift+Right |
 
+Hold `Space` and drag with the left mouse button to pan the graph, as a
+middle button drag does. It is a mouse action rather than a shortcut, so it
+is not in the Hotkey Editor; see [Moving around](reference.md#moving-around).
+
 ## Layers
 |          Name          |           What's this           |        Tool tip        |   Shortcut   |
 | :--------------------- | :-----------------------------: | :--------------------- | :----------: |

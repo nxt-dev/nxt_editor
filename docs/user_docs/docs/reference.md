@@ -37,6 +37,16 @@ so switching back to a tab is instant.
 and shows it again. The editor remembers your choice. With the graph
 hidden, switch between open files from the bottom of the **Window** menu.
 
+### Moving around
+
+- **Pan** by dragging with the middle mouse button, or hold `Space` and
+  drag with the left button, for a trackpad or a mouse without a middle
+  button. The cursor turns into a hand while `Space` is held, and a left
+  drag then only pans: it does not select or move anything.
+- **Zoom** with the scroll wheel, or hold `Alt` and drag with the right
+  mouse button.
+- **Frame** everything with `A`, or the selected nodes with `F`.
+
 ### How nodes look
 
 The editor is drawn in neutral dark greys, so the only color on screen is
