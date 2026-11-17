@@ -77,7 +77,6 @@
             "child_order": [
                 "copy_source",
                 "qt_py",
-                "completion_deps",
                 "populate_mod_template",
                 "clean_up"
             ],
@@ -120,41 +119,6 @@
                 "        print('!' * 79)",
                 "        print('Failed to delete source clone, do so by hand!')",
                 "        print(' ' * 3 + '${src_clone}')"
-            ]
-        },
-        "/make_module_folder/completion_deps": {
-            "attrs": {
-                "requirement": {
-                    "comment": "Kept the same as the 'completion' extra in setup.py, test_maya_module_completion.py checks.",
-                    "type": "raw",
-                    "value": "jedi>=0.19,<0.21"
-                }
-            },
-            "code": [
-                "# jedi (and parso, which it needs), so Python Analysis completes in Maya",
-                "# straight from the zip. Standalone it is 'pip install nxt-editor[completion]',",
-                "# but a module folder has no pip step, and asking artists to pip install",
-                "# into mayapy is exactly what a module folder exists to avoid.",
-                "#",
-                "# Both are pure Python wheels, so what is installed here runs on every",
-                "# Maya the module supports, whatever python builds it. Released wheels",
-                "# from PyPI, inside the range setup.py already promises to work with.",
-                "target = '${mod_folder}/scripts'",
-                "subprocess.check_call([sys.executable, '-m', 'pip', 'install',",
-                "                       '--target', target, '--only-binary', ':all:',",
-                "                       '--no-compile', '--disable-pip-version-check',",
-                "                       '${requirement}'])",
-                "",
-                "# pip leaves a bin folder for packages with scripts. Neither has any, but",
-                "# nothing in it could be of use inside a Maya module.",
-                "shutil.rmtree(os.path.join(target, 'bin'), ignore_errors=True)",
-                "",
-                "# The same check Qt.py gets: what ships has to at least be there.",
-                "for package in ('jedi', 'parso'):",
-                "    init = os.path.join(target, package, '__init__.py')",
-                "    if not os.path.isfile(init):",
-                "        raise RuntimeError('{} was not installed into the module'.format(package))",
-                "print('bundled jedi and parso for code completion')"
             ]
         },
         "/make_module_folder/copy_source": {

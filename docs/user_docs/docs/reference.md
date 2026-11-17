@@ -378,8 +378,7 @@ string and offers `path.split` and `path.splitlines`.
 - It is optional. Install it with `pip install nxt-editor[completion]` (see
   [Standalone Installation](install.md#standalone-installation)). Without
   it, **Python Analysis (jedi)** is greyed out in the menu, and its
-  description says how to install it. The Maya module from the release
-  already carries it.
+  description says how to install it.
 - It is only asked after a dot. Bare names still come from the other
   sources, so switching one of those off keeps its names out of the list.
 - It is asked once typing pauses, or straight away with `Ctrl+Space`. The
