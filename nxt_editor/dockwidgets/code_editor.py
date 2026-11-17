@@ -1345,6 +1345,27 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         return [root + dot + name
                 for name in code_completion.live_completions(obj, rest)]
 
+    @staticmethod
+    def node_attr_names(model, node_path):
+        """Every attribute a node's compute can use, as the Property Editor
+        lists them: its own from every layer, then what it inherits from its
+        parents and gets from what it instances.
+
+        Asked of the composited graph, because the target layer alone only
+        knows what that layer says about the node.
+
+        :rtype: list
+        """
+        comp = model.comp_layer
+        names = []
+        for found in (model.get_node_local_attr_names(node_path, comp),
+                      model.get_node_inherited_attr_names(node_path, comp),
+                      model.get_node_instanced_attr_names(node_path, comp)):
+            for name in found:
+                if name not in names:
+                    names.append(name)
+        return names
+
     def build_completion_words(self):
         """Everything worth offering as a completion for this node.
 
@@ -1365,7 +1386,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             node_path = self.ce_widget.node_path
             if model and node_path:
                 try:
-                    for name in model.get_node_attr_names(node_path):
+                    for name in self.node_attr_names(model, node_path):
                         words.add(name)
                         words.add('self.' + name)
                         # How an attribute is written in a compute
@@ -1435,7 +1456,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                 node_path = body.rpartition('.')[0]
                 return [tokens.TOKEN_PREFIX + node_path + '.' + name
                         + tokens.TOKEN_SUFFIX
-                        for name in model.get_node_attr_names(node_path)]
+                        for name in self.node_attr_names(model, node_path)]
             return [tokens.TOKEN_PREFIX + path
                     for path in model.get_descendants(nxt_path.WORLD)]
         except Exception:
@@ -1521,8 +1542,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.jedi_busy = True
         self.jedi_force = force
         # The names are gathered here, on the main thread; jedi only reads
-        # them on the worker.
-        namespace = self.completion_namespace()
+        # them on the worker. STAGE and self are left out, see
+        # completion_namespace.
+        namespace = self.completion_namespace(live=False)
         answer = self.jedi_answer
 
         def work():
