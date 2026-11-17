@@ -791,6 +791,16 @@ and stays in view however far you scroll the table. The source looks like a
 button only under the mouse; click it to go to that node. It is off by
 default and remembered with your preferences.
 
+### Filtering attributes
+
+Type in the **Filter attributes** field above the attribute table to show
+only the attributes whose name or value has what you typed in it, ignoring
+case. As in the node searches, `*` stands for anything and commas separate
+terms, any of which can match: `arm*len, side` shows `arm_length` and
+`side`. Values match as the table shows them, raw, resolved or cached. The
+filter stays on as you select other nodes; clear it with the button at its
+end.
+
 ### Position
 
 The **Position** fields show where the selected root node is in the

@@ -1,4 +1,5 @@
 # Built-in
+import re
 import textwrap
 import sys
 import logging
@@ -387,6 +388,39 @@ class PropertyEditor(DockWidgetBase):
         self.attributes_layout.setSpacing(0)
         self.attributes_widget.setLayout(self.attributes_layout)
 
+        # filter
+        self.attr_filter_layout = QtWidgets.QHBoxLayout()
+        self.attr_filter_layout.setContentsMargins(0, 4, 0, 4)
+        self.attributes_layout.addLayout(self.attr_filter_layout)
+        self.attr_filter_field = QtWidgets.QLineEdit(parent=self)
+        self.attr_filter_field.setObjectName('Attribute Filter')
+        self.attr_filter_field.setPlaceholderText('Filter attributes')
+        self.attr_filter_field.setClearButtonEnabled(True)
+        self.attr_filter_field.setToolTip(
+            'Show the attributes whose name or value has what you type in '
+            'it, ignoring case. * stands for anything and commas separate '
+            'more than one.')
+        self.attr_filter_field.setFont(theme.font())
+        self.attr_filter_field.setStyleSheet(theme.fill('''
+            QLineEdit {
+                background-color: {RAISED};
+                border: 1px solid transparent;
+                border-radius: 11px;
+                padding: 2px 8px;
+                color: {TEXT};
+            }
+
+            QLineEdit:hover {
+                border: 1px solid {BORDER_STRONG};
+            }
+
+            QLineEdit:focus {
+                border: 1px solid {ACCENT};
+            }
+            '''))
+        self.attr_filter_field.textChanged.connect(self.filter_attrs)
+        self.attr_filter_layout.addWidget(self.attr_filter_field)
+
         self.table_view = AttrsTableView(self)
         self.table_view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.table_view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked)
@@ -415,7 +449,7 @@ class PropertyEditor(DockWidgetBase):
                                    headers=self.header_names,
                                    parent=self)
 
-        self.proxy_model = QtCore.QSortFilterProxyModel()
+        self.proxy_model = AttrFilterProxyModel()
         self.proxy_model.setSourceModel(self.model)
 
         self.table_view.setModel(self.proxy_model)
@@ -990,6 +1024,14 @@ class PropertyEditor(DockWidgetBase):
             self.stage_model.add_node_attr(node_path=self.node_path,
                                            layer=self.stage_model.target_layer)
 
+    def filter_attrs(self, text=None):
+        """Show only the attributes matching text, see
+        AttrFilterProxyModel. The filter stays as other nodes are shown, to
+        look at the same attributes on each of them."""
+        if text is None:
+            text = self.attr_filter_field.text()
+        self.proxy_model.set_filter_text(text)
+
     def get_selected_attr_names(self):
         selection = self.table_view.selectedIndexes()
         attr_names = set()
@@ -1542,6 +1584,48 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
     def columnCount(self, parent):
         return len(self._data[0])
+
+
+def attr_filter_regex(text):
+    """What was typed in the attribute filter as a regex, or None when it
+    filters nothing. Like the node searches: ignoring case, * stands for
+    anything and commas separate terms, any of which can match.
+
+    :rtype: re.Pattern or None
+    """
+    terms = [term.strip() for term in (text or '').split(',')]
+    terms = ['.*'.join(re.escape(part) for part in term.split('*'))
+             for term in terms if term.strip('*')]
+    if not terms:
+        return None
+    return re.compile('|'.join(terms), re.IGNORECASE)
+
+
+class AttrFilterProxyModel(QtCore.QSortFilterProxyModel):
+    """Sorts the attribute table and hides the rows the filter field does
+    not match. A row matches on its name or on its value as the table
+    shows it, raw, resolved or cached."""
+
+    def __init__(self, parent=None):
+        super(AttrFilterProxyModel, self).__init__(parent)
+        self.filter_regex = None
+
+    def set_filter_text(self, text):
+        self.filter_regex = attr_filter_regex(text)
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        if self.filter_regex is None:
+            return True
+        model = self.sourceModel()
+        for column in (COLUMNS.name, COLUMNS.value):
+            index = model.index(source_row, column, source_parent)
+            if not index.isValid():
+                continue
+            value = model.data(index, QtCore.Qt.DisplayRole)
+            if value is not None and self.filter_regex.search(str(value)):
+                return True
+        return False
 
 
 class AttrsTableView(QtWidgets.QTableView):
