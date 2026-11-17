@@ -397,7 +397,10 @@ what the build left behind: `STAGE.` on whatever the graph stored on the
 stage (`STAGE.rig`, then `STAGE.rig.build_guides`), and `self.` on the node
 being edited as it ran. This needs **Node Attributes And Tokens** switched
 on, and works with or without jedi. Nothing is run to complete: a property
-is listed, but its value is not looked inside.
+is listed, but its value is not looked inside, and the names come from what
+is stored on each object rather than from its `__dir__` or `__getattr__`.
+At most 2000 names that match what you typed are offered, and nothing is
+offered while a node is running.
 
 #### Autocomplete options
 
