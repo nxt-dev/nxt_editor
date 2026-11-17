@@ -635,6 +635,16 @@ class StageView(QtWidgets.QGraphicsView):
         self.status_label.setText(text)
         self._status_timer.start(msecs)
 
+    def show_hidden_status(self, hidden):
+        """Say why the view stayed put: the nodes it was asked to show are
+        on layers hidden in the graph."""
+        if len(hidden) == 1:
+            text = '{} is on a layer hidden in the graph'.format(hidden[0])
+        else:
+            text = '{} nodes are on layers hidden in the graph'.format(
+                len(hidden))
+        self.show_status(text)
+
     def frame_selection(self):
         self.frame_nodes(self.model.selection)
 
@@ -647,12 +657,7 @@ class StageView(QtWidgets.QGraphicsView):
         if hidden:
             node_paths = [path for path in node_paths if path not in hidden]
             if not node_paths:
-                if len(hidden) == 1:
-                    text = '{} is on a layer hidden in the graph'.format(
-                        hidden[0])
-                else:
-                    text = '{} nodes are on layers hidden in the '                            'graph'.format(len(hidden))
-                self.show_status(text)
+                self.show_hidden_status(hidden)
                 return
         bounding_rect = QtCore.QRectF()
         for path in node_paths:
@@ -1055,8 +1060,12 @@ class StageView(QtWidgets.QGraphicsView):
 
     def go_to_node(self, node_path):
         """Select a node, everywhere it is shown, and bring it into view
-        here without zooming."""
+        here without zooming. A node hidden with its layers is selected
+        but the view stays put and says why, as framing does."""
         self.model.set_selection([node_path])
+        if self.node_hidden(node_path):
+            self.show_hidden_status([node_path])
+            return
         graphic = self.get_node_graphic(node_path)
         if graphic:
             self.centerOn(node_scene_rect(graphic).center())

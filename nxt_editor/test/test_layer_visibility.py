@@ -16,6 +16,7 @@ import shutil
 import sys
 import tempfile
 import time
+import types
 import unittest
 from unittest import mock
 
@@ -26,6 +27,7 @@ from Qt import QtCore, QtGui, QtTest, QtWidgets
 from nxt import nxt_node
 from nxt.session import Session
 from nxt_editor import stage_model, user_dir
+from nxt_editor import connection_graphics_item as lines
 from nxt_editor.dockwidgets.layer_manager import (EyeCheckboxDelegate,
                                                    LayerModel)
 from nxt_editor.test.test_paste_is_one_undo import Pasteboard
@@ -377,6 +379,46 @@ class FramingHiddenNodes(_SameGraph):
             self.view.frame_nodes(['/template', '/made'])
         rect = frame_rect.call_args[0][0]
         self.assertLess(rect.right(), 9000)
+
+    def test_going_to_a_hidden_node_stays_put_and_says_why(self):
+        # Go to Source or Target on a line, here or in the Instance View.
+        self.hide()
+        with mock.patch.object(self.view, 'centerOn') as center_on:
+            self.view.go_to_node('/template')
+        center_on.assert_not_called()
+        self.assertIn('/template', self.view.status_label.text())
+        self.assertTrue(self.model.get_layer_hidden(
+            self.library_layer.real_path))
+        self.model.clear_selection()
+
+    def test_going_to_a_node_in_view_centers_on_it(self):
+        self.hide()
+        with mock.patch.object(self.view, 'centerOn') as center_on:
+            self.view.go_to_node('/made')
+        center_on.assert_called_once()
+        self.model.clear_selection()
+
+
+class HiddenExecLines(_SameGraph):
+    """Exec lines are always drawn, except to or from a hidden node."""
+
+    def exec_line(self, src, tgt):
+        return types.SimpleNamespace(
+            kind=lines.EXEC_LINES, src_node_path=src, tgt_node_path=tgt,
+            src_attr_name=nxt_node.INTERNAL_ATTRS.EXECUTE_IN,
+            tgt_attr_name=nxt_node.INTERNAL_ATTRS.EXECUTE_IN)
+
+    def test_an_exec_line_to_a_hidden_node_is_hidden(self):
+        self.hide()
+        self.assertFalse(self.view.line_shown(
+            self.exec_line('/made', '/template')))
+        self.assertFalse(self.view.line_shown(
+            self.exec_line('/template', '/made')))
+
+    def test_other_exec_lines_are_still_drawn(self):
+        self.hide()
+        self.assertTrue(self.view.line_shown(
+            self.exec_line('/made', '/made')))
 
 
 class MakingNodesOnAHiddenLayer(_SameGraph):

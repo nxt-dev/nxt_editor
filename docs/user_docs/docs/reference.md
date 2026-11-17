@@ -620,6 +620,10 @@ it again, or use **Show In Graph** on the layer's menu, to bring them back.
 - Framing leaves hidden nodes out. When everything there is to frame is
   hidden, for example a node picked in the Outliner, the graph stays where
   it is and says the node is on a hidden layer. Show the layer to see it.
+  **Go to Source** and **Go to Target** on a line, in the graph or the
+  Instance View, do the same.
+- Lines to and from a hidden node are hidden whatever the line toggles
+  say, exec lines included.
 - It is remembered for you, per graph. It is not saved in the layer and
   does not mark anything unsaved. Saving the graph to a new file keeps it,
   a reference you remove is forgotten, and two tabs on the same graph each
