@@ -168,6 +168,8 @@ class USER_PREF():
     ATTR_SORTING = 'attribute_sorting'
     EXEC_FRAMING = 'execution_framing'
     SKIP_INITIAL_BREAK = 'skip_initial_breakpoint'
+    # Runs go straight through every breakpoint, which are kept as they are.
+    IGNORE_BREAKS = 'ignore_breakpoints'
     HISTORICAL_LABEL_FORMAT = 'historical_label_format'
     NODE_TOOLTIPS = 'node_tooltips'
     GRID_SNAP = 'snap_to_grid'

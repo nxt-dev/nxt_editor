@@ -4,6 +4,9 @@ Each is the play triangle of Execute Graph, with what it runs beside it:
 one node for the selected nodes, a parent and its children for a
 hierarchy, and a node with an arrow down for running on from it. Grey, with
 the triangle going green under the mouse, as Execute Graph's does.
+
+Ignore Breakpoints' button is drawn here too, a hollow breakpoint with a
+line through it.
 """
 # External
 from Qt import QtCore, QtGui
@@ -11,6 +14,9 @@ from Qt import QtCore, QtGui
 GREY = '#a09e9e'
 GREEN = '#49cc54'
 NODE = '#c8c6c6'
+# The breakpoint buttons' red, and the blue they go under the mouse.
+BREAK_RED = '#ec1c24'
+BLUE = '#39aae0'
 # The size the toolbar's other icons are drawn at, and how many times over
 # to draw them, so they are sharp on a high DPI screen too.
 SIZE = QtCore.QSize(17, 16)
@@ -99,3 +105,33 @@ def execute_from():
     :rtype: QtGui.QIcon
     """
     return _icon(_from)
+
+
+def _ignore_breaks_pixmap(line_color):
+    pixmap = QtGui.QPixmap(SIZE * SCALE)
+    pixmap.fill(QtCore.Qt.transparent)
+    painter = QtGui.QPainter(pixmap)
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    painter.scale(SCALE, SCALE)
+    # The red square of a breakpoint, hollow as the graph draws it when
+    # breakpoints are ignored, with a line through it.
+    painter.setPen(QtGui.QPen(QtGui.QColor(BREAK_RED), 2.0))
+    painter.setBrush(QtCore.Qt.NoBrush)
+    painter.drawRect(QtCore.QRectF(3.5, 3.0, 10.0, 10.0))
+    painter.setPen(QtGui.QPen(QtGui.QColor(line_color), 1.6))
+    painter.drawLine(QtCore.QPointF(1.5, 14.5), QtCore.QPointF(15.5, 1.5))
+    painter.end()
+    return pixmap
+
+
+def ignore_breakpoints():
+    """A hollow breakpoint with a line through it, grey and blue under the
+    mouse as the other breakpoint buttons are.
+
+    :rtype: QtGui.QIcon
+    """
+    icon = QtGui.QIcon()
+    for state in (QtGui.QIcon.Off, QtGui.QIcon.On):
+        icon.addPixmap(_ignore_breaks_pixmap(GREY), QtGui.QIcon.Normal, state)
+        icon.addPixmap(_ignore_breaks_pixmap(BLUE), QtGui.QIcon.Active, state)
+    return icon

@@ -3076,6 +3076,16 @@ class StageModel(QtCore.QObject):
             if points:
                 prefs[layer_path] = points
 
+    @staticmethod
+    def breakpoints_ignored():
+        """Whether runs are going through every breakpoint, as the Ignore
+        Breakpoints toggle asks. The breakpoints themselves are kept.
+
+        :rtype: bool
+        """
+        pref_key = user_dir.USER_PREF.IGNORE_BREAKS
+        return bool(user_dir.user_prefs.get(pref_key, False))
+
     def get_breakpoints(self, layer=None):
         """The paths of the nodes with a breakpoint, on layer or the top
         layer."""
@@ -4260,6 +4270,11 @@ class StageModel(QtCore.QObject):
         if self.last_hit_break is not None:
             if self.last_hit_break in breaks:
                 breaks.remove(self.last_hit_break)
+        # Ignored breakpoints stay where they are, a run just goes through.
+        if breaks and self.breakpoints_ignored():
+            logger.execinfo('Ignoring {} breakpoint(s), see Execute > Ignore '
+                            'Breakpoints.'.format(len(breaks)))
+            breaks = []
         self._set_build_paused(False)
         for i in range(start, stop):
             node_path = self.current_build_order[i]

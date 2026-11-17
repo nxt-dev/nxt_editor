@@ -2139,6 +2139,20 @@ class ExecuteActions(NxtActionContainer):
         clear_icon.addPixmap(clear_pixmap_on, QtGui.QIcon.Normal,
                              QtGui.QIcon.On)
         self.clear_breaks_action.setIcon(clear_icon)
+        # Ignore breakpoints, without taking them off. Read as a run goes,
+        # so it can be flipped while a build is paused at one.
+        self.ignore_breaks_action = BoolUserPrefAction(
+            'Ignore Breakpoints', user_dir.USER_PREF.IGNORE_BREAKS,
+            parent=self)
+        self.ignore_breaks_action.setAutoRepeat(False)
+        self.ignore_breaks_action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        self.ignore_breaks_action.setToolTip('Ignore Breakpoints')
+        self.ignore_breaks_action.setWhatsThis(
+            'Runs go straight through every breakpoint while this is on. The '
+            'breakpoints are kept.')
+        self.ignore_breaks_action.setIcon(exec_icons.ignore_breakpoints())
+        self.ignore_breaks_action.toggled.connect(
+            self.main_window.on_ignore_breaks_toggled)
 
         # Toggle start point
 
@@ -2334,6 +2348,7 @@ class ExecuteActions(NxtActionContainer):
                                      self.add_break_action,
                                      self.remove_break_action,
                                      self.clear_breaks_action,
+                                     self.ignore_breaks_action,
                                      self.wt_recomp_action,
                                      self.clear_cache_action,
                                      self.enable_cmd_port_action,

@@ -663,6 +663,15 @@ QCheckBox::indicator {
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
 
+    def on_ignore_breaks_toggled(self, ignored=None):
+        """Redraw the breakpoints of every open graph, which are hollow
+        while they are ignored. Nodes cache how they look, so each is told.
+        """
+        for open_file in self.open_files.values():
+            model = open_file.get('model')
+            if model:
+                model.breaks_changed.emit(tuple(model.get_breakpoints()))
+
     @staticmethod
     def ding():
         if user_dir.user_prefs.get(user_dir.USER_PREF.DING, True):
@@ -1443,6 +1452,7 @@ class ExecuteToolBar(ToolBar):
                 self.exec_actions.add_break_action,
                 self.exec_actions.remove_break_action,
                 self.exec_actions.clear_breaks_action,
+                self.exec_actions.ignore_breaks_action,
             ]
         )
 
@@ -1626,6 +1636,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.execute_menu.addAction(self.exec_actions.execute_selected_action)
         self.execute_menu.addAction(self.exec_actions.execute_hierarchy_action)
         self.execute_menu.addAction(self.exec_actions.execute_graph_action)
+        self.execute_menu.addSeparator()
+        self.execute_menu.addAction(self.exec_actions.ignore_breaks_action)
+        self.execute_menu.addSeparator()
         self.execute_menu.addAction(self.exec_actions.clear_cache_action)
         self.execute_menu.addAction(self.exec_actions.wt_recomp_action)
         # Populate action data for window actions

@@ -130,6 +130,13 @@ what it runs.
 - **Execute Hierarchy**, the play button with a parent and its children:
   runs the selected node and every node under it.
 
+**Ignore Breakpoints**, in the Execute menu and on the toolbar beside the
+other breakpoint buttons, lets every run go straight through breakpoints
+without taking any of them off. While it is on, breakpoints are drawn as
+hollow red squares. It can be turned on while a build is paused at a
+breakpoint, and the rest of the run goes through. The editor remembers it
+between sessions.
+
 ### Find Node
 
 Press `/` over the graph to find nodes. Type any part of a node's name, and

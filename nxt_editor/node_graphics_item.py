@@ -1190,6 +1190,12 @@ class NodeExecutionPlug(NodeGraphicsPlug):
             painter.setBrush(colors.BREAK_COLOR)
             painter.setPen(shape_border_pen)
             painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
+            if self.model.breakpoints_ignored():
+                # Hollow while runs go through it, kept but not stopping.
+                inner = self.radius - 3
+                painter.setBrush(colors.GRAPH_BG_COLOR)
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.drawRect(inner * -1, inner * -1, inner * 2, inner * 2)
 
     def _buildTriangle(self, offset, side_length):
         polygon = QtGui.QPolygonF()
