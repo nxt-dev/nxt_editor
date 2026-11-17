@@ -26,8 +26,11 @@ def plugin_version():
 
 
 # A studio that opens the editor from its own pipeline menu or shelf does not
-# want a second, top level "nxt" menu beside it. The nxt_ui command is still
-# registered, so their menu item only has to call it.
+# want a second, top level "nxt" menu beside it. Every host plugin asks this
+# one function, so the rule is the same in Maya, Blender and Unreal, and each
+# still has a way to open the editor without the menu. Blender and Unreal
+# load this file by its path before Qt may exist, which is one more reason
+# it imports nothing but the standard library.
 NO_MENU_ENV_VAR = 'NXT_NO_MENU'
 _FALSE_STRINGS = ('', '0', 'false', 'no', 'off')
 

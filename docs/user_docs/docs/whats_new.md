@@ -143,6 +143,12 @@ Each item links to the part of the docs that explains it in full.
   graph with `'NoneType' object has no attribute '_source_layer'`.
 - Layers show their colors again in the list of layers to save on close.
 
+## Unreleased
+
+- `NXT_NO_MENU=1` leaves nxt's own menu out of Maya, Blender and Unreal, for
+  pipelines that open the editor from their own menu. See
+  [Leaving the nxt menu out](install.md#leaving-the-nxt-menu-out).
+
 ## nxt_editor 4.6.1
 
 **New**

@@ -24,6 +24,13 @@ it was installed for.
 # Launch
 From the top menu **nxt**, select **Open Editor**.
 
+Set `NXT_NO_MENU=1` before the editor starts to leave the **nxt** menu out,
+as in Maya and Blender. The editor still opens from Python:
+
+    import nxt_unreal_menu; nxt_unreal_menu.launch_nxt_editor()
+
+and `nxt_unreal_menu.install_qt()` does what **Install Qt (PySide6)** does.
+
 # Update
 Replace the plugin folder with the one from a newer release.
 

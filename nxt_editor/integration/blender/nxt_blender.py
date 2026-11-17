@@ -17,6 +17,10 @@ Blender (see ``nxt_editor/integration/optional_deps.py``). The editor's
 Options > Optional Components does the rest, jedi say. Graphs run without
 it. Only the editor window needs it.
 
+**No menu.** ``NXT_NO_MENU=1`` leaves the menu out, by the same rule as
+Maya and Unreal. The operators are still registered, so a studio's own menu
+can call ``bpy.ops.nxt.open_editor()``.
+
 **Blender owns the event loop.** Maya is a Qt application already, so an
 nxt window just joins its loop. Blender knows nothing about Qt, so a timer
 hands Qt a slice of Blender's loop while an editor is open; without it
@@ -178,29 +182,55 @@ def _core_dir():
     return os.path.abspath(list(spec.submodule_search_locations)[0])
 
 
-def qt_deps():
-    """nxt_editor's Qt installer, loaded by path.
+def _load_integration(module_name, file_name):
+    """A file from nxt_editor/integration, loaded by path.
 
     Loaded that way because importing anything under nxt_editor imports Qt,
     which is the thing that may not be there yet.
 
+    :param module_name: the name to keep it under in ``sys.modules``.
+    :type module_name: str
+    :param file_name: the file in nxt_editor/integration.
+    :type file_name: str
     :return: the module, or ``None`` when nxt_editor cannot be found.
     :rtype: module | None
     """
-    found = sys.modules.get("nxt_qt_deps")
+    found = sys.modules.get(module_name)
     if found is not None:
         return found
     for root in _source_dirs():
-        path = os.path.join(root, "nxt_editor", "integration", "qt_deps.py")
+        path = os.path.join(root, "nxt_editor", "integration", file_name)
         if os.path.isfile(path):
             break
     else:
         return None
-    spec = importlib.util.spec_from_file_location("nxt_qt_deps", path)
+    spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    sys.modules["nxt_qt_deps"] = module
+    sys.modules[module_name] = module
     return module
+
+
+def qt_deps():
+    """nxt_editor's Qt installer.
+
+    :return: the module, or ``None`` when nxt_editor cannot be found.
+    :rtype: module | None
+    """
+    return _load_integration("nxt_qt_deps", "qt_deps.py")
+
+
+def wants_menu():
+    """Whether to add the NXT menu, by the same rule as Maya and Unreal.
+
+    ``NXT_NO_MENU=1`` leaves it out. The operators are registered either
+    way, so ``bpy.ops.nxt.open_editor()`` still opens the editor.
+
+    :return: whether to add it.
+    :rtype: bool
+    """
+    integration = _load_integration("nxt_integration", "__init__.py")
+    return integration is None or integration.wants_menu()
 
 
 def has_qt():
@@ -713,6 +743,9 @@ def _draw_menu(self, context):
 CLASSES = (NXT_OT_open_editor, NXT_OT_install_qt, NXT_OT_close_editor,
            NXT_OT_run_graph, NXT_OT_run_last, NXT_OT_reload, NXT_MT_menu)
 
+#: Whether register() put the menu in the top bar, for unregister().
+__MENU_ADDED__ = [False]
+
 
 def register():
     """Register the add-on.
@@ -723,7 +756,9 @@ def register():
     _paths()
     for item in CLASSES:
         bpy.utils.register_class(item)
-    bpy.types.TOPBAR_MT_editor_menus.append(_draw_menu)
+    if wants_menu():
+        bpy.types.TOPBAR_MT_editor_menus.append(_draw_menu)
+        __MENU_ADDED__[0] = True
 
 
 def unregister():
@@ -733,7 +768,9 @@ def unregister():
     :rtype: None
     """
     close_nxt()
-    bpy.types.TOPBAR_MT_editor_menus.remove(_draw_menu)
+    if __MENU_ADDED__[0]:
+        bpy.types.TOPBAR_MT_editor_menus.remove(_draw_menu)
+        __MENU_ADDED__[0] = False
     for item in reversed(CLASSES):
         bpy.utils.unregister_class(item)
 
