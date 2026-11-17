@@ -73,6 +73,27 @@ def _select_all(painter, color):
     painter.drawRoundedRect(QtCore.QRectF(7.5, 9.0, 7.0, 4.0), 1.0, 1.0)
 
 
+def _layout(painter, color):
+    """Four nodes in a chain that branches: two in a row, then two
+    stacked."""
+    painter.setBrush(QtGui.QColor(NODE))
+    painter.drawRoundedRect(QtCore.QRectF(0.5, 2.0, 5.0, 3.5), 1.0, 1.0)
+    painter.drawRoundedRect(QtCore.QRectF(6.0, 2.0, 5.0, 3.5), 1.0, 1.0)
+    painter.setBrush(QtGui.QColor(color))
+    painter.drawRoundedRect(QtCore.QRectF(11.5, 2.0, 5.0, 3.5), 1.0, 1.0)
+    painter.drawRoundedRect(QtCore.QRectF(11.5, 10.5, 5.0, 3.5), 1.0, 1.0)
+    # The branch, from the middle node down to the lower one.
+    pen = QtGui.QPen(QtGui.QColor(GREY), 1.0)
+    painter.setPen(pen)
+    painter.setBrush(QtCore.Qt.NoBrush)
+    path = QtGui.QPainterPath(QtCore.QPointF(11.0, 3.75))
+    path.lineTo(9.0, 3.75)
+    path.lineTo(9.0, 12.25)
+    path.lineTo(11.5, 12.25)
+    painter.drawPath(path)
+    painter.setPen(QtCore.Qt.NoPen)
+
+
 def _pixmap(draw, color):
     pixmap = QtGui.QPixmap(SIZE * SCALE)
     pixmap.fill(QtCore.Qt.transparent)
@@ -104,6 +125,11 @@ def distribute_icon(axis):
     :rtype: QtGui.QIcon
     """
     return _icon(_distribute(axis))
+
+
+def layout_icon():
+    """:rtype: QtGui.QIcon"""
+    return _icon(_layout)
 
 
 def select_all_icon():

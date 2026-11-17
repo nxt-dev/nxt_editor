@@ -261,6 +261,31 @@ The Align button sits on the toolbar just before **Select All**, with the
 same menu. **Select All** (`Ctrl+A`) is the icon of two nodes in a dashed
 box, and hovering it shows its shortcut.
 
+### Laying out nodes
+
+**Layout Nodes** (`Shift+L`) tidies the graph up by the order it runs in.
+It arranges the selected top level nodes, or every one when none are
+selected, as one undo:
+
+- Each exec chain runs left to right, a column per node, in the order the
+  nodes run. Builds from start points come first, as in the
+  [Outliner](#outliner).
+- Where a node runs more than one node after it, the one that runs first
+  carries on along the same row and each of the others starts a row of its
+  own below, laid out the same way.
+- Nodes on no chain get a row each, below the chains.
+- Each column is as wide as its widest node and each row as tall as its
+  tallest, children stacked under a node included, so nothing overlaps.
+- The nodes start from the top left of where they were, so the layout
+  stays in the same part of the graph. With grid snapping on, they land on
+  the grid.
+- A backdrop with nodes being laid out in it is fitted around them again
+  afterwards, so they stay in it.
+
+It is in the **Graph** menu, the right click menu of selected nodes, and
+the right click menu of empty space when nothing is selected. Locked nodes
+are left where they are.
+
 ### Animate Nodes
 
 Nodes no longer slide open when a parent is expanded. Every child is

@@ -19,7 +19,7 @@ from nxt_editor.constants import FONTS
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.backdrop_graphics_item import (BackdropGraphicsItem,
                                                BackdropEditDialog)
-from nxt_editor import align, backdrops, theme
+from nxt_editor import align, auto_layout, backdrops, theme
 from nxt_editor.connection_graphics_item import (AttrConnectionGraphic,
                                                   WirePointGraphic)
 from nxt_editor import connection_graphics_item as lines
@@ -1548,6 +1548,87 @@ class StageView(QtWidgets.QGraphicsView):
         self._current_pan_distance = 0.0
         self.update_pan_cursor()
 
+    def layout_nodes(self):
+        """Lay out the selected top level nodes, or every one when none are
+        selected, by the order they run in, as one undo: each exec chain
+        left to right and its branches stacked below, see
+        nxt_editor.auto_layout. The nodes stay where they were as a group,
+        starting from the top left of where they were.
+
+        A backdrop with nodes being laid out in it is fitted around them
+        again afterwards, so they stay in it.
+        """
+        # Here rather than at the top: the dock widgets import a lot.
+        from nxt_editor.dockwidgets.outliner import root_exec_order
+        selected = set(nxt_path.get_root_path(p)
+                       for p in self.model.get_selected_nodes()
+                       if p != nxt_path.WORLD)
+        paths = [path for path in root_exec_order(self.model)
+                 if (not selected or path in selected) and
+                 self.get_node_graphic(path) and
+                 not self.model.get_node_locked(path)]
+        if not paths:
+            return
+        rects = {}
+        for path in paths:
+            rects[path] = self._nodes_rect([self.get_node_graphic(path)])
+        exec_in = dict((p, self.model.get_node_exec_in(p)) for p in paths)
+        sizes = dict((p, (r.width(), r.height())) for p, r in rects.items())
+        places = auto_layout.arrange(paths, exec_in, sizes)
+        origin = QtCore.QRectF()
+        for rect in rects.values():
+            origin = origin.united(rect)
+        origin = origin.topLeft()
+        snap = self.alignment_actions.snap_action.isChecked()
+        positions = {}
+        moves = {}
+        for path in paths:
+            graphic = self.get_node_graphic(path)
+            # Where the node is drawn from, which its plugs reach past.
+            inset = graphic.pos() - rects[path].topLeft()
+            x, y = places[path]
+            pos = QtCore.QPointF(origin.x() + x, origin.y() + y) + inset
+            if snap:
+                pos = QtCore.QPointF(*self.model.snap_pos_to_grid(
+                    (pos.x(), pos.y())))
+            positions[path] = [pos.x(), pos.y()]
+            moves[path] = pos - graphic.pos()
+        # Which backdrop each node is in, before anything moves.
+        fits = {}
+        for backdrop_id, graphic in self._backdrop_graphics.items():
+            nodes, _ = self.backdrop_contents(graphic)
+            inside = [g.node_path for g in nodes]
+            if any(path in moves for path in inside):
+                fits[backdrop_id] = (graphic, inside)
+        changes = {}
+        pad = self.BACKDROP_PADDING
+        for backdrop_id, (graphic, inside) in fits.items():
+            rect = QtCore.QRectF()
+            for path in inside:
+                node_rect = rects.get(path)
+                if node_rect is None:
+                    node_rect = self._nodes_rect(
+                        [self.get_node_graphic(path)])
+                rect = rect.united(node_rect.translated(
+                    moves.get(path, QtCore.QPointF())))
+            header = graphic.header_rect().height()
+            record = copy.deepcopy(graphic.record)
+            record[backdrops.POS] = [rect.left() - pad,
+                                     rect.top() - pad - header]
+            record[backdrops.SIZE] = [rect.width() + (pad * 2),
+                                      rect.height() + (pad * 2) + header]
+            changes[backdrop_id] = record
+        if len(positions) > 1:
+            text = 'Layout {} nodes'.format(len(positions))
+        else:
+            text = 'Layout {}'.format(paths[0])
+        stack = self.model.undo_stack
+        stack.beginMacro(text)
+        self.model.set_nodes_pos(positions, layer=self._position_layer())
+        if changes:
+            self.model.set_backdrops(changes, text=text)
+        stack.endMacro()
+
     def keyPressEvent(self, event):
         key = event.key()
         if key == self.PAN_KEY and self.scene().focusItem() is None:
@@ -2259,6 +2340,9 @@ class StageView(QtWidgets.QGraphicsView):
         if selected_nodes_count <= 1:
             menu.addAction(self.authoring_actions.add_node_action)
         menu.addAction(self.authoring_actions.add_backdrop_action)
+        if selected_nodes_count == 0:
+            # With nothing selected it lays out the whole graph.
+            menu.addAction(self.alignment_actions.layout_action)
         if selected_nodes_count == 1:
             menu.addAction(self.authoring_actions.rename_node_action)
         if selected_nodes_count > 0:
@@ -2275,6 +2359,7 @@ class StageView(QtWidgets.QGraphicsView):
             menu.addAction(self.authoring_actions.remove_instance_action)
             menu.addSeparator()
             self.add_align_menu(menu)
+            menu.addAction(self.alignment_actions.layout_action)
             menu.addSeparator()
             menu.addAction(self.authoring_actions.localize_node_action)
             if nodes_only_on_tgt:

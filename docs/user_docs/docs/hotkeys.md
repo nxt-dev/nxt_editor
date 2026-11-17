@@ -35,6 +35,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Align Bottom | Line the selected nodes and points up on the bottom most one. | Align Bottom | Shift+S |
 | Distribute Horizontally | Space the selected nodes and points out evenly from left to right, leaving the ends where they are. | Distribute Horizontally | Alt+Shift+A |
 | Distribute Vertically | Space the selected nodes and points out evenly from top to bottom, leaving the ends where they are. | Distribute Vertically | Alt+Shift+D |
+| Layout Nodes | Arrange the selected top level nodes, or every one when none are selected, by the order they run in: each exec chain left to right, with its branches stacked below. | Layout Nodes | Shift+L |
 
 ## Display
 |     Name      |               What's this                |       Tool tip       | Shortcut |

@@ -1383,8 +1383,20 @@ class AlignmentActions(NxtActionContainer):
         self.distribute_actions = [self.distribute_horizontal_action,
                                    self.distribute_vertical_action]
 
+        def layout_nodes():
+            view = self.main_window.view
+            if view is not None:
+                view.layout_nodes()
+        self.layout_action = add(
+            'Layout Nodes', 'Shift+L', layout_icons.layout_icon(),
+            'Arrange the selected top level nodes, or every one when none '
+            'are selected, by the order they run in: each exec chain left '
+            'to right, with its branches stacked below.', layout_nodes)
+        self.layout_action.setToolTip('Layout Nodes')
+
         self.action_display_order = [self.snap_action] + \
-            self.align_actions + self.distribute_actions
+            self.align_actions + self.distribute_actions + \
+            [self.layout_action]
 
     def align_menu(self, parent=None):
         """The Align menu: every way to line up and space out the selected

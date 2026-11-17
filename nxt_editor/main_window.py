@@ -1577,6 +1577,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.graph_menu = self.addMenu("Graph")
         self.graph_menu.setTearOffEnabled(True)
         self.graph_menu.addAction(self.node_actions.add_node_action)
+        self.graph_menu.addAction(
+            self.main_window.alignment_actions.layout_action)
 
         # execute menu
         self.execute_menu = self.addMenu("Execute")
