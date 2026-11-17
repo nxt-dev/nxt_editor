@@ -23,6 +23,7 @@ from a pull request by @enriquevelmai (nxt-dev/nxt_editor#298).
 import contextlib
 import importlib
 import importlib.util
+import inspect
 import logging
 import os
 import re
@@ -49,6 +50,71 @@ RUNTIME_GLOBALS = {
     'ExitNode': ExitNode,
     'ExitGraph': ExitGraph,
 }
+
+#: The names above that a graph fills in when it runs.
+LIVE_GLOBALS = tuple(name for name, value in RUNTIME_GLOBALS.items()
+                     if value is None)
+
+
+def runtime_namespace(rt_layer=None, node_path=None):
+    """What can be completed after the dot of a name nxt gives a compute.
+
+    The None placeholders are left out. Completing on None offered what
+    None has, __bool__, __class__ and the rest, after STAGE. and self.,
+    which is worse than offering nothing. Once the graph has run, the
+    runtime layer holds the real things: STAGE with whatever the graph
+    stored on it, and this node as it ran, for self.
+
+    :param rt_layer: the runtime layer of the last build, if there was one
+    :param node_path: the node being edited, which is what self means
+    :type node_path: str | None
+    :return: {name: object}
+    :rtype: dict
+    """
+    namespace = {name: value for name, value in RUNTIME_GLOBALS.items()
+                 if value is not None}
+    console = getattr(rt_layer, '_console', None)
+    live = getattr(console, 'globals', None) or {}
+    for name in LIVE_GLOBALS:
+        value = live.get(name)
+        if value is not None:
+            namespace[name] = value
+    # The console's self is whichever node ran last. In the code editor
+    # self is the node being edited.
+    namespace.pop('self', None)
+    if node_path and live:
+        try:
+            node = rt_layer.lookup(node_path)
+        except Exception:
+            node = None
+        if node is not None:
+            namespace['self'] = node
+    return namespace
+
+
+def attr_for_completion(obj, name):
+    """An attribute to look inside, read without running anything.
+
+    Walking os.path.jo needs os.path, and getattr is fine on a module.
+    On a live object getattr can run a property, and a property on a scene
+    object can do anything, so those are read statically and a property is
+    where the walk stops.
+
+    :return: the attribute, or None when there is none or it would have to
+        be computed
+    """
+    if isinstance(obj, types.ModuleType):
+        return getattr(obj, name, None)
+    try:
+        value = inspect.getattr_static(obj, name)
+    except AttributeError:
+        return None
+    if isinstance(value, (staticmethod, classmethod)):
+        return value.__func__
+    if hasattr(type(value), '__get__') and not inspect.isroutine(value):
+        # A property or another descriptor: its value is not there to read.
+        return None
+    return value
 
 #: Modules each host keeps loaded, by the name scripts usually give them.
 HOST_MODULES = {

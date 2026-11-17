@@ -557,6 +557,16 @@ string and offers `path.split` and `path.splitlines`.
 - jedi is loaded the first time it is needed, not when the editor starts,
   and keeps its cache in the nxt user directory.
 
+#### STAGE and self after a build
+
+Before the graph has run there is nothing to offer after `STAGE.`, and
+`self.` only offers the node's attributes. Once it has run, both complete on
+what the build left behind: `STAGE.` on whatever the graph stored on the
+stage (`STAGE.rig`, then `STAGE.rig.build_guides`), and `self.` on the node
+being edited as it ran. This needs **Node Attributes And Tokens** switched
+on, and works with or without jedi. Nothing is run to complete: a property
+is listed, but its value is not looked inside.
+
 #### Autocomplete options
 
 ![Options > Autocomplete](images/options_autocomplete.png)
