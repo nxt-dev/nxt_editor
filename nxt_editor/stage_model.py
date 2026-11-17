@@ -1316,7 +1316,11 @@ class StageModel(QtCore.QObject):
                                                  sort_keys=False))
 
         if cut:
-            self.delete_nodes(node_paths, layer or self.target_layer)
+            # The world node is copied but never deleted: a graph always
+            # has one.
+            node_paths = [p for p in node_paths if p != nxt_path.WORLD]
+            if node_paths:
+                self.delete_nodes(node_paths, layer or self.target_layer)
 
         output = ',\n'.join(node_copy_data)
         output = '\t' + '\t'.join(output.splitlines(True))
@@ -1450,13 +1454,26 @@ class StageModel(QtCore.QObject):
             return []
         pos = pos or [0.0, 0.0]
         pasted = []
+        # The world node is not pasted as a node of its own, there is only
+        # one, so what it holds is merged into the target layer's.
+        worlds = [list(d.values())[0] for d in node_load_data
+                  if list(d.keys())[0] == nxt_path.WORLD]
+        node_load_data = [d for d in node_load_data
+                          if list(d.keys())[0] != nxt_path.WORLD]
         # A single node is already a single command; wrapping it would only
-        # bury the name of what was pasted under a macro.
-        as_macro = len(node_load_data) > 1
+        # bury the name of what was pasted under a macro. The world node's
+        # attributes and code are a command each.
+        as_macro = len(node_load_data) > 1 or bool(worlds)
         if as_macro:
-            msg = 'Paste {} nodes'.format(len(node_load_data))
+            if not node_load_data:
+                msg = 'Paste world node'
+            else:
+                count = len(node_load_data) + len(worlds)
+                msg = 'Paste {} nodes'.format(count)
             self.undo_stack.beginMacro(msg)
         try:
+            for data in worlds:
+                self._paste_world(data, layer)
             for node_data in node_load_data:
                 node_path, data = list(node_data.items())[0]
                 name = nxt_path.node_name_from_node_path(node_path)
@@ -1484,13 +1501,46 @@ class StageModel(QtCore.QObject):
         finally:
             if as_macro:
                 self.undo_stack.endMacro()
+        if worlds:
+            pasted = [nxt_path.WORLD] + pasted
         if not pasted:
             return []
         self.update_comp_layer()
         for new_node_path in pasted:
-            self.node_added.emit(new_node_path)
+            if new_node_path != nxt_path.WORLD:
+                self.node_added.emit(new_node_path)
         self.selection = pasted
         return pasted
+
+    def _paste_world(self, data, layer=None):
+        """Merge a copied world node into the layer's world node: its
+        attributes are set on it, a pasted one taking the place of one of
+        the same name, and its code and comment, when it has them, take
+        the place of the layer's. The world node is made if the layer has
+        none.
+
+        :param data: the world node as copied, see copy_nodes
+        :param layer: the layer to paste on, the target layer by default
+        """
+        layer = layer or self.target_layer
+        layer_path = self.get_layer_path(layer, fallback=LAYERS.TARGET)
+        world = nxt_path.WORLD
+        attrs = data.get(nxt_io.SAVE_KEY.ATTRS) or {}
+        for attr_name, attr_data in attrs.items():
+            attr_data = dict(attr_data or {})
+            attr_data.setdefault(META_ATTRS.VALUE, None)
+            cmd = SetNodeAttributeData(node_path=world, attr_name=attr_name,
+                                       data=attr_data, model=self,
+                                       layer_path=layer_path)
+            self.undo_stack.push(cmd)
+        code_key = INTERNAL_ATTRS.as_save_key(INTERNAL_ATTRS.COMPUTE)
+        code = data.get(code_key)
+        if code:
+            self.set_node_code_lines(world, list(code), layer=layer)
+        comment_key = INTERNAL_ATTRS.as_save_key(INTERNAL_ATTRS.COMMENT)
+        comment = data.get(comment_key)
+        if comment:
+            self.set_node_comment(world, comment, layer=layer)
 
     def get_node_attr_names(self, node_path, layer=None):
         layer = layer or self.target_layer

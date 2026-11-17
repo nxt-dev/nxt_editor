@@ -282,6 +282,15 @@ descendants.
 Pasting nodes (`Ctrl+V`) is a single step on the undo stack however many
 nodes are pasted.
 
+The world node (`/`) can be copied too: double click a layer in the Layer
+Manager to select it, then `Ctrl+C`. Pasting it into another graph or onto
+another layer does not make a new node, as a graph has only one world
+node. Its attributes are set on the target layer's world node, taking the
+place of any of the same name and leaving the others, and its code and
+comment, when it has them, take the place of the world node's own. It is
+one step on the undo stack. Cutting the world node copies it and leaves it
+where it is.
+
 ### Pushing positions to a lower layer
 
 Moving a node always saves where it is on the top layer, so a layer below
