@@ -149,6 +149,18 @@ Each item links to the part of the docs that explains it in full.
   pipelines that open the editor from their own menu. See
   [Leaving the nxt menu out](install.md#leaving-the-nxt-menu-out).
 
+## Next release
+
+- [Env files](extensions.md#env-files) set environment variables when nxt
+  starts, in the editor, in a host and in a headless run, from your own
+  file, the site's, and project files kept under version control.
+  **Options > Environment Variables...** edits them as a table.
+- A file picked to reference that sits under one of your `NXT_FILE_ROOTS`
+  is stored relative to that root, and one in a folder an env file variable
+  names is stored from that variable, so the graph loads on other machines.
+  This changes what is stored for anyone with `NXT_FILE_ROOTS` set. See
+  [How references are found](reference.md#how-references-are-found).
+
 ## nxt_editor 4.6.1
 
 **New**

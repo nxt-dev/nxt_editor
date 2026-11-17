@@ -41,10 +41,11 @@ class EnvDialogCase(unittest.TestCase):
         for patch in (mock.patch.object(env_files, 'USER_ENV_FILE', self.user),
                       mock.patch.object(env_files, 'SITE_ENV_FILE', self.site),
                       mock.patch.object(env_files, '_applied', {}),
+                      mock.patch.object(env_files, '_declared', []),
                       mock.patch.dict(os.environ, clear=False)):
             patch.start()
             self.addCleanup(patch.stop)
-        for name in ('NXT_T_GRAPHS', 'NXT_T_ROOTS',
+        for name in ('NXT_T_GRAPHS', 'NXT_T_ROOTS', 'NXT_T_FLAGS',
                      env_files.ENV_FILES_ENV_VAR):
             os.environ.pop(name, None)
 
@@ -100,8 +101,10 @@ class EditingTheUserFile(EnvDialogCase):
 
     def test_a_list_reads_back_as_it_was_typed(self):
         self.assertEqual('/a; /b', env_dialog.value_to_text(['/a', '/b']))
-        self.assertEqual(['/a', '/b'], env_dialog.text_to_value('/a; /b'))
+        self.assertEqual(['/a', '/b'],
+                         env_dialog.text_to_value('/a; /b', as_list=True))
         self.assertEqual('/a', env_dialog.text_to_value(' /a '))
+        self.assertEqual('/a; /b', env_dialog.text_to_value('/a; /b'))
 
     def test_removing_a_variable_unsets_it(self):
         dialog = self.dialog()
@@ -123,6 +126,100 @@ class EditingTheUserFile(EnvDialogCase):
         now = dialog.table.item(row, env_dialog.NOW_COL).text()
         self.assertIn('/from/the/launcher', now)
         self.assertIn('set outside nxt', now)
+
+
+class ListsOfPaths(EnvDialogCase):
+    """Only a value ticked as a list is split at ;. Anything else keeps its
+    ; and is never joined again with : on macOS and Linux."""
+
+    def saved(self, name):
+        return env_files.EnvFile.load(self.user).variables[name]
+
+    def test_a_value_with_a_semicolon_is_kept_whole(self):
+        dialog = self.dialog()
+        row = self.set_row(dialog, 'NXT_T_FLAGS', 'a=1; b=2')
+        self.assertFalse(dialog.is_list(row))
+        dialog.apply()
+        self.assertEqual('a=1; b=2', self.saved('NXT_T_FLAGS'))
+        self.assertEqual('a=1; b=2', os.environ['NXT_T_FLAGS'])
+
+    def test_names_that_hold_paths_start_as_a_list(self):
+        for name in ('NXT_FILE_ROOTS', 'PYTHONPATH', 'MAYA_SCRIPT_PATH',
+                     'NXT_T_ROOTS', 'nxt_t_paths'):
+            self.assertTrue(env_dialog.holds_paths(name), name)
+        for name in ('NXT_T_GRAPHS', 'NXT_T_FLAGS', 'PATHWAY'):
+            self.assertFalse(env_dialog.holds_paths(name), name)
+        dialog = self.dialog()
+        self.assertTrue(dialog.is_list(self.set_row(dialog, 'PYTHONPATH',
+                                                    '/a')))
+
+    def test_ticking_list_splits_it(self):
+        dialog = self.dialog()
+        row = self.set_row(dialog, 'NXT_T_GRAPHS', '/a; /b')
+        dialog.set_list(row, True)
+        dialog.apply()
+        self.assertEqual(['/a', '/b'], self.saved('NXT_T_GRAPHS'))
+        self.assertEqual(os.pathsep.join(['/a', '/b']),
+                         os.environ['NXT_T_GRAPHS'])
+
+    def test_unticking_list_keeps_it_whole(self):
+        dialog = self.dialog()
+        row = self.set_row(dialog, 'NXT_T_ROOTS', '/a; /b')
+        dialog.set_list(row, False)
+        dialog.apply()
+        self.assertEqual('/a; /b', self.saved('NXT_T_ROOTS'))
+
+    def test_a_list_in_the_file_shows_ticked(self):
+        env_file = env_files.EnvFile(self.user)
+        env_file.variables['NXT_T_GRAPHS'] = ['/a']
+        env_file.variables['NXT_T_FLAGS'] = 'a;b'
+        env_file.save()
+        dialog = self.dialog()
+        self.assertTrue(dialog.is_list(0))
+        self.assertFalse(dialog.is_list(1))
+        dialog.apply()
+        self.assertEqual(['/a'], self.saved('NXT_T_GRAPHS'))
+        self.assertEqual('a;b', self.saved('NXT_T_FLAGS'))
+
+    def test_adding_a_second_folder_makes_a_list(self):
+        dialog = self.dialog()
+        row = self.set_row(dialog, 'NXT_T_GRAPHS', '')
+        dialog.add_path_to_row(row, os.path.join(self.folder, 'one'))
+        self.assertFalse(dialog.is_list(row))
+        dialog.add_path_to_row(row, os.path.join(self.folder, 'two'))
+        self.assertTrue(dialog.is_list(row))
+        dialog.apply()
+        self.assertEqual(2, len(self.saved('NXT_T_GRAPHS')))
+
+
+class Looks(EnvDialogCase):
+
+    def test_the_intro_is_dimmed_like_the_other_dialogs(self):
+        from nxt_editor import theme
+        dialog = self.dialog()
+        self.assertIn(theme.TEXT_DIM, dialog.intro.styleSheet())
+        self.assertNotIn('<b>', dialog.intro.text())
+
+
+class WithAnOlderCore(unittest.TestCase):
+
+    def test_not_available_without_env_files(self):
+        with mock.patch.object(env_dialog, 'env_files', None):
+            self.assertFalse(env_dialog.available())
+
+    def test_the_menu_item_is_hidden(self):
+        from nxt_editor.main_window import MainWindow
+        with mock.patch.object(env_dialog, 'env_files', None):
+            win = MainWindow()
+            self.assertFalse(win.app_actions.env_files_action.isVisible())
+            self.assertIsNone(win.open_env_files())
+
+    @unittest.skipUnless(env_dialog.available(),
+                         'needs an nxt core with env files')
+    def test_shown_with_one_that_has_them(self):
+        from nxt_editor.main_window import MainWindow
+        win = MainWindow()
+        self.assertTrue(win.app_actions.env_files_action.isVisible())
 
 
 class ProjectFiles(EnvDialogCase):

@@ -12,7 +12,9 @@ import os
 import shutil
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 
 # External
 from Qt import QtWidgets
@@ -148,6 +150,46 @@ class PickedFromUnderARoot(ReferenceMenus):
         self.addCleanup(editor.deleteLater)
         self.assertEqual('far.nxt', editor.as_stored(self.far))
         self.assertEqual('beside.nxt', editor.as_stored(self.beside))
+
+
+@unittest.skipUnless(hasattr(nxt_io, 'compact_reference_path'),
+                     'needs an nxt core that writes paths under a root')
+class TheCoreDecides(ReferenceMenus):
+    """One answer, the core's, so the editor and a script never differ."""
+
+    def test_the_editor_asks_the_core(self):
+        with mock.patch.object(nxt_io, 'stored_reference_path',
+                               return_value='from/the/core') as core:
+            self.assertEqual('from/the/core',
+                             stored_reference_path(self.far, self.graph_dir))
+        core.assert_called_once_with(self.far, self.graph_dir)
+
+
+class WithAnOlderCore(ReferenceMenus):
+    """A core from before roots were asked: beside the layer or whole, even
+    under a root."""
+
+    def setUp(self):
+        super(WithAnOlderCore, self).setUp()
+        # Without compact_reference_path, as such a core is.
+        patch = mock.patch('nxt_editor.reference_paths.nxt_io',
+                           types.SimpleNamespace())
+        patch.start()
+        self.addCleanup(patch.stop)
+        environ = mock.patch.dict(os.environ, {
+            file_fallbacks.NXT_FILE_ROOTS: self.far_dir})
+        environ.start()
+        self.addCleanup(environ.stop)
+        file_fallbacks._ENV_ROOTS_CACHE.clear()
+        self.addCleanup(file_fallbacks._ENV_ROOTS_CACHE.clear)
+
+    def test_under_a_root_is_still_stored_whole(self):
+        self.assertEqual(self.far.replace(os.sep, '/'),
+                         stored_reference_path(self.far, self.graph_dir))
+
+    def test_beside_the_layer_is_still_relative(self):
+        self.assertEqual('beside.nxt',
+                         stored_reference_path(self.beside, self.graph_dir))
 
 
 if __name__ == '__main__':
