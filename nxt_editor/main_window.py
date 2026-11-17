@@ -1122,6 +1122,17 @@ QCheckBox::indicator {
         if getattr(editor, 'stage_model', None):
             editor.set_represented_node()
 
+    def open_env_files(self):
+        """Options > Environment Variables."""
+        from nxt_editor import env_dialog
+        if not env_dialog.available():
+            logger.warning('Env files need a newer nxt core than the one '
+                           'in use.')
+            return None
+        dialog = env_dialog.EnvFilesDialog(parent=self)
+        dialog.exec_()
+        return dialog
+
     def open_ai_settings(self):
         """Options > AI Assistant."""
         from nxt_editor.ai.settings_dialog import AiSettingsDialog
@@ -1578,6 +1589,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
         self.options_menu.addAction(self.app_actions.ai_settings_action)
+        self.options_menu.addAction(self.app_actions.env_files_action)
         self.options_view_sub = self.options_menu.addMenu("View")
         self.options_view_sub.setTearOffEnabled(True)
         self.options_view_sub.addActions(self.view_opt_menu.actions())
