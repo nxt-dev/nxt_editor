@@ -50,6 +50,203 @@ RUNTIME_GLOBALS = {
     'ExitGraph': ExitGraph,
 }
 
+#: The names above that a graph fills in when it runs.
+LIVE_GLOBALS = tuple(name for name, value in RUNTIME_GLOBALS.items()
+                     if value is None)
+
+
+def runtime_namespace(rt_layer=None, node_path=None):
+    """What can be completed after the dot of a name nxt gives a compute.
+
+    The None placeholders are left out. Completing on None offered what
+    None has, __bool__, __class__ and the rest, after STAGE. and self.,
+    which is worse than offering nothing. Once the graph has run, the
+    runtime layer holds the real things: STAGE with whatever the graph
+    stored on it, and this node as it ran, for self.
+
+    :param rt_layer: the runtime layer of the last build, if there was one
+    :param node_path: the node being edited, which is what self means
+    :type node_path: str | None
+    :return: {name: object}
+    :rtype: dict
+    """
+    namespace = {name: value for name, value in RUNTIME_GLOBALS.items()
+                 if value is not None}
+    console = getattr(rt_layer, '_console', None)
+    live = getattr(console, 'globals', None) or {}
+    for name in LIVE_GLOBALS:
+        value = live.get(name)
+        if value is not None:
+            namespace[name] = value
+    # The console's self is whichever node ran last. In the code editor
+    # self is the node being edited.
+    namespace.pop('self', None)
+    if node_path and live:
+        try:
+            node = rt_layer.lookup(node_path)
+        except Exception:
+            node = None
+        if node is not None:
+            namespace['self'] = node
+    return namespace
+
+
+#: Most names offered after the dot of something a graph left behind. A rig
+#: can keep thousands of things on STAGE, and a list that long is no help.
+LIVE_NAME_LIMIT = 2000
+
+# Read straight from type, so a class cannot answer with code of its own.
+_class_dict = type.__dict__['__dict__'].__get__
+_class_mro = type.__dict__['__mro__'].__get__
+
+# What reading a slot or an instance's __dict__ goes through. They copy a
+# value out of the object, no python runs.
+_PLAIN_READS = (types.MemberDescriptorType, types.GetSetDescriptorType)
+
+_MISSING = object()
+
+
+def _is_a(obj, klass):
+    """isinstance without asking obj, which could answer through __class__."""
+    return any(base is klass for base in _class_mro(type(obj)))
+
+
+def _has_on_class(klass, name):
+    return any(name in _class_dict(base) for base in _class_mro(klass))
+
+
+def _instance_dict(obj):
+    """obj's own __dict__, or None, read without running anything of obj's."""
+    for base in _class_mro(type(obj)):
+        entry = _class_dict(base).get('__dict__')
+        if entry is None:
+            continue
+        if type(entry) not in _PLAIN_READS:
+            # A class that makes __dict__ a property of its own.
+            return None
+        found = entry.__get__(obj)
+        return found if _is_a(found, dict) else None
+    return None
+
+
+def _namespaces(obj):
+    """(obj's own __dict__ or None, its classes' dicts in lookup order)."""
+    if _is_a(obj, type):
+        return None, [_class_dict(base) for base in _class_mro(obj)]
+    return (_instance_dict(obj),
+            [_class_dict(base) for base in _class_mro(type(obj))])
+
+
+def static_attr(obj, name):
+    """An attribute of a live object, without running any of its code.
+
+    No __getattr__, no __getattribute__, no property. A value stored on the
+    object or its class is read; a method is read as the function it is; a
+    property or any other computed attribute is where the walk stops.
+
+    :return: the attribute, or None when there is none or it would have to
+        be computed
+    """
+    try:
+        own, classes = _namespaces(obj)
+        on_class = next((namespace[name] for namespace in classes
+                         if name in namespace), _MISSING)
+        computed = (on_class is not _MISSING and
+                    _has_on_class(type(on_class), '__get__'))
+        if own is not None and dict.__contains__(own, name):
+            data = computed and (_has_on_class(type(on_class), '__set__') or
+                                 _has_on_class(type(on_class), '__delete__'))
+            if not data:
+                # Python reads the object's own value first, unless the
+                # class has a property of that name.
+                return dict.__getitem__(own, name)
+        if on_class is _MISSING:
+            return None
+        if _is_a(on_class, staticmethod) or _is_a(on_class, classmethod):
+            return on_class.__func__
+        if not computed or _is_a(on_class, types.FunctionType):
+            return on_class
+        if (type(on_class) is types.MemberDescriptorType and
+                not _is_a(obj, type)):
+            # A __slots__ entry, copied out of the object.
+            return on_class.__get__(obj)
+        return None
+    except Exception:
+        return None
+
+
+def static_names(obj, start='', limit=LIVE_NAME_LIMIT):
+    """The public names on a live object, without running any of its code.
+
+    dir() calls the object's __dir__, which is its code to run. These come
+    from the object's own __dict__ and its classes' instead, which is also
+    where __slots__ entries are listed.
+
+    :param start: only names that start with this, the part already typed
+    :param limit: stop after this many
+    :rtype: list
+    """
+    names = []
+    seen = set()
+    try:
+        own, classes = _namespaces(obj)
+        if own is not None:
+            classes.insert(0, own)
+        for namespace in classes:
+            if _is_a(namespace, dict):
+                keys = list(dict.keys(namespace))
+            else:
+                keys = list(namespace.keys())
+            for key in keys:
+                if (type(key) is not str or key.startswith('_') or
+                        not key.startswith(start) or key in seen):
+                    continue
+                seen.add(key)
+                names.append(key)
+                if len(names) >= limit:
+                    return names
+    except Exception:
+        # A build in another thread can change a dict while it is read.
+        logger.debug('Could not list names for completion', exc_info=True)
+    return names
+
+
+def live_completions(obj, rest, limit=LIVE_NAME_LIMIT):
+    """What follows the dots after something a graph left behind.
+
+    Only names come back, never the objects they name, so nothing that
+    belongs to the graph is held on to or handed elsewhere.
+
+    :param obj: STAGE or self, as the build left it
+    :param rest: what is typed after its first dot, like rig.bu
+    :return: the dotted names after the first dot, like rig.build_guides
+    :rtype: list
+    """
+    parts = rest.split('.')
+    walked = ''
+    for part in parts[:-1]:
+        obj = static_attr(obj, part)
+        if obj is None:
+            return []
+        walked += part + '.'
+    return [walked + name for name in static_names(obj, parts[-1], limit)]
+
+
+def attr_for_completion(obj, name):
+    """An attribute to look inside, read without running anything.
+
+    Walking os.path.jo needs os.path, and getattr is fine on a module.
+    On anything else getattr can run a property or a __getattr__, which on
+    a scene object can do anything, so those are read with static_attr.
+
+    :return: the attribute, or None when there is none or it would have to
+        be computed
+    """
+    if _is_a(obj, types.ModuleType):
+        return getattr(obj, name, None)
+    return static_attr(obj, name)
+
+
 #: Modules each host keeps loaded, by the name scripts usually give them.
 HOST_MODULES = {
     'maya': (('cmds', 'maya.cmds'), ('mc', 'maya.cmds'), ('mel', 'maya.mel'),

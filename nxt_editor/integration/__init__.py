@@ -25,6 +25,27 @@ def plugin_version():
         return ''
 
 
+# A studio that opens the editor from its own pipeline menu or shelf does not
+# want a second, top level "nxt" menu beside it. Every host plugin asks this
+# one function, so the rule is the same in Maya, Blender and Unreal, and each
+# still has a way to open the editor without the menu. Blender and Unreal
+# load this file by its path before Qt may exist, which is one more reason
+# it imports nothing but the standard library.
+NO_MENU_ENV_VAR = 'NXT_NO_MENU'
+_FALSE_STRINGS = ('', '0', 'false', 'no', 'off')
+
+
+def wants_menu():
+    """Whether a DCC plugin should add nxt's own menu to the host.
+
+    :return: False when the env var NXT_NO_MENU is set to anything but an
+        empty string, 0, false, no or off
+    :rtype: bool
+    """
+    value = os.environ.get(NO_MENU_ENV_VAR, '')
+    return value.strip().lower() in _FALSE_STRINGS
+
+
 class NxtIntegration(object):
 
     def __init__(self, name):

@@ -37,6 +37,13 @@ so switching back to a tab is instant.
 and shows it again. The editor remembers your choice. With the graph
 hidden, switch between open files from the bottom of the **Window** menu.
 
+### Tabs
+
+Each open graph has a tab above the stage view. The **+** after the last
+tab, or a double click on the empty bar beside the tabs, makes a new
+graph, the same as **File > New Graph** (`Ctrl+N`). With no graph open,
+the empty space offers **New Graph** and **Open...**.
+
 ### Moving around
 
 - **Pan** by dragging with the middle mouse button, or hold `Space` and
@@ -557,6 +564,19 @@ string and offers `path.split` and `path.splitlines`.
 - jedi is loaded the first time it is needed, not when the editor starts,
   and keeps its cache in the nxt user directory.
 
+#### STAGE and self after a build
+
+Before the graph has run there is nothing to offer after `STAGE.`, and
+`self.` only offers the node's attributes. Once it has run, both complete on
+what the build left behind: `STAGE.` on whatever the graph stored on the
+stage (`STAGE.rig`, then `STAGE.rig.build_guides`), and `self.` on the node
+being edited as it ran. This needs **Node Attributes And Tokens** switched
+on, and works with or without jedi. Nothing is run to complete: a property
+is listed, but its value is not looked inside, and the names come from what
+is stored on each object rather than from its `__dir__` or `__getattr__`.
+At most 2000 names that match what you typed are offered, and nothing is
+offered while a node is running.
+
 #### Autocomplete options
 
 ![Options > Autocomplete](images/options_autocomplete.png)
@@ -583,6 +603,39 @@ in the [Outliner](#outliner). Right click a layer for its menu.
 Two items on this menu change what a layer pulls in from disk:
 **Edit References...** and **Reload Source...**.
 
+### Hiding a layer in the graph
+
+![The eye in the Layer Manager](images/layer_eye.png)
+
+The eye at the end of each row hides that layer's nodes in the graph, for
+example a library layer of nodes that are only there to be instanced. Click
+it again, or use **Show In Graph** on the layer's menu, to bring them back.
+
+- Only what that layer alone has is hidden: its root nodes with everything
+  under them, the lines to and from them, and its backdrops. A node that a
+  layer still showing also adds to stays in view.
+- It is a way of looking at the graph. The layer still composites and
+  runs, which is the difference from **Mute**, and its nodes are still in
+  the Outliner.
+- Only what is showing can be selected in the graph: **Select All** and a
+  box leave hidden nodes, and points on hidden lines, out, and hiding a
+  layer takes its nodes out of the selection. Copy and delete only reach
+  what you can see.
+- A node you make, paste, duplicate or instance on a hidden target layer
+  would vanish as it was made, so the layer is shown again and the graph
+  says so in its bottom left corner.
+- Framing leaves hidden nodes out. When everything there is to frame is
+  hidden, for example a node picked in the Outliner, the graph stays where
+  it is and says the node is on a hidden layer. Show the layer to see it.
+  **Go to Source** and **Go to Target** on a line, in the graph or the
+  Instance View, do the same.
+- Lines to and from a hidden node are hidden whatever the line toggles
+  say, exec lines included.
+- It is remembered for you, per graph. It is not saved in the layer and
+  does not mark anything unsaved. Saving the graph to a new file keeps it,
+  a reference you remove is forgotten, and two tabs on the same graph each
+  keep their own.
+
 ### Reference Editor
 
 **Edit References...** opens the Reference Editor on that layer.
@@ -600,8 +653,12 @@ Two items on this menu change what a layer pulls in from disk:
   [file roots](#how-references-are-found) keeps working on other machines.
   The folder button next to the field picks a file with a file browser
   instead. A picked file that sits next to the layer, or in a folder below
-  it, is stored relative to the layer; anything else is stored as a full
-  path. A relative path is looked for under your file roots before the
+  it, is stored relative to the layer; one under a file root is stored
+  relative to that root, unless an earlier root holds a file of the same
+  name; one in a folder that an [env file](extensions.md#env-files) variable
+  names is stored from that variable, as `$PROJECT_GRAPHS/rig.nxt`; anything
+  else is stored as a full path. A relative path is looked for under your
+  file roots before the
   layer's folder, so check the resolved view if a root might hold a file of
   the same name.
 - **+** adds an empty row and puts the cursor in the field, ready to type.
@@ -1155,6 +1212,19 @@ machine, or for another project, with different roots.
     changing the graph. Take the folder out of `NXT_FILE_ROOTS` to go back.
     To always use one particular file, reference it by an absolute path, or
     by a path built from an environment variable.
+
+!!! note "Picked files under a root are stored short"
+    Once `NXT_FILE_ROOTS` is set, by an [env file](extensions.md#env-files)
+    or any other way, a file you pick in a file browser that sits under one
+    of the roots is stored relative to that root, as `lib/shared_steps.nxt`,
+    not as its full path. This is so for everyone with `NXT_FILE_ROOTS` set,
+    whether or not they use env files: before, a picked file was always
+    stored whole. A file in a folder that an env file variable names is
+    stored from that variable, as `$PROJECT_GRAPHS/rig.nxt`. The short path
+    is only used when it resolves back to the file you picked, and it keeps
+    the folders you picked it through: picked as `current/rig.nxt`, with
+    `current` a link to `v12`, it stays `current/rig.nxt`. Type the full
+    path in the Reference Editor to store that instead.
 
 The [Reference Editor](#reference-editor) shows where each reference
 resolves on this machine with its resolved toggle, and the tooltip on a row

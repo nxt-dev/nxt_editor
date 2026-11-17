@@ -20,6 +20,73 @@ To add a config there are two approaches, both of which are compatible with each
 
 Inside the config dir you'll need a directory called `plugins`. So for example if you're using API `v0.1.2` your local config plugins dir would be: `~/nxt/config/0/plugins`
 
+# Env files
+
+Graphs often lean on environment variables: a `$PROJECT_GRAPHS/rig.nxt`
+reference, the roots in `NXT_FILE_ROOTS`, whatever the code in a node reads.
+An env file sets them when nxt starts, so they do not have to be set by
+whatever launches nxt. It works the same in the editor, in a host such as
+Maya, and in a headless run.
+
+```json
+{
+    "version": 1,
+    "include": ["D:/projects/hero/nxt_env.json"],
+    "variables": {
+        "PROJECT_GRAPHS": "$NXT_ENV_FILE_DIR/graphs",
+        "NXT_FILE_ROOTS": ["$PROJECT_GRAPHS", "//server/graphs"]
+    }
+}
+```
+
+- A value is text, or a list, which is joined with the platform's path
+  separator so one file serves Windows and Linux.
+- `$NXT_ENV_FILE_DIR` is the folder of the file it is written in. A file
+  written with it can be committed beside the graphs it points at.
+- Other variables are filled in as each value is set, so a value can use one
+  set above it or in a file read earlier. Write them `$NAME` or `${NAME}`;
+  `${NAME}` is the one to use when letters follow the name. A variable that
+  is not set is left as written, and logged with the file and the variable
+  it is in. On Windows names ignore case, as they do in the environment
+  there.
+- `include` names other env files, read first, so the including file has the
+  last word. A relative path is relative to the file.
+
+nxt reads, in this order, later files winning:
+
+1. `env.json` in the site config dir
+2. `env.json` in the local config dir
+3. the files listed in the environment variable `NXT_ENV_FILES`
+
+A variable that is already set when nxt starts is left alone, so whatever
+launched nxt keeps the last word. `NXT_USER_DIR`, `NXT_SITE_DIR` and
+`NXT_ENV_FILES` decide which files are read, so they cannot be set from one:
+a file that sets one is logged and that variable is passed over. A file that
+is missing or cannot be read is logged and skipped.
+
+Once these variables are set, a file you pick to reference is stored the
+short way when it can be: relative to a root in `NXT_FILE_ROOTS`, or from a
+variable an env file declares, as `$PROJECT_GRAPHS/rig.nxt`. This applies to
+everyone with `NXT_FILE_ROOTS` set, env files or not. See
+[How references are found](reference.md#how-references-are-found).
+
+![Options > Environment Variables](images/env_files_dialog.png)
+
+**Options > Environment Variables...** edits these files as a table: your
+own file, the site's, any named in `NXT_ENV_FILES`, and project files.
+Tick **List** for a value of several paths, typed with `;` between them: it
+is saved as a list and joined with the separator of the platform nxt runs
+on. A name that holds paths, such as `NXT_FILE_ROOTS` or one ending in
+`PATH`, starts out ticked. Any other value is kept exactly as typed, `;` and
+all.
+**Add Project File...** picks or creates an env file anywhere, typically in
+a project's repository, and has your own file include it. **In This
+Session** shows what each variable holds now, and says when it was set
+outside nxt and so left alone. **Apply** saves and sets the variables in the
+running session; graphs opened or reloaded afterwards use them.
+
+From code: `nxt.env_files.apply()` reads the files again.
+
 # Plugins
 
 Any `.py` files inside your plugin dir(s) will automatilly be imported during nxt startup. 

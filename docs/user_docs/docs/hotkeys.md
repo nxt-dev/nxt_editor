@@ -23,6 +23,11 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Close Tab           |                Close active tab                 | Close Tab           |    Ctrl+W    |
 | Find and Open Graph |                                                 | Find and Open Graph |    Ctrl+P    |
 
+!!! note "New Graph from the tabs"
+    The **+** after the open graphs' tabs, or a double click on the empty
+    bar beside them, does the same as New Graph, with whatever shortcut
+    New Graph has. See [Tabs](reference.md#tabs).
+
 ## Alignment
 |         Name         |                What's this                |      Tool tip       | Shortcut |
 | :------------------- | :---------------------------------------: | :------------------ | :------: |

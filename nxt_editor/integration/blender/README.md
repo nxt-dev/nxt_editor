@@ -35,6 +35,13 @@ Qt.py and PySide6 from an `nxt_dev_deps` folder beside them. Without
 * **Run Last Graph** — the same graph again.
 * **Reload Code** — forget the cached `core` modules.
 
+## No menu
+
+Set `NXT_NO_MENU=1` before Blender starts to leave the **NXT** menu out, as
+in Maya and Unreal. The operators are still registered, so a studio menu
+can call `bpy.ops.nxt.open_editor()`, `bpy.ops.nxt.install_qt()` and the
+others.
+
 ## Qt
 
 Blender ships no Qt and the editor is a Qt application, so **Open Editor**

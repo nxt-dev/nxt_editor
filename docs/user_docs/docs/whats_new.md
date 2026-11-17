@@ -4,6 +4,27 @@ This page summarises what is new in recent releases of **nxt_editor**, and
 in **nxt_core 0.21**.
 Each item links to the part of the docs that explains it in full.
 
+## Unreleased
+
+**New**
+- `NXT_NO_MENU=1` leaves nxt's own menu out of Maya, Blender and Unreal, for
+  pipelines that open the editor from their own menu. See
+  [Leaving the nxt menu out](install.md#leaving-the-nxt-menu-out).
+- [Env files](extensions.md#env-files) set environment variables when nxt
+  starts, in the editor, in a host and in a headless run, from your own
+  file, the site's, and project files kept under version control.
+  **Options > Environment Variables...** edits them as a table.
+- A file picked to reference that sits under one of your `NXT_FILE_ROOTS`
+  is stored relative to that root, and one in a folder an env file variable
+  names is stored from that variable, so the graph loads on other machines.
+  This changes what is stored for anyone with `NXT_FILE_ROOTS` set. See
+  [How references are found](reference.md#how-references-are-found).
+- An eye at the end of each row in the Layer Manager, and **Hide In
+  Graph** on a layer's menu, hide that layer's nodes, lines and backdrops
+  in the graph while it still composites and runs, for example a library
+  layer of nodes that are only there to be instanced. See
+  [Hiding a layer in the graph](reference.md#hiding-a-layer-in-the-graph).
+
 ## nxt_editor 4.12.0
 
 **New**
