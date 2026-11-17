@@ -43,6 +43,23 @@ class EXEC_FRAMING:
     ALWAYS = 2
 
 
+#: The types a value has when its text reads back as itself, which is what
+#: determine_nxt_type names. Anything else it calls raw.
+LITERAL_TYPES = (bool, int, float, complex, list, tuple, dict, set,
+                 type(None))
+
+
+def cached_type_name(value):
+    """The type of a cached value, named as determine_nxt_type names the
+    type of the same value written out, without writing it out.
+
+    :rtype: str
+    """
+    if isinstance(value, LITERAL_TYPES):
+        return type(value).__name__
+    return 'raw'
+
+
 class StageModel(QtCore.QObject):
     destroy_cmd_port = QtCore.Signal()
     update_cache_dict = QtCore.Signal(dict)
@@ -99,6 +116,10 @@ class StageModel(QtCore.QObject):
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
     request_ding = QtCore.Signal()
+    # A node raised an error and the build stopped there. The node's path.
+    build_failed = QtCore.Signal(str)
+    # Nodes that came to have unsaved changes, or stopped having them.
+    unsaved_nodes_changed = QtCore.Signal(tuple)
 
     def __init__(self, stage):
         super(StageModel, self).__init__()
@@ -106,6 +127,19 @@ class StageModel(QtCore.QObject):
         self.clipboard = QtWidgets.QApplication.clipboard()
         self.undo_stack = NxtUndoStack(self)
         self.effected_layers = UnsavedLayerSet()
+        # Which nodes have unsaved changes, by layer. A node has them when
+        # a command that changed it on that layer is on one side of where
+        # the layer was last saved and the undo stack is on the other.
+        # Where each layer was saved, as an undo stack index, 0 for one
+        # nobody has changed since it was opened:
+        self._saved_stack_index = {}
+        # Nodes changed by commands the stack has since thrown away, which
+        # it does with everything undone when something new is done. What
+        # they changed can no longer be undone back to what is saved.
+        self._lost_node_edits = {}
+        # {layer real path: set of node paths}, see unsaved_node_paths.
+        self._unsaved_nodes = {}
+        self.undo_stack.indexChanged.connect(self._refresh_unsaved_nodes)
 
         # execution
         self.is_standalone = is_standalone()
@@ -154,6 +188,16 @@ class StageModel(QtCore.QObject):
         self.layer_removed.connect(self._forget_unloaded_hidden_layers)
         self.layers_restacked.connect(self._forget_unloaded_hidden_layers)
         self.layer_saved.connect(self._check_hidden_graph)
+        # When and how big each layer's file was when it was last read or
+        # written here, {real_path: (mtime, size)}. A file that no longer
+        # matches was changed by something else, a version control update
+        # most often, and saving would write over that without a word.
+        self.disk_stamps = {}
+        for layer in stage._sub_layers:
+            self.stamp_layer_file(layer.real_path)
+        self.layer_saved.connect(self.stamp_layer_file)
+        self.layer_saved.connect(self._on_layer_saved_nodes)
+        self.layer_added.connect(self._stamp_new_layer_file)
         # attribute display state
         # {/node/path: STATE_INT}
         # 0 = no attributes
@@ -725,6 +769,165 @@ class StageModel(QtCore.QObject):
             return False
         self.undo_stack.push(ReloadLayers(layer_paths, self))
         return True
+
+    def _on_layer_saved_nodes(self, layer_path):
+        self.mark_nodes_saved([layer_path])
+
+    def mark_nodes_saved(self, layer_paths, index=None):
+        """Note that what these layers hold in memory is what is on disk:
+        they were saved, or read again.
+
+        :param layer_paths: real paths of the layers
+        :param index: the undo stack index that is true at, defaults to
+            where the stack is now
+        """
+        if index is None:
+            index = self.undo_stack.index()
+        for layer_path in layer_paths:
+            self._saved_stack_index[layer_path] = index
+            self._lost_node_edits.pop(layer_path, None)
+        self._refresh_unsaved_nodes()
+
+    def forget_commands_past_index(self):
+        """Called just before the undo stack throws away the commands that
+        were undone, see NxtUndoStack. A layer saved with some of them
+        applied can no longer be undone back to as saved, so the nodes
+        they changed stay changed until it is saved again.
+        """
+        stack = self.undo_stack
+        index = stack.index()
+        for layer_path, saved in list(self._saved_stack_index.items()):
+            if saved <= index:
+                continue
+            lost = self._lost_node_edits.setdefault(layer_path, set())
+            for i in range(index, min(saved, stack.count())):
+                lost |= touched_nodes(stack.command(i), layer_path)
+            self._saved_stack_index[layer_path] = index
+
+    def _refresh_unsaved_nodes(self, *args):
+        """Work out again which nodes have unsaved changes, and tell the
+        ones whose state changed.
+        """
+        stack = self.undo_stack
+        index = stack.index()
+        unsaved = {}
+        layer_paths = set(l.real_path for l in self.stage._sub_layers)
+        for layer_path in layer_paths:
+            saved = min(self._saved_stack_index.get(layer_path, 0),
+                        stack.count())
+            nodes = set(self._lost_node_edits.get(layer_path, ()))
+            for i in range(min(saved, index), max(saved, index)):
+                nodes |= touched_nodes(stack.command(i), layer_path)
+            if nodes:
+                unsaved[layer_path] = nodes
+        before = set().union(*self._unsaved_nodes.values())
+        after = set().union(*unsaved.values())
+        self._unsaved_nodes = unsaved
+        changed = before.symmetric_difference(after)
+        if changed:
+            self.unsaved_nodes_changed.emit(tuple(changed))
+
+    def unsaved_node_paths(self, layer_path=None):
+        """The nodes with changes not saved yet, on one layer or on any.
+
+        :param layer_path: real path of a layer, or None for all of them
+        :rtype: set
+        """
+        if layer_path is not None:
+            return set(self._unsaved_nodes.get(layer_path, ()))
+        return set().union(*self._unsaved_nodes.values())
+
+    def get_node_unsaved_layers(self, node_path):
+        """The real paths of the layers on which a node has changes that
+        are not saved yet, strongest first.
+
+        :rtype: list
+        """
+        return [l.real_path for l in self.stage._sub_layers
+                if node_path in self._unsaved_nodes.get(l.real_path, ())]
+
+    def missing_references(self):
+        """The references that did not load, by the loaded layer holding
+        them. A file that could not be found or opened is kept as a
+        reference with no layer behind it.
+
+        :return: [(layer, [reference as stored, ...]), ...] in stack order,
+            each file once however many times it is loaded
+        :rtype: list
+        """
+        missing = []
+        seen = set()
+        for layer in self.stage._sub_layers:
+            if layer.real_path in seen:
+                continue
+            seen.add(layer.real_path)
+            references = [data.get(SAVE_KEY.FILEPATH)
+                          for data in layer.sub_layers
+                          if data.get('layer') is None]
+            if references:
+                missing.append((layer, references))
+        return missing
+
+    @staticmethod
+    def read_disk_stamp(layer_path):
+        """When and how big the file at layer_path is now, None when
+        there is no file.
+
+        :rtype: tuple or None
+        """
+        if not layer_path:
+            return None
+        try:
+            info = os.stat(layer_path)
+        except OSError:
+            return None
+        return info.st_mtime, info.st_size
+
+    def stamp_layer_file(self, layer_path):
+        """Note the file as it is now, as what this graph last read or
+        wrote. Called once a layer is loaded, saved or reloaded.
+        """
+        stamp = self.read_disk_stamp(layer_path)
+        if stamp is None:
+            self.disk_stamps.pop(layer_path, None)
+        else:
+            self.disk_stamps[layer_path] = stamp
+
+    def _stamp_new_layer_file(self, layer_path):
+        # A layer referenced after the graph was opened is read as it is
+        # added. A file already noted keeps its stamp: another copy of it
+        # in the stack does not mean it was read again.
+        if layer_path not in self.disk_stamps:
+            self.stamp_layer_file(layer_path)
+
+    def layer_file_changed_on_disk(self, layer_path):
+        """Whether something else has written the layer's file since this
+        graph last read or wrote it. A file that has gone away is not
+        counted, saving puts it back.
+
+        :rtype: bool
+        """
+        known = self.disk_stamps.get(layer_path)
+        if known is None:
+            return False
+        now = self.read_disk_stamp(layer_path)
+        return now is not None and now != known
+
+    def layer_files_changed_on_disk(self):
+        """The real paths of the loaded layers whose files have changed on
+        disk, each once, in stack order. A stat of each file, cheap enough
+        to ask whenever the window comes back to the front.
+
+        :rtype: list
+        """
+        changed = []
+        for layer in self.stage._sub_layers:
+            path = layer.real_path
+            if path in changed:
+                continue
+            if self.layer_file_changed_on_disk(path):
+                changed.append(path)
+        return changed
 
     def get_layer_colors(self, layer_list):
         layers_colors = []
@@ -2070,9 +2273,20 @@ class StageModel(QtCore.QObject):
     def get_node_attr_type(self, node_path, attr_name, layer=None):
         layer = layer or self.target_layer
         node = layer.lookup(node_path)
-        if node:
-            value = self.stage.get_node_attr_value(node, attr_name, layer)
-            return determine_nxt_type(value)
+        if not node:
+            return None
+        if isinstance(layer, nxt_layer.CacheLayer):
+            # A cached value is whatever object a node's code left there,
+            # so its type is right there. Working it out the way a saved
+            # value's is, by resolving tokens in its text and parsing that
+            # back, took seconds for a big list and stalled the editor,
+            # and the host it runs in, at the end of every build.
+            value = self.stage.get_node_attr_value(node, attr_name, layer,
+                                                   resolved=False)
+            if not isinstance(value, str):
+                return cached_type_name(value)
+        value = self.stage.get_node_attr_value(node, attr_name, layer)
+        return determine_nxt_type(value)
 
     def get_node_attr_comment(self, node_path, attr_name, layer=None):
         layer = layer or self.target_layer
@@ -3076,6 +3290,16 @@ class StageModel(QtCore.QObject):
             if points:
                 prefs[layer_path] = points
 
+    @staticmethod
+    def breakpoints_ignored():
+        """Whether runs are going through every breakpoint, as the Ignore
+        Breakpoints toggle asks. The breakpoints themselves are kept.
+
+        :rtype: bool
+        """
+        pref_key = user_dir.USER_PREF.IGNORE_BREAKS
+        return bool(user_dir.user_prefs.get(pref_key, False))
+
     def get_breakpoints(self, layer=None):
         """The paths of the nodes with a breakpoint, on layer or the top
         layer."""
@@ -4010,6 +4234,9 @@ class StageModel(QtCore.QObject):
         if self._build_should_stop and not t.raised_exception:
             # Stop was pressed while the node ran, after it last looked.
             raise BuildStop
+        if t.failed:
+            # Told before the invalid node dialog below, which waits.
+            self.build_failed.emit(node_path)
         if t.raised_exception:
             if isinstance(t.raised_exception, InvalidNodeError):
                 details = ("A build runs against the graph as it was when "
@@ -4260,6 +4487,11 @@ class StageModel(QtCore.QObject):
         if self.last_hit_break is not None:
             if self.last_hit_break in breaks:
                 breaks.remove(self.last_hit_break)
+        # Ignored breakpoints stay where they are, a run just goes through.
+        if breaks and self.breakpoints_ignored():
+            logger.execinfo('Ignoring {} breakpoint(s), see Execute > Ignore '
+                            'Breakpoints.'.format(len(breaks)))
+            breaks = []
         self._set_build_paused(False)
         for i in range(start, stop):
             node_path = self.current_build_order[i]
@@ -4449,7 +4681,31 @@ class NxtUndoStack(QtWidgets.QUndoStack):
             logger.warning('The target layer is locked!')
             model.request_ding.emit()
             return
+        if not self._macro_depth:
+            self._before_dropping_undone()
         super(NxtUndoStack, self).push(command)
+
+    # Pushing, or starting a macro, throws away what was undone. Inside a
+    # macro nothing is: it was thrown away when the macro began.
+    _macro_depth = 0
+
+    def beginMacro(self, text):
+        if not self._macro_depth:
+            self._before_dropping_undone()
+        self._macro_depth += 1
+        super(NxtUndoStack, self).beginMacro(text)
+
+    def endMacro(self):
+        super(NxtUndoStack, self).endMacro()
+        self._macro_depth = max(0, self._macro_depth - 1)
+
+    def _before_dropping_undone(self):
+        if self.index() >= self.count():
+            return
+        model = self.parent()
+        forget = getattr(model, 'forget_commands_past_index', None)
+        if forget:
+            forget()
 
 
 class UnsavedLayerSet(set):
@@ -4791,6 +5047,9 @@ class ExecuteNodeThread(QtCore.QThread):
         # Linux won't raise exceptions in threads so this is how we catch it
         # and let the model raise it in the main thread.
         self.raised_exception = None
+        # Whether the node raised an error, rather than the build being
+        # stopped or the graph exiting on purpose.
+        self.failed = False
 
     def run(self):
         self._run()
@@ -4810,6 +5069,7 @@ class ExecuteNodeThread(QtCore.QThread):
                                                           layer)
             except GraphError as err:
                 logger.grapherror(str(err), links=[self.node_path])
+                self.failed = True
                 if isinstance(err, InvalidNodeError):
                     self.raised_exception = err
                 else:

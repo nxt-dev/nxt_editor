@@ -508,6 +508,17 @@ class AppActions(NxtActionContainer):
         self.toggle_ding_action.triggered.connect(toggle_ding)
         self.toggle_ding_action.setShortcutContext(context)
         self.available_without_model.append(self.toggle_ding_action)
+        # Notice files changed on disk
+        pref_key = user_dir.USER_PREF.CHECK_DISK_CHANGES
+        self.check_disk_action = BoolUserPrefAction(
+            'Notice Files Changed on Disk', pref_key, default=True,
+            parent=self)
+        self.check_disk_action.setWhatsThis(
+            'When the editor comes back to the front, offer to reload the '
+            "graph's files that something else has changed on disk. Saving "
+            'over a changed file asks first either way.')
+        self.check_disk_action.setShortcutContext(context)
+        self.available_without_model.append(self.check_disk_action)
 
         # Font size actions
         self.increase_font_size_action = NxtAction(text='Increase Font '
@@ -549,6 +560,7 @@ class AppActions(NxtActionContainer):
                                      self.ai_assistant_action,
                                      self.ai_settings_action,
                                      self.toggle_ding_action,
+                                     self.check_disk_action,
                                      self.clear_logs_action,
                                      self.close_action]
 
@@ -2139,6 +2151,20 @@ class ExecuteActions(NxtActionContainer):
         clear_icon.addPixmap(clear_pixmap_on, QtGui.QIcon.Normal,
                              QtGui.QIcon.On)
         self.clear_breaks_action.setIcon(clear_icon)
+        # Ignore breakpoints, without taking them off. Read as a run goes,
+        # so it can be flipped while a build is paused at one.
+        self.ignore_breaks_action = BoolUserPrefAction(
+            'Ignore Breakpoints', user_dir.USER_PREF.IGNORE_BREAKS,
+            parent=self)
+        self.ignore_breaks_action.setAutoRepeat(False)
+        self.ignore_breaks_action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        self.ignore_breaks_action.setToolTip('Ignore Breakpoints')
+        self.ignore_breaks_action.setWhatsThis(
+            'Runs go straight through every breakpoint while this is on. The '
+            'breakpoints are kept.')
+        self.ignore_breaks_action.setIcon(exec_icons.ignore_breakpoints())
+        self.ignore_breaks_action.toggled.connect(
+            self.main_window.on_ignore_breaks_toggled)
 
         # Toggle start point
 
@@ -2334,6 +2360,7 @@ class ExecuteActions(NxtActionContainer):
                                      self.add_break_action,
                                      self.remove_break_action,
                                      self.clear_breaks_action,
+                                     self.ignore_breaks_action,
                                      self.wt_recomp_action,
                                      self.clear_cache_action,
                                      self.enable_cmd_port_action,

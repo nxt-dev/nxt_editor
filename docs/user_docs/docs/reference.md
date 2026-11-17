@@ -87,6 +87,13 @@ and Blender.
   any other.
 - A selected node has an amber outline, and the node under the mouse a thin
   white one.
+- A small dot after a node's name means it has changes that are not saved
+  yet, on any of its layers: anything that changes the node, moving it
+  included. Saving the layer clears it, and undoing back to where the layer
+  was saved clears it too. Undoing past a save marks the node again,
+  because it no longer matches the file. Reloading a layer clears it as
+  well. Reloading can be undone, but a node whose reload was undone is not
+  marked again; the layer still shows as unsaved in the Layer Manager.
 - Start, skip and break points sit on the node's exec input: a green
   triangle, an orange bar and a red square.
 
@@ -129,6 +136,18 @@ what it runs.
   runs the selected node, then on down its exec chain.
 - **Execute Hierarchy**, the play button with a parent and its children:
   runs the selected node and every node under it.
+
+**Ignore Breakpoints**, in the Execute menu and on the toolbar beside the
+other breakpoint buttons, lets every run go straight through breakpoints
+without taking any of them off. While it is on, breakpoints are drawn as
+hollow red squares. It can be turned on while a build is paused at a
+breakpoint, and the rest of the run goes through. The editor remembers it
+between sessions.
+
+When a node fails and stops the build, the editor plays its error sound
+and, if another window is in front, flashes in the taskbar (or bounces in
+the Dock) until you look at it. **Options > Error sound** turns the sound
+off.
 
 ### Find Node
 
@@ -660,6 +679,20 @@ it again, or use **Show In Graph** on the layer's menu, to bring them back.
 
 **Edit References...** opens the Reference Editor on that layer.
 
+Opening a graph with references that cannot be found or opened shows a
+notice listing them (**Show Details...**), with **Edit References...** to
+open the Reference Editor on the first layer holding one. The notice does
+not hold anything up, so you can look at the graph first or close it with
+**Ignore**. References that are not found are kept as written, in case they
+resolve on another machine.
+
+A graph saved by a newer version of nxt, or one referencing such a file, is
+not opened straight away. The editor says which version saved it and asks
+first. **Open Anyway** opens it, but anything this version does not
+understand is left out, and saving writes the file without it, so updating
+nxt is the safe way to open it. From Python, open one inside
+`nxt_io.allow_newer_files()`.
+
 ![The Reference Editor](images/reference_editor.png)
 
 - **Layer** picks which layer's references you are editing. Only layers that
@@ -721,6 +754,19 @@ If a file now references something different, the layer stack follows it:
 layers can appear, disappear or change order. Reloading is one step on the
 undo stack, and undoing it puts back exactly what each layer held before,
 without reading the files again.
+
+### Files changed on disk
+
+The editor notes when each layer file was last read or written. If
+something else changes a file after that, a version control update for
+example, saving that layer asks first: **Overwrite** writes the graph over
+the changes on disk, **Reload...** opens Reload Source instead, and
+**Cancel** leaves the file alone.
+
+When you come back to the editor from another window, it also offers to
+reload the current graph's files that have changed. **Keep Mine** is
+remembered until the file changes again. Turn this off with **Options >
+Notice Files Changed on Disk**; saving over a changed file still asks.
 
 ## Build View
 

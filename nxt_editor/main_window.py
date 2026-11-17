@@ -44,6 +44,9 @@ from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
 from nxt_editor.dockwidgets.reference_editor import ReferenceEditor
 from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
+    FileChangedMessage,
+    MissingReferencesMessage,
+    NxtConfirmDialog,
     NxtFileDialog,
     NxtWarningDialog,
     ReloadSourceDialog,
@@ -63,6 +66,13 @@ import nxt.remote.contexts
 
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
+
+
+class _NoNewerFileError(Exception):
+    """Stands in with an nxt_core too old to open newer files anyway."""
+
+
+NewerFileError = getattr(nxt_io, 'NewerFileError', _NoNewerFileError)
 
 # Widget classes given the editor's font when the QApplication is nxt's own.
 WIDGETS_WITH_FONTS = (
@@ -159,6 +169,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.zoom_keys_down = False
         self._held_keys = []
         self._closing = False
+        # Files changed on disk already offered for reload, per tab,
+        # {model uid: {real_path: disk stamp}}. See check_files_changed_on_disk.
+        self._offered_disk_stamps = {}
+        self._asking_about_disk = False
+        self._was_deactivated = False
+        # The notice about references a graph could not load, kept so it
+        # is not collected while it is up.
+        self.missing_references_message = None
         self.last_focused_start = 0  # Start point focus tracker
         # FIXME: Fix with MV signal
         self.last_focused_tab = -1  # Tab tracker for upating the comp layer
@@ -435,7 +453,58 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.WindowDeactivate:
             self._held_keys = []
             self.zoom_keys_down = False
+            self._was_deactivated = True
+        elif (event.type() == QtCore.QEvent.WindowActivate and
+              self._was_deactivated):
+            # Coming back to the editor is when a file changed by
+            # something else, a version control update say, is worth
+            # mentioning. Not the first time the window comes up, it has
+            # only just read its files. After the event, so the window is
+            # up first.
+            self._was_deactivated = False
+            QtCore.QTimer.singleShot(0, self.check_files_changed_on_disk)
         return super(MainWindow, self).event(event)
+
+    def check_files_changed_on_disk(self):
+        """Offer to reload the current graph's layer files that something
+        else has changed on disk. Each change is offered once: keeping
+        what is here is remembered until the file changes again, and
+        saving over it still asks first, see save_layer.
+
+        :return: whether anything was reloaded
+        :rtype: bool
+        """
+        pref_key = user_dir.USER_PREF.CHECK_DISK_CHANGES
+        if not user_dir.user_prefs.get(pref_key, True):
+            return False
+        model = self.model
+        if not model or self._asking_about_disk or not self.isVisible():
+            return False
+        offered = self._offered_disk_stamps.setdefault(model.uid, {})
+        changed = []
+        for layer_path in model.layer_files_changed_on_disk():
+            stamp = model.read_disk_stamp(layer_path)
+            if offered.get(layer_path) != stamp:
+                offered[layer_path] = stamp
+                changed.append(layer_path)
+        if not changed:
+            return False
+        unsaved = [p for p in changed if p in model.effected_layers]
+        # The message takes the focus and gives it back, which would ask
+        # again before this has been answered.
+        self._asking_about_disk = True
+        try:
+            reload = FileChangedMessage.offer_reload(changed, unsaved,
+                                                     parent=self)
+        finally:
+            self._asking_about_disk = False
+        if not reload:
+            return False
+        self.set_waiting_cursor(True)
+        try:
+            return model.reload_layers(changed)
+        finally:
+            self.set_waiting_cursor(False)
 
     @staticmethod
     def set_waiting_cursor(state=True):
@@ -641,6 +710,7 @@ QCheckBox::indicator {
         model = StageModel(stage=stage)
         model.processing.connect(self.set_waiting_cursor)
         model.request_ding.connect(self.ding)
+        model.build_failed.connect(self.on_build_failed)
         model.layer_alias_changed.connect(partial(self.update_tab_title, model))
         # create view
         view = StageView(model=model, parent=self)
@@ -662,6 +732,26 @@ QCheckBox::indicator {
             self.update_target_color()
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
+
+    def on_ignore_breaks_toggled(self, ignored=None):
+        """Redraw the breakpoints of every open graph, which are hollow
+        while they are ignored. Nodes cache how they look, so each is told.
+        """
+        for open_file in self.open_files.values():
+            model = open_file.get('model')
+            if model:
+                model.breaks_changed.emit(tuple(model.get_breakpoints()))
+
+    def on_build_failed(self, node_path=None):
+        """A node failed and its build stopped. Builds can run long, so
+        ding (unless the error sound is off in the Options menu) and, when
+        the editor is not the window in front, flash it in the taskbar or
+        dock until it is looked at.
+        """
+        self.ding()
+        window = self.window()
+        if not window.isActiveWindow():
+            QtWidgets.QApplication.alert(window, 0)
 
     @staticmethod
     def ding():
@@ -704,12 +794,109 @@ QCheckBox::indicator {
         new_stage = None
         try:
             new_stage = self.nxt.load_file(potential_path)
+        except NewerFileError as e:
+            self.set_waiting_cursor(False)
+            if self.confirm_open_newer([(potential_path, e.version)]):
+                new_stage = self._load_allowing_newer(potential_path)
         except IOError as e:
             NxtWarningDialog.show_message("Failed to Open", str(e))
+        if new_stage and NewerFileError is not _NoNewerFileError:
+            # A reference saved by a newer nxt is left out, as one that is
+            # not found is. That can be opened anyway too.
+            newer = self.newer_references(new_stage)
+            if newer:
+                self.set_waiting_cursor(False)
+                if self.confirm_open_newer(newer):
+                    self.nxt.unload_file(new_stage.uid)
+                    new_stage = self._load_allowing_newer(potential_path)
         self.set_waiting_cursor(False)
         if new_stage:
             self.new_tab(initial_stage=new_stage, update=not self.in_startup)
             user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = potential_path
+            for open_file in self.open_files.values():
+                if open_file['stage'] is new_stage:
+                    self.notify_missing_references(open_file['model'])
+
+    @staticmethod
+    def newer_references(stage):
+        """The references of a loaded graph that were left out because a
+        newer nxt saved them.
+
+        :return: [(reference, version), ...]
+        :rtype: list
+        """
+        newer = []
+        for layer in stage._sub_layers:
+            layer_dir = os.path.dirname(layer.real_path or '') or None
+            for data in layer.sub_layers:
+                if data.get('layer') is not None:
+                    continue
+                reference = data.get(nxt_layer.SAVE_KEY.FILEPATH)
+                try:
+                    nxt_io.load_file_data(reference, layer_dir)
+                except NewerFileError as e:
+                    newer.append((reference, e.version))
+                except Exception:
+                    # Not found, or broken some other way. Not this.
+                    pass
+        return newer
+
+    @staticmethod
+    def confirm_open_newer(files):
+        """Ask whether to open files saved by a newer nxt anyway.
+
+        :param files: [(path, version), ...]
+        :rtype: bool
+        """
+        if len(files) == 1:
+            path, version = files[0]
+            text = ('"{}" was saved by a newer nxt ({}).'
+                    ''.format(os.path.basename(path), version))
+        else:
+            text = '{} files were saved by a newer nxt ({}).'.format(
+                len(files), ', '.join(sorted(set(v for _, v in files))))
+        info = ('Open anyway? Anything this version does not understand is '
+                'left out, and saving writes the file without it. Updating '
+                'nxt is the safe way to open it.')
+        button_text = {NxtConfirmDialog.Ok: 'Open Anyway',
+                       NxtConfirmDialog.Cancel: 'Cancel'}
+        return NxtConfirmDialog.show_message(
+            text=text, info=info, button_text=button_text,
+            icon=QtWidgets.QMessageBox.Icon.Warning)
+
+    def _load_allowing_newer(self, filepath):
+        self.set_waiting_cursor(True)
+        try:
+            with nxt_io.allow_newer_files():
+                return self.nxt.load_file(filepath)
+        except IOError as e:
+            NxtWarningDialog.show_message("Failed to Open", str(e))
+        finally:
+            self.set_waiting_cursor(False)
+        return None
+
+    def notify_missing_references(self, model):
+        """Say which references a graph could not load, with a button to
+        fix them in the Reference Editor. Not modal, so it neither holds up
+        a script opening graphs nor stops the graph being looked at first.
+
+        :param model: StageModel of the graph just opened
+        :return: the notice, or None when nothing was missing
+        """
+        missing = model.missing_references()
+        if not missing:
+            return None
+        if self.missing_references_message is not None:
+            self.missing_references_message.close()
+        message = MissingReferencesMessage(missing, parent=self)
+        layer = missing[0][0]
+
+        def edit_references():
+            self.edit_layer_references(layer, model=model)
+        message.edit_requested.connect(edit_references)
+        self.missing_references_message = message
+        message.show()
+        return message
 
     def save_open_tab(self):
         """Save the file that corresponds to the currently selected tab."""
@@ -721,18 +908,20 @@ QCheckBox::indicator {
         for layer in self.model.stage._sub_layers:
             self.save_layer(layer)
 
-    def edit_layer_references(self, layer=None):
+    def edit_layer_references(self, layer=None, model=None):
         """Open the reference editor on a layer.
 
         :param layer: layer to edit, defaults to the one being targeted
+        :param model: graph the layer is in, defaults to the current one
         :return: whether the dialog was accepted
         :rtype: bool
         """
-        if not self.model:
+        model = model or self.model
+        if not model:
             return False
-        layer = layer or self.model.target_layer
+        layer = layer or model.target_layer
         layer_path = getattr(layer, 'real_path', None)
-        dialog = ReferenceEditor(self.model, layer_path=layer_path,
+        dialog = ReferenceEditor(model, layer_path=layer_path,
                                  parent=self)
         return bool(dialog.exec_())
 
@@ -780,6 +969,14 @@ QCheckBox::indicator {
         if not layer.real_path:
             layer_saved = self.save_layer_as(layer, open_in_new_tab=False)
         else:
+            if self.model.layer_file_changed_on_disk(layer.real_path):
+                choice = FileChangedMessage.before_save(layer.real_path,
+                                                        parent=self)
+                if choice == FileChangedMessage.RELOAD:
+                    self.reload_layer_source(layer)
+                    return
+                if choice != FileChangedMessage.OVERWRITE:
+                    return
             self.set_waiting_cursor(True)
             self.nxt.save_layer(layer)
             layer_saved = True
@@ -1443,6 +1640,7 @@ class ExecuteToolBar(ToolBar):
                 self.exec_actions.add_break_action,
                 self.exec_actions.remove_break_action,
                 self.exec_actions.clear_breaks_action,
+                self.exec_actions.ignore_breaks_action,
             ]
         )
 
@@ -1626,6 +1824,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.execute_menu.addAction(self.exec_actions.execute_selected_action)
         self.execute_menu.addAction(self.exec_actions.execute_hierarchy_action)
         self.execute_menu.addAction(self.exec_actions.execute_graph_action)
+        self.execute_menu.addSeparator()
+        self.execute_menu.addAction(self.exec_actions.ignore_breaks_action)
+        self.execute_menu.addSeparator()
         self.execute_menu.addAction(self.exec_actions.clear_cache_action)
         self.execute_menu.addAction(self.exec_actions.wt_recomp_action)
         # Populate action data for window actions
@@ -1676,6 +1877,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
         self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
+        self.options_menu.addAction(self.app_actions.check_disk_action)
         self.options_menu.addAction(self.app_actions.ai_settings_action)
         self.options_menu.addAction(
             self.app_actions.optional_components_action)

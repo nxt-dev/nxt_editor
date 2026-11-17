@@ -737,3 +737,118 @@ class UnsavedChangesMessage(QtWidgets.QMessageBox):
                                    message.Cancel)
         message.setIcon(message.Warning)
         return message.exec_()
+
+
+class FileChangedMessage(QtWidgets.QMessageBox):
+    """Asks what to do about a layer file something else has changed on
+    disk since the editor last read or wrote it.
+    """
+    OVERWRITE = 'overwrite'
+    RELOAD = 'reload'
+    CANCEL = 'cancel'
+
+    @classmethod
+    def before_save(cls, layer_path, parent=None):
+        """Ask before saving over a file that changed on disk.
+
+        :param layer_path: the file about to be saved over
+        :param parent: widget to parent the message to
+        :return: OVERWRITE, RELOAD or CANCEL
+        :rtype: str
+        """
+        message = cls(parent)
+        message.setWindowTitle('File Changed on Disk')
+        message.setIcon(cls.Icon.Warning)
+        message.setText('"{}" has changed on disk since it was opened or '
+                        'last saved.'.format(os.path.basename(layer_path)))
+        message.setInformativeText(
+            'Overwrite it with this graph, losing what changed on disk, or '
+            'reload it, losing what is unsaved here?')
+        message.setDetailedText(layer_path)
+        overwrite = message.addButton('Overwrite', cls.ButtonRole.AcceptRole)
+        reload_button = message.addButton('Reload...', cls.ButtonRole.ActionRole)
+        cancel = message.addButton(cls.StandardButton.Cancel)
+        message.setDefaultButton(cancel)
+        message.exec_()
+        clicked = message.clickedButton()
+        if clicked is overwrite:
+            return cls.OVERWRITE
+        if clicked is reload_button:
+            return cls.RELOAD
+        return cls.CANCEL
+
+    @classmethod
+    def offer_reload(cls, layer_paths, unsaved=(), parent=None):
+        """Offer to reload files that changed on disk while the editor was
+        in the background.
+
+        :param layer_paths: files that changed
+        :param unsaved: those of them with unsaved changes here
+        :param parent: widget to parent the message to
+        :return: whether to reload them
+        :rtype: bool
+        """
+        message = cls(parent)
+        message.setWindowTitle('Files Changed on Disk')
+        message.setIcon(cls.Icon.Question)
+        names = [os.path.basename(p) for p in layer_paths]
+        if len(names) == 1:
+            text = '"{}" has changed on disk.'.format(names[0])
+        else:
+            text = '{} files of this graph have changed on disk.'.format(
+                len(names))
+        message.setText(text)
+        info = 'Reload to see the changes. Reloading can be undone.'
+        if unsaved:
+            info += ('\nUnsaved changes to {} are replaced by what is on '
+                     'disk.'.format(', '.join('"{}"'.format(
+                        os.path.basename(p)) for p in unsaved)))
+        message.setInformativeText(info)
+        message.setDetailedText('\n'.join(layer_paths))
+        reload_button = message.addButton('Reload', cls.ButtonRole.AcceptRole)
+        message.addButton('Keep Mine', cls.ButtonRole.RejectRole)
+        message.setDefaultButton(reload_button)
+        message.exec_()
+        return message.clickedButton() is reload_button
+
+
+class MissingReferencesMessage(QtWidgets.QMessageBox):
+    """Says which references a graph that was just opened could not load,
+    with a button to open the Reference Editor on them. It is shown, not
+    run, so nothing waits on it.
+    """
+    edit_requested = QtCore.Signal()
+
+    def __init__(self, missing, parent=None):
+        """
+        :param missing: [(layer, [reference, ...]), ...] as
+            StageModel.missing_references gives them
+        """
+        super(MissingReferencesMessage, self).__init__(parent)
+        self.setModal(False)
+        self.setWindowTitle('References Not Found')
+        self.setIcon(self.Icon.Warning)
+        count = sum(len(references) for _, references in missing)
+        if count == 1:
+            text = '1 reference could not be loaded.'
+        else:
+            text = '{} references could not be loaded.'.format(count)
+        self.setText(text)
+        self.setInformativeText(
+            'They are kept as written, in case they resolve on another '
+            'machine. Open the Reference Editor to point them at the right '
+            'files.')
+        lines = []
+        for layer, references in missing:
+            lines.append('{}:'.format(layer.get_alias()))
+            lines.extend('    {}'.format(r) for r in references)
+        self.setDetailedText('\n'.join(lines))
+        self.edit_button = self.addButton('Edit References...',
+                                          self.ButtonRole.AcceptRole)
+        self.addButton('Ignore', self.ButtonRole.RejectRole)
+        self.setDefaultButton(self.edit_button)
+        self.buttonClicked.connect(self._on_clicked)
+
+    def _on_clicked(self, button):
+        if button is self.edit_button:
+            self.edit_requested.emit()

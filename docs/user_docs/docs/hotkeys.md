@@ -178,6 +178,7 @@ is not in the Hotkey Editor; see [Moving around](reference.md#moving-around).
 | Add Breakpoint               |                Adds the breakpoint on the selected node(s).                | Add Breakpoint               |          |
 | Remove Breakpoint            |              Removes the breakpoint on the selected node(s).               | Remove Breakpoint            |          |
 | Clear All Breakpoints        |                                                                            | Clear All Breakpoints        |          |
+| Ignore Breakpoints           | Runs go straight through every breakpoint while this is on. The breakpoints are kept. | Ignore Breakpoints |          |
 | Clear Cache                  |               Clears the Python interpreter and cached data.               | Clear Cache Now              |          |
 | Workflow Tools Always Recomp |                                                                            | Workflow Tools Always Recomp |          |
 | Toggle Start Point           |                 Toggles a startpoint on the selected node.                 | Toggle Start Point           |    S     |

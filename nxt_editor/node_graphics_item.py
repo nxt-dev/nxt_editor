@@ -35,6 +35,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
     EXEC_PLUG_RADIUS = 6
     # A chip of a weaker layer's color at the title bar's right end.
     LAYER_CHIP = 8
+    # The dot after a node's name while it has unsaved changes.
+    UNSAVED_DOT_RADIUS = 3
+    UNSAVED_DOT_SPACE = 14
     ROUND_X = theme.NODE_RADIUS
     ROUND_Y = theme.NODE_RADIUS
     # Room around a root node for its shadow: left, top, right, bottom.
@@ -98,6 +101,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
         self.model.build_idx_changed.connect(self.update_build_focus)
         self.model.executing_changed.connect(self.update_build_focus)
+        self.model.unsaved_nodes_changed.connect(self.on_unsaved_changed)
         self.xChanged.connect(self._moved)
         self.yChanged.connect(self._moved)
         # draw node
@@ -503,6 +507,10 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         width = self.max_width - 40 - self.chips_width()
         if self.error_list:
             width -= 20
+        unsaved = self.has_unsaved_changes()
+        if unsaved:
+            # Room for the unsaved dot after the name.
+            width -= self.UNSAVED_DOT_SPACE
         # Light or dark, whichever reads on this layer's color.
         text_color = QtGui.QColor(self.header_text)
         if not self.node_enabled:
@@ -513,6 +521,17 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                             QtCore.Qt.ElideRight, width)
             painter.drawText(14, 0, self.max_width - 14, self.title_rect_height,
                              QtCore.Qt.AlignVCenter, title)
+            if unsaved:
+                # A small dot after the name, in the title's own color,
+                # while the node has changes that are not saved yet.
+                dot_x = (14 + font_metrics.horizontalAdvance(title) +
+                         self.UNSAVED_DOT_SPACE / 2.0)
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.setBrush(text_color)
+                painter.drawEllipse(QtCore.QPointF(dot_x,
+                                                   self.title_rect_height / 2),
+                                    self.UNSAVED_DOT_RADIUS,
+                                    self.UNSAVED_DOT_RADIUS)
         else:
             painter.setBrush(text_color)
             proxy_rect = font_metrics.boundingRect(title_str)
@@ -746,13 +765,35 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.update()
         super(NodeGraphicsItem, self).hoverLeaveEvent(event)
 
-    def update_build_focus(self):
+    def on_unsaved_changed(self, node_paths):
+        if self.node_path in node_paths:
+            self.update()
+
+    def has_unsaved_changes(self):
+        """Whether this node has changes on any layer that are not saved
+        yet, drawn as a dot after its name.
+        """
+        return bool(self.model.get_node_unsaved_layers(self.node_path))
+
+    def update_build_focus(self, *signal_args, force=False):
+        """Draw this node as the one running, or not.
+
+        Every node hears about every step of a build, so only the ones
+        whose look changes are redrawn. Redrawing them all made a build
+        cost the square of its length in drawing, which a host, running
+        nodes on the thread that draws, spent stalled.
+
+        :param signal_args: what the signal calling this carried, unused
+        :param force: redraw even if nothing changed here
+        """
+        was_focus = self.is_build_focus
         if not self.model.executing:
             self.is_build_focus = False
+        else:
+            focus = self.model.get_build_focus()
+            self.is_build_focus = self.node_path == focus
+        if force or self.is_build_focus != was_focus:
             self.update()
-            return
-        self.is_build_focus = self.node_path == self.model.get_build_focus()
-        self.update()
 
     def update_from_model(self):
         """Sync the visible state of this node with the model."""
@@ -770,7 +811,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                                            comp)
         self.node_enabled = self.model.get_node_enabled(self.node_path)
         self.update_color()
-        self.update_build_focus()
+        self.update_build_focus(force=True)
         self._update_collapse()
         self.error_list = self.model.get_node_error(node_path, comp)
         self.update_fonts()
@@ -1190,6 +1231,12 @@ class NodeExecutionPlug(NodeGraphicsPlug):
             painter.setBrush(colors.BREAK_COLOR)
             painter.setPen(shape_border_pen)
             painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
+            if self.model.breakpoints_ignored():
+                # Hollow while runs go through it, kept but not stopping.
+                inner = self.radius - 3
+                painter.setBrush(colors.GRAPH_BG_COLOR)
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.drawRect(inner * -1, inner * -1, inner * 2, inner * 2)
 
     def _buildTriangle(self, offset, side_length):
         polygon = QtGui.QPolygonF()

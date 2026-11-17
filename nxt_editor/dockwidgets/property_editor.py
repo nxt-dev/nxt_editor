@@ -30,6 +30,18 @@ from nxt import tokens
 
 # Fixme: Should this be a pref?
 HISTORICAL_MAX_CHARS = 50
+# How much of a cached value is shown. A node can leave a value millions of
+# characters long, and laying that out in a cell, or wrapping it for the
+# tooltip, held up the editor for seconds after every build.
+CACHED_MAX_CHARS = 2000
+
+
+def shorten_cached(text):
+    """A cached value's text, cut short if it is too long to show."""
+    if not text or len(text) <= CACHED_MAX_CHARS:
+        return text
+    return '{} ... ({:,} characters)'.format(text[:CACHED_MAX_CHARS],
+                                            len(text))
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -1364,7 +1376,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
                                                           attr_name,
                                                           data_state=cached,
                                                           as_string=True)
-            self.attr_data_cached += [attr_cached]
+            self.attr_data_cached += [shorten_cached(attr_cached)]
             # get resolved data
             resolved = DATA_STATE.RESOLVED
             resolved_val = stage_model.get_node_attr_value(node_path,

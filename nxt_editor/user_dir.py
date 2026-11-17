@@ -168,6 +168,8 @@ class USER_PREF():
     ATTR_SORTING = 'attribute_sorting'
     EXEC_FRAMING = 'execution_framing'
     SKIP_INITIAL_BREAK = 'skip_initial_breakpoint'
+    # Runs go straight through every breakpoint, which are kept as they are.
+    IGNORE_BREAKS = 'ignore_breakpoints'
     HISTORICAL_LABEL_FORMAT = 'historical_label_format'
     NODE_TOOLTIPS = 'node_tooltips'
     GRID_SNAP = 'snap_to_grid'
@@ -191,6 +193,9 @@ class USER_PREF():
     CE_COMPLETE_HOST = 'code_editor_complete_host'
     CE_COMPLETE_JEDI = 'code_editor_complete_jedi'
     DING = 'ding'
+    # Offer to reload layer files changed on disk when the editor comes
+    # back to the front.
+    CHECK_DISK_CHANGES = 'check_files_changed_on_disk'
     SHOW_GRID = 'show_grid'
     # Property Editor rows in neutral text, the layer as a color beside
     # them, rather than in their layer's color.
