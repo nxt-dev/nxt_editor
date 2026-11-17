@@ -4,6 +4,12 @@ This page summarises what is new in recent releases of **nxt_editor**, and
 in **nxt_core 0.21**. Each item links to the part of the docs that explains
 it in full.
 
+## Unreleased
+
+- `NXT_NO_MENU=1` leaves nxt's own menu out of Maya, Blender and Unreal, for
+  pipelines that open the editor from their own menu. See
+  [Leaving the nxt menu out](install.md#leaving-the-nxt-menu-out).
+
 ## nxt_editor 4.6.1
 
 - Only proxy nodes are striped again, as before 4.6.0: nodes made by an

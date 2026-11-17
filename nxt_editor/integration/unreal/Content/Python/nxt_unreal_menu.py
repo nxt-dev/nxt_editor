@@ -12,6 +12,10 @@ and needed internet access and write access to the engine.
 
 Unreal ships no Qt, so PySide6 is installed once, into a folder outside the
 engine; the menu offers to do it. See nxt_editor/integration/qt_deps.py.
+
+NXT_NO_MENU=1 leaves the menu out, by the same rule as Maya and Blender.
+Everything the menu does is still here to call, for example
+``import nxt_unreal_menu; nxt_unreal_menu.launch_nxt_editor()``.
 """
 import functools
 import importlib.util
@@ -66,19 +70,29 @@ def _put_first(path):
                 del sys.modules[name]
 
 
-def qt_deps():
-    """nxt_editor's Qt installer, loaded by path because importing anything
-    under nxt_editor imports Qt, which may not be there yet.
+def _load_integration(module_name, file_name):
+    """A file from nxt_editor/integration, loaded by path because importing
+    anything under nxt_editor imports Qt, which may not be there yet.
     """
-    found = sys.modules.get('nxt_qt_deps')
+    found = sys.modules.get(module_name)
     if found is not None:
         return found
-    path = os.path.join(HERE, 'nxt_editor', 'integration', 'qt_deps.py')
-    spec = importlib.util.spec_from_file_location('nxt_qt_deps', path)
+    path = os.path.join(HERE, 'nxt_editor', 'integration', file_name)
+    spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    sys.modules['nxt_qt_deps'] = module
+    sys.modules[module_name] = module
     return module
+
+
+def qt_deps():
+    """nxt_editor's Qt installer."""
+    return _load_integration('nxt_qt_deps', 'qt_deps.py')
+
+
+def wants_menu():
+    """Whether to add the nxt menu, by the same rule as Maya and Blender."""
+    return _load_integration('nxt_integration', '__init__.py').wants_menu()
 
 
 def is_nxt_available():
@@ -153,6 +167,9 @@ def make_or_find_nxt_menu():
 
 
 def refresh_nxt_menu():
+    if not wants_menu():
+        # Also after an install, which refreshes the menu it would be in.
+        return
     try:
         nxt_menu = make_or_find_nxt_menu()
     except ValueError:

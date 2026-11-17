@@ -65,10 +65,8 @@ Each zip also contains a `README.md` with these same steps.
 
 ## Maya
 
-The Maya plugin is a Maya module folder that carries nxt, nxt_editor,
-Qt.py, and jedi for the
-[Python Analysis](reference.md#python-analysis-with-jedi) completion source.
-Maya ships its own PySide6, so there is nothing else to install.
+The Maya plugin is a Maya module folder that carries nxt, nxt_editor and
+Qt.py. Maya ships its own PySide6, so there is nothing else to install.
 
 ### Automated install
 
@@ -98,9 +96,8 @@ folder and put the `nxt.mod` somewhere on your Maya modules path.
 When the plugin is loaded there is an **nxt** menu in Maya's main menu bar.
 Choose **Open Editor** to get started.
 
-A pipeline that opens the editor from its own menu or shelf can leave the
-**nxt** menu out: set the environment variable `NXT_NO_MENU=1` before the
-plugin loads, for example in the `nxt.mod` module file. The `nxt_ui` command
+To leave the **nxt** menu out, see
+[Leaving the nxt menu out](#leaving-the-nxt-menu-out). The `nxt_ui` command
 below is registered either way.
 
 The plugin also adds an `nxt_ui` command, for shelf buttons and scripts.
@@ -271,6 +268,27 @@ only matter when installing by hand.
 
     If `NXT_USER_DIR` is set, the default folder is `$NXT_USER_DIR/deps`
     rather than `~/nxt/deps`.
+
+## Leaving the nxt menu out
+
+A pipeline that opens the editor from its own menu or shelf can leave nxt's
+own menu out of every host: set the environment variable `NXT_NO_MENU=1`
+before the plugin loads, for example in the `nxt.mod` module file, the
+studio's Blender startup environment, or Unreal's launch environment. An
+empty value, `0`, `false`, `no` or `off` keeps the menu. The rule is the same
+in Maya, Blender and Unreal.
+
+Everything else still loads, and the editor opens from the host's Python:
+
+| Host | Open the editor |
+| :--- | :-------------- |
+| Maya | `cmds.nxt_ui()` (see [Maya usage](#usage)) |
+| Blender | `bpy.ops.nxt.open_editor()` |
+| Unreal | `import nxt_unreal_menu; nxt_unreal_menu.launch_nxt_editor()` |
+
+The other menu items are there too: in Blender every item is a
+`bpy.ops.nxt` operator, such as `bpy.ops.nxt.install_qt()`, and in Unreal
+`nxt_unreal_menu.install_qt()`.
 
 ## Other hosts
 
