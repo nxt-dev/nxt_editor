@@ -23,7 +23,7 @@ from nxt import nxt_log
 from nxt_editor.constants import NXT_WEBSITE
 from nxt.constants import NXT_DCC_ENV_VAR
 
-from nxt_editor.integration import plugin_version
+from nxt_editor.integration import plugin_version, wants_menu
 
 logger = logging.getLogger('nxt')
 CREATED_UI = []
@@ -241,6 +241,9 @@ def initializePlugin(plugin):
         logger.exception("Failed to register: {}".format(NxtUiCmd.cmd_name))
         raise
     # UI
+    if not wants_menu():
+        # The command above is all a pipeline's own menu needs.
+        return
     maya_window = mel.eval('$_=$gMainWindow')
     nxt_menu = cmds.menu('nxt', parent=maya_window, tearOff=True)
     CREATED_UI.append(nxt_menu)
