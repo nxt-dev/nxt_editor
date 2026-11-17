@@ -407,6 +407,16 @@ class AppActions(NxtActionContainer):
         self.ai_settings_action.setShortcutContext(context)
         self.available_without_model.append(self.ai_settings_action)
 
+        self.optional_components_action = NxtAction(
+            text='Optional Components...', parent=self)
+        self.optional_components_action.setWhatsThis(
+            'Install extras the editor can use, such as jedi for smarter '
+            'code completion.')
+        self.optional_components_action.triggered.connect(
+            lambda _=False: self.main_window.open_optional_components())
+        self.optional_components_action.setShortcutContext(context)
+        self.available_without_model.append(self.optional_components_action)
+
         self.color_range_action = NxtAction(text='Layer Color View...',
                                             parent=self)
         self.color_range_action.setWhatsThis(
@@ -2314,16 +2324,8 @@ class CodeEditorActions(NxtActionContainer):
         self.complete_jedi_action = NxtAction('Python Analysis (jedi)',
                                               parent=self)
         self.complete_jedi_action.setCheckable(True)
-        if code_completion.JEDI.installed():
-            self.complete_jedi_action.setWhatsThis(
-                'Uses jedi to work out what a name is, so that after a dot '
-                'it can complete what a call returns or what a variable '
-                'holds. Asked when typing pauses, or with Ctrl+Space.')
-        else:
-            self.complete_jedi_action.setEnabled(False)
-            self.complete_jedi_action.setWhatsThis(
-                'Needs jedi, which is not installed for this python. '
-                'pip install nxt-editor[completion] adds it.')
+        # Without jedi it offers to install it, see refresh_jedi_action.
+        self.complete_jedi_action.triggered.connect(self.on_jedi_triggered)
 
         self.completion_source_actions = (
             (self.complete_python_action,
@@ -2361,6 +2363,7 @@ class CodeEditorActions(NxtActionContainer):
 
         for source_action, pref, default in self.completion_source_actions:
             make_source_toggle(source_action, pref, default)
+        self.refresh_jedi_action()
         # accept edit
         self.accept_edit_action = NxtAction('Accept Code Edit', parent=self)
         self.accept_edit_action.setWhatsThis('Accept changes and commit them '
@@ -2472,6 +2475,53 @@ class CodeEditorActions(NxtActionContainer):
                                      self.complete_action,
                                      self.run_line_global_action,
                                      self.run_line_local_action]
+
+    def refresh_jedi_action(self):
+        """Python Analysis as it can be now: on as the preference says when
+        jedi is there, and off when it is not, where turning it on offers to
+        install it.
+
+        Asked again after Options > Optional Components installs or removes
+        jedi, so it is picked up without a restart. Its text stays the same,
+        because an NxtAction's hotkey is saved under its text.
+        """
+        action = self.complete_jedi_action
+        pref = user_dir.USER_PREF.CE_COMPLETE_JEDI
+        action.blockSignals(True)
+        try:
+            action.setCheckable(True)
+            if code_completion.JEDI.installed():
+                action.setChecked(user_dir.user_prefs.get(pref, True))
+                action.setWhatsThis(
+                    'Uses jedi to work out what a name is, so that after a '
+                    'dot it can complete what a call returns or what a '
+                    'variable holds. Asked when typing pauses, or with '
+                    'Ctrl+Space.')
+            else:
+                action.setChecked(False)
+                action.setWhatsThis(
+                    'Needs jedi, a free add on that is not installed yet. '
+                    'Turn this on to install it, or use Options > Optional '
+                    'Components.')
+            action.setToolTip(action.whatsThis())
+            action.setEnabled(True)
+        finally:
+            action.blockSignals(False)
+
+    def on_jedi_triggered(self, checked=False):
+        """Without jedi, turning Python Analysis on offers to install it.
+
+        The preference keeps the choice, so it is on once jedi is there.
+        """
+        if code_completion.JEDI.installed() or not checked:
+            return
+        action = self.complete_jedi_action
+        action.blockSignals(True)
+        action.setChecked(False)
+        action.blockSignals(False)
+        offer = getattr(self.main_window, 'offer_jedi', None)
+        if offer:
+            offer()
 
 
 def clear_action_data(action_list):

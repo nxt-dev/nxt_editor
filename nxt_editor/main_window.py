@@ -282,6 +282,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.ai_assistant)
         self.ai_assistant.hide()
         self.ai_settings_dialog = None
+        self.optional_components_dialog = None
+        self.jedi_offered = False
 
         self.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
         self.setCorner(QtCore.Qt.BottomLeftCorner, QtCore.Qt.LeftDockWidgetArea)
@@ -361,6 +363,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         app = QtWidgets.QApplication.instance()
         app.aboutToQuit.connect(self.shutdown_rpc_server)
+        # Once the window is up, say if an optional component needs an
+        # update. Once a session at most.
+        QtCore.QTimer.singleShot(1500, self.show_component_notice)
 
     # RPC
     def startup_rpc_server(self, join=True):
@@ -1111,6 +1116,63 @@ QCheckBox::indicator {
         self.ai_settings_dialog.show()
         self.ai_settings_dialog.raise_()
 
+    def open_optional_components(self, focus=None):
+        """Options > Optional Components.
+
+        :param focus: the id of a component to point at
+        """
+        from nxt_editor.optional_components import OptionalComponentsDialog
+        if self.optional_components_dialog is None:
+            dialog = OptionalComponentsDialog(parent=self)
+            dialog.changed.connect(self.on_optional_component_changed)
+            self.optional_components_dialog = dialog
+        dialog = self.optional_components_dialog
+        if not dialog.busy():
+            dialog.refresh()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        if focus:
+            dialog.focus(focus)
+        return dialog
+
+    def offer_jedi(self):
+        """Python Analysis was picked without jedi: ask, the first time a
+        session, whether to install it, and after that go straight to the
+        dialog."""
+        from nxt_editor.integration import optional_deps
+        from nxt_editor.optional_components import Hint
+        if self.jedi_offered:
+            return self.open_optional_components(focus=optional_deps.JEDI.id)
+        self.jedi_offered = True
+        hint = Hint(parent=self)
+        if hint.exec_() != QtWidgets.QDialog.Accepted:
+            return None
+        dialog = self.open_optional_components(focus=optional_deps.JEDI.id)
+        dialog.install(optional_deps.JEDI)
+        return dialog
+
+    def on_optional_component_changed(self, component_id):
+        """Pick up what was just installed or removed, without a restart."""
+        from nxt_editor.dockwidgets import code_completion
+        from nxt_editor.integration import optional_deps
+        if component_id != optional_deps.JEDI.id:
+            return
+        code_completion.JEDI.reset()
+        self.code_editor_actions.refresh_jedi_action()
+        editor = getattr(self, 'code_editor', None)
+        if editor is not None:
+            editor.editor.invalidate_completion_words()
+
+    def show_component_notice(self):
+        from nxt_editor import optional_components
+        try:
+            return optional_components.show_startup_notice(
+                self.status_bar, self.open_optional_components)
+        except RuntimeError:
+            # The window went before the timer did.
+            return None
+
     def on_ai_enabled_changed(self, enabled):
         if enabled:
             self.ai_assistant.refresh_providers()
@@ -1574,6 +1636,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
         self.options_menu.addAction(self.app_actions.ai_settings_action)
+        self.options_menu.addAction(
+            self.app_actions.optional_components_action)
         self.options_view_sub = self.options_menu.addMenu("View")
         self.options_view_sub.setTearOffEnabled(True)
         self.options_view_sub.addActions(self.view_opt_menu.actions())
@@ -1582,6 +1646,8 @@ class MenuBar(QtWidgets.QMenuBar):
         ce_actions = self.main_window.code_editor_actions
         self.options_complete_sub = self.options_menu.addMenu("Autocomplete")
         self.options_complete_sub.setTearOffEnabled(True)
+        # Python Analysis says how to get jedi when it is missing.
+        self.options_complete_sub.setToolTipsVisible(True)
         self.options_complete_sub.addAction(ce_actions.autocomplete_action)
         self.options_complete_sub.addSeparator()
         for source_action, _pref, _default in                 ce_actions.completion_source_actions:

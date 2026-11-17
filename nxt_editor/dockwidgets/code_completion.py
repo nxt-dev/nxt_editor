@@ -8,14 +8,17 @@ python analyser:
   so cmds. completes before an import line is written. Only modules the
   host has already loaded are offered; nothing is imported for them,
   because importing pymel alone can take seconds.
-- jedi, when it is installed (pip install nxt-editor[completion]). It knows
-  what a name is, so it can complete what a call returns or what a local
-  variable holds, which reading import lines cannot.
+- jedi, when it is installed: from Options > Optional Components, or with
+  pip install nxt-editor[completion]. It knows what a name is, so it can
+  complete what a call returns or what a local variable holds, which
+  reading import lines cannot.
 
 The jedi support, the token sanitizing and the host module lists come
 from a pull request by @enriquevelmai (nxt-dev/nxt_editor#298).
 """
 # Builtin
+import contextlib
+import importlib
 import importlib.util
 import logging
 import os
@@ -143,6 +146,22 @@ class Jedi(object):
         jedi.settings.allow_unsafe_interpreter_executions = False
         self._module = jedi
         return jedi
+
+    def reset(self):
+        """Forget whether jedi was found, so it is looked for again. For
+        when it has just been installed, or removed, while nxt runs.
+        """
+        importlib.invalidate_caches()
+        # Under the lock, where completion is asked from another thread.
+        lock = getattr(self, '_lock', None) or contextlib.nullcontext()
+        with lock:
+            self._module = None
+            self._tried = False
+            self._failed_once = False
+            self._cache_key = None
+            self._cache_names = []
+            if hasattr(self, '_cache'):
+                self._cache = (None, [])
 
     def available(self):
         return self.module() is not None
