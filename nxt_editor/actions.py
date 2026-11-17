@@ -417,6 +417,17 @@ class AppActions(NxtActionContainer):
         self.optional_components_action.setShortcutContext(context)
         self.available_without_model.append(self.optional_components_action)
 
+        self.env_files_action = NxtAction(text='Environment Variables...',
+                                          parent=self)
+        self.env_files_action.setWhatsThis(
+            'Edit the env files nxt sets environment variables from when '
+            'it starts: your own, the site\'s, and project files kept '
+            'under version control.')
+        self.env_files_action.triggered.connect(
+            self.main_window.open_env_files)
+        self.env_files_action.setShortcutContext(context)
+        self.available_without_model.append(self.env_files_action)
+
         self.color_range_action = NxtAction(text='Layer Color View...',
                                             parent=self)
         self.color_range_action.setWhatsThis(
