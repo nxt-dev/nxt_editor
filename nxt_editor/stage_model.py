@@ -2623,8 +2623,11 @@ class StageModel(QtCore.QObject):
         :return: [float, float]
         """
         grid_size = GRID_SIZE
-        x = math.floor(pos[0] / grid_size) * grid_size
-        y = math.floor(pos[1] / grid_size) * grid_size
+        # The nearest line either way, not the one up and to the left, so
+        # a node dragged just short of a grid line still lands on it. Half
+        # way rounds up, the same in both directions.
+        x = math.floor(pos[0] / grid_size + .5) * grid_size
+        y = math.floor(pos[1] / grid_size + .5) * grid_size
         snapped_pos = [x, y]
         return snapped_pos
 
