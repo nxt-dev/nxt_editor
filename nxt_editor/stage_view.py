@@ -158,9 +158,9 @@ class StageView(QtWidgets.QGraphicsView):
         # Whether a layer was hidden the last time visibility was applied,
         # so a graph with every layer showing never pays for the check.
         self._layers_were_hidden = False
-        # The roots hidden with their layers, worked out once each time
+        # The nodes hidden with their layers, worked out once each time
         # visibility is applied. See apply_layer_visibility.
-        self._hidden_roots = frozenset()
+        self._hidden_nodes = frozenset()
         # What a backdrop being moved or resized started from, see
         # backdrop_press.
         self._backdrop_drag = None
@@ -510,18 +510,29 @@ class StageView(QtWidgets.QGraphicsView):
     def apply_layer_visibility(self):
         """Show or hide what belongs to layers hidden in the Layer Manager.
 
-        Root nodes, with everything under them, the lines to and from
-        them, with their points, and the backdrops only those layers draw.
-        Nothing is removed: the items are there, drawn or not.
+        The nodes hidden with them, see StageModel.hidden_nodes, the lines
+        to and from those, with their points, and the backdrops only those
+        layers draw. Nothing is removed: the items are there, drawn or not.
+        A hidden child takes no room under its parent, so the children
+        after it close up, and open up again when it is shown.
         """
         hiding = bool(self.model.hidden_layer_paths())
         if not hiding and not self._layers_were_hidden:
             return
         self._layers_were_hidden = hiding
-        self._hidden_roots = self.model.hidden_roots()
+        was_hidden = self._hidden_nodes
+        self._hidden_nodes = self.model.hidden_nodes()
         for node_path, graphic in list(self._node_graphics.items()):
-            if graphic.parentItem() is None:
-                graphic.setVisible(not self.node_hidden(node_path))
+            graphic.setVisible(node_path not in self._hidden_nodes)
+        changed = was_hidden ^ self._hidden_nodes
+        roots = set(nxt_path.get_root_path(path) for path in changed)
+        og_do_anims = self.do_animations
+        self.do_animations = False
+        for root in roots:
+            graphic = self.get_node_graphic(root)
+            if graphic:
+                graphic.arrange_descendants()
+        self.do_animations = og_do_anims
         self.update_lines_shown()
         hidden_backdrops = self.model.hidden_backdrop_ids()
         for backdrop_id, graphic in self._backdrop_graphics.items():
@@ -610,7 +621,7 @@ class StageView(QtWidgets.QGraphicsView):
         of the selection too, so nothing done to the selection, such as
         copy or delete, reaches what cannot be seen."""
         self.apply_layer_visibility()
-        if not self._hidden_roots:
+        if not self._hidden_nodes:
             return
         hidden = [path for path in self.model.selection
                   if self.node_hidden(path)]
@@ -625,8 +636,8 @@ class StageView(QtWidgets.QGraphicsView):
 
     def node_hidden(self, node_path):
         """Whether a node is hidden with its layers. See
-        StageModel.hidden_roots."""
-        return nxt_path.get_root_path(node_path) in self._hidden_roots
+        StageModel.hidden_nodes."""
+        return node_path in self._hidden_nodes
 
     def _point_line_shown(self, ref):
         for connection in self._connection_graphics:
@@ -1034,7 +1045,7 @@ class StageView(QtWidgets.QGraphicsView):
         showing on at least one of its nodes, so with every node's
         properties hidden there are none. A line to or from a node hidden
         with its layers never is, exec lines included."""
-        if self._hidden_roots:
+        if self._hidden_nodes:
             for path in (line.src_node_path, line.tgt_node_path):
                 if path and self.node_hidden(path):
                     return False
@@ -1395,13 +1406,14 @@ class StageView(QtWidgets.QGraphicsView):
 
     def _nodes_rect(self, node_graphics):
         """Scene rectangle around nodes, the children stacked under them
-        included."""
+        included, but not those hidden with their layers."""
         rect = QtCore.QRectF()
         for graphic in node_graphics:
             rect = rect.united(node_scene_rect(graphic))
             for child in graphic.childItems():
                 if isinstance(child, NodeGraphicsItem):
-                    rect = rect.united(self._nodes_rect([child]))
+                    if not self.node_hidden(child.node_path):
+                        rect = rect.united(self._nodes_rect([child]))
                 elif child.isVisible():
                     # Plugs and the like, which reach past the node's edge.
                     rect = rect.united(child.sceneBoundingRect())

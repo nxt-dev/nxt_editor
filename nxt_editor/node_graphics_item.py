@@ -249,7 +249,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         """
         out_rect = self.get_selection_rect()
         for child in self.childItems():
-            if isinstance(child, NodeGraphicsItem):
+            if (isinstance(child, NodeGraphicsItem) and
+                    not self.view.node_hidden(child.node_path)):
                 child_rect = child.stack_bounding_rect
                 out_rect.setHeight(child_rect.height() + out_rect.height())
         return out_rect
@@ -973,7 +974,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                         layer_path=LAYERS.TOP)
 
     def arrange_descendants(self):
-        """Recursively arrange this node's descendants
+        """Recursively arrange this node's descendants. A child hidden with
+        its layers takes no room, so the children after it close up, see
+        StageView.apply_layer_visibility.
         """
         self.stack_height = self.get_selection_rect().height()
         if self.model.get_node_collapse(self.node_path):
@@ -989,6 +992,11 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                 continue
             child.setParentItem(self)
             child.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, False)
+            if self.view.node_hidden(child_path):
+                # Kept under this node, so it is shown with it again, but
+                # it takes no room in the stack.
+                child.arrange_descendants()
+                continue
 
             if prev_child:
                 y = prev_child.stack_height

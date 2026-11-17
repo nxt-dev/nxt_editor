@@ -3,8 +3,9 @@
 A library layer of nodes that are only there to be instanced fills the
 graph of every layer above it. Muting it is not an answer, the graph needs
 it to build. The eye in the Layer Manager hides what only that layer has:
-its root nodes and everything under them, the lines to and from them, and
-its backdrops. The comp does not change, so the graph builds the same.
+the nodes no layer still showing has an opinion on, unless something under
+them is shown, the lines to and from them, and its backdrops. The comp
+does not change, so the graph builds the same.
 
 It is a view, kept per user and per graph in the editor's cache. It never
 marks a layer unsaved.
@@ -295,13 +296,13 @@ class HiddenLines(_SameGraph):
         self.view._draw_inst_connections('/made')
         self.assertFalse(self.line_to('/template').isVisible())
 
-    def test_applying_works_out_hidden_roots_once(self):
+    def test_applying_works_out_hidden_nodes_once(self):
         model = self.model
-        with mock.patch.object(model, 'hidden_roots',
-                               wraps=model.hidden_roots) as hidden_roots:
+        with mock.patch.object(model, 'hidden_nodes',
+                               wraps=model.hidden_nodes) as hidden_nodes:
             with mock.patch.object(model, 'is_node_hidden') as per_node:
                 self.hide()
-        self.assertEqual(1, hidden_roots.call_count)
+        self.assertEqual(1, hidden_nodes.call_count)
         per_node.assert_not_called()
 
     def test_points_on_a_hidden_line_are_hidden_and_not_box_selected(self):
@@ -465,16 +466,16 @@ class MakingNodesOnAHiddenLayer(_SameGraph):
         app.processEvents()
         self.assert_shown_again(pasted[0])
 
-    def test_a_node_made_under_a_root_in_view_leaves_it_hidden(self):
-        # /start shows, the top layer adds to it, so a node made under it
-        # is in view already.
+    def test_a_node_made_under_a_node_in_view_shows_the_layer(self):
+        # /start shows, the top layer adds to it. Nodes are hidden one at
+        # a time, so a node made under it that only the hidden layer has
+        # would still vanish: the layer is shown again. While whole trees
+        # were hidden it was in view already and the layer stayed hidden.
         self.hide()
         self.model.add_node(name='more', parent_path='/start',
                             layer=self.model.target_layer)
         app.processEvents()
-        self.assertTrue(self.model.get_layer_hidden(
-            self.library_layer.real_path))
-        self.assertFalse(self.messages)
+        self.assert_shown_again('/start/more')
 
     def test_a_node_parented_out_of_sight_shows_the_layer(self):
         # As the Outliner does when rows are dragged onto another.
@@ -518,6 +519,233 @@ class LayoutAndFramingLeaveHiddenNodesOut(_SameGraph):
             self.view.frame_opened()
         rect = frame_rect.call_args[0][0]
         self.assertLess(rect.right(), 9000)
+
+
+class LayeredRig(unittest.TestCase):
+    """A rig built up in layers, as a character is: a base layer makes
+    /load and the steps under it, a mid layer adds a step and changes one
+    of the base's, and a show layer adds steps of its own under /load and
+    a root of its own. Nodes are hidden one at a time, so hiding the show
+    layer takes away its own steps even though /load is everybody's."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = os.path.realpath(tempfile.mkdtemp(prefix='nxt_layer_eye_'))
+        cls.cache_key = user_dir.EDITOR_CACHE.HIDDEN_LAYERS
+        cls.cache_before = user_dir.editor_cache.get(cls.cache_key) or {}
+        user_dir.editor_cache[cls.cache_key] = {}
+        write(os.path.join(cls.tmp, 'base.nxt'), {
+            'version': '1.17', 'alias': 'base', 'references': [],
+            'nodes': {'/load': {'code': ['pass']},
+                      '/load/a': {'attrs': {'v': {'value': '1'}}},
+                      '/load/b': {'attrs': {'v': {'value': '1'}}},
+                      '/load/c': {},
+                      '/keep': {},
+                      '/parts': {},
+                      '/parts/kid': {}}})
+        write(os.path.join(cls.tmp, 'mid.nxt'), {
+            'version': '1.17', 'alias': 'mid', 'references': ['base.nxt'],
+            'nodes': {'/load/b': {'attrs': {'v': {'value': '2'}}},
+                      '/load/m': {}}})
+        write(os.path.join(cls.tmp, 'show.nxt'), {
+            'version': '1.17', 'alias': 'show', 'references': ['mid.nxt'],
+            'nodes': {'/load': {'child_order': ['a', 's1', 'b', 'c', 'm',
+                                                's2']},
+                      '/load/s1': {},
+                      '/load/s2': {'instance': '/load/c'},
+                      '/keep/x': {},
+                      '/show_root': {'execute_in': '/load'},
+                      '/show_root/kid': {}}})
+        cls.top = write(os.path.join(cls.tmp, 'top.nxt'), {
+            'version': '1.17', 'alias': 'top', 'references': ['show.nxt'],
+            'nodes': {'/made': {'instance': '/parts'}}})
+        cls.win = MainWindow(filepath=cls.top)
+        cls.win.show()
+        app.processEvents()
+        cls.model = cls.win.model
+        cls.view = cls.win.get_current_view()
+        cls.layers = dict((layer.get_alias(), layer.real_path)
+                          for layer in cls.model.stage._sub_layers)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Undone, but still marked unsaved, which would ask to save.
+        cls.model.effected_layers.clear()
+        LayerVisibility.tearDownClass.__func__(cls)
+
+    def setUp(self):
+        self.hide(*self.layers, hidden=False)
+
+    def tearDown(self):
+        self.model.clear_selection()
+        self.hide(*self.layers, hidden=False)
+
+    def hide(self, *aliases, **kwargs):
+        for alias in aliases:
+            self.model.set_layer_hidden(self.layers[alias],
+                                        kwargs.get('hidden', True))
+        app.processEvents()
+
+    def shown(self, node_path):
+        return self.view.get_node_graphic(node_path).isVisible()
+
+    def undo_all(self):
+        while self.model.undo_stack.canUndo():
+            self.model.undo_stack.undo()
+
+    def assert_shown(self, *node_paths):
+        for path in node_paths:
+            self.assertTrue(self.shown(path), path)
+            self.assertFalse(self.view.node_hidden(path), path)
+
+    def assert_hidden(self, *node_paths):
+        for path in node_paths:
+            self.assertFalse(self.shown(path), path)
+            self.assertTrue(self.view.node_hidden(path), path)
+
+    def child_y(self, node_path):
+        return self.view.get_node_graphic(node_path).pos().y()
+
+    # -- what is hidden ----------------------------------------------------
+
+    def test_hiding_the_show_layer_hides_its_own_nodes(self):
+        self.hide('show')
+        self.assert_hidden('/load/s1', '/load/s2', '/keep/x', '/show_root',
+                           '/show_root/kid')
+
+    def test_hiding_the_show_layer_keeps_base_and_changed_nodes(self):
+        # /load has the show layer's child order, but the base layer has
+        # it too.
+        self.hide('show')
+        self.assert_shown('/load', '/load/a', '/load/b', '/load/c',
+                          '/load/m', '/keep', '/made')
+
+    def test_hiding_base_keeps_what_a_layer_showing_adds_to(self):
+        self.hide('base')
+        # /load/b is changed by mid, and every layer adds to /load.
+        self.assert_shown('/load', '/load/b', '/load/m', '/load/s1',
+                          '/load/s2', '/keep', '/keep/x')
+        self.assert_hidden('/load/a', '/load/c', '/parts', '/parts/kid')
+
+    def test_a_parent_shows_while_a_child_does(self):
+        # /keep is the base layer's, /keep/x the show layer's.
+        self.hide('base')
+        self.assert_shown('/keep', '/keep/x')
+        self.hide('show')
+        self.assert_hidden('/keep', '/keep/x')
+
+    def test_hiding_every_layer_hides_every_node(self):
+        self.hide(*self.layers)
+        for path in self.view._node_graphics:
+            self.assertFalse(self.shown(path), path)
+
+    def test_the_hidden_nodes_are_one_answer(self):
+        self.hide('show')
+        self.assertEqual({'/load/s1', '/load/s2', '/keep/x', '/show_root',
+                          '/show_root/kid'}, set(self.model.hidden_nodes()))
+
+    # -- instanced nodes ---------------------------------------------------
+
+    def test_a_proxy_goes_with_the_node_it_is_under(self):
+        # /made/kid is made by the instance of /parts. Hiding the layer
+        # /parts is on leaves the instance, and what it brings, in view.
+        self.assertTrue(self.model.get_node_is_proxy('/made/kid'))
+        self.hide('base')
+        self.assert_hidden('/parts', '/parts/kid')
+        self.assert_shown('/made', '/made/kid')
+
+    def test_a_proxy_is_hidden_with_its_instance(self):
+        self.hide('top')
+        self.assert_hidden('/made', '/made/kid')
+        self.assert_shown('/parts', '/parts/kid')
+
+    # -- the stack under a parent ------------------------------------------
+
+    def test_children_close_up_over_a_hidden_child(self):
+        order = ['/load/a', '/load/s1', '/load/b', '/load/c', '/load/m',
+                 '/load/s2']
+        self.assertEqual(order, self.model.get_children(
+            '/load', ordered=True, include_implied=True))
+        before = dict((path, self.child_y(path)) for path in order)
+        height = self.view.get_node_graphic('/load').stack_height
+        self.hide('show')
+        # /load/b moves up to where /load/s1 was, and the rest with it.
+        self.assertEqual(before['/load/a'], self.child_y('/load/a'))
+        self.assertEqual(before['/load/s1'], self.child_y('/load/b'))
+        self.assertEqual(before['/load/b'], self.child_y('/load/c'))
+        self.assertEqual(before['/load/c'], self.child_y('/load/m'))
+        self.assertLess(self.view.get_node_graphic('/load').stack_height,
+                        height)
+        self.hide('show', hidden=False)
+        for path in order:
+            self.assertEqual(before[path], self.child_y(path), path)
+        self.assertEqual(height,
+                         self.view.get_node_graphic('/load').stack_height)
+
+    def test_a_parent_with_every_child_hidden_has_no_room_under_it(self):
+        self.hide('show')
+        graphic = self.view.get_node_graphic('/keep')
+        own = graphic.get_selection_rect().height()
+        self.assertEqual(own, graphic.stack_height)
+        self.assertEqual(own, graphic.stack_bounding_rect.height())
+
+    def test_a_redraw_keeps_the_stack_closed_up(self):
+        self.hide('show')
+        closed = self.child_y('/load/b')
+        self.view.update_view()
+        app.processEvents()
+        self.assert_hidden('/load/s1')
+        self.assertEqual(closed, self.child_y('/load/b'))
+
+    # -- lines, selection and framing --------------------------------------
+
+    def lines_to(self, node_path):
+        return [line for line in self.view._connection_graphics
+                if node_path in (line.src_node_path, line.tgt_node_path)]
+
+    def test_lines_to_a_hidden_child_and_root_are_hidden(self):
+        instance_lines = self.lines_to('/load/s2')
+        exec_lines = self.lines_to('/show_root')
+        self.assertTrue(instance_lines, 'the instance line was never drawn')
+        self.assertTrue(exec_lines, 'the exec line was never drawn')
+        self.hide('show')
+        for line in instance_lines + exec_lines:
+            self.assertFalse(line.isVisible())
+        for line in self.view._connection_graphics:
+            self.assertEqual(self.view.line_shown(line), line.isVisible())
+
+    def test_select_all_leaves_hidden_children_out(self):
+        self.hide('show')
+        self.view.select_all()
+        self.assertIn('/load/a', self.model.selection)
+        self.assertNotIn('/load/s1', self.model.selection)
+        self.assertNotIn('/show_root', self.model.selection)
+
+    def test_hiding_takes_hidden_children_out_of_the_selection(self):
+        self.model.set_selection(['/load/a', '/load/s1'])
+        self.hide('show')
+        self.assertEqual(['/load/a'], list(self.model.selection))
+
+    def test_framing_a_hidden_child_stays_put_and_says_why(self):
+        self.hide('show')
+        with mock.patch.object(self.view, 'frame_rect') as frame_rect:
+            self.view.frame_nodes(['/load/s1'])
+        frame_rect.assert_not_called()
+        self.assertIn('/load/s1', self.view.status_label.text())
+
+    def test_a_node_made_under_a_shown_node_on_a_hidden_layer(self):
+        # It would be hidden as it was made, so the layer shows again.
+        self.model.set_target_layer(self.layers['show'])
+        self.addCleanup(app.processEvents)
+        self.addCleanup(self.model.set_target_layer,
+                        self.model.top_layer.real_path)
+        self.addCleanup(self.undo_all)
+        self.hide('show')
+        self.model.add_node(name='more', parent_path='/load',
+                            layer=self.model.target_layer)
+        app.processEvents()
+        self.assertFalse(self.model.get_layer_hidden(self.layers['show']))
+        self.assert_shown('/load/more')
 
 
 class RememberingHiddenLayers(unittest.TestCase):
@@ -595,7 +823,7 @@ class RememberingHiddenLayers(unittest.TestCase):
 
 
 class ManyRoots(unittest.TestCase):
-    """Which roots are hidden is worked out in one pass. Asking each root
+    """Which nodes are hidden is worked out in one pass. Asking each root
     in turn scanned every layer for every root, and a graph of 2500 took
     more than a second and a half each time the graph changed."""
 
@@ -624,11 +852,15 @@ class ManyRoots(unittest.TestCase):
         model = stage_model.StageModel(Session().load_file(top))
         model.set_layer_hidden(model.stage._sub_layers[1].real_path)
         start = time.time()
-        hidden_roots = model.hidden_roots()
+        hidden_nodes = model.hidden_nodes()
         took = time.time() - start
-        self.assertEqual(self.COUNT - 1, len(hidden_roots))
-        self.assertNotIn('/lib0', hidden_roots)
-        self.assertNotIn('/top0', hidden_roots)
+        # Every library node but /lib0, which the top layer adds to. Its
+        # own child is the library's alone, so that goes too.
+        self.assertEqual(self.COUNT * 2 - 1, len(hidden_nodes))
+        self.assertNotIn('/lib0', hidden_nodes)
+        self.assertNotIn('/lib0/mine', hidden_nodes)
+        self.assertIn('/lib0/child', hidden_nodes)
+        self.assertNotIn('/top0', hidden_nodes)
         self.assertLess(took, 0.5)
 
 
