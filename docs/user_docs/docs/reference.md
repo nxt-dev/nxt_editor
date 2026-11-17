@@ -46,6 +46,11 @@ hidden, switch between open files from the bottom of the **Window** menu.
 - **Zoom** with the scroll wheel, or hold `Alt` and drag with the right
   mouse button.
 - **Frame** everything with `A`, or the selected nodes with `F`.
+- **Frame All on Open**: a graph is framed to show all of its nodes when
+  it is first shown, zoomed out as far as that takes but never zoomed in
+  past 100%, so a small graph looks as it always has. Turn it off in the
+  **View** menu, next to **Frame All**, to have graphs open at the origin
+  instead. The choice is remembered.
 
 ### How nodes look
 

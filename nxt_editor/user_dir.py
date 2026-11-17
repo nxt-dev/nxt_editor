@@ -212,6 +212,9 @@ class USER_PREF():
     SHOW_PROPERTY_LINES = 'show_property_lines'
     SHOW_CODE_LINES = 'show_code_lines'
     SHOW_MINI_MAP = 'show_mini_map'
+    # Whether a graph is framed when it is first shown, rather than
+    # centered on the origin.
+    FRAME_ON_OPEN = 'frame_all_on_open'
     FONT_SIZE = 'font_size'
     # Whether the graph is shown. On unless turned off in the Window menu.
     SHOW_STAGE_VIEW = 'show_stage_view'

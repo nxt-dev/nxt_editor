@@ -73,6 +73,10 @@ class BreakCase(unittest.TestCase):
         self.view = self.win.view
         self.model = self.view.model
         self.view.ensure_drawn()
+        # At 100%, where plugs are drawn: the graph is framed when it
+        # opens, which can be zoomed out past where they are.
+        self.view.resetTransform()
+        self.view.centerOn(0, 0)
         self.model.set_attr_display_state(['/first', '/user'], 3)
         app.processEvents()
 

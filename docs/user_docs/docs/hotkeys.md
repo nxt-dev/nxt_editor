@@ -57,6 +57,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Display Node Tooltips       |                                                       | Display Node Tooltips            |             |
 | Frame All                   |         Frames all nodes so they are visible.         | Frame all nodes                  |      A      |
 | Frame Selection             |               Frames the selected node.               | Frame selected node              |      F      |
+| Frame All on Open           | When on, a graph is framed to show all of its nodes when it is first shown, never zoomed in past 100%. When off, it is shown at the origin. On by default. | Frame all nodes when a graph is opened | |
 | Display No Attrs            |                 Display no attributes                 | Display No Attrs                 |      0      |
 | Display Local Attrs         |             Display local attributes only             | Display Local Attrs              |      1      |
 | Display Local+Inst Attrs    |        Display local and instanced attributes         | Display Local+Inst Attrs         |      2      |

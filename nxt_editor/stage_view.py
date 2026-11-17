@@ -328,6 +328,7 @@ class StageView(QtWidgets.QGraphicsView):
             return False
         self._drawn = True
         self.redraw()
+        self.frame_opened()
         # The comp this graph has just been drawn from is the first one
         # anybody has seen of it, and a comp that failed is worth saying
         # so about here rather than only when the next edit lands.
@@ -470,6 +471,21 @@ class StageView(QtWidgets.QGraphicsView):
 
     def frame_all(self):
         self.frame_rect(self.scene().itemsBoundingRect())
+
+    def frame_opened(self):
+        """Show a graph the way it is first shown: framed around all of it
+        with Frame All on Open on, never zoomed in past 100% so a small
+        graph is not blown up, and otherwise, or with nothing in it, at the
+        origin."""
+        rect = self.scene().itemsBoundingRect()
+        if rect.isEmpty() or not user_prefs.get(USER_PREF.FRAME_ON_OPEN,
+                                                True):
+            self.centerOn(0, 0)
+            return
+        self.frame_rect(rect)
+        if self.scale_factor > 1.0:
+            self.resetTransform()
+            self.centerOn(rect.center())
 
     def frame_selection(self):
         self.frame_nodes(self.model.selection)

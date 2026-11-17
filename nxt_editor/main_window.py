@@ -671,7 +671,7 @@ QCheckBox::indicator {
     def center_view(self):
         target_graph_view = self.get_current_view()
         if target_graph_view:
-            target_graph_view.centerOn(0, 0)
+            target_graph_view.frame_opened()
 
     def load_file(self, filepath=None):
         """Open an NxtFileDialog to allow user to select .nxt file to open.
@@ -1069,8 +1069,7 @@ QCheckBox::indicator {
                 tab_bar.installEventFilter(self)
 
     def show(self):
-        """Centering after the window is shown because the center is based on the window's size."""
-        # Todo: add previous rect to the bookmarks data for the layer - use this instead of center if it exists
+        """Framing after the window is shown because the frame is based on the window's size."""
         super(MainWindow, self).show()
         self.center_view()
 
@@ -1537,6 +1536,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.setTearOffEnabled(True)
         self.view_menu.addAction(self.view_actions.frame_selection_action)
         self.view_menu.addAction(self.view_actions.frame_all_action)
+        self.view_menu.addAction(self.view_actions.frame_on_open_action)
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.display_actions.raw_action)
         self.view_menu.addAction(self.display_actions.resolve_action)

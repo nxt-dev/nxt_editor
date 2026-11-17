@@ -1653,6 +1653,18 @@ class StageViewActions(NxtActionContainer):
                           QtGui.QIcon.Off)
         self.frame_selection_action.setIcon(fs_icon)
 
+        # Frame all when a graph is opened. The view reads the preference
+        # when it first shows a graph, so there is nothing to call here.
+        self.frame_on_open_action = BoolUserPrefAction(
+            'Frame All on Open', user_dir.USER_PREF.FRAME_ON_OPEN,
+            default=True, parent=self)
+        self.frame_on_open_action.setToolTip('Frame all nodes when a graph '
+                                             'is opened')
+        self.frame_on_open_action.setWhatsThis(
+            'When on, a graph is framed to show all of its nodes when it is '
+            'first shown, zoomed out as far as it takes but never in past '
+            '100%. When off, it is shown at the origin.')
+
         # Attr display actions
         self.hide_attrs_action = NxtAction(text='Display No Attrs',
                                            parent=self)
@@ -1787,6 +1799,7 @@ class StageViewActions(NxtActionContainer):
                                      self.neutral_property_text_action,
                                      self.frame_all_action,
                                      self.frame_selection_action,
+                                     self.frame_on_open_action,
                                      self.hide_attrs_action,
                                      self.disp_local_attrs_action,
                                      self.disp_inst_attrs_action,
