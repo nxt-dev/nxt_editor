@@ -43,6 +43,23 @@ class EXEC_FRAMING:
     ALWAYS = 2
 
 
+#: The types a value has when its text reads back as itself, which is what
+#: determine_nxt_type names. Anything else it calls raw.
+LITERAL_TYPES = (bool, int, float, complex, list, tuple, dict, set,
+                 type(None))
+
+
+def cached_type_name(value):
+    """The type of a cached value, named as determine_nxt_type names the
+    type of the same value written out, without writing it out.
+
+    :rtype: str
+    """
+    if isinstance(value, LITERAL_TYPES):
+        return type(value).__name__
+    return 'raw'
+
+
 class StageModel(QtCore.QObject):
     destroy_cmd_port = QtCore.Signal()
     update_cache_dict = QtCore.Signal(dict)
@@ -2164,9 +2181,20 @@ class StageModel(QtCore.QObject):
     def get_node_attr_type(self, node_path, attr_name, layer=None):
         layer = layer or self.target_layer
         node = layer.lookup(node_path)
-        if node:
-            value = self.stage.get_node_attr_value(node, attr_name, layer)
-            return determine_nxt_type(value)
+        if not node:
+            return None
+        if isinstance(layer, nxt_layer.CacheLayer):
+            # A cached value is whatever object a node's code left there,
+            # so its type is right there. Working it out the way a saved
+            # value's is, by resolving tokens in its text and parsing that
+            # back, took seconds for a big list and stalled the editor,
+            # and the host it runs in, at the end of every build.
+            value = self.stage.get_node_attr_value(node, attr_name, layer,
+                                                   resolved=False)
+            if not isinstance(value, str):
+                return cached_type_name(value)
+        value = self.stage.get_node_attr_value(node, attr_name, layer)
+        return determine_nxt_type(value)
 
     def get_node_attr_comment(self, node_path, attr_name, layer=None):
         layer = layer or self.target_layer
