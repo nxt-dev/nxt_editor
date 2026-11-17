@@ -644,5 +644,52 @@ class TestShortcuts(CodeEditorTestCase):
                           '%s escapes the code editor' % action.text())
 
 
+class TestScrollKept(CodeEditorTestCase):
+    """Changing the target layer used to scroll the code back to the top."""
+
+    LONG_NODE = '/inst_target6'
+    OTHER_NODE = '/inst_target5'
+
+    def setUp(self):
+        self.ce.editing_active = False
+        self.editor.setReadOnly(True)
+        model = self.ce.stage_model
+        # Undone again afterwards, or closing the window would stop to ask
+        # about saving the graph.
+        self.undo_index = model.undo_stack.index()
+        lines = ['line_%d = %d' % (i, i) for i in range(300)]
+        model.set_node_code_lines(self.LONG_NODE, lines)
+        model.set_node_code_lines(self.OTHER_NODE, lines)
+        model.set_selection([self.LONG_NODE])
+        app.processEvents()
+        self.scrollbar = self.editor.verticalScrollBar()
+        self.assertGreater(self.scrollbar.maximum(), 100)
+        self.scrollbar.setValue(100)
+        app.processEvents()
+
+    def tearDown(self):
+        model = self.ce.stage_model
+        while model.undo_stack.index() > self.undo_index:
+            model.undo_stack.undo()
+        model.set_selection(['/inst_source1'])
+        app.processEvents()
+
+    def test_target_layer_change_keeps_scroll(self):
+        model = self.ce.stage_model
+        model.target_layer_changed.emit(model.target_layer)
+        app.processEvents()
+        self.assertEqual(100, self.scrollbar.value())
+
+    def test_same_node_shown_again_keeps_scroll(self):
+        self.ce.set_represented_node()
+        app.processEvents()
+        self.assertEqual(100, self.scrollbar.value())
+
+    def test_other_node_starts_at_top(self):
+        self.ce.stage_model.set_selection([self.OTHER_NODE])
+        app.processEvents()
+        self.assertEqual(0, self.scrollbar.value())
+
+
 if __name__ == '__main__':
     unittest.main()

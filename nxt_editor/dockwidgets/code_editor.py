@@ -314,6 +314,7 @@ class CodeEditor(DockWidgetBase):
             action.setEnabled(not self.locked)
 
     def set_represented_node(self):
+        previous_path = self.node_path
         self.node_path = self.stage_model.node_focus
         if not self.node_path:
             self.clear()
@@ -323,7 +324,12 @@ class CodeEditor(DockWidgetBase):
         if not self.node_name:
             self.clear()
         else:
-            self.editor.verticalScrollBar().setValue(0)
+            # Changing the target layer, accepting an edit or editing an
+            # attribute all land here with the same node still showing.
+            # Only a different node starts at the top; the same one stays
+            # where it was scrolled to.
+            if self.node_path != previous_path:
+                self.editor.verticalScrollBar().setValue(0)
             self.update_editor()
             self.update_border_color()
             self.update_format_characters()
