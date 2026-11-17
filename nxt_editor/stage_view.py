@@ -492,16 +492,20 @@ class StageView(QtWidgets.QGraphicsView):
             bottom = MiniMap.HEIGHT + MiniMap.MARGIN
         self.hud_layout.setContentsMargins(0, 0, 0, bottom)
 
-    def frame_all(self):
+    def shown_items_rect(self):
+        """The scene rect around everything showing: what is hidden with
+        its layers is left out."""
         if not self._layers_were_hidden:
-            self.frame_rect(self.scene().itemsBoundingRect())
-            return
+            return self.scene().itemsBoundingRect()
         # itemsBoundingRect counts items that are not showing.
         rect = QtCore.QRectF()
         for item in self.scene().items():
             if item.isVisible() and item.parentItem() is None:
                 rect = rect.united(item.sceneBoundingRect())
-        self.frame_rect(rect)
+        return rect
+
+    def frame_all(self):
+        self.frame_rect(self.shown_items_rect())
 
     def apply_layer_visibility(self):
         """Show or hide what belongs to layers hidden in the Layer Manager.
@@ -528,8 +532,8 @@ class StageView(QtWidgets.QGraphicsView):
         """Show a graph the way it is first shown: framed around all of it
         with Frame All on Open on, never zoomed in past 100% so a small
         graph is not blown up, and otherwise, or with nothing in it, at the
-        origin."""
-        rect = self.scene().itemsBoundingRect()
+        origin. Nodes hidden with their layers are left out."""
+        rect = self.shown_items_rect()
         if rect.isEmpty() or not user_prefs.get(USER_PREF.FRAME_ON_OPEN,
                                                 True):
             self.centerOn(0, 0)
@@ -1741,6 +1745,9 @@ class StageView(QtWidgets.QGraphicsView):
 
         A backdrop with nodes being laid out in it is fitted around them
         again afterwards, so they stay in it.
+
+        Nodes hidden with their layers are left where they are, and so
+        are backdrops only hidden layers draw.
         """
         # Here rather than at the top: the dock widgets import a lot.
         from nxt_editor.dockwidgets.outliner import root_exec_order
@@ -1750,6 +1757,7 @@ class StageView(QtWidgets.QGraphicsView):
         paths = [path for path in root_exec_order(self.model)
                  if (not selected or path in selected) and
                  self.get_node_graphic(path) and
+                 not self.node_hidden(path) and
                  not self.model.get_node_locked(path)]
         if not paths:
             return
@@ -1780,8 +1788,11 @@ class StageView(QtWidgets.QGraphicsView):
         # Which backdrop each node is in, before anything moves.
         fits = {}
         for backdrop_id, graphic in self._backdrop_graphics.items():
+            if not graphic.isVisible():
+                continue
             nodes, _ = self.backdrop_contents(graphic)
-            inside = [g.node_path for g in nodes]
+            inside = [g.node_path for g in nodes
+                      if not self.node_hidden(g.node_path)]
             if any(path in moves for path in inside):
                 fits[backdrop_id] = (graphic, inside)
         changes = {}

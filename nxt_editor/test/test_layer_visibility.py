@@ -434,9 +434,11 @@ class MakingNodesOnAHiddenLayer(_SameGraph):
 
     def tearDown(self):
         self.model.status_message.disconnect(self.messages.append)
-        self.model.set_target_layer(self.model.top_layer.real_path)
+        # Undone on the layer it was done on: undoing a parent looks the
+        # nodes up on the target layer.
         while self.model.undo_stack.canUndo():
             self.model.undo_stack.undo()
+        self.model.set_target_layer(self.model.top_layer.real_path)
         app.processEvents()
         super(MakingNodesOnAHiddenLayer, self).tearDown()
 
@@ -473,6 +475,49 @@ class MakingNodesOnAHiddenLayer(_SameGraph):
         self.assertTrue(self.model.get_layer_hidden(
             self.library_layer.real_path))
         self.assertFalse(self.messages)
+
+    def test_a_node_parented_out_of_sight_shows_the_layer(self):
+        # As the Outliner does when rows are dragged onto another.
+        self.model.add_node(name='holder', pos=[0.0, 0.0],
+                            layer=self.model.target_layer)
+        self.model.add_node(name='moved', pos=[0.0, 200.0],
+                            layer=self.model.target_layer)
+        app.processEvents()
+        self.hide()
+        self.model.parent_nodes(['/moved'], '/holder')
+        app.processEvents()
+        self.assertFalse(self.model.get_layer_hidden(
+            self.library_layer.real_path))
+        self.assertTrue(self.shown('/holder/moved'))
+        self.assertEqual(1, len(self.messages))
+        self.assertIn('parented', self.messages[0])
+
+
+class LayoutAndFramingLeaveHiddenNodesOut(_SameGraph):
+    """Layout Nodes and framing a graph as it opens only reach what is
+    showing."""
+
+    def test_layout_leaves_hidden_nodes_where_they_are(self):
+        self.model.clear_selection()
+        self.hide()
+        with mock.patch.object(self.model, 'set_nodes_pos') as set_pos:
+            self.view.layout_nodes()
+        moved = set()
+        for call in set_pos.call_args_list:
+            moved.update(call[0][0])
+        self.assertIn('/made', moved)
+        self.assertNotIn('/template', moved)
+
+    def test_framing_on_open_leaves_hidden_nodes_out(self):
+        graphic = self.view.get_node_graphic('/template')
+        before = graphic.pos()
+        graphic.setPos(9000.0, 9000.0)
+        self.addCleanup(graphic.setPos, before)
+        self.hide()
+        with mock.patch.object(self.view, 'frame_rect') as frame_rect:
+            self.view.frame_opened()
+        rect = frame_rect.call_args[0][0]
+        self.assertLess(rect.right(), 9000)
 
 
 class RememberingHiddenLayers(unittest.TestCase):

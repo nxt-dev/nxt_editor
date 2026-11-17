@@ -959,13 +959,15 @@ class StageModel(QtCore.QObject):
         """
         return backdrop_id in self.hidden_backdrop_ids()
 
-    def _show_layer_for_new_nodes(self, node_paths, layer_path):
+    def _show_layer_for_new_nodes(self, node_paths, layer_path,
+                                  why='a node was made on it'):
         """Show a hidden layer again when nodes made on it would be hidden
         the moment they are made, and say so.
 
         :param node_paths: the nodes just made
         :param layer_path: real path of the layer they were made on, or a
             LAYERS constant
+        :param why: the end of the message: what was done on the layer
         """
         node_paths = [path for path in node_paths or () if path]
         layer = self.lookup_layer(layer_path)
@@ -980,8 +982,8 @@ class StageModel(QtCore.QObject):
             return
         self.set_layer_hidden(layer_path, False)
         name = layer.get_alias()
-        message = 'Showing layer "{}" in the graph again, a node was ' \
-                  'made on it'.format(name)
+        message = 'Showing layer "{}" in the graph again, {}'.format(name,
+                                                                   why)
         logger.info(message)
         self.status_message.emit(message)
 
@@ -1853,6 +1855,11 @@ class StageModel(QtCore.QObject):
             cmd = ParentNodes(node_paths=node_paths,
                               parent_node_path=parent_path, model=self)
             self.undo_stack.push(cmd)
+            # Parented on a hidden target layer, a node would vanish from
+            # the graph as it moved, as a node made there would.
+            self._show_layer_for_new_nodes(
+                list(cmd.node_path_data.values()), LAYERS.TARGET,
+                why='a node was parented on it')
             return cmd.node_path_data
 
     def get_node_child_order(self, node_path, layer=None):
