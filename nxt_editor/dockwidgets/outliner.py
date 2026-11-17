@@ -1,4 +1,5 @@
 # Builtin
+import json
 import logging
 
 # External
@@ -36,6 +37,8 @@ POINT_NAMES = {START: 'Start point', SKIP: 'Skip point',
                BREAK: 'Breakpoint'}
 
 NOT_IN_A_BUILD = 'Not in a build'
+# What a row dragged in the tree carries: the paths of the nodes dragged.
+NODE_PATHS_MIME = 'application/x-nxt-node-paths'
 # How long after the last key a search runs.
 SEARCH_DELAY_MS = 300
 
@@ -130,6 +133,156 @@ class NodeTree(QtWidgets.QTreeWidget):
     """
     # The item whose arrow was clicked, and the modifiers held.
     arrowClicked = QtCore.Signal(object, object)
+    # Node paths dropped, and the node they were dropped on, or the world
+    # node when dropped off the nodes.
+    nodesDropped = QtCore.Signal(object, object)
+
+    def __init__(self, parent=None):
+        super(NodeTree, self).__init__(parent)
+        # Rows are dragged onto another to parent their nodes to it, or
+        # off the nodes to unparent them, see drop_parent.
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
+        self.setDragDropMode(QtWidgets.QAbstractItemView.DragDrop)
+        self.setDefaultDropAction(QtCore.Qt.MoveAction)
+        # Qt's own indicator is drawn by the host's style, so the tree
+        # draws its own, see paintEvent.
+        self.setDropIndicatorShown(False)
+        # Where a drag would drop now: a row, WORLD for off the nodes, or
+        # None where it cannot.
+        self.drop_target = None
+
+    def dragged_paths(self):
+        """The selected nodes, less any under another one of them: those
+        go with it."""
+        paths = [item.data(0, PATH_ROLE) for item in self.selectedItems()]
+        paths = [path for path in paths if path]
+        return [path for path in paths
+                if not any(path.startswith(other + nxt_path.NODE_SEP)
+                           for other in paths)]
+
+    def startDrag(self, supported_actions):
+        paths = self.dragged_paths()
+        if not paths:
+            return
+        mime = QtCore.QMimeData()
+        mime.setData(NODE_PATHS_MIME,
+                     QtCore.QByteArray(json.dumps(paths).encode('utf-8')))
+        drag = QtGui.QDrag(self)
+        drag.setMimeData(mime)
+        item = self.items_by_path().get(paths[0])
+        if item is not None:
+            drag.setPixmap(self.viewport().grab(self.visualItemRect(item)))
+        drag.exec_(QtCore.Qt.MoveAction)
+        self.set_drop_target(None)
+
+    def items_by_path(self):
+        found = {}
+        stack = [self.invisibleRootItem()]
+        while stack:
+            item = stack.pop()
+            path = item.data(0, PATH_ROLE)
+            if path:
+                found[path] = item
+            stack += [item.child(i) for i in range(item.childCount())]
+        return found
+
+    @staticmethod
+    def mime_paths(mime):
+        if not mime.hasFormat(NODE_PATHS_MIME):
+            return []
+        try:
+            paths = json.loads(bytes(mime.data(NODE_PATHS_MIME)).decode(
+                'utf-8'))
+        except ValueError:
+            return []
+        return [path for path in paths if isinstance(path, str)]
+
+    def drop_parent(self, paths, pos):
+        """The node that nodes dropped at pos in the viewport would be
+        parented to: the row's node, or the world node off the rows and on
+        a group's heading. None when the drop cannot be made: onto one of
+        the nodes dragged or a node under one, or where they all are
+        already.
+
+        :rtype: str or None
+        """
+        if not paths:
+            return None
+        item = self.itemAt(pos)
+        target = item.data(0, PATH_ROLE) if item is not None else None
+        target = target or nxt_path.WORLD
+        for path in paths:
+            if target == path or target.startswith(path + nxt_path.NODE_SEP):
+                return None
+        if all(nxt_path.get_parent_path(path) == target for path in paths):
+            return None
+        return target
+
+    def set_drop_target(self, target):
+        if target != self.drop_target:
+            self.drop_target = target
+            self.viewport().update()
+
+    def dragEnterEvent(self, event):
+        if self.mime_paths(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        # Qt scrolls the tree near its edges.
+        super(NodeTree, self).dragMoveEvent(event)
+        paths = self.mime_paths(event.mimeData())
+        target = self.drop_parent(paths, event.position().toPoint())
+        self.set_drop_target(target)
+        if target is None:
+            event.ignore()
+        else:
+            event.setDropAction(QtCore.Qt.MoveAction)
+            event.accept()
+
+    def dragLeaveEvent(self, event):
+        super(NodeTree, self).dragLeaveEvent(event)
+        self.set_drop_target(None)
+
+    def dropEvent(self, event):
+        paths = self.mime_paths(event.mimeData())
+        target = self.drop_parent(paths, event.position().toPoint())
+        self.set_drop_target(None)
+        if target is None:
+            event.ignore()
+            return
+        # The tree is rebuilt from the graph once the nodes have moved, so
+        # Qt is not let move the rows itself.
+        event.setDropAction(QtCore.Qt.MoveAction)
+        event.accept()
+        self.nodesDropped.emit(paths, target)
+
+    def paintEvent(self, event):
+        super(NodeTree, self).paintEvent(event)
+        target = self.drop_target
+        if target is None:
+            return
+        painter = QtGui.QPainter(self.viewport())
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setBrush(QtCore.Qt.NoBrush)
+        if target == nxt_path.WORLD:
+            # Off the nodes: the whole tree, dashed, as the top of the
+            # hierarchy.
+            pen = QtGui.QPen(theme.color(theme.SELECTED), 2,
+                             QtCore.Qt.DashLine)
+            painter.setPen(pen)
+            painter.drawRect(QtCore.QRectF(self.viewport().rect()).adjusted(
+                1, 1, -1, -1))
+        else:
+            item = self.items_by_path().get(target)
+            if item is not None:
+                painter.setPen(QtGui.QPen(theme.color(theme.SELECTED), 2))
+                rect = QtCore.QRectF(self.visualItemRect(item))
+                painter.drawRoundedRect(rect.adjusted(1, 1, -2, -1), 4, 4)
+        painter.end()
 
     def keyboardSearch(self, text):
         pass
@@ -375,6 +528,7 @@ class Outliner(DockWidgetBase):
         self.tree.itemSelectionChanged.connect(self.on_tree_selection)
         self.tree.itemDoubleClicked.connect(self.on_double_click)
         self.tree.arrowClicked.connect(self.on_arrow_click)
+        self.tree.nodesDropped.connect(self.on_nodes_dropped)
         self.tree.itemCollapsed.connect(self.on_collapsed)
         self.tree.itemExpanded.connect(self.on_expanded)
         self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -733,6 +887,17 @@ class Outliner(DockWidgetBase):
             self.toggle_collapse(path, modifiers)
         elif modifiers & QtCore.Qt.ShiftModifier:
             self.toggle_group(item)
+
+    def on_nodes_dropped(self, paths, parent_path):
+        """Rows dropped on another row parent their nodes to its node, and
+        dropped off the rows, unparent them, as one undo."""
+        model = self.stage_model
+        if not model:
+            return
+        paths = [path for path in paths
+                 if nxt_path.get_parent_path(path) != parent_path]
+        if paths:
+            model.parent_nodes(paths, parent_path)
 
     def toggle_group(self, heading):
         """Collapse every node in a group, a build or the nodes in none, or

@@ -676,6 +676,13 @@ on from **Window > Outliner**.
   collapse every node in that build, or in **Not in a build**. When they
   all are, it expands them all. A plain click on the arrow only opens or
   closes the group.
+- Drag rows onto another row to parent their nodes to its node, or drag
+  them below the rows or onto a group's heading to unparent them, as one
+  undo. The row they would go under is outlined in amber while you drag,
+  and the whole list with a dashed amber line when they would go to the
+  top of the hierarchy. A node cannot be dropped onto itself or anything
+  below it, or where it already is. Dragging a node and its child together
+  only moves the node, the child going with it.
 - Right click below the rows for the graph's menu for empty space, to add
   or paste a node at the top of the hierarchy. It lands in the middle of
   the graph's view.
