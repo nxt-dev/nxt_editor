@@ -196,6 +196,21 @@ class LayerTreeView(QtWidgets.QTreeView):
             menu.popup(QtGui.QCursor.pos())
             return
         stage_model = self.model().stage_model
+        # The layer is handed to the shared layer actions as their data,
+        # and it must not outlive this menu. Left behind by a menu closed
+        # without picking anything, Ctrl+S in another tab saved this layer,
+        # over its file, instead of the graph being looked at. A menu hides
+        # before the picked action triggers, so the data is cleared once
+        # that has had its turn.
+        actions = self.actions
+
+        def clear_data():
+            for action in actions.actions():
+                action.setData(None)
+
+        def forget_layer():
+            QtCore.QTimer.singleShot(0, clear_data)
+        menu.aboutToHide.connect(forget_layer)
 
         self.actions.save_layer_action.setData(layer)
         menu.addAction(self.actions.save_layer_action)
