@@ -672,6 +672,13 @@ it again, or use **Show In Graph** on the layer's menu, to bring them back.
 
 **Edit References...** opens the Reference Editor on that layer.
 
+Opening a graph with references that cannot be found or opened shows a
+notice listing them (**Show Details...**), with **Edit References...** to
+open the Reference Editor on the first layer holding one. The notice does
+not hold anything up, so you can look at the graph first or close it with
+**Ignore**. References that are not found are kept as written, in case they
+resolve on another machine.
+
 ![The Reference Editor](images/reference_editor.png)
 
 - **Layer** picks which layer's references you are editing. Only layers that

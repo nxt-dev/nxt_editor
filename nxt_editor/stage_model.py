@@ -737,6 +737,28 @@ class StageModel(QtCore.QObject):
         self.undo_stack.push(ReloadLayers(layer_paths, self))
         return True
 
+    def missing_references(self):
+        """The references that did not load, by the loaded layer holding
+        them. A file that could not be found or opened is kept as a
+        reference with no layer behind it.
+
+        :return: [(layer, [reference as stored, ...]), ...] in stack order,
+            each file once however many times it is loaded
+        :rtype: list
+        """
+        missing = []
+        seen = set()
+        for layer in self.stage._sub_layers:
+            if layer.real_path in seen:
+                continue
+            seen.add(layer.real_path)
+            references = [data.get(SAVE_KEY.FILEPATH)
+                          for data in layer.sub_layers
+                          if data.get('layer') is None]
+            if references:
+                missing.append((layer, references))
+        return missing
+
     @staticmethod
     def read_disk_stamp(layer_path):
         """When and how big the file at layer_path is now, None when

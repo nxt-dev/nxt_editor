@@ -45,6 +45,7 @@ from nxt_editor.dockwidgets.reference_editor import ReferenceEditor
 from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
     FileChangedMessage,
+    MissingReferencesMessage,
     NxtFileDialog,
     NxtWarningDialog,
     ReloadSourceDialog,
@@ -165,6 +166,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._offered_disk_stamps = {}
         self._asking_about_disk = False
         self._was_deactivated = False
+        # The notice about references a graph could not load, kept so it
+        # is not collected while it is up.
+        self.missing_references_message = None
         self.last_focused_start = 0  # Start point focus tracker
         # FIXME: Fix with MV signal
         self.last_focused_tab = -1  # Tab tracker for upating the comp layer
@@ -788,6 +792,32 @@ QCheckBox::indicator {
         if new_stage:
             self.new_tab(initial_stage=new_stage, update=not self.in_startup)
             user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = potential_path
+            for open_file in self.open_files.values():
+                if open_file['stage'] is new_stage:
+                    self.notify_missing_references(open_file['model'])
+
+    def notify_missing_references(self, model):
+        """Say which references a graph could not load, with a button to
+        fix them in the Reference Editor. Not modal, so it neither holds up
+        a script opening graphs nor stops the graph being looked at first.
+
+        :param model: StageModel of the graph just opened
+        :return: the notice, or None when nothing was missing
+        """
+        missing = model.missing_references()
+        if not missing:
+            return None
+        if self.missing_references_message is not None:
+            self.missing_references_message.close()
+        message = MissingReferencesMessage(missing, parent=self)
+        layer = missing[0][0]
+
+        def edit_references():
+            self.edit_layer_references(layer, model=model)
+        message.edit_requested.connect(edit_references)
+        self.missing_references_message = message
+        message.show()
+        return message
 
     def save_open_tab(self):
         """Save the file that corresponds to the currently selected tab."""
@@ -799,18 +829,20 @@ QCheckBox::indicator {
         for layer in self.model.stage._sub_layers:
             self.save_layer(layer)
 
-    def edit_layer_references(self, layer=None):
+    def edit_layer_references(self, layer=None, model=None):
         """Open the reference editor on a layer.
 
         :param layer: layer to edit, defaults to the one being targeted
+        :param model: graph the layer is in, defaults to the current one
         :return: whether the dialog was accepted
         :rtype: bool
         """
-        if not self.model:
+        model = model or self.model
+        if not model:
             return False
-        layer = layer or self.model.target_layer
+        layer = layer or model.target_layer
         layer_path = getattr(layer, 'real_path', None)
-        dialog = ReferenceEditor(self.model, layer_path=layer_path,
+        dialog = ReferenceEditor(model, layer_path=layer_path,
                                  parent=self)
         return bool(dialog.exec_())
 

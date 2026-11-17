@@ -810,3 +810,45 @@ class FileChangedMessage(QtWidgets.QMessageBox):
         message.setDefaultButton(reload_button)
         message.exec_()
         return message.clickedButton() is reload_button
+
+
+class MissingReferencesMessage(QtWidgets.QMessageBox):
+    """Says which references a graph that was just opened could not load,
+    with a button to open the Reference Editor on them. It is shown, not
+    run, so nothing waits on it.
+    """
+    edit_requested = QtCore.Signal()
+
+    def __init__(self, missing, parent=None):
+        """
+        :param missing: [(layer, [reference, ...]), ...] as
+            StageModel.missing_references gives them
+        """
+        super(MissingReferencesMessage, self).__init__(parent)
+        self.setModal(False)
+        self.setWindowTitle('References Not Found')
+        self.setIcon(self.Icon.Warning)
+        count = sum(len(references) for _, references in missing)
+        if count == 1:
+            text = '1 reference could not be loaded.'
+        else:
+            text = '{} references could not be loaded.'.format(count)
+        self.setText(text)
+        self.setInformativeText(
+            'They are kept as written, in case they resolve on another '
+            'machine. Open the Reference Editor to point them at the right '
+            'files.')
+        lines = []
+        for layer, references in missing:
+            lines.append('{}:'.format(layer.get_alias()))
+            lines.extend('    {}'.format(r) for r in references)
+        self.setDetailedText('\n'.join(lines))
+        self.edit_button = self.addButton('Edit References...',
+                                          self.ButtonRole.AcceptRole)
+        self.addButton('Ignore', self.ButtonRole.RejectRole)
+        self.setDefaultButton(self.edit_button)
+        self.buttonClicked.connect(self._on_clicked)
+
+    def _on_clicked(self, button):
+        if button is self.edit_button:
+            self.edit_requested.emit()
