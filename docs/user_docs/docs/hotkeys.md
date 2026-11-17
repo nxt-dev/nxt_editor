@@ -43,6 +43,14 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Resolved View |  Displays resolved values for this tab.  | Toggle resolved view |    W     |
 | Cached View   |   Displays cached values for this tab.   | Toggle cached view   |    E     |
 
+!!! note "Typing in a list finds rows"
+    Q, W and E work from anywhere in the window, except while you are
+    typing. In a text field, the Property Editor's attribute table or the
+    Hotkey Editor's table, letters go to what has focus: in a table, typing
+    jumps to the row starting with what you typed. Shortcuts with `Ctrl` or
+    `Alt`, and any you give the Property Editor's own actions, still work
+    there.
+
 ## Graph
 |            Name             |                      What's this                      |             Tool tip             |  Shortcut   |
 | :-------------------------- | :---------------------------------------------------: | :------------------------------- | :---------: |

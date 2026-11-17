@@ -22,7 +22,7 @@ from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.dockwidgets import code_completion
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
-from nxt_editor import colors, theme, LOGGER_NAME
+from nxt_editor import colors, theme, typed_keys, LOGGER_NAME
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
@@ -1790,6 +1790,15 @@ class AttrsTableView(QtWidgets.QTableView):
         self.setDragEnabled(True)
         self.setMouseTracking(True)
         self.installEventFilter(self)
+
+    def event(self, event):
+        # Typing a letter jumps to the attribute starting with it, rather
+        # than setting off a window shortcut such as Q, W or E. See
+        # typed_keys.
+        if typed_keys.wants_typed_key(self, event):
+            event.accept()
+            return True
+        return super(AttrsTableView, self).event(event)
 
     def mousePressEvent(self, event):
         super(AttrsTableView, self).mousePressEvent(event)
