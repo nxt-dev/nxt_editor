@@ -124,6 +124,13 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Remove Attribute       |             | Remove Attribute       |          |
 | Localize Attribute     |             | Localize Attribute     |          |
 | Revert Attribute       |             | Revert Attribute       |          |
+| Copy Attributes        | Copy the selected attributes, with their values, types and comments, to paste onto other nodes. | Copy Attributes | Ctrl+C |
+| Paste Attributes       | Add the copied attributes to the selected node(s) on the target layer, or set them where a node already has them. | Paste Attributes | Ctrl+V |
+
+!!! note "Property Editor shortcuts apply while it has focus"
+    `Ctrl+C` and `Ctrl+V` copy and paste attributes while the Property
+    Editor has focus, and copy and paste nodes in the graph. In a text
+    field they copy and paste text as usual.
 
 ## Node Comment
 |        Name         |                           What's this                            |      Tool tip       |  Shortcut   |

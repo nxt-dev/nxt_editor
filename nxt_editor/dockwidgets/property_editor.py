@@ -107,6 +107,11 @@ class PropertyEditor(DockWidgetBase):
         self.add_attr_action.triggered.connect(self.add_attr)
         self.remove_attr_action = self._actions.remove_attr_action
         self.remove_attr_action.triggered.connect(self.remove_selected_attrs)
+        # Copy and paste attributes
+        self.copy_attrs_action = self._actions.copy_attrs_action
+        self.copy_attrs_action.triggered.connect(self.copy_attrs)
+        self.paste_attrs_action = self._actions.paste_attrs_action
+        self.paste_attrs_action.triggered.connect(self.paste_attrs)
         # Copy Actions
         self.copy_raw_action = self._actions.copy_raw_action
         copy_raw = partial(self.copy_selected_attrs, DATA_STATE.RAW)
@@ -1046,6 +1051,47 @@ class PropertyEditor(DockWidgetBase):
             self.stage_model.delete_node_attr(node_path=self.node_path,
                                               attr_name=attr_name)
 
+    def get_selected_attr_names_in_order(self):
+        """The selected attributes' names, top to bottom as the table
+        shows them.
+
+        :rtype: list
+        """
+        rows = set()
+        for index in self.table_view.selectedIndexes():
+            rows.add(index.row())
+        names = []
+        data = self.model.get_data()
+        for row in sorted(rows):
+            source_row = self.proxy_model.mapToSource(
+                self.proxy_model.index(row, COLUMNS.name)).row()
+            try:
+                name = data[source_row][COLUMNS.name]
+            except IndexError:
+                continue
+            if name and name not in names:
+                names.append(name)
+        return names
+
+    def copy_attrs(self):
+        """Copy the selected attributes, see StageModel.copy_attrs."""
+        if not self.stage_model or not self.node_path:
+            return
+        attr_names = self.get_selected_attr_names_in_order()
+        if attr_names:
+            self.stage_model.copy_attrs(self.node_path, attr_names)
+
+    def paste_attrs(self):
+        """Paste copied attributes onto the selected nodes, or onto the
+        node shown here when none are selected, see
+        StageModel.paste_attrs."""
+        if not self.stage_model:
+            return
+        node_paths = self.stage_model.get_selected_nodes()
+        if not node_paths and self.node_path:
+            node_paths = [self.node_path]
+        self.stage_model.paste_attrs(node_paths)
+
     def copy_selected_attrs(self, data_state):
         attr_names = self.get_selected_attr_names()
         self.stage_model.copy_attrs_val(self.node_path, attr_names, data_state)
@@ -1133,6 +1179,11 @@ class PropertyEditor(DockWidgetBase):
                 hist_func = self.stage_model.get_historical_opinions
                 if locality == LOCALITIES.local and hist_func(path, name):
                     menu.addAction(self.revert_attr_action)
+            menu.addSeparator()
+            if index.row() != -1:
+                menu.addAction(self.copy_attrs_action)
+            if self.stage_model.get_clipboard_attrs():
+                menu.addAction(self.paste_attrs_action)
             if index.column() == COLUMNS.value:
                 menu.addSeparator()
                 menu.addAction(self.copy_raw_action)

@@ -1335,6 +1335,95 @@ class StageModel(QtCore.QObject):
             vals += [str(val)]
         self.clipboard.setText(','.join(vals))
 
+    # The key copied attributes sit under on the clipboard, which is how a
+    # paste tells them from copied nodes or any other text.
+    ATTRS_CLIPBOARD_KEY = 'nxt_attrs'
+
+    def copy_attrs(self, node_path, attr_names, layer=None):
+        """Put attributes on the clipboard as JSON: each one's name, raw
+        value, type and comment, in the order given. paste_attrs puts them
+        on other nodes, in this graph or another.
+
+        :param node_path: the node they are on
+        :param attr_names: their names
+        :param layer: where to read them, the comp layer by default
+        :return: the attributes copied, as they are on the clipboard
+        :rtype: list
+        """
+        layer = layer or self.comp_layer
+        attrs = []
+        for attr_name in attr_names:
+            value = self.get_node_attr_value(node_path, attr_name, layer,
+                                             data_state=DATA_STATE.RAW,
+                                             as_string=True)
+            attrs += [{'name': attr_name,
+                       'value': value,
+                       'type': self.get_node_attr_type(node_path, attr_name,
+                                                       layer),
+                       'comment': self.get_node_attr_comment(node_path,
+                                                             attr_name,
+                                                             layer)}]
+        if not attrs:
+            return []
+        text = json.dumps({self.ATTRS_CLIPBOARD_KEY: attrs}, indent=4)
+        self.clipboard.setText(text)
+        return attrs
+
+    def get_clipboard_attrs(self):
+        """The attributes copy_attrs put on the clipboard, or an empty
+        list when it holds anything else.
+
+        :rtype: list
+        """
+        try:
+            data = json.loads(self.clipboard.text())
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(data, dict):
+            return []
+        attrs = data.get(self.ATTRS_CLIPBOARD_KEY)
+        if not isinstance(attrs, list):
+            return []
+        return [attr for attr in attrs
+                if isinstance(attr, dict) and attr.get('name')]
+
+    def paste_attrs(self, node_paths, layer=None):
+        """Add the attributes on the clipboard to each of the nodes, on the
+        target layer, or set them where a node already has them. Their
+        comments come along too. It is one undo however many nodes and
+        attributes there are.
+
+        :param node_paths: the nodes to paste onto
+        :param layer: where to set them, the target layer by default
+        :return: whether anything was pasted
+        :rtype: bool
+        """
+        attrs = self.get_clipboard_attrs()
+        node_paths = [path for path in node_paths if path]
+        if not attrs or not node_paths:
+            return False
+        layer = layer or self.target_layer
+        msg = 'Paste {} attribute(s) onto {}'.format(
+            len(attrs), node_paths[0] if len(node_paths) == 1 else
+            '{} nodes'.format(len(node_paths)))
+        self.undo_stack.beginMacro(msg)
+        try:
+            for node_path in node_paths:
+                for attr in attrs:
+                    attr_name = str(attr['name'])
+                    value = attr.get('value')
+                    if value is None:
+                        value = ''
+                    self.set_node_attr_value(node_path, attr_name, value,
+                                             layer)
+                    comment = attr.get('comment')
+                    if comment:
+                        self.node_setattr_comment(node_path, attr_name,
+                                                  comment, layer)
+        finally:
+            self.undo_stack.endMacro()
+        return True
+
     def cut_nodes(self, node_paths=(), layer=None):
         if not node_paths:
             node_paths = self.selection

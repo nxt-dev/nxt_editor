@@ -1229,6 +1229,23 @@ class PropertyEditorActions(NxtActionContainer):
                                             parent=self)
         self.revert_attr_action.setShortcutContext(context)
         self.revert_attr_action.setAutoRepeat(False)
+        # Copy and paste whole attributes, between nodes and graphs
+        self.copy_attrs_action = NxtAction(text='Copy Attributes',
+                                           parent=self)
+        self.copy_attrs_action.setShortcut('Ctrl+C')
+        self.copy_attrs_action.setShortcutContext(context)
+        self.copy_attrs_action.setAutoRepeat(False)
+        self.copy_attrs_action.setWhatsThis(
+            'Copy the selected attributes, with their values, types and '
+            'comments, to paste onto other nodes.')
+        self.paste_attrs_action = NxtAction(text='Paste Attributes',
+                                            parent=self)
+        self.paste_attrs_action.setShortcut('Ctrl+V')
+        self.paste_attrs_action.setShortcutContext(context)
+        self.paste_attrs_action.setAutoRepeat(False)
+        self.paste_attrs_action.setWhatsThis(
+            'Add the copied attributes to the selected node(s) on the '
+            'target layer, or set them where a node already has them.')
         # Copy actions
         self.copy_raw_action = NxtAction(text='Copy Raw')
         self.copy_raw_action.setShortcutContext(context)

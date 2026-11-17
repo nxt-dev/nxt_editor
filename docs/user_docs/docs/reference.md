@@ -801,6 +801,20 @@ terms, any of which can match: `arm*len, side` shows `arm_length` and
 filter stays on as you select other nodes; clear it with the button at its
 end.
 
+### Copying and pasting attributes
+
+Select attributes in the table and choose **Copy Attributes** from the
+right click menu, or press `Ctrl+C`, to copy them with their values, types
+and comments. Select one or more nodes, in this graph or another, and
+choose **Paste Attributes**, or press `Ctrl+V` with the Property Editor in
+focus, to add them to every selected node on the target layer. A node
+that already has one of them gets the copied value instead. The paste is
+one undo. The clipboard holds them as JSON, so they can be read or edited
+as text too.
+
+To copy only a value, right click it and choose **Copy Raw**, **Copy
+Resolved** or **Copy Cached**.
+
 ### Position
 
 The **Position** fields show where the selected root node is in the
