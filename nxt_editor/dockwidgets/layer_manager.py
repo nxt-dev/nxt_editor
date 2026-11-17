@@ -117,6 +117,50 @@ class LayerTreeView(QtWidgets.QTreeView):
         else:
             self.setIndentation(user_dir.user_prefs.get(indent_pref, 20))
 
+    def arrow_at(self, pos):
+        """The index whose expand arrow is at pos in the viewport, or an
+        invalid index."""
+        index = self.indexAt(pos)
+        if not index.isValid():
+            return QtCore.QModelIndex()
+        index = index.sibling(index.row(), 0)
+        if not self.model().hasChildren(index):
+            return QtCore.QModelIndex()
+        rect = self.visualRect(index)
+        if rect.left() - self.indentation() <= pos.x() < rect.left():
+            return index
+        return QtCore.QModelIndex()
+
+    def set_expanded_below(self, index, expanded):
+        """Expand or collapse a layer and every layer under it."""
+        model = self.model()
+        stack = [index]
+        while stack:
+            current = stack.pop()
+            self.setExpanded(current, expanded)
+            for row in range(model.rowCount(current)):
+                stack.append(model.index(row, 0, current))
+
+    def mousePressEvent(self, event):
+        """Shift clicking a layer's arrow opens or closes everything under
+        it too, as it does in the Outliner."""
+        if (event.button() == QtCore.Qt.LeftButton and
+                event.modifiers() & QtCore.Qt.ShiftModifier):
+            index = self.arrow_at(event.pos())
+            if index.isValid():
+                self.set_expanded_below(index, not self.isExpanded(index))
+                event.accept()
+                return
+        super(LayerTreeView, self).mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        # The press already took care of a Shift click on an arrow.
+        if (event.modifiers() & QtCore.Qt.ShiftModifier and
+                self.arrow_at(event.pos()).isValid()):
+            self.mousePressEvent(event)
+            return
+        super(LayerTreeView, self).mouseDoubleClickEvent(event)
+
     def on_item_clicked(self, clicked_idx):
         if not clicked_idx.column() == LayerModel.ALIAS_COLUMN:
             return

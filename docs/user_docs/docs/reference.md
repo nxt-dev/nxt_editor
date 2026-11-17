@@ -521,8 +521,9 @@ even to a list that is already open.
 ## Layer Manager
 
 The Layer Manager lists the layers of the open graph: the top layer and,
-nested under it, the layers it references. Right click a layer for its
-menu.
+nested under it, the layers it references. Click a layer's arrow to open
+or close it, or hold `Shift` to open or close every layer under it too, as
+in the [Outliner](#outliner). Right click a layer for its menu.
 
 ![The layer menu](images/layer_menu.png)
 
