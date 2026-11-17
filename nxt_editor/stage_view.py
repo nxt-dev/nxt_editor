@@ -3,6 +3,7 @@ import copy
 import math
 import logging
 import time
+from collections import namedtuple
 from functools import partial
 
 # External
@@ -33,6 +34,12 @@ from .user_dir import USER_PREF, user_prefs
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
+#: A plug a line being dragged can be dropped on, see
+#: StageView.snap_plug_near. pos is in the scene.
+PlugTarget = namedtuple('PlugTarget', 'node_path attr_name is_input pos '
+                                      'radius')
+
+
 class CONNECTION_SIDES:
     IN = 'input'
     OUT = 'output'
@@ -51,6 +58,9 @@ class StageView(QtWidgets.QGraphicsView):
     BACKDROP_DEPTH = -1000
     # Room left around the nodes a new backdrop is drawn around.
     BACKDROP_PADDING = 40
+    # How far past a plug's edge, in pixels on screen whatever the zoom, a
+    # line being dragged still snaps to it, see snap_plug_near.
+    PLUG_SNAP_PIXELS = 12
 
     def __init__(self, model, parent=None):
         super(StageView, self).__init__(parent=parent)
@@ -169,6 +179,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.mini_map = MiniMap(self)
         # connection attribute used when drawing connections
         self.potential_connection = None
+        # The plug the line being dragged would connect to if dropped now.
+        self.snap_plug = None
 
         # model and connections
         self.model = model
@@ -238,6 +250,7 @@ class StageView(QtWidgets.QGraphicsView):
     def drawForeground(self, painter, rect):
         super(StageView, self).drawForeground(painter, rect)
         self.frames += 1
+        self.draw_snap_plug(painter)
         self.mini_map.draw(painter)
 
     def focusInEvent(self, event):
@@ -415,6 +428,7 @@ class StageView(QtWidgets.QGraphicsView):
         self._backdrop_drag = None
         self._selected_points = set()
         self._point_drag = None
+        self.snap_plug = None
         self.scene().clear()
 
     def toggle_implicit_connections(self, state=None):
@@ -1605,6 +1619,7 @@ class StageView(QtWidgets.QGraphicsView):
         # connection action
         self.mouse_scene_pos = self.mapToScene(event.pos())
         if self.potential_connection:
+            self.set_snap_plug(self.snap_plug_near(self.mouse_scene_pos))
             self.potential_connection.rebuild_line()
 
         # zooming action
@@ -1759,57 +1774,57 @@ class StageView(QtWidgets.QGraphicsView):
 
         # complete connection action
         if self.potential_connection and event.button() is QtCore.Qt.LeftButton:
-            items_released_on = self.items(event.pos())
-            # using the 1 index item here because the 0 index thing will always be the connection
-            if len(items_released_on) > 1:
-                if isinstance(items_released_on[1], NodeGraphicsPlug):
-                    dropped_plug = items_released_on[1]
-                    dropped_node_path = dropped_plug.parentItem().node_path
-                    locked = self.model.get_node_locked(dropped_node_path)
-                    dropped_attr_name = dropped_plug.attr_name_represented
-                    exec_attr_name = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
-                    if (dropped_attr_name not in nxt_node.INTERNAL_ATTRS.ALL
-                            and not locked):
-                        if self.potential_connection.src_path:
-                            if dropped_plug.is_input:
-                                # Fixme: This isn't how tokens are created now
-                                value = '${%s}' % self.potential_connection.src_path
-                                self.model.set_node_attr_value(node_path=dropped_node_path,
-                                                               attr_name=dropped_attr_name,
-                                                               value=value,
-                                                               layer=self.model.target_layer)
-                            else:
-                                logger.warning("cannot make connections from output to output.")
-                        elif self.potential_connection.tgt_path:
-                            if not dropped_plug.is_input:
-                                dropped_attr_path = nxt_path.make_attr_path(dropped_node_path, dropped_attr_name)
-                                value = tokens.make_token_str(dropped_attr_path)
-                                target_node_path = self.potential_connection.tgt_node_path
-                                self.model.set_node_attr_value(node_path=target_node_path,
-                                                               attr_name=self.potential_connection.tgt_attr_name,
-                                                               value=value,
-                                                               layer=self.model.target_layer)
-                            else:
-                                logger.warning("cannot make connections from input to inputs")
-                    elif dropped_attr_name == exec_attr_name and not locked:
-                        src_path = self.potential_connection.src_node_path
-                        tgt_path = self.potential_connection.tgt_node_path
-                        locked = all((not locked,
-                                      self.model.get_node_locked(tgt_path)))
-                        if src_path and not locked:
-                            if dropped_plug.is_input:
-                                self.model.set_node_exec_in(node_path=dropped_node_path,
-                                                            source_node_path=src_path,
-                                                            layer=self.model.target_layer)
-                            else:
-                                logger.warning("cannot make connections from output to output.")
-                        elif tgt_path and not locked:
-                            if not dropped_plug.is_input:
-                                self.model.set_node_exec_in(node_path=tgt_path,
-                                                            source_node_path=dropped_node_path,
-                                                            layer=self.model.target_layer)
-                            else:
-                                logger.warning("cannot make connections from input to input")
+            # The plug nearest the drop that takes the line, not only one
+            # right under the mouse, see snap_plug_near.
+            dropped_plug = self.snap_plug_near(self.mapToScene(event.pos()))
+            self.set_snap_plug(None)
+            if dropped_plug is not None:
+                dropped_node_path = dropped_plug.node_path
+                locked = self.model.get_node_locked(dropped_node_path)
+                dropped_attr_name = dropped_plug.attr_name
+                exec_attr_name = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
+                if (dropped_attr_name not in nxt_node.INTERNAL_ATTRS.ALL
+                        and not locked):
+                    if self.potential_connection.src_path:
+                        if dropped_plug.is_input:
+                            # Fixme: This isn't how tokens are created now
+                            value = '${%s}' % self.potential_connection.src_path
+                            self.model.set_node_attr_value(node_path=dropped_node_path,
+                                                           attr_name=dropped_attr_name,
+                                                           value=value,
+                                                           layer=self.model.target_layer)
+                        else:
+                            logger.warning("cannot make connections from output to output.")
+                    elif self.potential_connection.tgt_path:
+                        if not dropped_plug.is_input:
+                            dropped_attr_path = nxt_path.make_attr_path(dropped_node_path, dropped_attr_name)
+                            value = tokens.make_token_str(dropped_attr_path)
+                            target_node_path = self.potential_connection.tgt_node_path
+                            self.model.set_node_attr_value(node_path=target_node_path,
+                                                           attr_name=self.potential_connection.tgt_attr_name,
+                                                           value=value,
+                                                           layer=self.model.target_layer)
+                        else:
+                            logger.warning("cannot make connections from input to inputs")
+                elif dropped_attr_name == exec_attr_name and not locked:
+                    src_path = self.potential_connection.src_node_path
+                    tgt_path = self.potential_connection.tgt_node_path
+                    locked = all((not locked,
+                                  self.model.get_node_locked(tgt_path)))
+                    if src_path and not locked:
+                        if dropped_plug.is_input:
+                            self.model.set_node_exec_in(node_path=dropped_node_path,
+                                                        source_node_path=src_path,
+                                                        layer=self.model.target_layer)
+                        else:
+                            logger.warning("cannot make connections from output to output.")
+                    elif tgt_path and not locked:
+                        if not dropped_plug.is_input:
+                            self.model.set_node_exec_in(node_path=tgt_path,
+                                                        source_node_path=dropped_node_path,
+                                                        layer=self.model.target_layer)
+                        else:
+                            logger.warning("cannot make connections from input to input")
             if self.potential_connection:
                 self.scene().removeItem(self.potential_connection)
                 self.potential_connection = None
@@ -1918,6 +1933,93 @@ class StageView(QtWidgets.QGraphicsView):
                                                           target_path=tgt_path)
         self.scene().addItem(self.potential_connection)
         self.potential_connection.setZValue(self.POTENTIAL_CONNECTION_DEPTH)
+
+    def snap_plug_near(self, scene_pos):
+        """Where the line being dragged connects if dropped at scene_pos:
+        the nearest plug that can take it, within PLUG_SNAP_PIXELS on
+        screen of its edge, so a plug is as easy to drop on zoomed out as
+        in. Zoomed out far enough that plugs are not drawn, they are still
+        where they would be.
+
+        An input takes a line from an output and the other way round, an
+        exec plug only an exec line between top level nodes, and a
+        property plug only a property line. Locked nodes take nothing.
+
+        :return: PlugTarget or None
+        """
+        line = self.potential_connection
+        if line is None:
+            return None
+        from_input = not line.src_path
+        dragged = line.tgt_path if from_input else line.src_path
+        exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
+        is_exec = nxt_path.attr_name_from_attr_path(dragged) == exec_attr
+        room = self.PLUG_SNAP_PIXELS / (self.scale_factor or 1.0)
+        # Wide enough to find a node whose plug sticks out past its edge.
+        reach = room + NodeGraphicsItem.EXEC_PLUG_RADIUS
+        area = QtCore.QRectF(scene_pos.x() - reach, scene_pos.y() - reach,
+                             reach * 2, reach * 2)
+        nearest, best = None, None
+        for item in self.scene().items(area):
+            if not isinstance(item, NodeGraphicsItem) or not item.isVisible():
+                continue
+            node_path = item.node_path
+            if self.model.get_node_locked(node_path):
+                continue
+            if is_exec:
+                if nxt_path.get_root_path(node_path) != node_path:
+                    continue
+                if node_path == nxt_path.node_path_from_attr_path(dragged):
+                    # A node's exec cannot come from itself.
+                    continue
+                attrs = [exec_attr]
+                radius = NodeGraphicsItem.EXEC_PLUG_RADIUS
+            else:
+                attrs = item.user_attr_names
+                radius = NodeGraphicsItem.ATTR_PLUG_RADIUS
+            for attr in attrs:
+                # Dragged out of an input, it is dropped on an output.
+                if from_input:
+                    pos = item.get_attr_out_pos(attr, scene=True)
+                else:
+                    pos = item.get_attr_in_pos(attr, scene=True)
+                if pos is None:
+                    continue
+                gap = math.hypot(pos.x() - scene_pos.x(),
+                                 pos.y() - scene_pos.y()) - radius
+                if gap <= room and (best is None or gap < best):
+                    nearest = PlugTarget(node_path, attr, not from_input,
+                                         pos, radius)
+                    best = gap
+        return nearest
+
+    def set_snap_plug(self, target):
+        """Mark the plug the line being dragged would connect to."""
+        if target == self.snap_plug:
+            return
+        self.snap_plug = target
+        self.viewport().update()
+
+    def connection_drag_pos(self):
+        """Where the loose end of the line being dragged is drawn to: the
+        plug it snaps to, or else the mouse."""
+        if self.snap_plug is not None:
+            return QtCore.QPointF(self.snap_plug.pos)
+        return self.mouse_scene_pos
+
+    def draw_snap_plug(self, painter):
+        """Ring the plug the line being dragged would connect to, the way a
+        plug under the mouse is."""
+        target = self.snap_plug
+        if target is None or self.potential_connection is None:
+            return
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        painter.setPen(QtGui.QPen(QtCore.Qt.white, 1.0))
+        painter.setBrush(QtCore.Qt.NoBrush)
+        radius = target.radius + 2
+        painter.drawEllipse(target.pos, radius, radius)
+        painter.restore()
 
     def lines_at(self, view_pos):
         """The lines a right click at view_pos is about.

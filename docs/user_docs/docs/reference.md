@@ -164,6 +164,13 @@ was.
 
 ### Lines between nodes
 
+- **Connect by dragging**: drag out of a plug and drop on another to
+  connect them. The line does not have to land right on the plug: it
+  snaps to the nearest plug that can take it within a few pixels on
+  screen, at any zoom, and that plug is ringed in white while you drag so
+  you can see where it will go. An output connects to an input and the
+  other way round, an exec plug only to another node's exec plug, and an
+  attribute only to an attribute. Locked nodes take nothing.
 - **Straight or curved**: **View > Curved Connections** draws the graph's
   lines as curves that leave and meet each plug going across. The choice
   is saved with the graph, so everyone who opens it sees the same lines.

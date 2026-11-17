@@ -363,7 +363,7 @@ class AttrConnectionGraphic(QtWidgets.QGraphicsPathItem):
                 self.src_pos = src_node.get_attr_out_pos(exec_attr,
                                                          scene=True)
         else:
-            self.src_pos = self.view.mouse_scene_pos
+            self.src_pos = self.view.connection_drag_pos()
         if tgt_node:
             self.tgt_pos = tgt_node.get_attr_in_pos(self.tgt_attr_name,
                                                     scene=True)
@@ -372,7 +372,7 @@ class AttrConnectionGraphic(QtWidgets.QGraphicsPathItem):
                 self.tgt_pos = tgt_node.get_attr_in_pos(exec_attr,
                                                         scene=True)
         else:
-            self.tgt_pos = self.view.mouse_scene_pos
+            self.tgt_pos = self.view.connection_drag_pos()
         anchors = [QtCore.QPointF(self.src_pos)] + self.points + \
             [QtCore.QPointF(self.tgt_pos)]
         curved = self.view.connection_style == wires.CURVED
