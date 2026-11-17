@@ -129,7 +129,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except:  # Broad because Maya
             # Failed to run git branch, attempting fallback method
             try:
-                with open("../../.git/HEAD") as f:
+                with open("../../.git/HEAD", encoding='utf-8') as f:
                     head = f.read()
                 _, __, current_branch = head.rpartition("/")
             except:
@@ -1947,10 +1947,9 @@ class StartRPCThread(QtCore.QThread):
                 logger.warning("Failed to tail remote rpc server log!")
         if remote_rpc_log_file_path:
             self.main_window.rpc_log_tail.watch_path = remote_rpc_log_file_path
-            with open(remote_rpc_log_file_path, "r") as fp:
-                text = fp.read()
-                end_pos = len(text)
-            self.main_window.rpc_log_tail.last_read_pos = end_pos
+            # Picks up from the end, in bytes, as the tail counts them.
+            self.main_window.rpc_log_tail.last_read_pos = os.path.getsize(
+                remote_rpc_log_file_path)
         if self.main_window.model:
             self.main_window.model.processing.emit(False)
 

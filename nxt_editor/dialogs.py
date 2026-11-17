@@ -350,7 +350,7 @@ class NxtWarningDialog(QtWidgets.QDialog):
         _, ext = os.path.splitext(file_name)
         if not ext:
             file_name += '.txt'
-        with open(file_name, 'w+') as fp:
+        with open(file_name, 'w+', encoding='utf-8') as fp:
             fp.write(self._detail_text)
 
     def _update_details(self):

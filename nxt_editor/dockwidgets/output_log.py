@@ -1,4 +1,5 @@
 # Built-in
+import codecs
 import logging
 import re
 from code import InteractiveConsole
@@ -161,7 +162,12 @@ class FileTailingThread(QtCore.QThread):
         super(FileTailingThread, self).__init__()
         self.watch_path = path
         self.last_mtime = 0
+        # In bytes, not characters: a character outside English can take
+        # several, and seeking by a character count lands mid-line.
         self.last_read_pos = 0
+        # Holds the start of a character a write has only half finished,
+        # until the rest of it arrives.
+        self.decoder = codecs.getincrementaldecoder('utf-8')('replace')
 
     def run(self):
         while not self.isInterruptionRequested():
@@ -176,11 +182,13 @@ class FileTailingThread(QtCore.QThread):
             if current_mtime == self.last_mtime:
                 continue
             self.last_mtime = current_mtime
-            with open(self.watch_path, 'r') as fp:
+            with open(self.watch_path, 'rb') as fp:
                 fp.seek(self.last_read_pos)
-                new_text = fp.read()
-            self.last_read_pos += len(new_text)
-            self.new_text.emit(new_text)
+                new_bytes = fp.read()
+            self.last_read_pos += len(new_bytes)
+            new_text = self.decoder.decode(new_bytes)
+            if new_text:
+                self.new_text.emit(new_text)
 
 
 class OutputLog(DockWidgetBase):
@@ -253,7 +261,8 @@ class OutputLog(DockWidgetBase):
         self.wrap_std_streams_for_raw_output()
 
         # Catch-up visual log to file log
-        with open(self.parent().nxt.log_file, 'r') as fp:
+        with open(self.parent().nxt.log_file, 'r', encoding='utf-8',
+                  errors='replace') as fp:
             catch_up = fp.read()
         catch_up = catch_up.rstrip()  # removing hanging newlines.
         self.rich_output_textedit.append(catch_up)

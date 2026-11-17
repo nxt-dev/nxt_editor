@@ -11,7 +11,7 @@ version_file = os.path.join(EDITOR_DIR, 'version.json')
 
 
 class EDITOR_VERSION(object):
-    with open(version_file, 'r') as f:
+    with open(version_file, 'r', encoding='utf-8') as f:
         version_data = json.load(f)
     api_v_data = version_data['EDITOR']
     MAJOR = api_v_data['MAJOR']

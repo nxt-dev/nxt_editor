@@ -56,7 +56,9 @@ def write_whole_file(path, mode, dump):
     """
     tmp = '{}.{}.tmp'.format(path, os.getpid())
     try:
-        with open(tmp, mode) as fp:
+        # Text is always UTF-8, whatever the system's own encoding is.
+        encoding = None if 'b' in mode else 'utf-8'
+        with open(tmp, mode, encoding=encoding) as fp:
             dump(fp)
             fp.flush()
             os.fsync(fp.fileno())
@@ -355,7 +357,7 @@ class JsonPref(PrefFile):
         if stamp == self._stamp:
             return
         try:
-            with open(self.path, 'r') as fp:
+            with open(self.path, 'r', encoding='utf-8') as fp:
                 contents = json.load(fp)
         except (self.json_decode_err, OSError):
             # Keep what we have, the next write puts the file right.

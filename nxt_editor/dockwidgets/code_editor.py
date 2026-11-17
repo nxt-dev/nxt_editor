@@ -1371,7 +1371,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if self.completion_source_enabled('complete_host_action'):
             words.update(code_completion.host_modules())
         if self.completion_source_enabled('complete_document_action'):
-            words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
+            # A name can be in any language: \w is any letter or digit.
+            words.update(re.findall(r'[^\W\d]\w{2,}',
                                     self.toPlainText()))
         return sorted(words)
 
@@ -1382,7 +1383,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     # why only python builtins ever appeared.
     # Slashes too, but only inside a token, where they are a node path:
     # anywhere else a slash is division and starts a new word.
-    PREFIX_CHARS = r'[A-Za-z0-9_.:${}/]*$'
+    PREFIX_CHARS = r'[\w.:${}/]*$'
 
     def completion_prefix(self):
         """The partial word in front of the cursor.

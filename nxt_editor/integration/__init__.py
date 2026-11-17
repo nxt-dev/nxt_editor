@@ -18,7 +18,7 @@ def plugin_version():
     :rtype: str
     """
     try:
-        with open(VERSION_FILE, 'r') as file_object:
+        with open(VERSION_FILE, 'r', encoding='utf-8') as file_object:
             editor = json.load(file_object)['EDITOR']
         return '{MAJOR}.{MINOR}.{PATCH}'.format(**editor)
     except (IOError, OSError, ValueError, KeyError):

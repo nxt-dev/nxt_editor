@@ -555,7 +555,7 @@ def nxt_report():
     here = os.path.dirname(getattr(module, "__file__", "") or "")
     version = "?"
     try:
-        with open(os.path.join(here, "version.json")) as handle:
+        with open(os.path.join(here, "version.json"), encoding="utf-8") as handle:
             api = json.load(handle).get("API", {})
         version = "{}.{}.{}".format(api.get("MAJOR"), api.get("MINOR"),
                                     api.get("PATCH"))

@@ -41,7 +41,7 @@ def dict_or_string(value={}):
     if os.path.isfile(value):
         try:
             # open the filepath and load the json file
-            with open(value, "r") as fp:
+            with open(value, "r", encoding="utf-8-sig") as fp:
                 return json.load(fp)
         except json.JSONDecodeError:
             pass
