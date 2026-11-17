@@ -342,7 +342,9 @@ take you to another node, and accept your edit on the way, by accident.
 `Ctrl+Space` offers completions for the word in front of the cursor. Use the
 arrow keys to choose one and `Enter` or `Tab` to insert it; `Esc` closes the
 list. With **Code Editor Autocomplete** on, the list also appears by itself
-once you have typed two characters of a word.
+once you have typed two characters of a word and paused, or straight away
+after a `.`. While it is open, typing more of the word narrows it, and it
+shows up to 12 names at a time.
 
 Completions come from six sources:
 
@@ -381,8 +383,12 @@ string and offers `path.split` and `path.splitlines`.
   description says how to install it.
 - It is only asked after a dot. Bare names still come from the other
   sources, so switching one of those off keeps its names out of the list.
-- It is asked once typing pauses, or straight away with `Ctrl+Space`. The
+- It is asked once typing pauses, or straight away with `Ctrl+Space`, and
+  works in the background, so typing never waits for it. Its names join the
+  list when it answers, if the cursor is still where it was asked. The
   answer is kept while you type more of the same name.
+- The first time it reads a library it takes a moment longer, as it saves
+  what it learned for next time.
 - It sees the world node's imports and the names nxt gives every compute.
   `${}` tokens are read as plain strings, so a compute full of tokens can
   still be analysed.
