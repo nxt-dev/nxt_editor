@@ -37,6 +37,13 @@ so switching back to a tab is instant.
 and shows it again. The editor remembers your choice. With the graph
 hidden, switch between open files from the bottom of the **Window** menu.
 
+### Tabs
+
+Each open graph has a tab above the stage view. The **+** after the last
+tab, or a double click on the empty bar beside the tabs, makes a new
+graph, the same as **File > New Graph** (`Ctrl+N`). With no graph open,
+the empty space offers **New Graph** and **Open...**.
+
 ### Moving around
 
 - **Pan** by dragging with the middle mouse button, or hold `Space` and

@@ -1938,13 +1938,368 @@ class MenuBar(QtWidgets.QMenuBar):
         proxy.kill()
 
 
+class NewGraphButton(QtWidgets.QToolButton):
+    """The plus after the open graphs' tabs, which makes a new graph.
+
+    It paints itself from the theme rather than taking a style, so it is
+    the same in every host, and it stays clear of the tab widget's
+    stylesheet, which the layer color replaces whole.
+    """
+    SIZE = 22
+    GLYPH = 10
+    STROKE = 1.5
+    RADIUS = 4
+
+    def __init__(self, action, parent=None):
+        super(NewGraphButton, self).__init__(parent=parent)
+        self.action = action
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setAccessibleName('New Graph')
+        self.setAttribute(QtCore.Qt.WA_Hover)
+        self.setEnabled(action.isEnabled())
+        action.changed.connect(self.follow_action)
+
+    def follow_action(self):
+        self.setEnabled(self.action.isEnabled())
+
+    def tooltip_text(self):
+        """The tooltip, with the shortcut the action has right now."""
+        keys = self.action.shortcut().toString(
+            QtGui.QKeySequence.NativeText)
+        return 'New Graph ({})'.format(keys) if keys else 'New Graph'
+
+    def event(self, event):
+        if event.type() == QtCore.QEvent.ToolTip:
+            # Read as it is about to show, so a rebound key is right.
+            self.setToolTip(self.tooltip_text())
+        return super(NewGraphButton, self).event(event)
+
+    def mousePressEvent(self, event):
+        # Only the left button makes a graph. The others are taken here so
+        # they do nothing, rather than reaching the tabs behind.
+        if event.button() != QtCore.Qt.LeftButton:
+            event.accept()
+            return
+        super(NewGraphButton, self).mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != QtCore.Qt.LeftButton:
+            event.accept()
+            return
+        super(NewGraphButton, self).mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        # Not a double click on the bar behind it.
+        event.accept()
+        if event.button() == QtCore.Qt.LeftButton:
+            super(NewGraphButton, self).mouseDoubleClickEvent(event)
+
+    def enterEvent(self, event):
+        super(NewGraphButton, self).enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event):
+        super(NewGraphButton, self).leaveEvent(event)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        down = self.isDown()
+        hovered = self.isEnabled() and self.underMouse()
+        if down or hovered:
+            painter.setPen(QtGui.QPen(theme.color(theme.BORDER), 1))
+            painter.setBrush(theme.color(theme.PRESSED if down
+                                         else theme.HOVER))
+            painter.drawRoundedRect(
+                QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                self.RADIUS, self.RADIUS)
+        if not self.isEnabled():
+            ink = theme.TEXT_FAINT
+        elif down or hovered:
+            ink = theme.TEXT
+        else:
+            ink = theme.TEXT_DIM
+        pen = QtGui.QPen(theme.color(ink), self.STROKE)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        painter.setPen(pen)
+        center = QtCore.QRectF(self.rect()).center()
+        half = self.GLYPH / 2.0
+        painter.drawLine(QtCore.QPointF(center.x() - half, center.y()),
+                         QtCore.QPointF(center.x() + half, center.y()))
+        painter.drawLine(QtCore.QPointF(center.x(), center.y() - half),
+                         QtCore.QPointF(center.x(), center.y() + half))
+        painter.end()
+
+
+class LinkLabel(QtWidgets.QWidget):
+    """Text that runs an action when clicked, with the action's shortcut
+    after it. It paints itself from the theme, so a host's link color never
+    shows.
+    """
+    GAP = 8
+
+    def __init__(self, text, action, parent=None):
+        super(LinkLabel, self).__init__(parent=parent)
+        self.text = text
+        self.action = action
+        self.setAttribute(QtCore.Qt.WA_Hover)
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setAccessibleName(text)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed,
+                           QtWidgets.QSizePolicy.Fixed)
+        self.text_font = theme.font(theme.TEXT_PX)
+
+    def shortcut_text(self):
+        """The action's shortcut as it is now, or an empty string."""
+        return self.action.shortcut().toString(QtGui.QKeySequence.NativeText)
+
+    def sizeHint(self):
+        metrics = QtGui.QFontMetrics(self.text_font)
+        width = metrics.horizontalAdvance(self.text)
+        keys = self.shortcut_text()
+        if keys:
+            width += self.GAP + metrics.horizontalAdvance(keys)
+        return QtCore.QSize(width + 2, metrics.height() + 6)
+
+    def showEvent(self, event):
+        # The shortcut may have been rebound since this last showed.
+        self.updateGeometry()
+        super(LinkLabel, self).showEvent(event)
+
+    def enterEvent(self, event):
+        self.update()
+
+    def leaveEvent(self, event):
+        self.update()
+
+    def mouseReleaseEvent(self, event):
+        if (event.button() == QtCore.Qt.LeftButton and
+                self.rect().contains(event.pos())):
+            self.action.trigger()
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        hovered = self.underMouse()
+        font = QtGui.QFont(self.text_font)
+        font.setUnderline(hovered)
+        painter.setFont(font)
+        painter.setPen(theme.color(theme.TEXT if hovered else theme.TEXT_DIM))
+        align = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+        painter.drawText(self.rect(), align, self.text)
+        keys = self.shortcut_text()
+        if keys:
+            metrics = QtGui.QFontMetrics(self.text_font)
+            left = metrics.horizontalAdvance(self.text) + self.GAP
+            painter.setFont(self.text_font)
+            painter.setPen(theme.color(theme.TEXT_FAINT))
+            painter.drawText(self.rect().adjusted(left, 0, 0, 0), align, keys)
+        painter.end()
+
+
+class EmptyGraphsHint(QtWidgets.QWidget):
+    """What shows where the graph goes when no graph is open."""
+
+    def __init__(self, app_actions, parent=None):
+        super(EmptyGraphsHint, self).__init__(parent=parent)
+        self.new_link = LinkLabel('New Graph', app_actions.new_graph_action,
+                                  parent=self)
+        self.open_link = LinkLabel('Open...', app_actions.open_file_action,
+                                   parent=self)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(2)
+        layout.addStretch()
+        layout.addWidget(self.new_link, 0, QtCore.Qt.AlignHCenter)
+        layout.addWidget(self.open_link, 0, QtCore.Qt.AlignHCenter)
+        layout.addStretch()
+
+
+class ButtonCorner(QtWidgets.QWidget):
+    """Empty room at the end of a tab bar, kept for a button laid over it.
+    Clicks go through to the tab widget behind."""
+
+    def __init__(self, width, parent=None):
+        super(ButtonCorner, self).__init__(parent=parent)
+        self.room = width
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+
+    def sizeHint(self):
+        return QtCore.QSize(self.room, 1)
+
+
+class OpenFilesTabBar(QtWidgets.QTabBar):
+    """The open graphs' tabs. They say when their layout changes, and keep
+    their height with no tabs, so the new graph button has a bar to sit in.
+    """
+    layout_changed = QtCore.Signal()
+    empty_double_clicked = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        super(OpenFilesTabBar, self).__init__(parent=parent)
+        self._tab_height = 0
+
+    def sizeHint(self):
+        hint = super(OpenFilesTabBar, self).sizeHint()
+        if self.count():
+            self._tab_height = hint.height()
+            return hint
+        return QtCore.QSize(0, self.empty_height())
+
+    def minimumSizeHint(self):
+        if self.count():
+            return super(OpenFilesTabBar, self).minimumSizeHint()
+        return QtCore.QSize(0, self.empty_height())
+
+    def empty_height(self):
+        """The height of the bar while it had tabs, or of one tab."""
+        if not self._tab_height:
+            option = QtWidgets.QStyleOptionTab()
+            option.initFrom(self)
+            option.shape = self.shape()
+            option.text = 'untitled'
+            metrics = self.fontMetrics()
+            contents = QtCore.QSize(metrics.horizontalAdvance(option.text),
+                                    metrics.height())
+            size = self.style().sizeFromContents(
+                QtWidgets.QStyle.CT_TabBarTab, option, contents, self)
+            return size.height()
+        return self._tab_height
+
+    def tabLayoutChange(self):
+        super(OpenFilesTabBar, self).tabLayoutChange()
+        self.layout_changed.emit()
+
+    def resizeEvent(self, event):
+        super(OpenFilesTabBar, self).resizeEvent(event)
+        self.layout_changed.emit()
+
+    def moveEvent(self, event):
+        super(OpenFilesTabBar, self).moveEvent(event)
+        self.layout_changed.emit()
+
+    def mouseDoubleClickEvent(self, event):
+        if (event.button() == QtCore.Qt.LeftButton and
+                self.tabAt(event.pos()) == -1):
+            self.empty_double_clicked.emit()
+            return
+        super(OpenFilesTabBar, self).mouseDoubleClickEvent(event)
+
+
 class OpenFilesTabWidget(QtWidgets.QTabWidget):
+    #: Between the last tab and the new graph button, and past the button.
+    BUTTON_GAP = 4
+
     def __init__(self, parent=None):
         super(OpenFilesTabWidget, self).__init__(parent=parent)
         self.main_window = parent
+        bar = OpenFilesTabBar(self)
+        self.setTabBar(bar)
         self.setTabsClosable(True)
         self.setMovable(True)
+        # Arrows in every style, so tabs that do not fit scroll the same
+        # way everywhere.
+        bar.setUsesScrollButtons(True)
         self.tabCloseRequested.connect(self.close_tab)
+        app_actions = self.main_window.app_actions
+        self.new_graph_button = NewGraphButton(app_actions.new_graph_action,
+                                               parent=self)
+        self.new_graph_button.clicked.connect(self.new_graph)
+        # Holds the bar's far end for the button when it and the tabs do
+        # not fit, which puts the scroll arrows to its left.
+        self.button_corner = ButtonCorner(
+            NewGraphButton.SIZE + 2 * self.BUTTON_GAP, parent=self)
+        self.button_corner.hide()
+        self.empty_hint = EmptyGraphsHint(app_actions, parent=self)
+        self._placing = False
+        bar.layout_changed.connect(self.place_new_graph_button)
+        bar.tabMoved.connect(self.place_new_graph_button)
+        bar.empty_double_clicked.connect(self.new_graph)
+        self.place_new_graph_button()
+
+    def new_graph(self):
+        """Make a new graph as File > New Graph does, and give its view the
+        keyboard."""
+        action = self.main_window.app_actions.new_graph_action
+        if not action.isEnabled():
+            return
+        action.trigger()
+        view = self.currentWidget()
+        if view is not None:
+            view.setFocus()
+
+    def overflowing(self):
+        """Whether the button is pinned to the end of the bar."""
+        corner = self.cornerWidget(QtCore.Qt.TopRightCorner)
+        return corner is self.button_corner
+
+    def place_new_graph_button(self):
+        """Put the new graph button after the last tab, or at the end of
+        the bar when they do not both fit."""
+        if self._placing:
+            return
+        self._placing = True
+        try:
+            self._place_new_graph_button()
+        finally:
+            self._placing = False
+
+    def _place_new_graph_button(self):
+        bar = self.tabBar()
+        size = NewGraphButton.SIZE
+        gap = self.BUTTON_GAP
+        count = bar.count()
+        tabs_width = bar.sizeHint().width() if count else 0
+        fits = bar.x() + tabs_width + gap + size + gap <= self.width()
+        if fits == self.overflowing():
+            self.setCornerWidget(None if fits else self.button_corner,
+                                 QtCore.Qt.TopRightCorner)
+            self.button_corner.setVisible(not fits)
+        # A tab that is not current is drawn lower, which puts the middle of
+        # its text a pixel below the middle of the bar.
+        y = bar.y() + bar.height() // 2 + 1 - size // 2
+        if not fits:
+            x = self.width() - gap - size
+        elif count:
+            x = bar.x() + bar.tabRect(count - 1).right() + 1 + gap
+        else:
+            x = bar.x() + gap
+        self.new_graph_button.move(x, y)
+        self.new_graph_button.raise_()
+        self.empty_hint.setVisible(not count)
+        if not count:
+            top = bar.geometry().bottom() + 1
+            self.empty_hint.setGeometry(0, top, self.width(),
+                                        max(0, self.height() - top))
+            self.empty_hint.raise_()
+
+    def tabInserted(self, index):
+        super(OpenFilesTabWidget, self).tabInserted(index)
+        self.place_new_graph_button()
+
+    def tabRemoved(self, index):
+        super(OpenFilesTabWidget, self).tabRemoved(index)
+        self.place_new_graph_button()
+
+    def resizeEvent(self, event):
+        super(OpenFilesTabWidget, self).resizeEvent(event)
+        self.place_new_graph_button()
+
+    def showEvent(self, event):
+        super(OpenFilesTabWidget, self).showEvent(event)
+        self.place_new_graph_button()
+
+    def mouseDoubleClickEvent(self, event):
+        # The bar is only as wide as its tabs. The space after them, still
+        # in the bar's band, is this widget's.
+        bar = self.tabBar().geometry()
+        pos = event.pos()
+        if (event.button() == QtCore.Qt.LeftButton and
+                pos.y() <= bar.bottom() and pos.x() >= bar.left()):
+            self.new_graph()
+            return
+        super(OpenFilesTabWidget, self).mouseDoubleClickEvent(event)
 
     def close_tab(self, index):
         model = self.widget(index).model
