@@ -1,5 +1,8 @@
 """Where the code editor's completions come from, beyond the editor itself.
 
+Node paths and ${} tokens come from here too, for the code editor and for
+the Property Editor's path fields and attribute values alike.
+
 Three things a compute can use without importing them, and an optional
 python analyser:
 
@@ -28,7 +31,7 @@ import threading
 import types
 
 # Internal
-from nxt import nxt_path
+from nxt import nxt_path, tokens
 from nxt.constants import NXT_DCC_ENV_VAR, USER_DIR
 from nxt.runtime import ExitNode, ExitGraph
 
@@ -80,6 +83,79 @@ def host_modules():
             if module is not None and alias not in found:
                 found[alias] = module
     return found
+
+
+def node_paths(model):
+    """Every node path in the graph, as the path fields and ${/ offer them.
+
+    :param model: StageModel
+    :rtype: list
+    """
+    return sorted(model.get_descendants(nxt_path.WORLD))
+
+
+def node_attr_names(model, node_path):
+    """Every attribute a node's compute can use, as the Property Editor
+    lists them: its own from every layer, then what it inherits from its
+    parents and gets from what it instances.
+
+    Asked of the composited graph, because the target layer alone only
+    knows what that layer says about the node.
+
+    :rtype: list
+    """
+    comp = model.comp_layer
+    names = []
+    for found in (model.get_node_local_attr_names(node_path, comp),
+                  model.get_node_inherited_attr_names(node_path, comp),
+                  model.get_node_instanced_attr_names(node_path, comp)):
+        for name in found:
+            if name not in names:
+                names.append(name)
+    return names
+
+
+def token_words(model, node_path):
+    """The tokens worth offering on a node whatever is being typed: each
+    of its attributes as ${name}, and the token prefixes nxt knows about,
+    ${file:: and the rest, including any added by plugins.
+
+    :param model: StageModel, or None for the prefixes alone
+    :param node_path: the node being edited, or None
+    :rtype: list
+    """
+    words = set()
+    if model is not None and node_path:
+        for name in node_attr_names(model, node_path):
+            words.add(tokens.TOKEN_PREFIX + name + tokens.TOKEN_SUFFIX)
+    all_tokens = tuple(tokens.TOKENTYPE.ALL) + tuple(tokens.plugin_tokens)
+    for token in all_tokens:
+        if token.prefix:
+            words.add(tokens.TOKEN_PREFIX + token.prefix)
+    return sorted(words)
+
+
+def token_completions(model, prefix):
+    """Node paths inside ${/, and a node's attributes after its dot.
+
+    ${/ offers every node path, and ${/some/node. offers that node's
+    attributes as whole tokens.
+
+    :param model: StageModel
+    :param prefix: the partial token being typed
+    :type prefix: str
+    :rtype: list
+    """
+    start = tokens.TOKEN_PREFIX + nxt_path.WORLD
+    if not model or not prefix.startswith(start):
+        return []
+    body = prefix[len(tokens.TOKEN_PREFIX):]
+    if '.' in body:
+        node_path = body.rpartition('.')[0]
+        return [tokens.TOKEN_PREFIX + node_path + '.' + name
+                + tokens.TOKEN_SUFFIX
+                for name in node_attr_names(model, node_path)]
+    return [tokens.TOKEN_PREFIX + path for path in node_paths(model)]
 
 
 # A ${...} token. nxt resolves these before python sees the code, so to a

@@ -1684,24 +1684,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
     @staticmethod
     def node_attr_names(model, node_path):
-        """Every attribute a node's compute can use, as the Property Editor
-        lists them: its own from every layer, then what it inherits from its
-        parents and gets from what it instances.
-
-        Asked of the composited graph, because the target layer alone only
-        knows what that layer says about the node.
+        """Every attribute a node's compute can use, see
+        code_completion.node_attr_names.
 
         :rtype: list
         """
-        comp = model.comp_layer
-        names = []
-        for found in (model.get_node_local_attr_names(node_path, comp),
-                      model.get_node_inherited_attr_names(node_path, comp),
-                      model.get_node_instanced_attr_names(node_path, comp)):
-            for name in found:
-                if name not in names:
-                    names.append(name)
-        return names
+        return code_completion.node_attr_names(model, node_path)
 
     def build_completion_words(self):
         """Everything worth offering as a completion for this node.
@@ -1726,17 +1714,17 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                     for name in self.node_attr_names(model, node_path):
                         words.add(name)
                         words.add('self.' + name)
-                        # How an attribute is written in a compute
-                        words.add(tokens.TOKEN_PREFIX + name
-                                  + tokens.TOKEN_SUFFIX)
                 except Exception:
                     logger.debug('Could not read attrs for completion on '
                                  + str(node_path), exc_info=True)
-            all_tokens = (tuple(tokens.TOKENTYPE.ALL)
-                          + tuple(tokens.plugin_tokens))
-            for token in all_tokens:
-                if token.prefix:
-                    words.add(tokens.TOKEN_PREFIX + token.prefix)
+            # How an attribute is written in a compute, and the token
+            # prefixes, as the Property Editor's values offer them too.
+            try:
+                words.update(code_completion.token_words(model, node_path))
+            except Exception:
+                logger.debug('Could not read tokens for completion on '
+                             + str(node_path), exc_info=True)
+                words.update(code_completion.token_words(None, None))
         if self.completion_source_enabled('complete_modules_action'):
             # The bare module names. What is inside them is resolved per
             # prefix, since dir() on everything imported would be huge.
@@ -1788,15 +1776,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         model = self.ce_widget.stage_model
         if not model:
             return []
-        body = prefix[len(tokens.TOKEN_PREFIX):]
         try:
-            if '.' in body:
-                node_path = body.rpartition('.')[0]
-                return [tokens.TOKEN_PREFIX + node_path + '.' + name
-                        + tokens.TOKEN_SUFFIX
-                        for name in self.node_attr_names(model, node_path)]
-            return [tokens.TOKEN_PREFIX + path
-                    for path in model.get_descendants(nxt_path.WORLD)]
+            return code_completion.token_completions(model, prefix)
         except Exception:
             logger.debug('No token completions for ' + prefix, exc_info=True)
             return []

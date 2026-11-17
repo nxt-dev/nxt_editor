@@ -451,6 +451,9 @@ nodes in the graph (`${/settings`, `${/export/report`). Once a node path is
 followed by a dot, it offers that node's attributes as whole tokens, so
 choosing one writes `${/settings.out_dir}` complete with its closing brace.
 
+Attribute values in the Property Editor complete tokens the same way; see
+[Completing paths and tokens](#completing-paths-and-tokens).
+
 #### Python analysis with jedi
 
 ![jedi completing a string's methods](images/completion_jedi.png)
@@ -814,6 +817,19 @@ as text too.
 
 To copy only a value, right click it and choose **Copy Raw**, **Copy
 Resolved** or **Copy Cached**.
+
+### Completing paths and tokens
+
+The **Instance** field offers the paths of the other nodes in the graph as
+you type, and **Exec Input** the other root nodes. Both match anywhere in
+the path and ignore case, so typing `arm` offers `/rig/arm`.
+
+While you edit an attribute's value, typing `${` offers the node's
+attributes as tokens (`${side}`) and the token prefixes nxt knows about
+(`${file::` and so on), `${/` offers every node path, and a node path
+followed by a dot offers that node's attributes as whole tokens, as in the
+[Code Editor](#node-paths-and-their-attributes). Choose one with the arrow
+keys and Return, or the mouse; it replaces only the token you were typing.
 
 ### Position
 

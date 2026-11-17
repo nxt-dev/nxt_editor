@@ -19,6 +19,7 @@ except AttributeError:
 from nxt_editor import user_dir
 from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets import code_completion
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors, theme, LOGGER_NAME
@@ -190,9 +191,8 @@ class PropertyEditor(DockWidgetBase):
         self.instance_layout.addWidget(self.instance_field, 0, 0)
 
         self.instance_field_model = QtCore.QStringListModel()
-        self.instance_field_completer = QtWidgets.QCompleter()
-        self.instance_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
-        self.instance_field_completer.setModel(self.instance_field_model)
+        self.instance_field_completer = node_path_completer(
+            self.instance_field_model, self)
         self.instance_field.setCompleter(self.instance_field_completer)
         self.instance_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.instance_field.customContextMenuRequested.connect(self.instance_context_menu)
@@ -240,10 +240,10 @@ class PropertyEditor(DockWidgetBase):
         self.execute_layout.addWidget(self.execute_field, 0, 0)
 
         self.execute_field_model = QtCore.QStringListModel()
-        self.execute_field_completer = QtWidgets.QCompleter()
-        self.execute_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
-        self.execute_field_completer.setModel(self.execute_field_model)
+        self.execute_field_completer = node_path_completer(
+            self.execute_field_model, self)
         self.execute_field.setCompleter(self.execute_field_completer)
+        self.execute_field.focus_changed.connect(self.focus_execute_field)
         self.execute_opinions = OpinionDots(self, 'Execute Opinions')
         self.execute_layout.addWidget(self.execute_opinions, 0, 1)
         self.revert_exec_source_button = PixmapButton(
@@ -617,17 +617,9 @@ class PropertyEditor(DockWidgetBase):
             self.clear()
             return
         disp_layer = self.stage_model.comp_layer
-        # set instance completer options
-        # Todo: node_path completer logic needed!
-        top_nodes = self.stage_model.get_node_sibling_paths(self.node_path)
-        if top_nodes:
-            self.instance_field_model.setStringList(top_nodes)
-
         node_path = self.node_path
-        # set execute completer options
-        sibling_node_paths = self.stage_model.get_node_sibling_paths(node_path)
-        if sibling_node_paths:
-            self.execute_field_model.setStringList(sibling_node_paths)
+        # The path fields' completions are filled when they get focus,
+        # rather than for every node selected: see update_path_completions.
 
         # set node data
         if self.stage_model.data_state != DATA_STATE.RAW:
@@ -681,6 +673,30 @@ class PropertyEditor(DockWidgetBase):
         self.model.set_represented_node(node_path=self.node_path)
         self.handle_locking()
 
+    def update_path_completions(self):
+        """Fill the instance and exec input fields' completers with node
+        paths, from the same source as ${/ in the code editor. A node can
+        instance any node but itself, and its exec input can be any other
+        root node. Called when either field gets focus, so the list is as
+        the graph is then and selecting nodes never waits on it."""
+        if not self.stage_model or not self.node_path:
+            return
+        try:
+            paths = code_completion.node_paths(self.stage_model)
+        except Exception:
+            logger.debug('No node paths to complete', exc_info=True)
+            return
+        others = [path for path in paths if path != self.node_path]
+        self.instance_field_model.setStringList(others)
+        roots = [path for path in others
+                 if nxt_path.get_root_path(path) == path]
+        self.execute_field_model.setStringList(roots)
+
+    def focus_execute_field(self, in_focus):
+        # Nodes may have come and gone since this node was shown.
+        if in_focus:
+            self.update_path_completions()
+
     def view_instance_node(self):
         instance_path = self.instance_field.text()
         if instance_path:
@@ -696,6 +712,8 @@ class PropertyEditor(DockWidgetBase):
         if self.instance_field.has_focus:
             return
         if in_focus:
+            # Nodes may have come and gone since this node was shown.
+            self.update_path_completions()
             layer = self.stage_model.target_layer
         else:
             layer = self.stage_model.comp_layer
@@ -1725,6 +1743,8 @@ class AttrsTableView(QtWidgets.QTableView):
         self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
         self.setItemDelegateForColumn(COLUMNS.source, self.node_path_delegate)
+        self.value_delegate = AttrValueDelegate(parent, self)
+        self.setItemDelegateForColumn(COLUMNS.value, self.value_delegate)
         # The layer each row's value comes from, as a color in the row
         # header, which stays put however far the table is scrolled.
         self.setVerticalHeader(LayerRowHeader(self))
@@ -1898,6 +1918,125 @@ class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
             return False
         model.setData(index, index.data(), role=QtCore.Qt.CheckStateRole)
         return True
+
+
+COMPLETER_POPUP_STYLE = ('border: 1px solid transparent; '
+                         'background-color: {RAISED}; color: {TEXT}')
+
+
+def node_path_completer(model, parent=None):
+    """A completer for a field that takes a node path. It matches anywhere
+    in the path, ignoring case, so typing arm finds /rig/arm.
+
+    :param model: QStringListModel of the paths to offer
+    :rtype: QtWidgets.QCompleter
+    """
+    completer = QtWidgets.QCompleter(parent)
+    completer.setModel(model)
+    completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+    completer.setFilterMode(QtCore.Qt.MatchContains)
+    completer.setMaxVisibleItems(12)
+    popup = completer.popup()
+    popup.setStyleSheet(theme.fill(COMPLETER_POPUP_STYLE))
+    popup.setFont(theme.font())
+    return completer
+
+
+class TokenLineEdit(QtWidgets.QLineEdit):
+    """An attribute value being typed, completing ${ tokens the way the
+    code editor does: ${ offers the node's attributes and the token
+    prefixes, ${/ every node path, and ${/some/node. that node's
+    attributes as whole tokens. Choosing one swaps it in for what was
+    typed of it, wherever it is in the value.
+    """
+
+    # The token being typed, up to the cursor.
+    PREFIX_RE = re.compile(r'\$\{[^{}\s]*$')
+
+    def __init__(self, stage_model, node_path, parent=None):
+        super(TokenLineEdit, self).__init__(parent)
+        self.stage_model = stage_model
+        self.node_path = node_path
+        self.completer = QtWidgets.QCompleter(self)
+        self.completer.setWidget(self)
+        self.completer.setModel(QtCore.QStringListModel(self.completer))
+        self.completer.setCompletionMode(
+            QtWidgets.QCompleter.PopupCompletion)
+        self.completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        self.completer.setMaxVisibleItems(12)
+        popup = self.completer.popup()
+        popup.setStyleSheet(theme.fill(COMPLETER_POPUP_STYLE))
+        popup.setFont(theme.font())
+        self.completer.activated.connect(self.insert_completion)
+        self.textEdited.connect(self.update_completions)
+
+    def completion_prefix(self):
+        """The ${ token in front of the cursor, or '' outside of one.
+
+        :rtype: str
+        """
+        text = self.text()[:self.cursorPosition()]
+        match = self.PREFIX_RE.search(text)
+        return match.group(0) if match else ''
+
+    def completion_words(self, prefix):
+        model = self.stage_model
+        try:
+            if prefix.startswith(tokens.TOKEN_PREFIX + nxt_path.WORLD):
+                return code_completion.token_completions(model, prefix)
+            return code_completion.token_words(model, self.node_path)
+        except Exception:
+            logger.debug('No token completions for ' + prefix,
+                         exc_info=True)
+            return []
+
+    def update_completions(self, *args):
+        """Offer what can finish the token being typed, if one is."""
+        prefix = self.completion_prefix()
+        popup = self.completer.popup()
+        if not prefix:
+            popup.hide()
+            return
+        words = sorted(set(self.completion_words(prefix)))
+        self.completer.model().setStringList(words)
+        self.completer.setCompletionPrefix(prefix)
+        count = self.completer.completionCount()
+        if not count or (count == 1 and
+                         self.completer.currentCompletion() == prefix):
+            popup.hide()
+            return
+        popup.setCurrentIndex(self.completer.completionModel().index(0, 0))
+        rect = self.cursorRect()
+        rect.setWidth(popup.sizeHintForColumn(0) +
+                      popup.verticalScrollBar().sizeHint().width() + 12)
+        self.completer.complete(rect)
+
+    def insert_completion(self, completion):
+        """Swap the typed part of the token for the chosen completion."""
+        prefix = self.completion_prefix()
+        pos = self.cursorPosition()
+        text = self.text()
+        start = pos - len(prefix)
+        after = text[pos:]
+        # A completed token brings its own closing brace.
+        if (completion.endswith(tokens.TOKEN_SUFFIX) and
+                after.startswith(tokens.TOKEN_SUFFIX)):
+            after = after[len(tokens.TOKEN_SUFFIX):]
+        self.setText(text[:start] + completion + after)
+        self.setCursorPosition(start + len(completion))
+
+
+class AttrValueDelegate(QtWidgets.QStyledItemDelegate):
+    """Edits attribute values in a TokenLineEdit, so tokens and node paths
+    complete as they are typed."""
+
+    def __init__(self, property_editor, parent=None):
+        super(AttrValueDelegate, self).__init__(parent)
+        self.property_editor = property_editor
+
+    def createEditor(self, parent, option, index):
+        editor = self.property_editor
+        return TokenLineEdit(editor.stage_model, editor.node_path, parent)
 
 
 class HistoricalContextMenu(QtWidgets.QMenu):
