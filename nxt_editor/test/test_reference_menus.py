@@ -141,6 +141,14 @@ class PickedFromUnderARoot(ReferenceMenus):
     def test_an_unsaved_layer_can_still_use_a_root(self):
         self.assertEqual('far.nxt', stored_reference_path(self.far, None))
 
+    def test_the_reference_editor_writes_it_the_same_way(self):
+        # Its folder button is where most references get picked.
+        from nxt_editor.dockwidgets.reference_editor import ReferenceEditor
+        editor = ReferenceEditor(self.model)
+        self.addCleanup(editor.deleteLater)
+        self.assertEqual('far.nxt', editor.as_stored(self.far))
+        self.assertEqual('beside.nxt', editor.as_stored(self.beside))
+
 
 if __name__ == '__main__':
     unittest.main()
