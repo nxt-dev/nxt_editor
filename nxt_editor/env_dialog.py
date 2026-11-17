@@ -19,24 +19,38 @@ from collections import OrderedDict
 from Qt import QtWidgets, QtCore
 
 # Internal
+from nxt_editor import theme
 try:
     from nxt import env_files
 except ImportError:
-    # An nxt core from before env files. The menu item says so.
+    # An nxt core from before env files. The menu item is hidden.
     env_files = None
 
 logger = logging.getLogger(__name__)
 
-#: Between the paths of one value, on every platform. The file holds them
-#: as a list, and nxt joins that with the platform's own separator.
+#: Between the paths of a list value, on every platform. The file holds
+#: them as a list, and nxt joins that with the platform's own separator.
 VALUE_SEP = ';'
-NAME_COL, VALUE_COL, NOW_COL = range(3)
+NAME_COL, LIST_COL, VALUE_COL, NOW_COL = range(4)
 FILE_FILTER = 'nxt env file (*.json)'
+#: Names that hold several paths without saying so in their name.
+PATH_LIST_NAMES = ('NXT_FILE_ROOTS',)
 
 
 def available():
     """Whether the nxt core in use knows about env files."""
-    return env_files is not None
+    return env_files is not None and hasattr(env_files, 'is_applied')
+
+
+def holds_paths(name):
+    """Whether a variable is one that holds several paths, like PATH.
+
+    Only the List box's starting state for a new row. Any value can be
+    made a list, or not, by ticking it.
+    """
+    name = name.strip().upper()
+    return (name in PATH_LIST_NAMES or name.endswith('PATH') or
+            name.endswith('_PATHS') or name.endswith('_ROOTS'))
 
 
 def value_to_text(value):
@@ -46,9 +60,14 @@ def value_to_text(value):
     return value
 
 
-def text_to_value(text):
-    """What is typed, as the file holds it: a list when there is a ;"""
-    if VALUE_SEP in text:
+def text_to_value(text, as_list=False):
+    """What is typed, as the file holds it.
+
+    :param as_list: split at each ; into a list, which nxt joins with the
+        platform's path separator. Otherwise the text is kept whole, ;
+        and all.
+    """
+    if as_list:
         return [part.strip() for part in text.split(VALUE_SEP)
                 if part.strip()]
     return text.strip()
@@ -90,13 +109,15 @@ class EnvFilesDialog(QtWidgets.QDialog):
         self._filling = False
 
         layout = QtWidgets.QVBoxLayout(self)
-        intro = QtWidgets.QLabel(
+        self.intro = QtWidgets.QLabel(
             'Set when nxt starts, in the editor and in headless runs. A '
             'variable that is already set outside nxt is left alone. Use '
-            '<b>$NXT_ENV_FILE_DIR</b> for the folder of the file, and '
-            '<b>;</b> between several paths.')
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
+            '$NXT_ENV_FILE_DIR for the folder of the file. Tick List for '
+            'a value of several paths, with ; between them.')
+        self.intro.setTextFormat(QtCore.Qt.PlainText)
+        self.intro.setWordWrap(True)
+        self.intro.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        layout.addWidget(self.intro)
 
         file_row = QtWidgets.QHBoxLayout()
         file_row.addWidget(QtWidgets.QLabel('File'))
@@ -118,11 +139,16 @@ class EnvFilesDialog(QtWidgets.QDialog):
         file_row.addWidget(self.remove_file_button)
         layout.addLayout(file_row)
 
-        self.table = QtWidgets.QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(['Name', 'Value',
+        self.table = QtWidgets.QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(['Name', 'List', 'Value',
                                               'In This Session'])
+        self.table.horizontalHeaderItem(LIST_COL).setToolTip(
+            'Several paths, with ; between them. Saved as a list and joined '
+            'with the separator of the platform nxt runs on.')
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(NAME_COL,
+                                    QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(LIST_COL,
                                     QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(VALUE_COL, QtWidgets.QHeaderView.Stretch)
         header.setSectionResizeMode(NOW_COL, QtWidgets.QHeaderView.Stretch)
@@ -273,19 +299,36 @@ class EnvFilesDialog(QtWidgets.QDialog):
         env_file = self.files.get(self.current)
         if env_file is not None:
             for name, value in env_file.variables.items():
-                self.append_row(name, value_to_text(value))
+                self.append_row(name, value_to_text(value),
+                                isinstance(value, list))
         self._filling = False
         self.update_session_column()
 
-    def append_row(self, name, text):
+    def append_row(self, name, text, as_list=False):
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, NAME_COL, QtWidgets.QTableWidgetItem(name))
+        is_list = QtWidgets.QTableWidgetItem('')
+        is_list.setFlags(QtCore.Qt.ItemIsEnabled |
+                         QtCore.Qt.ItemIsSelectable |
+                         QtCore.Qt.ItemIsUserCheckable)
+        is_list.setToolTip(self.table.horizontalHeaderItem(
+            LIST_COL).toolTip())
+        self.table.setItem(row, LIST_COL, is_list)
+        self.set_list(row, as_list)
         self.table.setItem(row, VALUE_COL, QtWidgets.QTableWidgetItem(text))
         now = QtWidgets.QTableWidgetItem('')
         now.setFlags(now.flags() & ~QtCore.Qt.ItemIsEditable)
         self.table.setItem(row, NOW_COL, now)
         return row
+
+    def is_list(self, row):
+        return self.table.item(row, LIST_COL).checkState() == \
+            QtCore.Qt.Checked
+
+    def set_list(self, row, as_list):
+        self.table.item(row, LIST_COL).setCheckState(
+            QtCore.Qt.Checked if as_list else QtCore.Qt.Unchecked)
 
     def update_session_column(self):
         """What each variable holds right now, and whether nxt set it."""
@@ -295,8 +338,7 @@ class EnvFilesDialog(QtWidgets.QDialog):
             if not name or name not in os.environ:
                 item.setText('')
                 item.setToolTip('Not set in this session yet.')
-            elif name in env_files._applied and \
-                    os.environ[name] == env_files._applied[name]:
+            elif env_files.is_applied(name):
                 item.setText(os.environ[name])
                 item.setToolTip('Set by nxt from an env file.')
             else:
@@ -315,7 +357,8 @@ class EnvFilesDialog(QtWidgets.QDialog):
             name = self.table.item(row, NAME_COL).text().strip()
             if name:
                 variables[name] = text_to_value(
-                    self.table.item(row, VALUE_COL).text())
+                    self.table.item(row, VALUE_COL).text(),
+                    self.is_list(row))
         if list(variables.items()) != list(env_file.variables.items()):
             env_file.variables = variables
             self.dirty.add(self.current)
@@ -323,6 +366,13 @@ class EnvFilesDialog(QtWidgets.QDialog):
     def on_item_changed(self, item):
         if self._filling or item.column() == NOW_COL:
             return
+        row = item.row()
+        if (item.column() == NAME_COL and
+                not self.table.item(row, VALUE_COL).text().strip()):
+            # A row being started: a name like PATH starts out a list.
+            self._filling = True
+            self.set_list(row, holds_paths(item.text()))
+            self._filling = False
         self.read_table()
         self._filling = True
         self.update_session_column()
@@ -357,6 +407,11 @@ class EnvFilesDialog(QtWidgets.QDialog):
         item = self.table.item(row, VALUE_COL)
         path = portable_path(path, self.files[self.current])
         text = item.text().strip()
+        if text:
+            # A second path makes it a list, whatever its name.
+            self._filling = True
+            self.set_list(row, True)
+            self._filling = False
         item.setText(text + VALUE_SEP + ' ' + path if text else path)
 
     # Saving --------------------------------------------------------------

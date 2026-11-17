@@ -825,6 +825,19 @@ machine, or for another project, with different roots.
     To always use one particular file, reference it by an absolute path, or
     by a path built from an environment variable.
 
+!!! note "Picked files under a root are stored short"
+    Once `NXT_FILE_ROOTS` is set, by an [env file](extensions.md#env-files)
+    or any other way, a file you pick in a file browser that sits under one
+    of the roots is stored relative to that root, as `lib/shared_steps.nxt`,
+    not as its full path. This is so for everyone with `NXT_FILE_ROOTS` set,
+    whether or not they use env files: before, a picked file was always
+    stored whole. A file in a folder that an env file variable names is
+    stored from that variable, as `$PROJECT_GRAPHS/rig.nxt`. The short path
+    is only used when it resolves back to the file you picked, and it keeps
+    the folders you picked it through: picked as `current/rig.nxt`, with
+    `current` a link to `v12`, it stays `current/rig.nxt`. Type the full
+    path in the Reference Editor to store that instead.
+
 The [Reference Editor](#reference-editor) shows where each reference
 resolves on this machine with its resolved toggle, and the tooltip on a row
 says where nxt looked.

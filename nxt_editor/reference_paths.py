@@ -12,31 +12,15 @@ import os
 from nxt import nxt_io
 
 
-def not_beside_the_layer(path, layer_dir):
-    """A file that is not beside the layer, written the best way there is.
-
-    A file under one of NXT_FILE_ROOTS is written relative to that root,
-    the way it would have been typed, so it loads from whichever root holds
-    it on another machine. A file in a folder that an env file variable
-    names is written from that variable. The core works both out, and only
-    offers a path that resolves back to this very file. Anything else is
-    stored whole.
-    """
-    compact = getattr(nxt_io, 'compact_reference_path', None)
-    if compact is None:
-        # An nxt core from before roots were asked.
-        return path
-    return compact(path, layer_dir)
-
-
 def stored_reference_path(path, layer_dir):
     """The path to store for a file chosen to be referenced.
 
     Relative to the layer when it sits alongside it, which is what keeps a
-    graph portable. Relative to a root when it is under one of
-    NXT_FILE_ROOTS. Anything else is stored whole: making a path relative
-    across drives or out of the layer's folder would be worse than being
-    explicit.
+    graph portable. With a core that knows how, relative to a root when it
+    is under one of NXT_FILE_ROOTS, or from a variable when it is in a
+    folder an env file variable names, see nxt.nxt_io.stored_reference_path.
+    Anything else is stored whole: making a path relative across drives or
+    out of the layer's folder would be worse than being explicit.
 
     :param path: the file as the file picker handed it back
     :type path: str
@@ -47,9 +31,15 @@ def stored_reference_path(path, layer_dir):
         layer or under a root
     :rtype: str
     """
+    if hasattr(nxt_io, 'compact_reference_path'):
+        # The core works it all out, and only offers a root or variable
+        # path that resolves back to this very file.
+        return nxt_io.stored_reference_path(path, layer_dir)
+    # An nxt core from before roots and variables were asked: beside the
+    # layer or whole, as it does it.
     path = path.replace(os.path.sep, '/')
     if not layer_dir:
-        return not_beside_the_layer(path, layer_dir)
+        return path
     try:
         # Through the symlinks first. A file picker hands back the path the
         # user walked, which can reach the same directory as the layer by
@@ -61,8 +51,8 @@ def stored_reference_path(path, layer_dir):
                                    os.path.realpath(layer_dir))
     except ValueError:
         # Different drive on Windows.
-        return not_beside_the_layer(path, layer_dir)
+        return path
     relative = relative.replace(os.path.sep, '/')
     if relative.startswith('..'):
-        return not_beside_the_layer(path, layer_dir)
+        return path
     return relative

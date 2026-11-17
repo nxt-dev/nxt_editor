@@ -416,6 +416,10 @@ class AppActions(NxtActionContainer):
             self.main_window.open_env_files)
         self.env_files_action.setShortcutContext(context)
         self.available_without_model.append(self.env_files_action)
+        # Hidden with an nxt core from before env files, which has nothing
+        # for it to edit.
+        from nxt_editor import env_dialog
+        self.env_files_action.setVisible(env_dialog.available())
 
         self.color_range_action = NxtAction(text='Layer Color View...',
                                             parent=self)

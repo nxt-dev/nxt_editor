@@ -1126,8 +1126,7 @@ QCheckBox::indicator {
         """Options > Environment Variables."""
         from nxt_editor import env_dialog
         if not env_dialog.available():
-            logger.warning('Env files need a newer nxt core than the one '
-                           'in use.')
+            # The menu item is hidden, see AppActions.
             return None
         dialog = env_dialog.EnvFilesDialog(parent=self)
         dialog.exec_()
