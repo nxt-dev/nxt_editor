@@ -148,8 +148,12 @@ class TokenValues(Base):
         self.type_into(edit, '${si')
         popup = edit.completer.popup()
         self.assertTrue(popup.isVisible())
-        QTest.keyClick(popup, QtCore.Qt.Key_Down)
-        QTest.keyClick(popup, QtCore.Qt.Key_Return)
+        # Picked the way the popup reports a choice. On macOS a Return
+        # pressed on the popup in a test also reaches the cell editor,
+        # which then commits and closes before it can be looked at.
+        index = popup.model().index(1, 0)
+        popup.setCurrentIndex(index)
+        edit.completer.activated[str].emit(index.data())
         app.processEvents()
         self.assertEqual(edit.text(), '${size}')
         self.assertTrue(edit.isVisible(),
