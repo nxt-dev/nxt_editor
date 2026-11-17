@@ -94,6 +94,15 @@ def _layout(painter, color):
     painter.setPen(QtCore.Qt.NoPen)
 
 
+def _bookmark(painter, color):
+    """A ribbon with a notch cut in its foot."""
+    painter.setBrush(QtGui.QColor(color))
+    painter.drawPolygon(QtGui.QPolygonF([
+        QtCore.QPointF(4.0, 1.0), QtCore.QPointF(13.0, 1.0),
+        QtCore.QPointF(13.0, 15.0), QtCore.QPointF(8.5, 10.5),
+        QtCore.QPointF(4.0, 15.0)]))
+
+
 def _pixmap(draw, color):
     pixmap = QtGui.QPixmap(SIZE * SCALE)
     pixmap.fill(QtCore.Qt.transparent)
@@ -130,6 +139,11 @@ def distribute_icon(axis):
 def layout_icon():
     """:rtype: QtGui.QIcon"""
     return _icon(_layout)
+
+
+def bookmark_icon():
+    """:rtype: QtGui.QIcon"""
+    return _icon(_bookmark)
 
 
 def select_all_icon():

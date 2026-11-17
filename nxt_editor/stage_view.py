@@ -19,7 +19,7 @@ from nxt_editor.constants import FONTS
 from nxt_editor.node_graphics_item import NodeGraphicsItem, NodeGraphicsPlug
 from nxt_editor.backdrop_graphics_item import (BackdropGraphicsItem,
                                                BackdropEditDialog)
-from nxt_editor import align, auto_layout, backdrops, theme
+from nxt_editor import align, auto_layout, backdrops, bookmarks, theme
 from nxt_editor.connection_graphics_item import (AttrConnectionGraphic,
                                                   WirePointGraphic)
 from nxt_editor import connection_graphics_item as lines
@@ -486,6 +486,68 @@ class StageView(QtWidgets.QGraphicsView):
         if self.scale_factor > 1.0:
             self.resetTransform()
             self.centerOn(rect.center())
+
+    # Camera bookmarks, see nxt_editor.bookmarks ----------------------------
+
+    def view_rect(self):
+        """The part of the scene in view."""
+        return self.mapToScene(self.viewport().rect()).boundingRect()
+
+    def add_bookmark(self, name=None):
+        """Bookmark the part of the graph in view.
+
+        :return: the new bookmark's index
+        """
+        rect = self.view_rect()
+        return self.model.add_bookmark(
+            (rect.x(), rect.y(), rect.width(), rect.height()), name)
+
+    def ask_bookmark_name(self, title, name):
+        """Ask for a bookmark's name.
+
+        :return: the name, or None when cancelled
+        """
+        text, ok = QtWidgets.QInputDialog.getText(
+            self, title, 'Name:', QtWidgets.QLineEdit.Normal, name)
+        if not ok or not text.strip():
+            return None
+        return text.strip()
+
+    def add_bookmark_named(self):
+        """Bookmark the part of the graph in view, asking what to call it."""
+        default = bookmarks.unique_name(self.model.get_bookmarks())
+        name = self.ask_bookmark_name('Add Bookmark', default)
+        if name is None:
+            return None
+        return self.add_bookmark(name)
+
+    def rename_bookmark_named(self, index):
+        records = self.model.get_bookmarks()
+        if not (0 <= index < len(records)):
+            return
+        name = self.ask_bookmark_name('Rename Bookmark',
+                                      records[index][bookmarks.NAME])
+        if name is not None:
+            self.model.rename_bookmark(index, name)
+
+    def go_to_bookmark(self, index):
+        """Show the part of the graph a bookmark saved.
+
+        :return: False when there is no such bookmark
+        """
+        records = self.model.get_bookmarks()
+        if not (0 <= index < len(records)):
+            return False
+        rect = QtCore.QRectF(*records[index][bookmarks.RECT])
+        # Scaled to fit the whole of it, with nothing added round the edge
+        # as fitInView does, so going back to a view in the same window
+        # shows just what was saved.
+        viewport = self.viewport().rect()
+        scale = min(viewport.width() / rect.width(),
+                    viewport.height() / rect.height())
+        self.setTransform(QtGui.QTransform.fromScale(scale, scale))
+        self.centerOn(rect.center())
+        return True
 
     def frame_selection(self):
         self.frame_nodes(self.model.selection)

@@ -51,6 +51,15 @@ hidden, switch between open files from the bottom of the **Window** menu.
   past 100%, so a small graph looks as it always has. Turn it off in the
   **View** menu, next to **Frame All**, to have graphs open at the origin
   instead. The choice is remembered.
+- **Bookmarks** save a view of the graph under a name to come back to.
+  `Ctrl+B`, or **Add Bookmark...** in the **View > Bookmarks** menu or
+  the bookmark button on the toolbar, saves the part of the graph in view,
+  and picking a bookmark from the same menu shows that part again. The
+  first four go to with `Ctrl+1` to `Ctrl+4`, shown beside their names.
+  The menu also renames and deletes them. Bookmarks are saved with the
+  graph, in the top layer's meta data like node positions, so they are
+  there for anyone who opens it, and adding, renaming and deleting them
+  can be undone.
 
 ### How nodes look
 

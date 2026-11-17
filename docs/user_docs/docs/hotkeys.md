@@ -58,6 +58,11 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Display Node Tooltips       |                                                       | Display Node Tooltips            |             |
 | Frame All                   |         Frames all nodes so they are visible.         | Frame all nodes                  |      A      |
 | Frame Selection             |               Frames the selected node.               | Frame selected node              |      F      |
+| Add Bookmark...             | Save the part of the graph in view under a name, to go back to from the Bookmarks menu. Saved with the graph. | Bookmark this view of the graph | Ctrl+B |
+| Go to Bookmark 1            | Show the part of the graph saved as the graph's bookmark number 1. | Go to Bookmark 1 | Ctrl+1 |
+| Go to Bookmark 2            | Show the part of the graph saved as the graph's bookmark number 2. | Go to Bookmark 2 | Ctrl+2 |
+| Go to Bookmark 3            | Show the part of the graph saved as the graph's bookmark number 3. | Go to Bookmark 3 | Ctrl+3 |
+| Go to Bookmark 4            | Show the part of the graph saved as the graph's bookmark number 4. | Go to Bookmark 4 | Ctrl+4 |
 | Frame All on Open           | When on, a graph is framed to show all of its nodes when it is first shown, never zoomed in past 100%. When off, it is shown at the origin. On by default. | Frame all nodes when a graph is opened | |
 | Display No Attrs            |                 Display no attributes                 | Display No Attrs                 |      0      |
 | Display Local Attrs         |             Display local attributes only             | Display Local Attrs              |      1      |

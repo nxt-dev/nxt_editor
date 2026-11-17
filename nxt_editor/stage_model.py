@@ -22,6 +22,7 @@ from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
 import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler, color_range, theme, user_dir
 from nxt_editor import backdrops
+from nxt_editor import bookmarks
 from nxt_editor import wires
 from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
@@ -88,6 +89,7 @@ class StageModel(QtCore.QObject):
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
     backdrops_changed = QtCore.Signal()
     wires_changed = QtCore.Signal()  # line style or points
+    bookmarks_changed = QtCore.Signal()
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
     request_ding = QtCore.Signal()
@@ -2393,6 +2395,54 @@ class StageModel(QtCore.QObject):
         cmd = SetBackdrops(changes, model=self,
                            layer_path=self.top_layer.real_path, text=text)
         self.undo_stack.push(cmd)
+
+    # Camera bookmarks, see nxt_editor.bookmarks ----------------------------
+
+    def get_bookmarks(self):
+        """The graph's camera bookmarks, in order.
+
+        :return: [{'name': str, 'rect': [x, y, w, h]}]
+        """
+        return bookmarks.layer_bookmarks(self.top_layer)
+
+    def set_bookmarks(self, records, text='Edit bookmarks'):
+        """Save the graph's bookmarks, all of them, as one undo."""
+        cmd = SetBookmarks(records, model=self,
+                           layer_path=self.top_layer.real_path, text=text)
+        self.undo_stack.push(cmd)
+
+    def add_bookmark(self, rect, name=None):
+        """Bookmark a part of the graph.
+
+        :param rect: (x, y, width, height) in the scene
+        :param name: what to call it, "Bookmark 1" and so on by default
+        :return: the new bookmark's index
+        """
+        records = self.get_bookmarks()
+        name = (name or '').strip() or bookmarks.unique_name(records)
+        records.append(bookmarks.make(name, rect))
+        self.set_bookmarks(records, text='Add bookmark "{}"'.format(name))
+        return len(records) - 1
+
+    def rename_bookmark(self, index, name):
+        records = self.get_bookmarks()
+        name = (name or '').strip()
+        if not (0 <= index < len(records)) or not name:
+            return
+        if records[index][bookmarks.NAME] == name:
+            return
+        old = records[index][bookmarks.NAME]
+        records[index][bookmarks.NAME] = name
+        self.set_bookmarks(records, text='Rename bookmark "{}" to "{}"'.format(
+            old, name))
+
+    def remove_bookmark(self, index):
+        records = self.get_bookmarks()
+        if not (0 <= index < len(records)):
+            return
+        removed = records.pop(index)
+        self.set_bookmarks(records, text='Delete bookmark "{}"'.format(
+            removed[bookmarks.NAME]))
 
     # Line style and points, see nxt_editor.wires ------------------------
 

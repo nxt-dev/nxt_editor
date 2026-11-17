@@ -9,6 +9,7 @@ from Qt.QtWidgets import QUndoCommand
 
 # Internal
 from nxt_editor import backdrops
+from nxt_editor import bookmarks
 from nxt_editor import colors
 from nxt_editor import user_dir
 from nxt_editor import wires
@@ -810,6 +811,38 @@ class SetBackdrops(NxtCommand):
         layer = self.model.lookup_layer(self.layer_path)
         backdrops.write(layer, self.new)
         self.model.backdrops_changed.emit()
+        self.redo_effected_layer(layer.real_path)
+
+
+class SetBookmarks(NxtCommand):
+
+    """Add, rename or remove camera bookmarks on one layer."""
+
+    def __init__(self, records, model, layer_path, text='Edit bookmarks'):
+        """
+        :param records: every bookmark the layer is to have, in order
+        """
+        super(SetBookmarks, self).__init__(model)
+        self.layer_path = layer_path
+        self.new = copy.deepcopy(list(records))
+        layer = model.lookup_layer(layer_path)
+        self.old = bookmarks.layer_bookmarks(layer)
+        self.setText(text)
+
+    def _write(self, records):
+        layer = self.model.lookup_layer(self.layer_path)
+        bookmarks.write(layer, records)
+        self.model.bookmarks_changed.emit()
+        return layer
+
+    @processing
+    def undo(self):
+        self._write(self.old)
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self._write(self.new)
         self.redo_effected_layer(layer.real_path)
 
 

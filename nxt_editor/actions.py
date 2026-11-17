@@ -10,8 +10,8 @@ from Qt import QtCore, QtGui, QtWidgets
 # Internal
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
-from nxt_editor import (align, connection_graphics_item, layout_icons,
-                        user_dir, wires)
+from nxt_editor import (align, bookmarks, connection_graphics_item,
+                        layout_icons, user_dir, wires)
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, exec_icons, finder, file_search, file_browser
@@ -1690,6 +1690,37 @@ class StageViewActions(NxtActionContainer):
             'first shown, zoomed out as far as it takes but never in past '
             '100%. When off, it is shown at the origin.')
 
+        # Camera bookmarks, see nxt_editor.bookmarks
+        def add_bookmark():
+            view = self.main_window.view
+            if view is not None:
+                view.add_bookmark_named()
+        self.add_bookmark_action = NxtAction(text='Add Bookmark...',
+                                             parent=self)
+        self.add_bookmark_action.setShortcut('Ctrl+B')
+        self.add_bookmark_action.setAutoRepeat(False)
+        self.add_bookmark_action.setToolTip('Bookmark this view of the graph')
+        self.add_bookmark_action.setWhatsThis(
+            'Save the part of the graph in view under a name, to go back to '
+            'from the Bookmarks menu. Saved with the graph.')
+        self.add_bookmark_action.setShortcutContext(
+            QtCore.Qt.WidgetWithChildrenShortcut)
+        self.add_bookmark_action.triggered.connect(add_bookmark)
+        self.go_to_bookmark_actions = []
+        for number in range(1, bookmarks.SHORTCUT_COUNT + 1):
+            action = NxtAction(text='Go to Bookmark {}'.format(number),
+                               parent=self)
+            action.setShortcut('Ctrl+{}'.format(number))
+            action.setAutoRepeat(False)
+            action.setToolTip('Go to Bookmark {}'.format(number))
+            action.setWhatsThis('Show the part of the graph saved as the '
+                                "graph's bookmark number {}.".format(number))
+            action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+            action.triggered.connect(partial(self.go_to_bookmark,
+                                             number - 1))
+            self.go_to_bookmark_actions.append(action)
+        self.bookmarks_icon = layout_icons.bookmark_icon()
+
         # Attr display actions
         self.hide_attrs_action = NxtAction(text='Display No Attrs',
                                            parent=self)
@@ -1825,6 +1856,8 @@ class StageViewActions(NxtActionContainer):
                                      self.frame_all_action,
                                      self.frame_selection_action,
                                      self.frame_on_open_action,
+                                     self.add_bookmark_action] + \
+            self.go_to_bookmark_actions + [
                                      self.hide_attrs_action,
                                      self.disp_local_attrs_action,
                                      self.disp_inst_attrs_action,
@@ -1844,6 +1877,59 @@ class StageViewActions(NxtActionContainer):
                                      self.nudge_down_action,
                                      self.nudge_up_action]
 
+
+    def go_to_bookmark(self, index):
+        view = self.main_window.view
+        if view is not None:
+            view.go_to_bookmark(index)
+
+    def bookmarks_menu(self, parent=None):
+        """The Bookmarks menu: add one, go to one, or rename or delete
+        one. Filled in each time it opens, from the graph shown then.
+
+        :rtype: QtWidgets.QMenu
+        """
+        menu = QtWidgets.QMenu('Bookmarks', parent)
+        menu.setIcon(self.bookmarks_icon)
+        menu.aboutToShow.connect(partial(self.fill_bookmarks_menu, menu))
+        # Something to open before it is first filled. The window has no
+        # graph to ask yet while its menus are being made.
+        menu.addAction(self.add_bookmark_action)
+        return menu
+
+    def fill_bookmarks_menu(self, menu):
+        menu.clear()
+        menu.addAction(self.add_bookmark_action)
+        view = self.main_window.view
+        model = view.model if view is not None else None
+        records = model.get_bookmarks() if model is not None else []
+        self.add_bookmark_action.setEnabled(model is not None)
+        menu.addSeparator()
+        if not records:
+            empty = menu.addAction('No bookmarks yet')
+            empty.setEnabled(False)
+            return
+        for index, record in enumerate(records):
+            text = record[bookmarks.NAME]
+            if index < len(self.go_to_bookmark_actions):
+                # Shown in the shortcut column, without taking the key.
+                shortcut = self.go_to_bookmark_actions[index].shortcut()
+                text += '\t' + shortcut.toString(
+                    QtGui.QKeySequence.NativeText)
+            go = menu.addAction(text)
+            go.triggered.connect(partial(self.go_to_bookmark, index))
+        menu.addSeparator()
+        # Made with the menu as their parent, so they live as long as it.
+        rename_menu = QtWidgets.QMenu('Rename Bookmark', menu)
+        delete_menu = QtWidgets.QMenu('Delete Bookmark', menu)
+        menu.addMenu(rename_menu)
+        menu.addMenu(delete_menu)
+        for index, record in enumerate(records):
+            rename = rename_menu.addAction(record[bookmarks.NAME])
+            rename.triggered.connect(partial(view.rename_bookmark_named,
+                                             index))
+            delete = delete_menu.addAction(record[bookmarks.NAME])
+            delete.triggered.connect(partial(model.remove_bookmark, index))
 
     def lines_menu(self, parent=None):
         """The Lines menu: which kinds of line the graph shows.
