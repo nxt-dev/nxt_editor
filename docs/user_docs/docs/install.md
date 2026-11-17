@@ -96,6 +96,11 @@ folder and put the `nxt.mod` somewhere on your Maya modules path.
 When the plugin is loaded there is an **nxt** menu in Maya's main menu bar.
 Choose **Open Editor** to get started.
 
+A pipeline that opens the editor from its own menu or shelf can leave the
+**nxt** menu out: set the environment variable `NXT_NO_MENU=1` before the
+plugin loads, for example in the `nxt.mod` module file. The `nxt_ui` command
+below is registered either way.
+
 The plugin also adds an `nxt_ui` command, for shelf buttons and scripts.
 There is one editor at a time: when an editor is already open, `nxt_ui`
 uses it rather than opening a second one.
