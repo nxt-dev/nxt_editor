@@ -596,6 +596,23 @@ in the [Outliner](#outliner). Right click a layer for its menu.
 Two items on this menu change what a layer pulls in from disk:
 **Edit References...** and **Reload Source...**.
 
+### Hiding a layer in the graph
+
+![The eye in the Layer Manager](images/layer_eye.png)
+
+The eye at the end of each row hides that layer's nodes in the graph, for
+example a library layer of nodes that are only there to be instanced. Click
+it again, or use **Show In Graph** on the layer's menu, to bring them back.
+
+- Only what that layer alone has is hidden: its root nodes with everything
+  under them, the lines to and from them, and its backdrops. A node that a
+  layer still showing also adds to stays in view.
+- It is a way of looking at the graph. The layer still composites and
+  runs, which is the difference from **Mute**, and its nodes are still in
+  the Outliner.
+- It is remembered for you, per graph. It is not saved in the layer and
+  does not mark anything unsaved.
+
 ### Reference Editor
 
 **Edit References...** opens the Reference Editor on that layer.

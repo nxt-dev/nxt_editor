@@ -63,6 +63,9 @@ class StageModel(QtCore.QObject):
     layer_solo_changed = QtCore.Signal(tuple)  # Layer paths whose solo changed
     layer_alias_changed = QtCore.Signal(str)  # Layer path whose alias changed
     layer_lock_changed = QtCore.Signal(str)  # Layer path whose locked changed
+    # Which layers are hidden in the graph changed. Nothing about the graph
+    # itself did.
+    layer_visibility_changed = QtCore.Signal()
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
     # Which layers are loaded, or the order they stack in, changed.
@@ -772,6 +775,104 @@ class StageModel(QtCore.QObject):
             return
         cmd = SetLayerLock(lock, layer_path, self)
         self.undo_stack.push(cmd)
+
+    # -- hiding a layer's nodes ------------------------------------------
+    # A view of the graph, like the layer color view: it is kept per user
+    # and per graph in the editor's cache, never in the layer, so it does
+    # not mark anything unsaved and is not somebody else's view too. A
+    # hidden layer still comps, still runs, and is still in the Outliner.
+
+    def hidden_layer_paths(self):
+        """Real paths of the layers hidden in the graph.
+
+        :rtype: set
+        """
+        hidden = getattr(self, '_hidden_layers', None)
+        if hidden is None:
+            stored = user_dir.editor_cache.get(
+                user_dir.EDITOR_CACHE.HIDDEN_LAYERS) or {}
+            hidden = set(stored.get(self.top_layer.real_path, ()))
+            self._hidden_layers = hidden
+        return hidden
+
+    def get_layer_hidden(self, layer_path):
+        """Whether a layer's own nodes are hidden in the graph.
+
+        :param layer_path: layer real path
+        :type layer_path: str
+        :rtype: bool
+        """
+        return layer_path in self.hidden_layer_paths()
+
+    def set_layer_hidden(self, layer_path, hidden=True):
+        """Hide, or show again, the nodes only this layer has.
+
+        :param layer_path: layer real path
+        :type layer_path: str
+        :param hidden: True to hide
+        :type hidden: bool
+        """
+        paths = self.hidden_layer_paths()
+        if bool(hidden) == (layer_path in paths):
+            return
+        if hidden:
+            paths.add(layer_path)
+        else:
+            paths.discard(layer_path)
+        graph = self.top_layer.real_path
+        if graph:
+            # A graph that was never saved has nowhere to be remembered by.
+            key = user_dir.EDITOR_CACHE.HIDDEN_LAYERS
+            stored = dict(user_dir.editor_cache.get(key) or {})
+            if paths:
+                stored[graph] = sorted(paths)
+            else:
+                stored.pop(graph, None)
+            user_dir.editor_cache[key] = stored
+        self.layer_visibility_changed.emit()
+
+    def _visible_layers(self):
+        hidden = self.hidden_layer_paths()
+        return [layer for layer in self.stage._sub_layers
+                if layer.real_path not in hidden]
+
+    def is_node_hidden(self, node_path):
+        """Whether a node is out of sight because its layers are hidden.
+
+        Decided a root node at a time, so a tree is shown or hidden whole.
+        A root is hidden when every layer that says anything about it, or
+        about a node under it, is hidden. One opinion from a layer that is
+        showing keeps it in view: hiding the layer a build's first node
+        comes from must not take away what other layers put under it.
+
+        :param node_path: any node path
+        :type node_path: str
+        :rtype: bool
+        """
+        if not self.hidden_layer_paths():
+            return False
+        root = nxt_path.get_root_path(node_path)
+        under = root + nxt_path.NODE_SEP
+        found = False
+        for layer in self.stage._sub_layers:
+            for path in layer._nodes_path_as_key:
+                if path == root or path.startswith(under):
+                    if layer.real_path not in self._hidden_layers:
+                        return False
+                    found = True
+                    break
+        return found
+
+    def is_backdrop_hidden(self, backdrop_id):
+        """Whether a backdrop only hidden layers draw.
+
+        :rtype: bool
+        """
+        if not self.hidden_layer_paths():
+            return False
+        if backdrop_id in backdrops.merged(self._visible_layers()):
+            return False
+        return backdrop_id in self.get_backdrops()
 
     def get_layer(self, layer_alias):
         """Gets a layer via its alias.
