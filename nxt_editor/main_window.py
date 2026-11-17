@@ -641,6 +641,7 @@ QCheckBox::indicator {
         model = StageModel(stage=stage)
         model.processing.connect(self.set_waiting_cursor)
         model.request_ding.connect(self.ding)
+        model.build_failed.connect(self.on_build_failed)
         model.layer_alias_changed.connect(partial(self.update_tab_title, model))
         # create view
         view = StageView(model=model, parent=self)
@@ -671,6 +672,17 @@ QCheckBox::indicator {
             model = open_file.get('model')
             if model:
                 model.breaks_changed.emit(tuple(model.get_breakpoints()))
+
+    def on_build_failed(self, node_path=None):
+        """A node failed and its build stopped. Builds can run long, so
+        ding (unless the error sound is off in the Options menu) and, when
+        the editor is not the window in front, flash it in the taskbar or
+        dock until it is looked at.
+        """
+        self.ding()
+        window = self.window()
+        if not window.isActiveWindow():
+            QtWidgets.QApplication.alert(window, 0)
 
     @staticmethod
     def ding():

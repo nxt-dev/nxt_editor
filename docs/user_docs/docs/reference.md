@@ -137,6 +137,11 @@ hollow red squares. It can be turned on while a build is paused at a
 breakpoint, and the rest of the run goes through. The editor remembers it
 between sessions.
 
+When a node fails and stops the build, the editor plays its error sound
+and, if another window is in front, flashes in the taskbar (or bounces in
+the Dock) until you look at it. **Options > Error sound** turns the sound
+off.
+
 ### Find Node
 
 Press `/` over the graph to find nodes. Type any part of a node's name, and

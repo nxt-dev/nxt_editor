@@ -99,6 +99,8 @@ class StageModel(QtCore.QObject):
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
     request_ding = QtCore.Signal()
+    # A node raised an error and the build stopped there. The node's path.
+    build_failed = QtCore.Signal(str)
 
     def __init__(self, stage):
         super(StageModel, self).__init__()
@@ -4020,6 +4022,9 @@ class StageModel(QtCore.QObject):
         if self._build_should_stop and not t.raised_exception:
             # Stop was pressed while the node ran, after it last looked.
             raise BuildStop
+        if t.failed:
+            # Told before the invalid node dialog below, which waits.
+            self.build_failed.emit(node_path)
         if t.raised_exception:
             if isinstance(t.raised_exception, InvalidNodeError):
                 details = ("A build runs against the graph as it was when "
@@ -4806,6 +4811,9 @@ class ExecuteNodeThread(QtCore.QThread):
         # Linux won't raise exceptions in threads so this is how we catch it
         # and let the model raise it in the main thread.
         self.raised_exception = None
+        # Whether the node raised an error, rather than the build being
+        # stopped or the graph exiting on purpose.
+        self.failed = False
 
     def run(self):
         self._run()
@@ -4825,6 +4833,7 @@ class ExecuteNodeThread(QtCore.QThread):
                                                           layer)
             except GraphError as err:
                 logger.grapherror(str(err), links=[self.node_path])
+                self.failed = True
                 if isinstance(err, InvalidNodeError):
                     self.raised_exception = err
                 else:
