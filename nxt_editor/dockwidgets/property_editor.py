@@ -1304,6 +1304,9 @@ class PropertyModel(QtCore.QAbstractTableModel):
         self.attr_data = []
         self.attr_data_resolved = []
         self.attr_data_cached = []
+        # {attr name: (type in the graph, type once run)} for attributes
+        # running the graph left a different type, in the Cached view.
+        self.attr_type_changes = {}
         self.selected_indexes = []
         self.horizontal_header = self.view.horizontalHeader()
         self.state = None
@@ -1353,6 +1356,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
         self.attr_data = []
         self.attr_data_resolved = []
         self.attr_data_cached = []
+        self.attr_type_changes = {}
         for attr_name in self.node_attr_names:
             # get cached data
             cached = DATA_STATE.CACHED
@@ -1390,6 +1394,18 @@ class PropertyModel(QtCore.QAbstractTableModel):
                 type_layer = stage_model.current_rt_layer.cache_layer
             attr_type = stage_model.get_node_attr_type(node_path, attr_name,
                                                        type_layer)
+            # A compute can leave an attribute a different type than the
+            # graph gives it, a list where it was a string say. Attributes
+            # the compute made itself have no type in the graph to compare.
+            if (type_layer is not comp_layer and
+                    attr_name in cached_attrs and
+                    locality != LOCALITIES.code):
+                comp_type = stage_model.get_node_attr_type(node_path,
+                                                           attr_name,
+                                                           comp_layer)
+                if comp_type and attr_type and comp_type != attr_type:
+                    self.attr_type_changes[attr_name] = (comp_type,
+                                                         attr_type)
             if locality == LOCALITIES.code:
                 attr_source = node_path
             else:
@@ -1535,6 +1551,9 @@ class PropertyModel(QtCore.QAbstractTableModel):
             if in_cached_state and not cached_data:
                 color = colors.UNCACHED_RED
                 return QtGui.QBrush(color, QtCore.Qt.BDiagPattern)
+        if role == QtCore.Qt.BackgroundRole and column == COLUMNS.nxt_type:
+            if self.type_change(row):
+                return QtGui.QBrush(colors.TYPE_CHANGED)
         if role == QtCore.Qt.DisplayRole:
             state = self.stage_model.data_state
             if column == COLUMNS.value and state is resolved_state:
@@ -1565,6 +1584,10 @@ class PropertyModel(QtCore.QAbstractTableModel):
                 cached_state = '  cached : ' + (',\n ' + (' ' * 10)).join(
                     textwrap.wrap(str(self.attr_data_cached[row]), 100))
                 return '\n'.join([value, resolved_state, cached_state])
+            elif column == COLUMNS.nxt_type:
+                change = self.type_change(row)
+                if change:
+                    return 'was {}, now {}'.format(*change)
             elif column == COLUMNS.source:
                 path = self.node_path
                 name = index.sibling(index.row(), COLUMNS.name).data()
@@ -1630,6 +1653,20 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
         if role == QtCore.Qt.EditRole:
             return self._data[row][column]
+
+    def type_change(self, row):
+        """(type in the graph, type once run) when running the graph left
+        the row's attribute a different type, shown in the Cached view.
+
+        :rtype: tuple or None
+        """
+        if self.stage_model.data_state != DATA_STATE.CACHED:
+            return None
+        try:
+            attr_name = self._data[row][COLUMNS.name]
+        except IndexError:
+            return None
+        return self.attr_type_changes.get(attr_name)
 
     def flags(self, index):
         column = index.column()

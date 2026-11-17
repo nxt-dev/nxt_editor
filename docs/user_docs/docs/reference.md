@@ -794,6 +794,14 @@ and stays in view however far you scroll the table. The source looks like a
 button only under the mouse; click it to go to that node. It is off by
 default and remembered with your preferences.
 
+### Types changed by running
+
+A compute can leave an attribute a different type than the graph gives
+it, a string where it was a list say. In the Cached view (`E`) the
+Property Editor highlights that attribute's **Type** in orange, and its
+tooltip says what changed, such as "was list, now raw". Attributes a
+compute made itself, and the Raw and Resolved views, are not marked.
+
 ### Filtering attributes
 
 Type in the **Filter attributes** field above the attribute table to show

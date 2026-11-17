@@ -45,6 +45,10 @@ UNCACHED_RED = QColor(255, 0, 0, 200)
 
 UNSAVED = QColor(200, 160, 26, 80)
 
+# Behind an attribute's type in the Cached view when running the graph
+# left it a different type than the graph gives it.
+TYPE_CHANGED = QColor(255, 181, 71, 70)
+
 ERROR = QColor(204, 0, 0, 50)
 
 IMPORTANT = QColor(223, 223, 22, 200)
