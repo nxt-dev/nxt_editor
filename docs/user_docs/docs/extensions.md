@@ -59,6 +59,8 @@ launched nxt keeps the last word. `NXT_USER_DIR` and `NXT_SITE_DIR` decide
 where the files are looked for, so they cannot be set from one. A file that
 is missing or cannot be read is logged and skipped.
 
+![Options > Environment Variables](images/env_files_dialog.png)
+
 **Options > Environment Variables...** edits these files as a table: your
 own file, the site's, any named in `NXT_ENV_FILES`, and project files.
 **Add Project File...** picks or creates an env file anywhere, typically in
