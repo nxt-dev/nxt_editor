@@ -428,8 +428,20 @@ it again, or use **Show In Graph** on the layer's menu, to bring them back.
 - It is a way of looking at the graph. The layer still composites and
   runs, which is the difference from **Mute**, and its nodes are still in
   the Outliner.
+- Only what is showing can be selected in the graph: **Select All** and a
+  box leave hidden nodes, and points on hidden lines, out, and hiding a
+  layer takes its nodes out of the selection. Copy and delete only reach
+  what you can see.
+- A node you make, paste, duplicate or instance on a hidden target layer
+  would vanish as it was made, so the layer is shown again and the graph
+  says so in its bottom left corner.
+- Framing leaves hidden nodes out. When everything there is to frame is
+  hidden, for example a node picked in the Outliner, the graph stays where
+  it is and says the node is on a hidden layer. Show the layer to see it.
 - It is remembered for you, per graph. It is not saved in the layer and
-  does not mark anything unsaved.
+  does not mark anything unsaved. Saving the graph to a new file keeps it,
+  a reference you remove is forgotten, and two tabs on the same graph each
+  keep their own.
 
 ### Reference Editor
 

@@ -699,8 +699,8 @@ class EyeCheckboxDelegate(LetterCheckboxDelegeate):
 
     def paint(self, painter, option, index):
         self.initStyleOption(option, index)
-        rect = QtCore.QRectF(option.rect).marginsRemoved(
-            QtCore.QMarginsF(5, 7, 5, 7))
+        # adjusted rather than marginsRemoved: Qt.py 1.4 has no QMarginsF.
+        rect = QtCore.QRectF(option.rect).adjusted(5, 7, -5, -7)
         mid_y = rect.center().y()
         shown = option.checkState == QtCore.Qt.CheckState.Checked
         color = QtGui.QColor(theme.TEXT if shown else theme.TEXT_FAINT)

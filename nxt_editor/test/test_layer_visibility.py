@@ -15,16 +15,20 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
 # External
-from Qt import QtCore, QtTest, QtWidgets
+from Qt import QtCore, QtGui, QtTest, QtWidgets
 
 # Internal
+from nxt import nxt_node
 from nxt.session import Session
 from nxt_editor import stage_model, user_dir
-from nxt_editor.dockwidgets.layer_manager import LayerModel
+from nxt_editor.dockwidgets.layer_manager import (EyeCheckboxDelegate,
+                                                   LayerModel)
+from nxt_editor.test.test_paste_is_one_undo import Pasteboard
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
@@ -208,6 +212,337 @@ class LayerVisibility(unittest.TestCase):
                                 pos=spot)
         self.assertFalse(self.model.get_layer_hidden(path))
         self.assertTrue(self.shown('/template'))
+
+
+class _SameGraph(unittest.TestCase):
+    """The graph LayerVisibility opens, in a window of its own, for tests
+    that change more than which layers are hidden."""
+
+    setUpClass = classmethod(LayerVisibility.setUpClass.__func__)
+    tearDownClass = classmethod(LayerVisibility.tearDownClass.__func__)
+    setUp = LayerVisibility.setUp
+    tearDown = LayerVisibility.tearDown
+    hide = LayerVisibility.hide
+    shown = LayerVisibility.shown
+
+    def line_to(self, node_path):
+        for line in self.view._connection_graphics:
+            if node_path in (line.src_node_path, line.tgt_node_path):
+                return line
+        self.fail('no line to {} was drawn'.format(node_path))
+
+
+class TheEye(unittest.TestCase):
+
+    def test_the_eye_paints(self):
+        # It was cut out with QMarginsF, which Qt.py 1.4 does not have, so
+        # under it every paint raised and the Layer Manager never drew.
+        model = QtGui.QStandardItemModel(1, 1)
+        item = QtGui.QStandardItem()
+        item.setCheckable(True)
+        item.setCheckState(QtCore.Qt.Checked)
+        model.setItem(0, 0, item)
+        option = QtWidgets.QStyleOptionViewItem()
+        option.rect = QtCore.QRect(0, 0, 24, 24)
+        pixmap = QtGui.QPixmap(24, 24)
+        pixmap.fill(QtCore.Qt.transparent)
+        blank = pixmap.toImage()
+        painter = QtGui.QPainter(pixmap)
+        try:
+            EyeCheckboxDelegate().paint(painter, option, model.index(0, 0))
+        finally:
+            painter.end()
+        self.assertNotEqual(blank, pixmap.toImage())
+
+
+class HiddenLines(_SameGraph):
+    """One rule decides whether a line is drawn, see StageView.line_shown,
+    so showing a layer again cannot bring back a line another rule hides,
+    and a line drawn later is hidden like the rest."""
+
+    def implied_lines(self, shown):
+        self.view.toggle_implicit_connections(shown)
+        app.processEvents()
+
+    def test_every_line_follows_the_one_rule(self):
+        self.hide()
+        self.assertTrue(self.view._connection_graphics)
+        for line in self.view._connection_graphics:
+            self.assertEqual(self.view.line_shown(line), line.isVisible())
+
+    def test_showing_the_layer_leaves_implied_lines_off(self):
+        self.addCleanup(self.implied_lines, True)
+        self.implied_lines(False)
+        self.hide()
+        self.hide(False)
+        implied = (nxt_node.INTERNAL_ATTRS.INSTANCE_PATH,
+                   nxt_node.INTERNAL_ATTRS.COMPUTE)
+        for line in self.view._connection_graphics:
+            if line.tgt_attr_name in implied:
+                self.assertFalse(line.isVisible(), line.tgt_path)
+
+    def test_turning_implied_lines_on_keeps_hidden_ones_hidden(self):
+        self.addCleanup(self.implied_lines, True)
+        self.hide()
+        self.implied_lines(False)
+        self.implied_lines(True)
+        self.assertFalse(self.line_to('/template').isVisible())
+
+    def test_a_line_drawn_later_is_hidden(self):
+        self.hide()
+        self.view._draw_inst_connections('/made')
+        self.assertFalse(self.line_to('/template').isVisible())
+
+    def test_applying_works_out_hidden_roots_once(self):
+        model = self.model
+        with mock.patch.object(model, 'hidden_roots',
+                               wraps=model.hidden_roots) as hidden_roots:
+            with mock.patch.object(model, 'is_node_hidden') as per_node:
+                self.hide()
+        self.assertEqual(1, hidden_roots.call_count)
+        per_node.assert_not_called()
+
+    def test_points_on_a_hidden_line_are_hidden_and_not_box_selected(self):
+        # On the line itself, not in the model: points are saved in the
+        # layer, and this is about what is drawn.
+        line = self.line_to('/template')
+        line.set_points([[50.0, 50.0]])
+        self.addCleanup(line.set_points, [])
+        everywhere = QtCore.QRectF(-1e6, -1e6, 2e6, 2e6)
+        self.assertTrue(self.view.points_in(everywhere))
+        self.hide()
+        self.assertFalse(line.point_graphics[0].isVisible())
+        self.assertFalse(self.view.points_in(everywhere))
+
+
+class HiddenSelection(_SameGraph):
+    """What cannot be seen cannot be selected from the graph, so copy and
+    delete only reach what is showing."""
+
+    def tearDown(self):
+        self.model.clear_selection()
+        super(HiddenSelection, self).tearDown()
+
+    def test_select_all_leaves_hidden_nodes_out(self):
+        self.hide()
+        self.view.select_all()
+        self.assertNotIn('/template', self.model.selection)
+        self.assertIn('/made', self.model.selection)
+
+    def test_box_select_leaves_hidden_nodes_out(self):
+        self.view.toggle_mini_map(False)
+        self.addCleanup(self.view.toggle_mini_map, self.view.show_mini_map)
+        self.view.frame_all()
+        app.processEvents()
+        self.hide()
+        viewport = self.view.viewport()
+        corner = viewport.rect().bottomRight() - QtCore.QPoint(2, 2)
+        QtTest.QTest.mousePress(viewport, QtCore.Qt.LeftButton,
+                                pos=QtCore.QPoint(2, 2))
+        QtTest.QTest.mouseMove(viewport, corner)
+        QtTest.QTest.mouseRelease(viewport, QtCore.Qt.LeftButton,
+                                  pos=corner)
+        self.assertIn('/made', self.model.selection)
+        self.assertNotIn('/template', self.model.selection)
+
+    def test_hiding_a_layer_takes_its_nodes_out_of_the_selection(self):
+        self.model.set_selection(['/template', '/made'])
+        self.hide()
+        self.assertEqual(['/made'], list(self.model.selection))
+
+
+class FramingHiddenNodes(_SameGraph):
+    """Framing leaves hidden nodes out. With only hidden nodes to frame
+    the view stays where it is and says why, rather than showing the
+    layer: picking a node in the Outliner would otherwise bring a whole
+    library back into the graph."""
+
+    def test_framing_a_hidden_node_stays_put_and_says_why(self):
+        self.hide()
+        with mock.patch.object(self.view, 'frame_rect') as frame_rect:
+            self.model.select_and_frame('/template')
+        frame_rect.assert_not_called()
+        self.assertIn('/template', self.view.status_label.text())
+        self.assertTrue(self.model.get_layer_hidden(
+            self.library_layer.real_path))
+        self.model.clear_selection()
+
+    def test_framing_some_hidden_nodes_frames_the_rest(self):
+        graphic = self.view.get_node_graphic('/template')
+        before = graphic.pos()
+        graphic.setPos(9000.0, 9000.0)
+        self.addCleanup(graphic.setPos, before)
+        self.hide()
+        with mock.patch.object(self.view, 'frame_rect') as frame_rect:
+            self.view.frame_nodes(['/template', '/made'])
+        rect = frame_rect.call_args[0][0]
+        self.assertLess(rect.right(), 9000)
+
+
+class MakingNodesOnAHiddenLayer(_SameGraph):
+    """A node made on a hidden target layer would vanish as it was made,
+    so the layer is shown again, and the graph says so."""
+
+    def setUp(self):
+        super(MakingNodesOnAHiddenLayer, self).setUp()
+        self.messages = []
+        self.model.status_message.connect(self.messages.append)
+        self.model.clipboard = Pasteboard()
+        self.model.set_target_layer(self.library_layer.real_path)
+
+    def tearDown(self):
+        self.model.status_message.disconnect(self.messages.append)
+        self.model.set_target_layer(self.model.top_layer.real_path)
+        while self.model.undo_stack.canUndo():
+            self.model.undo_stack.undo()
+        app.processEvents()
+        super(MakingNodesOnAHiddenLayer, self).tearDown()
+
+    def assert_shown_again(self, node_path):
+        self.assertFalse(self.model.get_layer_hidden(
+            self.library_layer.real_path))
+        self.assertTrue(self.shown(node_path))
+        self.assertEqual(1, len(self.messages))
+        self.assertIn('library', self.messages[0])
+        self.assertIn('library', self.view.status_label.text())
+
+    def test_a_new_node_shows_the_layer(self):
+        self.hide()
+        path = self.model.add_node(name='fresh', pos=[0.0, 0.0],
+                                   layer=self.model.target_layer)
+        app.processEvents()
+        self.assert_shown_again(path)
+
+    def test_a_pasted_node_shows_the_layer(self):
+        self.model.copy_nodes(['/template'])
+        self.hide()
+        pasted = self.model.paste_nodes(pos=[0.0, 0.0],
+                                        layer=self.model.target_layer)
+        app.processEvents()
+        self.assert_shown_again(pasted[0])
+
+    def test_a_node_made_under_a_root_in_view_leaves_it_hidden(self):
+        # /start shows, the top layer adds to it, so a node made under it
+        # is in view already.
+        self.hide()
+        self.model.add_node(name='more', parent_path='/start',
+                            layer=self.model.target_layer)
+        app.processEvents()
+        self.assertTrue(self.model.get_layer_hidden(
+            self.library_layer.real_path))
+        self.assertFalse(self.messages)
+
+
+class RememberingHiddenLayers(unittest.TestCase):
+    """What is remembered stays right as layers come and go, as the graph
+    is saved to a new file and with the graph open twice."""
+
+    def setUp(self):
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix='nxt_layer_eye_'))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        key = user_dir.EDITOR_CACHE.HIDDEN_LAYERS
+        before = user_dir.editor_cache.get(key) or {}
+        self.addCleanup(user_dir.editor_cache.__setitem__, key, before)
+        user_dir.editor_cache[key] = {}
+        write(os.path.join(self.tmp, 'library.nxt'), {
+            'version': '1.17', 'alias': 'library', 'references': [],
+            'nodes': {'/template': {}}})
+        self.top = write(os.path.join(self.tmp, 'top.nxt'), {
+            'version': '1.17', 'alias': 'top', 'references': ['library.nxt'],
+            'nodes': {'/made': {'instance': '/template'}}})
+
+    def open(self):
+        model = stage_model.StageModel(Session().load_file(self.top))
+        model.hidden_layer_paths()
+        return model
+
+    @staticmethod
+    def stored():
+        return user_dir.editor_cache[user_dir.EDITOR_CACHE.HIDDEN_LAYERS]
+
+    def test_a_removed_reference_is_forgotten(self):
+        model = self.open()
+        library = model.stage._sub_layers[1]
+        model.set_layer_hidden(library.real_path)
+        changes = []
+        model.layer_visibility_changed.connect(lambda: changes.append(1))
+        model.remove_sublayer(library)
+        self.assertFalse(model.hidden_layer_paths())
+        self.assertNotIn(model.top_layer.real_path, self.stored())
+        self.assertTrue(changes)
+
+    def test_two_tabs_on_one_graph_keep_each_others_layers(self):
+        first, second = self.open(), self.open()
+        library = first.stage._sub_layers[1].real_path
+        top = first.top_layer.real_path
+        first.set_layer_hidden(library)
+        second.set_layer_hidden(top)
+        self.assertEqual(sorted([library, top]), self.stored()[top])
+        second.set_layer_hidden(top, False)
+        self.assertEqual([library], self.stored()[top])
+
+    def save_as(self, model, name):
+        new_path = os.path.join(self.tmp, name)
+        model.top_layer.save(filepath=new_path)
+        model.layer_saved.emit(model.top_layer.real_path)
+        return model.top_layer.real_path
+
+    def test_saved_to_a_new_file_what_was_hidden_stays_hidden(self):
+        model = self.open()
+        library = model.stage._sub_layers[1].real_path
+        model.set_layer_hidden(library)
+        new_path = self.save_as(model, 'saved_as.nxt')
+        self.assertTrue(model.get_layer_hidden(library))
+        self.assertEqual([library], self.stored()[new_path])
+
+    def test_saved_over_a_file_what_was_remembered_for_it_is_read(self):
+        model = self.open()
+        library = model.stage._sub_layers[1].real_path
+        new_path = os.path.realpath(os.path.join(self.tmp, 'other.nxt'))
+        self.stored()[new_path] = [library]
+        changes = []
+        model.layer_visibility_changed.connect(lambda: changes.append(1))
+        self.save_as(model, 'other.nxt')
+        self.assertTrue(model.get_layer_hidden(library))
+        self.assertTrue(changes)
+
+
+class ManyRoots(unittest.TestCase):
+    """Which roots are hidden is worked out in one pass. Asking each root
+    in turn scanned every layer for every root, and a graph of 2500 took
+    more than a second and a half each time the graph changed."""
+
+    COUNT = 2500
+
+    def test_many_roots_are_quick(self):
+        tmp = os.path.realpath(tempfile.mkdtemp(prefix='nxt_layer_eye_'))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        key = user_dir.EDITOR_CACHE.HIDDEN_LAYERS
+        before = user_dir.editor_cache.get(key) or {}
+        self.addCleanup(user_dir.editor_cache.__setitem__, key, before)
+        library_nodes = {}
+        for index in range(self.COUNT):
+            library_nodes['/lib{}'.format(index)] = {}
+            library_nodes['/lib{}/child'.format(index)] = {}
+        write(os.path.join(tmp, 'library.nxt'), {
+            'version': '1.17', 'alias': 'library', 'references': [],
+            'nodes': library_nodes})
+        top_nodes = dict(('/top{}'.format(index), {})
+                         for index in range(self.COUNT))
+        # One the top layer adds to, which stays in view.
+        top_nodes['/lib0/mine'] = {}
+        top = write(os.path.join(tmp, 'top.nxt'), {
+            'version': '1.17', 'alias': 'top', 'references': ['library.nxt'],
+            'nodes': top_nodes})
+        model = stage_model.StageModel(Session().load_file(top))
+        model.set_layer_hidden(model.stage._sub_layers[1].real_path)
+        start = time.time()
+        hidden_roots = model.hidden_roots()
+        took = time.time() - start
+        self.assertEqual(self.COUNT - 1, len(hidden_roots))
+        self.assertNotIn('/lib0', hidden_roots)
+        self.assertNotIn('/top0', hidden_roots)
+        self.assertLess(took, 0.5)
 
 
 if __name__ == '__main__':

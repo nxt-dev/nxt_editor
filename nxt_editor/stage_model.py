@@ -65,6 +65,9 @@ class StageModel(QtCore.QObject):
     # Which layers are hidden in the graph changed. Nothing about the graph
     # itself did.
     layer_visibility_changed = QtCore.Signal()
+    # A short message about something the editor did by itself, for the
+    # graph to show.
+    status_message = QtCore.Signal(str)
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
     # Which layers are loaded, or the order they stack in, changed.
@@ -138,6 +141,13 @@ class StageModel(QtCore.QObject):
         # to keep them by in the user's prefs. {'breaks': {None: [paths]}}
         self._unsaved_points = {'breaks': {}, 'skips': {}}
         self.layer_saved.connect(self._keep_unsaved_points)
+        # Layers hidden in the graph, read from the cache by the graph's
+        # file when first asked for. See hidden_layer_paths.
+        self._hidden_layers = None
+        self._hidden_graph = None
+        self.layer_removed.connect(self._forget_unloaded_hidden_layers)
+        self.layers_restacked.connect(self._forget_unloaded_hidden_layers)
+        self.layer_saved.connect(self._check_hidden_graph)
         # attribute display state
         # {/node/path: STATE_INT}
         # 0 = no attributes
@@ -777,17 +787,82 @@ class StageModel(QtCore.QObject):
     # hidden layer still comps, still runs, and is still in the Outliner.
 
     def hidden_layer_paths(self):
-        """Real paths of the layers hidden in the graph.
+        """Real paths of the layers hidden in the graph. Only ever loaded
+        layers: one taken out of the graph is forgotten, see
+        _forget_unloaded_hidden_layers.
 
         :rtype: set
         """
-        hidden = getattr(self, '_hidden_layers', None)
-        if hidden is None:
-            stored = user_dir.editor_cache.get(
-                user_dir.EDITOR_CACHE.HIDDEN_LAYERS) or {}
-            hidden = set(stored.get(self.top_layer.real_path, ()))
-            self._hidden_layers = hidden
-        return hidden
+        graph = self.top_layer.real_path
+        if self._hidden_layers is None:
+            self._hidden_layers = set(self._stored_hidden_layers(graph))
+        elif graph != self._hidden_graph:
+            self._move_hidden_layers(self._hidden_graph, graph)
+        self._hidden_graph = graph
+        return self._hidden_layers
+
+    @staticmethod
+    def _stored_hidden_layers(graph):
+        stored = user_dir.editor_cache.get(
+            user_dir.EDITOR_CACHE.HIDDEN_LAYERS) or {}
+        return stored.get(graph, ())
+
+    def _move_hidden_layers(self, old_graph, graph):
+        """The graph was saved to a new file. What is remembered for that
+        file is read, if there is anything, and otherwise what was hidden
+        stays hidden and is remembered for it from now on."""
+        stored = self._stored_hidden_layers(graph)
+        if stored:
+            self._hidden_layers = set(stored)
+            return
+        if old_graph in self._hidden_layers:
+            # The top layer is the file that moved.
+            self._hidden_layers.discard(old_graph)
+            self._hidden_layers.add(graph)
+        self._store_hidden_layers(graph, hide=self._hidden_layers)
+
+    @staticmethod
+    def _store_hidden_layers(graph, hide=(), show=()):
+        """Change what is remembered for a graph by the paths that changed.
+
+        Read again first: another tab on the same graph has hidden layers
+        of its own, and writing this one's whole set would undo what that
+        one did.
+        """
+        if not graph:
+            # A graph that was never saved has nowhere to be remembered by.
+            return
+        key = user_dir.EDITOR_CACHE.HIDDEN_LAYERS
+        stored = dict(user_dir.editor_cache.get(key) or {})
+        paths = (set(stored.get(graph, ())) | set(hide)) - set(show)
+        if paths:
+            stored[graph] = sorted(paths)
+        else:
+            stored.pop(graph, None)
+        user_dir.editor_cache[key] = stored
+
+    def _forget_unloaded_hidden_layers(self, *args):
+        """Forget hidden layers that are no longer loaded, such as a
+        reference that was removed. Nothing in the Layer Manager could
+        show one again."""
+        if self._hidden_layers is None:
+            return
+        loaded = {layer.real_path for layer in self.stage._sub_layers}
+        gone = self._hidden_layers - loaded
+        if not gone:
+            return
+        self._hidden_layers -= gone
+        self._store_hidden_layers(self._hidden_graph, show=gone)
+        self.layer_visibility_changed.emit()
+
+    def _check_hidden_graph(self, *args):
+        """After a save, which can be to a new file. See
+        _move_hidden_layers."""
+        if self._hidden_layers is None:
+            return
+        before = set(self._hidden_layers)
+        if self.hidden_layer_paths() != before:
+            self.layer_visibility_changed.emit()
 
     def get_layer_hidden(self, layer_path):
         """Whether a layer's own nodes are hidden in the graph.
@@ -811,27 +886,14 @@ class StageModel(QtCore.QObject):
             return
         if hidden:
             paths.add(layer_path)
+            self._store_hidden_layers(self._hidden_graph, hide=[layer_path])
         else:
             paths.discard(layer_path)
-        graph = self.top_layer.real_path
-        if graph:
-            # A graph that was never saved has nowhere to be remembered by.
-            key = user_dir.EDITOR_CACHE.HIDDEN_LAYERS
-            stored = dict(user_dir.editor_cache.get(key) or {})
-            if paths:
-                stored[graph] = sorted(paths)
-            else:
-                stored.pop(graph, None)
-            user_dir.editor_cache[key] = stored
+            self._store_hidden_layers(self._hidden_graph, show=[layer_path])
         self.layer_visibility_changed.emit()
 
-    def _visible_layers(self):
-        hidden = self.hidden_layer_paths()
-        return [layer for layer in self.stage._sub_layers
-                if layer.real_path not in hidden]
-
-    def is_node_hidden(self, node_path):
-        """Whether a node is out of sight because its layers are hidden.
+    def hidden_roots(self):
+        """Root paths hidden in the graph.
 
         Decided a root node at a time, so a tree is shown or hidden whole.
         A root is hidden when every layer that says anything about it, or
@@ -839,34 +901,83 @@ class StageModel(QtCore.QObject):
         showing keeps it in view: hiding the layer a build's first node
         comes from must not take away what other layers put under it.
 
+        Worked out in one pass over every layer's nodes, so ask once and
+        look each node up in the answer.
+
+        :rtype: frozenset
+        """
+        hidden = self.hidden_layer_paths()
+        if not hidden:
+            return frozenset()
+        shown_roots = set()
+        hidden_roots = set()
+        get_root = nxt_path.get_root_path
+        for layer in self.stage._sub_layers:
+            if layer.real_path in hidden:
+                found = hidden_roots
+            else:
+                found = shown_roots
+            found.update(get_root(path)
+                         for path in layer._nodes_path_as_key)
+        return frozenset(hidden_roots - shown_roots)
+
+    def is_node_hidden(self, node_path, hidden_roots=None):
+        """Whether a node is out of sight because its layers are hidden.
+        See hidden_roots.
+
         :param node_path: any node path
         :type node_path: str
+        :param hidden_roots: hidden_roots, when it is already known
         :rtype: bool
         """
-        if not self.hidden_layer_paths():
-            return False
-        root = nxt_path.get_root_path(node_path)
-        under = root + nxt_path.NODE_SEP
-        found = False
-        for layer in self.stage._sub_layers:
-            for path in layer._nodes_path_as_key:
-                if path == root or path.startswith(under):
-                    if layer.real_path not in self._hidden_layers:
-                        return False
-                    found = True
-                    break
-        return found
+        if hidden_roots is None:
+            hidden_roots = self.hidden_roots()
+        return nxt_path.get_root_path(node_path) in hidden_roots
+
+    def hidden_backdrop_ids(self):
+        """Ids of the backdrops only hidden layers draw.
+
+        :rtype: set
+        """
+        hidden = self.hidden_layer_paths()
+        if not hidden:
+            return set()
+        shown = backdrops.merged([layer for layer in self.stage._sub_layers
+                                  if layer.real_path not in hidden])
+        return set(self.get_backdrops()) - set(shown)
 
     def is_backdrop_hidden(self, backdrop_id):
         """Whether a backdrop only hidden layers draw.
 
         :rtype: bool
         """
-        if not self.hidden_layer_paths():
-            return False
-        if backdrop_id in backdrops.merged(self._visible_layers()):
-            return False
-        return backdrop_id in self.get_backdrops()
+        return backdrop_id in self.hidden_backdrop_ids()
+
+    def _show_layer_for_new_nodes(self, node_paths, layer_path):
+        """Show a hidden layer again when nodes made on it would be hidden
+        the moment they are made, and say so.
+
+        :param node_paths: the nodes just made
+        :param layer_path: real path of the layer they were made on, or a
+            LAYERS constant
+        """
+        node_paths = [path for path in node_paths or () if path]
+        layer = self.lookup_layer(layer_path)
+        if not node_paths or layer is None:
+            return
+        layer_path = layer.real_path
+        if not self.get_layer_hidden(layer_path):
+            return
+        hidden_roots = self.hidden_roots()
+        if not any(self.is_node_hidden(path, hidden_roots)
+                   for path in node_paths):
+            return
+        self.set_layer_hidden(layer_path, False)
+        name = layer.get_alias()
+        message = 'Showing layer "{}" in the graph again, a node was ' \
+                  'made on it'.format(name)
+        logger.info(message)
+        self.status_message.emit(message)
 
     def get_layer(self, layer_alias):
         """Gets a layer via its alias.
@@ -1148,6 +1259,7 @@ class StageModel(QtCore.QObject):
                       pos=pos, model=self, layer_path=layer.real_path)
         self.undo_stack.push(cmd)
         new_node_path = cmd.node_path
+        self._show_layer_for_new_nodes([new_node_path], layer.real_path)
         return new_node_path
 
     def delete_is_orphaning(self, node_path, layer):
@@ -1270,7 +1382,7 @@ class StageModel(QtCore.QObject):
                              source_layer_path=source_layer_path,
                              target_layer_path=target_layer_path)
         self.undo_stack.push(cmd)
-
+        self._show_layer_for_new_nodes(cmd.new_node_paths, target_layer_path)
         return cmd.new_node_paths
 
     def instance_nodes(self, node_paths=(), source_layer=None,
@@ -1296,6 +1408,7 @@ class StageModel(QtCore.QObject):
         if new_nodes:
             self.selection = new_nodes
         self.undo_stack.endMacro()
+        self._show_layer_for_new_nodes(new_nodes, target_layer_path)
 
     def localize_nodes(self, node_paths=()):
         if not node_paths:
