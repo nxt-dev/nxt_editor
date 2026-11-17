@@ -163,6 +163,8 @@ class USER_PREF():
     LAST_OPEN = 'last_open'
     RECENT_FILES = 'recent_files'
     LOG_FILTERS = 'log_filters'
+    # Whether the Output Log wraps long lines to its width.
+    OUTPUT_LOG_WRAP = 'output_log_wrap'
     ATTR_SORTING = 'attribute_sorting'
     EXEC_FRAMING = 'execution_framing'
     SKIP_INITIAL_BREAK = 'skip_initial_breakpoint'

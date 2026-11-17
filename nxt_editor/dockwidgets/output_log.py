@@ -194,6 +194,8 @@ class FileTailingThread(QtCore.QThread):
 
 class OutputLog(DockWidgetBase):
     write_raw = QtCore.Signal(str, float)
+    #: Lines each log keeps. Older ones are dropped from the top.
+    MAX_LINES = 10000
 
     def __init__(self, graph_model=None, parent=None):
         super(OutputLog, self).__init__('Output Log', graph_model=graph_model,
@@ -254,6 +256,22 @@ class OutputLog(DockWidgetBase):
 
         self.main_layout.addWidget(self.tabs_widget)
 
+        # Long logs made every resize of the window slow, because each one
+        # re-wrapped every line in them. The logs keep only their last
+        # MAX_LINES lines, and wrapping can be turned off, after which a
+        # resize has nothing to lay out again.
+        for text_edit in self.text_edits():
+            text_edit.document().setMaximumBlockCount(self.MAX_LINES)
+        self.wrap_action = QtWidgets.QAction('Wrap Lines', self)
+        self.wrap_action.setCheckable(True)
+        self.wrap_action.setToolTip('Wrap long lines to the width of the '
+                                    'log. Off is faster to resize.')
+        wrap = user_dir.user_prefs.get(user_dir.USER_PREF.OUTPUT_LOG_WRAP,
+                                       True)
+        self.wrap_action.setChecked(bool(wrap))
+        self.wrap_action.toggled.connect(self.set_wrap_lines)
+        self.set_wrap_lines(self.wrap_action.isChecked(), save=False)
+
         self.log_watcher = None
         self.wrapped_stdout = None
         self.wrapped_stderr = None
@@ -273,6 +291,32 @@ class OutputLog(DockWidgetBase):
         self.visual_handler.addFilter(self.log_filter_button)
         nxt_logger = logging.getLogger('nxt')
         nxt_logger.addHandler(self.visual_handler)
+
+    def text_edits(self):
+        """The rich and the raw log."""
+        return self.rich_output_textedit, self.raw_output_textedit
+
+    def set_wrap_lines(self, wrap, save=True):
+        """Wrap long lines in both logs to their width, or not at all.
+
+        :param wrap: True to wrap
+        :type wrap: bool
+        :param save: remember it in the user preferences
+        :type save: bool
+        """
+        mode = (QtWidgets.QTextEdit.WidgetWidth if wrap
+                else QtWidgets.QTextEdit.NoWrap)
+        for text_edit in self.text_edits():
+            text_edit.setLineWrapMode(mode)
+        if save:
+            user_dir.user_prefs[user_dir.USER_PREF.OUTPUT_LOG_WRAP] = bool(wrap)
+
+    def add_menu_actions(self, menu, text_edit):
+        """What both logs add to their right click menus."""
+        menu.addAction('Clear', text_edit.clear)
+        menu.addAction(self.parent().app_actions.clear_logs_action)
+        menu.addSeparator()
+        menu.addAction(self.wrap_action)
 
     def wrap_std_streams_for_raw_output(self):
         if self.log_watcher:
@@ -519,8 +563,7 @@ class OutputTextEdit(QtWidgets.QTextEdit):
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
-        menu.addAction('Clear', self.clear)
-        menu.addAction(self._parent.parent().app_actions.clear_logs_action)
+        self._parent.add_menu_actions(menu, self)
         menu.exec_(event.globalPos())
 
 
@@ -536,8 +579,7 @@ class OutputTextBrowser(QtWidgets.QTextBrowser):
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
-        menu.addAction('Clear', self.clear)
-        menu.addAction(self._parent.parent().app_actions.clear_logs_action)
+        self._parent.add_menu_actions(menu, self)
         menu.exec_(event.globalPos())
 
 

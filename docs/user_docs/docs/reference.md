@@ -735,6 +735,13 @@ The Output Log follows new text while it is scrolled to the bottom, and
 resizing it keeps it there. Scroll up to read something and it stays where
 you left it; scroll back to the bottom and it follows again.
 
+Each log keeps its last 10,000 lines, and drops older ones from the top.
+Long lines wrap to the width of the log. Turn off **Wrap Lines** in the
+log's right click menu to show them on one line with a horizontal scroll
+bar instead, which also keeps resizing the window quick when the log is
+long. The setting applies to both the Rich Output and Raw Output tabs and
+is remembered with your preferences.
+
 In the Property Editor's attribute table, each row is in the color of the
 layer its value comes from, lighter where the selected node sets the value
 itself and darker where it inherits it. Instanced values are in italics.

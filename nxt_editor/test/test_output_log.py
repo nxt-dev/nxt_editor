@@ -98,5 +98,71 @@ class TestStickToBottom(OutputLogTestCase):
         self.assertEqual(bar.maximum(), bar.value())
 
 
+class TestLongLogs(OutputLogTestCase):
+    """Resizing was slow with a long log, which re-wrapped every line."""
+
+    def tearDown(self):
+        self.log.wrap_action.setChecked(True)
+        self.log.setFloating(False)
+        app.processEvents()
+
+    def test_logs_keep_a_limited_number_of_lines(self):
+        from nxt_editor.dockwidgets.output_log import OutputLog
+        limit = OutputLog.MAX_LINES
+        for text_edit in self.log.text_edits():
+            self.assertEqual(limit, text_edit.document().maximumBlockCount())
+        lines = ['line %d' % i for i in range(limit + 50)]
+        self.log._write_raw_output('\n'.join(lines))
+        document = self.log.raw_output_textedit.document()
+        self.assertLessEqual(document.blockCount(), limit)
+        self.assertEqual(lines[-1], document.lastBlock().text())
+        self.assertNotEqual(lines[0], document.firstBlock().text())
+
+    def test_wrap_toggle_changes_both_logs_and_is_remembered(self):
+        from nxt_editor import user_dir
+        key = user_dir.USER_PREF.OUTPUT_LOG_WRAP
+        self.log.wrap_action.setChecked(False)
+        for text_edit in self.log.text_edits():
+            self.assertEqual(QtWidgets.QTextEdit.NoWrap,
+                             text_edit.lineWrapMode())
+        self.assertIs(False, user_dir.user_prefs.get(key))
+        self.log.wrap_action.setChecked(True)
+        for text_edit in self.log.text_edits():
+            self.assertEqual(QtWidgets.QTextEdit.WidgetWidth,
+                             text_edit.lineWrapMode())
+        self.assertIs(True, user_dir.user_prefs.get(key))
+
+    def test_wrap_is_in_both_right_click_menus(self):
+        for text_edit in self.log.text_edits():
+            menu = QtWidgets.QMenu()
+            self.log.add_menu_actions(menu, text_edit)
+            self.assertIn(self.log.wrap_action, menu.actions())
+
+    def test_new_log_reads_the_preference(self):
+        from nxt_editor import user_dir
+        from nxt_editor.dockwidgets.output_log import OutputLog
+        user_dir.user_prefs[user_dir.USER_PREF.OUTPUT_LOG_WRAP] = False
+        other = OutputLog(parent=self.win)
+        try:
+            self.assertFalse(other.wrap_action.isChecked())
+            self.assertEqual(QtWidgets.QTextEdit.NoWrap,
+                             other.raw_output_textedit.lineWrapMode())
+        finally:
+            other.detach_from_logging()
+            other.hide()
+            user_dir.user_prefs[user_dir.USER_PREF.OUTPUT_LOG_WRAP] = True
+
+    def test_unwrapped_log_does_not_relayout_on_resize(self):
+        text_edit = self.log.raw_output_textedit
+        self.log.tabs_widget.setCurrentWidget(text_edit.parent())
+        self.log.wrap_action.setChecked(False)
+        bar = text_edit.verticalScrollBar()
+        self.resize_log(900)
+        self.fill(self.log._write_raw_output)
+        tall = bar.maximum()
+        self.resize_log(500)
+        self.assertEqual(tall, bar.maximum())
+
+
 if __name__ == '__main__':
     unittest.main()
