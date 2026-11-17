@@ -27,10 +27,12 @@ To install the latest release from [PyPI](https://pypi.org/project/nxt-editor/):
 - Install
     - `pip install nxt-editor`
     - Optionally, for richer code completion:
-      `pip install nxt-editor[completion]`. This adds
+      `pip install nxt-editor[completion]`, or later from
+      **Options > Optional Components** in the editor. This adds
       [jedi](https://github.com/davidhalter/jedi), which the
       [Python Analysis](reference.md#python-analysis-with-jedi) completion
-      source uses. The editor works the same without it.
+      source uses. The editor works the same without it. See
+      [Optional Components](optional_components.md).
 - Launch the editor
     - `nxt ui`, or `nxt ui path/to/graph.nxt` to open a graph
 - Update
@@ -183,6 +185,9 @@ from PyPI. It is experimental: save early, save often.
 4. The first time, choose **nxt > Install Qt (PySide6)**. Unreal ships no Qt,
    so this downloads PySide6 with the engine's own pip. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
+5. Optionally, for smarter code completion, open the editor and install
+   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   [Optional Components](optional_components.md).
 
 After that, the **nxt** menu in the main menu bar has **Open Editor**. The
 editor window is parented to the Unreal editor and stays responsive while
@@ -205,6 +210,9 @@ be installed or put on a path.
 2. Tick the add-on to enable it.
 3. The first time, choose **NXT > Install Qt (PySide6)**. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
+4. Optionally, for smarter code completion, open the editor and install
+   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   [Optional Components](optional_components.md).
 
 The **NXT** menu appears in Blender's top bar, next to **Help**. Enabling the
 add-on does not open anything on its own.
@@ -235,8 +243,9 @@ Graphs whose nodes use `bpy` can only be *run* in Blender, but they can be
 ## Qt for Blender and Unreal
 
 Blender and Unreal ship no Qt, and the nxt editor is a Qt application, so
-both menus offer **Install Qt (PySide6)**. It uses the host's own pip to
-install PySide6 once, into a folder outside the host:
+both menus offer **Install Qt (PySide6)**. Qt is one of nxt's
+[Optional Components](optional_components.md). The menu item uses the
+host's own pip to install PySide6 once, into a folder outside the host:
 
 ```
 ~/nxt/deps/py<python version>
@@ -254,13 +263,12 @@ newest PySide6 crashes on, so they get PySide6 6.10 in a folder of its own,
 only matter when installing by hand.
 
 !!! note "Studio installs and machines without internet access"
-    Set the `NXT_QT_DEPS` environment variable to a shared folder, and nxt
+    Set the `NXT_DEPS` environment variable to a shared folder, and nxt
     looks for (and installs) PySide6 under it instead of `~/nxt/deps`.
-    Install it there once with each host's python:
-
-        <unreal python>    -m pip install --target <shared>/py311 "pyside6-essentials>=6,<6.12"
-        <blender 5 python> -m pip install --target <shared>/py313 "pyside6-essentials>=6,<6.12"
-        <blender 4 python> -m pip install --target <shared>/py311-crt14.29 "pyside6-essentials>=6,<6.11"
+    `NXT_QT_DEPS`, its older name, still works. Set `NXT_DEPS_WHEELS` to a
+    folder of wheels made with `pip download`, and installs come from there
+    with no internet access. See
+    [Optional Components](optional_components.md#for-studios).
 
     If `NXT_USER_DIR` is set, the default folder is `$NXT_USER_DIR/deps`
     rather than `~/nxt/deps`.

@@ -418,10 +418,11 @@ is imported, but not what `os.path.join(...)` returns. jedi analyses the
 code, so after `path = os.path.join(out_dir, name)` it knows `path` is a
 string and offers `path.split` and `path.splitlines`.
 
-- It is optional. Install it with `pip install nxt-editor[completion]` (see
-  [Standalone Installation](install.md#standalone-installation)). Without
-  it, **Python Analysis (jedi)** is greyed out in the menu, and its
-  description says how to install it.
+- It is optional. Install it from **Options > Optional Components**, in
+  any host, or with `pip install nxt-editor[completion]` (see
+  [Optional Components](optional_components.md)). Without it, **Python
+  Analysis (jedi)** in the menu offers to install it. Once installed it
+  is used straight away, with no restart.
 - It is only asked after a dot. Bare names still come from the other
   sources, so switching one of those off keeps its names out of the list.
 - It is asked once typing pauses, or straight away with `Ctrl+Space`, and
