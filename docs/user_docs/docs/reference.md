@@ -603,6 +603,26 @@ in the [Outliner](#outliner). Right click a layer for its menu.
 Two items on this menu change what a layer pulls in from disk:
 **Edit References...** and **Reload Source...**.
 
+### Layer toggles
+
+![The toggles in the Layer Manager](images/layer_columns.png)
+
+Each row ends in five toggles, drawn as icons. A toggle that is on sits on
+a chip of the layer's color; one that is off is a dim outline. Hover over
+an icon for a tooltip that says what a click does and what the toggle
+means. Click an icon to toggle it; mute, solo and lock can be undone.
+
+| Icon | Off | On | What it does |
+|------|-----|----|--------------|
+| Stack of layers | Outline | Filled, on a chip | Picks the display layer: the graph shows the comp of that layer and the layers under it. Click another layer's stack to display from it. |
+| Speaker | Sounding | Crossed out, on a chip | **Mute**: a muted layer is left out of the comp and builds. |
+| Headphones | Outline | Filled, on a chip | **Solo**: while any layer is soloed, only soloed layers are comped. |
+| Padlock | Open | Shut, on a chip | **Lock**: a locked layer cannot be edited or made the target layer. |
+| Eye | Open | Struck through, on a chip | **Hide** the layer's nodes in the graph. See below. |
+
+The layer's name shows some of this too: a muted layer is outlined with a
+dashed line, and a soloed layer has a round swatch and a bold name.
+
 ### Hiding a layer in the graph
 
 ![The eye in the Layer Manager](images/layer_eye.png)

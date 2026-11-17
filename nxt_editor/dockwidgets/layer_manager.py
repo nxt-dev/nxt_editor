@@ -69,11 +69,10 @@ class LayerTreeView(QtWidgets.QTreeView):
         self.alias_delegate = AliasDelegate()
         pencil_pix = QtGui.QPixmap(':icons/icons/pencil_hover.png')
         self.target_delegate = PixMapCheckboxDelegate(pencil_pix)
-        layer_pix = QtGui.QPixmap(':icons/icons/layers_hover.png')
-        self.display_delegate = PixMapCheckboxDelegate(layer_pix)
-        self.mute_delgate = LetterCheckboxDelegeate('M')
-        self.solo_delegate = LetterCheckboxDelegeate('S')
-        self.lock_delegate = LetterCheckboxDelegeate('L')
+        self.display_delegate = DisplayIconDelegate()
+        self.mute_delgate = MuteIconDelegate()
+        self.solo_delegate = SoloIconDelegate()
+        self.lock_delegate = LockIconDelegate()
         self.visible_delegate = EyeCheckboxDelegate()
         self.setItemDelegateForColumn(LayerModel.ALIAS_COLUMN,
                                       self.alias_delegate)
@@ -90,6 +89,9 @@ class LayerTreeView(QtWidgets.QTreeView):
         self.setItemDelegateForColumn(LayerModel.VISIBLE_COLUMN,
                                       self.visible_delegate)
         self.setHeaderHidden(True)
+        # The cell under the mouse, for the icons to light up.
+        self.hover_index = QtCore.QPersistentModelIndex()
+        self.setMouseTracking(True)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.custom_context_menu)
         self.clicked.connect(self.on_item_clicked)
@@ -155,6 +157,23 @@ class LayerTreeView(QtWidgets.QTreeView):
                 event.accept()
                 return
         super(LayerTreeView, self).mousePressEvent(event)
+
+    def set_hover_index(self, index):
+        if QtCore.QModelIndex(self.hover_index) == index:
+            return
+        before = QtCore.QModelIndex(self.hover_index)
+        self.hover_index = QtCore.QPersistentModelIndex(index)
+        for changed in (before, index):
+            if changed.isValid():
+                self.update(changed)
+
+    def mouseMoveEvent(self, event):
+        self.set_hover_index(self.indexAt(event.pos()))
+        super(LayerTreeView, self).mouseMoveEvent(event)
+
+    def leaveEvent(self, event):
+        self.set_hover_index(QtCore.QModelIndex())
+        super(LayerTreeView, self).leaveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
         # The press already took care of a Shift click on an arrow.
@@ -306,6 +325,33 @@ class LayerModel(QtCore.QAbstractItemModel):
     VISIBLE_COLUMN = 6
     HAS_SELECTED_COLUMN = 7
     UNSAVED = 8
+    # What each toggle column says about itself, off and then on: the
+    # tooltip's first line, which is what a click does, the state for a
+    # screen reader, and a line on what the toggle means.
+    TOGGLE_TEXT = {
+        DISPLAY_COLUMN: (
+            ('Display from this layer', 'This is the display layer'),
+            ('Not the display layer', 'Display layer'),
+            'The graph shows the comp of the display layer and the '
+            'layers under it.'),
+        MUTE_COLUMN: (
+            ('Mute layer', 'Unmute layer'),
+            ('Not muted', 'Muted'),
+            'Muted layers are left out of the comp and builds.'),
+        SOLO_COLUMN: (
+            ('Solo layer', 'Unsolo layer'),
+            ('Not soloed', 'Soloed'),
+            'While any layer is soloed, only soloed layers are comped.'),
+        LOCK_COLUMN: (
+            ('Lock layer', 'Unlock layer'),
+            ('Unlocked', 'Locked'),
+            'A locked layer cannot be edited or made the target layer.'),
+        VISIBLE_COLUMN: (
+            ("Hide layer's nodes in the graph",
+             "Show layer's nodes in the graph"),
+            ('Shown in the graph', 'Hidden in the graph'),
+            'A hidden layer still comps and runs, unlike a muted one.'),
+    }
 
     def __init__(self, stage_model):
         super(LayerModel, self).__init__()
@@ -573,6 +619,25 @@ class LayerModel(QtCore.QAbstractItemModel):
         is_disp = layer == self.stage_model.display_layer
         is_target = layer == self.stage_model.target_layer
         is_locked = layer.get_locked()
+        if role in (QtCore.Qt.ToolTipRole, QtCore.Qt.AccessibleTextRole,
+                    QtCore.Qt.AccessibleDescriptionRole):
+            if column not in self.TOGGLE_TEXT:
+                return
+            actions, states, meaning = self.TOGGLE_TEXT[column]
+            if column == self.DISPLAY_COLUMN:
+                on = is_disp
+            elif column == self.MUTE_COLUMN:
+                on = layer.get_muted()
+            elif column == self.SOLO_COLUMN:
+                on = layer.get_soloed()
+            elif column == self.LOCK_COLUMN:
+                on = is_locked
+            else:
+                on = self.stage_model.get_layer_hidden(layer.real_path)
+            on = int(bool(on))
+            if role == QtCore.Qt.AccessibleTextRole:
+                return states[on]
+            return '{}\n{}'.format(actions[on], meaning)
         if role == QtCore.Qt.EditRole:
             if column == self.ALIAS_COLUMN:
                 return layer.get_alias()
@@ -746,39 +811,216 @@ class LetterCheckboxDelegeate(QtWidgets.QStyledItemDelegate):
         return True
 
 
-class EyeCheckboxDelegate(LetterCheckboxDelegeate):
-    def __init__(self):
-        """Paints an eye: open when the layer's nodes are shown in the
-        graph, shut and grey when they are hidden.
+class IconCheckboxDelegate(QtWidgets.QStyledItemDelegate):
+    """Paints a toggle column of the Layer Manager as a drawn icon.
 
-        Hiding is only a way of looking at the graph. The layer still
-        comps and runs, which is what sets this apart from mute.
+    Every icon is drawn with paths in a box of GLYPH px, so it is the same
+    size and as sharp in every host and at every screen scale. A toggle
+    that is on sits on a chip of the layer's color, the way it always has,
+    and is drawn in whichever text color reads on it. One that is off is a
+    dim outline. The cell under the mouse is lifted a little, so it reads
+    as something to click.
+    """
+    GLYPH = 14
+    STROKE = 1.5
+    RADIUS = 2
+
+    def __init__(self):
+        super(IconCheckboxDelegate, self).__init__()
+        self.height = LayerTreeView.SIZE
+
+    def is_on(self, option):
+        """Whether the toggle is on, which is what the chip shows."""
+        return option.checkState == QtCore.Qt.CheckState.Checked
+
+    def draw_glyph(self, painter, on, color):
+        """Draws the icon in a GLYPH px box at the origin. The pen is set
+        up and the brush is empty.
+
+        :param on: whether the toggle is on
+        :param color: the glyph color, for anything filled
+        :type color: QtGui.QColor
         """
-        super(EyeCheckboxDelegate, self).__init__('')
+        raise NotImplementedError
 
     def paint(self, painter, option, index):
         self.initStyleOption(option, index)
-        # adjusted rather than marginsRemoved: Qt.py 1.4 has no QMarginsF.
-        rect = QtCore.QRectF(option.rect).adjusted(5, 7, -5, -7)
-        mid_y = rect.center().y()
-        shown = option.checkState == QtCore.Qt.CheckState.Checked
-        color = QtGui.QColor(theme.TEXT if shown else theme.TEXT_FAINT)
+        on = self.is_on(option)
+        hovered = is_hovered(option, index)
+        chip = QtCore.QRectF(option.rect).adjusted(1, 1, -1, -1)
         painter.save()
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        painter.setPen(QtGui.QPen(color, 1.4))
+        painter.setPen(QtCore.Qt.NoPen)
+        if on:
+            fill = option.backgroundBrush.color()
+            color = theme.readable_text(fill)
+            if hovered:
+                fill = fill.lighter(115)
+            painter.setBrush(fill)
+            painter.drawRoundedRect(chip, self.RADIUS, self.RADIUS)
+        else:
+            color = theme.color(theme.TEXT if hovered else theme.TEXT_FAINT)
+            if hovered:
+                painter.setBrush(theme.color(theme.HOVER))
+                painter.drawRoundedRect(chip, self.RADIUS, self.RADIUS)
+        center = chip.center()
+        painter.translate(center.x() - self.GLYPH / 2.0,
+                          center.y() - self.GLYPH / 2.0)
+        pen = QtGui.QPen(color, self.STROKE)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        pen.setJoinStyle(QtCore.Qt.RoundJoin)
+        painter.setPen(pen)
         painter.setBrush(QtCore.Qt.NoBrush)
-        lower = QtGui.QPainterPath(QtCore.QPointF(rect.left(), mid_y))
-        lower.quadTo(rect.center().x(), rect.bottom() + rect.height() * .5,
-                     rect.right(), mid_y)
-        painter.drawPath(lower)
-        if shown:
-            upper = QtGui.QPainterPath(QtCore.QPointF(rect.left(), mid_y))
-            upper.quadTo(rect.center().x(), rect.top() - rect.height() * .5,
-                         rect.right(), mid_y)
-            painter.drawPath(upper)
-            painter.setBrush(color)
-            painter.drawEllipse(rect.center(), 2.2, 2.2)
+        self.draw_glyph(painter, on, color)
         painter.restore()
+
+    def sizeHint(self, option, index):
+        return QtCore.QSize(self.height, self.height)
+
+    def editorEvent(self, event, model, option, index):
+        if event.type() != QtCore.QEvent.Type.MouseButtonRelease:
+            return False
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
+            return False
+        prev_checked = option.checkState == QtCore.Qt.CheckState.Checked
+        model.setData(index, not prev_checked, role=QtCore.Qt.CheckStateRole)
+        return True
+
+
+def is_hovered(option, index):
+    """Whether the mouse is over this very cell of a LayerTreeView. The
+    view's own hover state covers the whole row."""
+    hover = getattr(option.widget, 'hover_index', None)
+    if hover is None or not hover.isValid():
+        return False
+    return (hover.row() == index.row() and
+            hover.column() == index.column() and
+            hover.parent() == index.parent())
+
+
+def slashed(painter, start, end):
+    """Clips what is drawn next to a gap around the line from start to
+    end, and returns that line, to be drawn once the clip is gone."""
+    line = QtGui.QPainterPath(start)
+    line.lineTo(end)
+    stroker = QtGui.QPainterPathStroker()
+    stroker.setWidth(IconCheckboxDelegate.STROKE * 2)
+    stroker.setCapStyle(QtCore.Qt.RoundCap)
+    box = QtGui.QPainterPath()
+    size = IconCheckboxDelegate.GLYPH
+    box.addRect(QtCore.QRectF(-1, -1, size + 2, size + 2))
+    painter.setClipPath(box.subtracted(stroker.createStroke(line)))
+    return line
+
+
+class DisplayIconDelegate(IconCheckboxDelegate):
+    """A stack of layers. On for the display layer, the one the graph
+    shows the comp from."""
+
+    def draw_glyph(self, painter, on, color):
+        top = QtGui.QPolygonF([QtCore.QPointF(1.5, 4.75),
+                               QtCore.QPointF(7, 1.75),
+                               QtCore.QPointF(12.5, 4.75),
+                               QtCore.QPointF(7, 7.75)])
+        if on:
+            painter.setBrush(color)
+        painter.drawPolygon(top)
+        painter.drawPolyline(QtGui.QPolygonF([
+            QtCore.QPointF(1.5, 8.75), QtCore.QPointF(7, 11.75),
+            QtCore.QPointF(12.5, 8.75)]))
+
+
+class MuteIconDelegate(IconCheckboxDelegate):
+    """A speaker: sounding while the layer plays its part, crossed out
+    when it is muted."""
+
+    def draw_glyph(self, painter, on, color):
+        speaker = QtGui.QPolygonF([
+            QtCore.QPointF(1.5, 5.25), QtCore.QPointF(3.75, 5.25),
+            QtCore.QPointF(7, 2.25), QtCore.QPointF(7, 11.75),
+            QtCore.QPointF(3.75, 8.75), QtCore.QPointF(1.5, 8.75)])
+        if on:
+            painter.setBrush(color)
+        painter.drawPolygon(speaker)
+        painter.setBrush(QtCore.Qt.NoBrush)
+        if on:
+            painter.drawLine(QtCore.QPointF(9, 4.75),
+                             QtCore.QPointF(13.25, 9.25))
+            painter.drawLine(QtCore.QPointF(13.25, 4.75),
+                             QtCore.QPointF(9, 9.25))
+            return
+        for radius in (2.5, 5):
+            arc = QtCore.QRectF(7 - radius, 7 - radius, radius * 2,
+                                radius * 2)
+            painter.drawArc(arc, -50 * 16, 100 * 16)
+
+
+class SoloIconDelegate(IconCheckboxDelegate):
+    """Headphones, with the ear cups filled in when the layer is
+    soloed."""
+
+    def draw_glyph(self, painter, on, color):
+        band = QtGui.QPainterPath(QtCore.QPointF(2, 9))
+        band.lineTo(2, 7)
+        band.arcTo(QtCore.QRectF(2, 2, 10, 10), 180, -180)
+        band.lineTo(12, 9)
+        painter.drawPath(band)
+        if on:
+            painter.setBrush(color)
+        for left in (1.25, 9.25):
+            painter.drawRoundedRect(QtCore.QRectF(left, 8.25, 3.5, 4.5),
+                                    1, 1)
+
+
+class LockIconDelegate(IconCheckboxDelegate):
+    """A padlock, shut and filled in when the layer is locked, with its
+    shackle swung open when it is not."""
+
+    def draw_glyph(self, painter, on, color):
+        if on:
+            shackle = QtGui.QPainterPath(QtCore.QPointF(4.5, 6.5))
+            shackle.lineTo(4.5, 4.5)
+            shackle.arcTo(QtCore.QRectF(4.5, 2, 5, 5), 180, -180)
+            shackle.lineTo(9.5, 6.5)
+        else:
+            shackle = QtGui.QPainterPath(QtCore.QPointF(7.5, 6.5))
+            shackle.lineTo(7.5, 4)
+            shackle.arcTo(QtCore.QRectF(7.5, 1.5, 5, 5), 180, -180)
+            shackle.lineTo(12.5, 5)
+        painter.drawPath(shackle)
+        if on:
+            painter.setBrush(color)
+        painter.drawRoundedRect(QtCore.QRectF(2.5, 6.5, 9, 6.25), 1.25, 1.25)
+
+
+class EyeCheckboxDelegate(IconCheckboxDelegate):
+    """An eye: open when the layer's nodes are shown in the graph, struck
+    through when they are hidden.
+
+    Hiding is only a way of looking at the graph. The layer still comps
+    and runs, which is what sets this apart from mute.
+    """
+
+    def is_on(self, option):
+        # The column is checked while the nodes show. What is worth
+        # pointing out is a layer that is hidden.
+        return option.checkState != QtCore.Qt.CheckState.Checked
+
+    def draw_glyph(self, painter, on, color):
+        line = None
+        if on:
+            line = slashed(painter, QtCore.QPointF(2.5, 11.5),
+                           QtCore.QPointF(11.5, 2.5))
+        eye = QtGui.QPainterPath(QtCore.QPointF(1, 7))
+        eye.quadTo(7, -0.5, 13, 7)
+        eye.quadTo(7, 14.5, 1, 7)
+        painter.drawPath(eye)
+        painter.setBrush(color)
+        painter.drawEllipse(QtCore.QPointF(7, 7), 1.9, 1.9)
+        if line is not None:
+            painter.setClipping(False)
+            painter.setBrush(QtCore.Qt.NoBrush)
+            painter.drawPath(line)
 
 
 class AliasDelegate(QtWidgets.QStyledItemDelegate):
