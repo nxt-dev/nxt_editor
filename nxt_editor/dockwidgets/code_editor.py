@@ -5,6 +5,7 @@ import keyword
 import logging
 import re
 import sys
+import threading
 from collections import OrderedDict
 from functools import partial
 
@@ -551,6 +552,15 @@ class CodeEditor(DockWidgetBase):
         self.exit_editing()
 
 
+class JediAnswer(QtCore.QObject):
+    """Carries word from jedi's worker thread back to the editor's.
+
+    Emitted on the worker, it is delivered on the thread this object lives
+    on, so the editor only ever touches its widgets from its own thread.
+    """
+    answered = QtCore.Signal(object)
+
+
 class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
     """NxtCodeEditor inherited from QPlainTextEdit providing:
@@ -605,6 +615,14 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                                       'brackets')
         self.extra_selection_layers = OrderedDict()
         self.completion_words = None
+        # The prefix the open list was built for, so typing more of the
+        # same name only filters it. None when it has to be built again.
+        self.completion_base = None
+        self.completion_width = 0
+        # What the compute's import lines ask for, kept while they stay the
+        # same, since every key changes the text. See imported_modules.
+        self.imports_key = None
+        self.imports_found = None
         self.prev_v_scroll_value = 0
         self.prev_h_scroll_value = 0
         self.changed_lines = []
@@ -722,14 +740,27 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.completer.setWidget(self)
         self.completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
         self.completer.setCaseSensitivity(QtCore.Qt.CaseSensitive)
+        self.completer.setMaxVisibleItems(12)
         self.completer.activated.connect(self.insert_completion)
         self.completer.popup().installEventFilter(self)
-        # jedi is asked once typing pauses rather than on every key, since
-        # a fresh question can take a moment.
+        # The list opens once typing pauses, so a fast typist is never
+        # waiting on it. While it is open, each key only filters it.
+        self.completion_timer = QtCore.QTimer(self)
+        self.completion_timer.setSingleShot(True)
+        self.completion_timer.setInterval(150)
+        self.completion_timer.timeout.connect(self.completions_due)
+        self.completion_position = None
+        # jedi is asked once typing pauses rather than on every key, and
+        # on a worker thread, since a fresh question can take seconds.
         self.jedi_timer = QtCore.QTimer(self)
         self.jedi_timer.setSingleShot(True)
-        self.jedi_timer.setInterval(250)
+        self.jedi_timer.setInterval(300)
         self.jedi_timer.timeout.connect(self.ask_jedi)
+        self.jedi_answer = JediAnswer(self)
+        self.jedi_answer.answered.connect(self.jedi_answered)
+        self.jedi_busy = False
+        self.jedi_again = None
+        self.jedi_force = False
         # The word list is rebuilt from the document, so it goes stale on
         # every edit. Rebuilding is deferred until a completion is asked for.
         self.textChanged.connect(self.invalidate_completion_words)
@@ -1176,16 +1207,20 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         :return: {name used in the code: module}
         :rtype: dict
         """
+        source = self.import_source()
+        # Every key changes the text, but rarely its import lines, so what
+        # they ask for, and what would not import, is kept while they stay
+        # the same. The modules themselves are looked up each time, so one
+        # reloaded since is the one offered and the old one is not kept.
+        key = tuple(line for line in source.splitlines() if 'import' in line)
+        if key != self.imports_key:
+            self.imports_key = key
+            self.imports_found = {'wanted': self.imports_wanted(source),
+                                  'failed': set()}
+        failed = self.imports_found['failed']
         found = {}
-        for match in self.IMPORT_RE.finditer(self.import_source()):
-            module_name = match.group('mod') or match.group('from')
-            if not module_name:
-                continue
-            local_name = match.group('alias') or module_name.split('.')[0]
-            if match.group('mod') and not match.group('alias'):
-                # "import os.path" binds os, not os.path
-                module_name = module_name.split('.')[0]
-            if local_name in found:
+        for local_name, module_name in self.imports_found['wanted']:
+            if local_name in found or module_name in failed:
                 continue
             module = sys.modules.get(module_name)
             if module is None:
@@ -1194,9 +1229,24 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                 except Exception:
                     logger.debug('No completions for %s, it would not import'
                                  % module_name)
+                    failed.add(module_name)
                     continue
             found[local_name] = module
         return found
+
+    def imports_wanted(self, source):
+        """(name used in the code, module name) for each import line."""
+        wanted = []
+        for match in self.IMPORT_RE.finditer(source):
+            module_name = match.group('mod') or match.group('from')
+            if not module_name:
+                continue
+            local_name = match.group('alias') or module_name.split('.')[0]
+            if match.group('mod') and not match.group('alias'):
+                # "import os.path" binds os, not os.path
+                module_name = module_name.split('.')[0]
+            wanted.append((local_name, module_name))
+        return wanted
 
     def world_source(self):
         """The world node's code, when this is another node.
@@ -1407,20 +1457,75 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                 fresh=fresh)
         return [before + name for name in names]
 
-    def ask_jedi(self):
-        """Typing paused: ask jedi, and show what it says."""
+    def ask_jedi(self, fresh=False, force=False):
+        """Typing paused: ask jedi on a worker thread, and show what it
+        says when it answers, if the cursor is still where it was asked.
+
+        :param fresh: ask again even if this spot was asked before
+        :param force: show the answer even with auto-complete off, which
+            is what Ctrl+Space does
+        """
         if self.isReadOnly() or not self.hasFocus():
             return
-        if self.jedi_completions(self.completion_prefix(), ask=True):
-            self.update_completions()
+        question = self.jedi_question(self.completion_prefix())
+        if question is None:
+            return
+        source, line, column, key, _ = question
+        if not fresh and code_completion.JEDI.cached(key) is not None:
+            return
+        if self.jedi_busy:
+            # One at a time. When this one answers, ask about wherever the
+            # cursor is then.
+            self.jedi_again = (fresh, force)
+            return
+        self.jedi_busy = True
+        self.jedi_force = force
+        # The names are gathered here, on the main thread; jedi only reads
+        # them on the worker.
+        namespace = self.completion_namespace()
+        answer = self.jedi_answer
 
-    def update_completions(self, force=False):
+        def work():
+            try:
+                code_completion.JEDI.complete(source, line, column,
+                                              namespace, key, fresh=fresh)
+            finally:
+                try:
+                    answer.answered.emit(key)
+                except RuntimeError:
+                    # The editor closed while jedi was thinking.
+                    pass
+
+        threading.Thread(target=work, name='nxt-jedi', daemon=True).start()
+
+    def jedi_answered(self, key):
+        """jedi has an answer: show it if it is still about this spot."""
+        self.jedi_busy = False
+        force = self.jedi_force
+        again, self.jedi_again = self.jedi_again, None
+        question = self.jedi_question(self.completion_prefix())
+        if question is not None and question[3] == key:
+            if not self.isReadOnly() and self.hasFocus():
+                self.update_completions(force=force, from_jedi=True)
+        elif again is not None:
+            self.ask_jedi(*again)
+
+    def update_completions(self, force=False, from_jedi=False):
         """Offer completions for the word being typed.
 
+        While the list is open and the same name is still being typed, the
+        list is only filtered, which is what keeps typing quick. It is
+        built again when the part before the last dot changes.
+
         :param force: show them even when the prefix is short or the
-            auto-complete preference is off, which is what Ctrl+Space does
+            auto-complete preference is off, which is what Ctrl+Space does.
+            It also asks jedi again, in the background.
         :type force: bool
+        :param from_jedi: jedi has just answered, so the list is built again
+            with what it said, and jedi is not asked again
+        :type from_jedi: bool
         """
+        self.completion_timer.stop()
         if self.isReadOnly():
             self.hide_completions()
             return
@@ -1432,16 +1537,44 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if not force and len(prefix) < 2:
             self.hide_completions()
             return
+        if not force and not from_jedi and self.can_filter(prefix):
+            self.show_completions(prefix)
+            return
+        if force and not from_jedi:
+            # Ctrl+Space is how a module imported since is picked up.
+            self.imports_key = None
         if self.completion_words is None:
             self.completion_words = self.build_completion_words()
         # Module contents, node paths and what jedi says depend on what is
         # being typed, so they are worked out per prefix rather than kept in
-        # the cached list.
+        # the cached list. jedi only adds what it already knows here; a new
+        # question goes to the worker and the list is built again when it
+        # answers.
         words = (self.completion_words + self.module_completions(prefix)
                  + self.token_completions(prefix)
-                 + self.jedi_completions(prefix, ask=force, fresh=force))
+                 + self.jedi_completions(prefix))
+        if force and not from_jedi:
+            self.ask_jedi(fresh=True, force=True)
         model = QtCore.QStringListModel(sorted(set(words)), self.completer)
         self.completer.setModel(model)
+        self.completion_base = prefix
+        self.completion_width = 0
+        self.show_completions(prefix)
+
+    def can_filter(self, prefix):
+        """Whether the open list still holds every answer for prefix.
+
+        It does while more of the same name is typed: the list was built
+        for the start of it, and what comes before the last dot decides
+        what is in it.
+        """
+        base = self.completion_base
+        return (base is not None and self.completer.popup().isVisible()
+                and prefix.startswith(base)
+                and prefix.rpartition('.')[0] == base.rpartition('.')[0])
+
+    def show_completions(self, prefix):
+        """Filter the list to prefix and put it up at the cursor."""
         self.completer.setCompletionPrefix(prefix)
         if not self.completer.completionCount():
             self.hide_completions()
@@ -1454,14 +1587,43 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         popup = self.completer.popup()
         popup.setFont(self.font())
         popup.setCurrentIndex(self.completer.completionModel().index(0, 0))
+        if not self.completion_width:
+            # Measured once per list rather than on every key, since it
+            # looks at every row.
+            self.completion_width = (
+                popup.sizeHintForColumn(0)
+                + popup.verticalScrollBar().sizeHint().width() + 12)
         rect = self.cursorRect()
-        width = (popup.sizeHintForColumn(0)
-                 + popup.verticalScrollBar().sizeHint().width() + 12)
-        rect.setWidth(width)
+        rect.setWidth(self.completion_width)
         self.set_completion_shortcuts(False)
         self.completer.complete(rect)
 
+    def request_completions(self, typed):
+        """A key was typed: filter the open list now, or open one once
+        typing pauses.
+
+        A dot, and a slash inside a token, open it at once, since that is
+        where someone stops to see what comes next.
+        """
+        prefix = self.completion_prefix()
+        now = (self.completer.popup().isVisible() or typed == '.'
+               or (typed == '/' and prefix.startswith(tokens.TOKEN_PREFIX)))
+        if now:
+            self.update_completions()
+            return
+        self.completion_position = self.textCursor().position()
+        self.completion_timer.start()
+
+    def completions_due(self):
+        """Typing paused. Open the list, unless the cursor has gone."""
+        if (not self.hasFocus() or
+                self.textCursor().position() != self.completion_position):
+            return
+        self.update_completions()
+
     def hide_completions(self):
+        self.completion_timer.stop()
+        self.completion_base = None
         if self.completer.popup().isVisible():
             self.completer.popup().hide()
         self.set_completion_shortcuts(True)
@@ -1526,8 +1688,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             return
         typed = event.text()
         if typed and (typed.isalnum() or typed in '_./'):
-            self.update_completions()
-        elif self.completer.popup().isVisible():
+            self.request_completions(typed)
+        else:
             self.hide_completions()
 
     def char_after_cursor(self, cursor=None):

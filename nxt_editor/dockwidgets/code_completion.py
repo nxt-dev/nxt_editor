@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sys
+import threading
 import types
 
 # Internal
@@ -105,6 +106,9 @@ class Jedi(object):
     should pay for at startup, least of all inside a host. Its results for
     one dotted prefix are kept until the code around it changes, so typing
     more of a name only filters what it already said.
+
+    The editor asks it from a worker thread, so a slow answer never holds
+    up typing. One question is answered at a time.
     """
 
     #: Where jedi keeps its parse cache. Its own default is shared by every
@@ -115,11 +119,17 @@ class Jedi(object):
         self._module = None
         self._tried = False
         self._failed_once = False
-        self._cache_key = None
-        self._cache_names = []
+        # The key and its names, swapped together so a reader on another
+        # thread never sees one without the other.
+        self._cache = (None, [])
+        self._lock = threading.Lock()
 
     def module(self):
         """jedi itself, or None when it is not installed."""
+        with self._lock:
+            return self._load()
+
+    def _load(self):
         if self._tried:
             return self._module
         self._tried = True
@@ -147,7 +157,8 @@ class Jedi(object):
 
     def cached(self, key):
         """The names last worked out for `key`, or None."""
-        return self._cache_names if key == self._cache_key else None
+        cache_key, names = self._cache
+        return names if key == cache_key else None
 
     def complete(self, source, line, column, namespace, key, fresh=False):
         """Names that can follow the cursor, as jedi sees the code.
@@ -162,12 +173,18 @@ class Jedi(object):
         :return: completed names, without the part before the last dot
         :rtype: list
         """
-        cached = None if fresh else self.cached(key)
-        if cached is not None:
-            return cached
-        jedi = self.module()
-        if jedi is None:
-            return []
+        with self._lock:
+            cached = None if fresh else self.cached(key)
+            if cached is not None:
+                return cached
+            jedi = self._load()
+            if jedi is None:
+                return []
+            names = self._complete(jedi, source, line, column, namespace)
+            self._cache = (key, names)
+            return names
+
+    def _complete(self, jedi, source, line, column, namespace):
         try:
             script = jedi.Interpreter(sanitize_tokens(source),
                                       namespaces=[namespace])
@@ -179,8 +196,6 @@ class Jedi(object):
                 logger.debug('jedi could not complete here', exc_info=True)
                 self._failed_once = True
             names = []
-        self._cache_key = key
-        self._cache_names = names
         return names
 
 
