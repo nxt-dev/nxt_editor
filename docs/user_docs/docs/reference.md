@@ -734,6 +734,19 @@ layers can appear, disappear or change order. Reloading is one step on the
 undo stack, and undoing it puts back exactly what each layer held before,
 without reading the files again.
 
+### Files changed on disk
+
+The editor notes when each layer file was last read or written. If
+something else changes a file after that, a version control update for
+example, saving that layer asks first: **Overwrite** writes the graph over
+the changes on disk, **Reload...** opens Reload Source instead, and
+**Cancel** leaves the file alone.
+
+When you come back to the editor from another window, it also offers to
+reload the current graph's files that have changed. **Keep Mine** is
+remembered until the file changes again. Turn this off with **Options >
+Notice Files Changed on Disk**; saving over a changed file still asks.
+
 ## Build View
 
 ![The build view](images/build_view_find.png)

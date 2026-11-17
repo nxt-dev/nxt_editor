@@ -1857,6 +1857,8 @@ class ReloadLayers(NxtCommand):
         # Which of them were unsaved before, so undoing a reload leaves
         # them marked the way they were.
         self.was_unsaved = []
+        # The model's disk stamps for them before, see redo.
+        self.old_stamps = {}
 
     def _layers(self):
         """The layers to reload that are still in the stage.
@@ -1931,6 +1933,11 @@ class ReloadLayers(NxtCommand):
         was_stacked = self._stack()
         self.stash = self.stage.reload_layers(layers)
         reloaded = list(self.stash)
+        # What is in memory is the file as it is now. The stamps it had
+        # before are kept for undo, which puts back the older contents.
+        self.old_stamps = {p: self.model.disk_stamps.get(p) for p in reloaded}
+        for layer_path in reloaded:
+            self.model.stamp_layer_file(layer_path)
         self.was_unsaved = [p for p in reloaded
                             if p in self.model.effected_layers]
         for layer_path in self.was_unsaved:
@@ -1954,6 +1961,11 @@ class ReloadLayers(NxtCommand):
         self.stage.reload_layers(layers, source=self.stash)
         for layer_path in self.was_unsaved:
             self.model.effected_layers.add(layer_path)
+        for layer_path, stamp in self.old_stamps.items():
+            if stamp is None:
+                self.model.disk_stamps.pop(layer_path, None)
+            else:
+                self.model.disk_stamps[layer_path] = stamp
         self._settle(list(self.stash), was_stacked)
 
 

@@ -44,6 +44,7 @@ from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
 from nxt_editor.dockwidgets.reference_editor import ReferenceEditor
 from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
+    FileChangedMessage,
     NxtFileDialog,
     NxtWarningDialog,
     ReloadSourceDialog,
@@ -159,6 +160,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.zoom_keys_down = False
         self._held_keys = []
         self._closing = False
+        # Files changed on disk already offered for reload, per tab,
+        # {model uid: {real_path: disk stamp}}. See check_files_changed_on_disk.
+        self._offered_disk_stamps = {}
+        self._asking_about_disk = False
+        self._was_deactivated = False
         self.last_focused_start = 0  # Start point focus tracker
         # FIXME: Fix with MV signal
         self.last_focused_tab = -1  # Tab tracker for upating the comp layer
@@ -435,7 +441,58 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.WindowDeactivate:
             self._held_keys = []
             self.zoom_keys_down = False
+            self._was_deactivated = True
+        elif (event.type() == QtCore.QEvent.WindowActivate and
+              self._was_deactivated):
+            # Coming back to the editor is when a file changed by
+            # something else, a version control update say, is worth
+            # mentioning. Not the first time the window comes up, it has
+            # only just read its files. After the event, so the window is
+            # up first.
+            self._was_deactivated = False
+            QtCore.QTimer.singleShot(0, self.check_files_changed_on_disk)
         return super(MainWindow, self).event(event)
+
+    def check_files_changed_on_disk(self):
+        """Offer to reload the current graph's layer files that something
+        else has changed on disk. Each change is offered once: keeping
+        what is here is remembered until the file changes again, and
+        saving over it still asks first, see save_layer.
+
+        :return: whether anything was reloaded
+        :rtype: bool
+        """
+        pref_key = user_dir.USER_PREF.CHECK_DISK_CHANGES
+        if not user_dir.user_prefs.get(pref_key, True):
+            return False
+        model = self.model
+        if not model or self._asking_about_disk or not self.isVisible():
+            return False
+        offered = self._offered_disk_stamps.setdefault(model.uid, {})
+        changed = []
+        for layer_path in model.layer_files_changed_on_disk():
+            stamp = model.read_disk_stamp(layer_path)
+            if offered.get(layer_path) != stamp:
+                offered[layer_path] = stamp
+                changed.append(layer_path)
+        if not changed:
+            return False
+        unsaved = [p for p in changed if p in model.effected_layers]
+        # The message takes the focus and gives it back, which would ask
+        # again before this has been answered.
+        self._asking_about_disk = True
+        try:
+            reload = FileChangedMessage.offer_reload(changed, unsaved,
+                                                     parent=self)
+        finally:
+            self._asking_about_disk = False
+        if not reload:
+            return False
+        self.set_waiting_cursor(True)
+        try:
+            return model.reload_layers(changed)
+        finally:
+            self.set_waiting_cursor(False)
 
     @staticmethod
     def set_waiting_cursor(state=True):
@@ -801,6 +858,14 @@ QCheckBox::indicator {
         if not layer.real_path:
             layer_saved = self.save_layer_as(layer, open_in_new_tab=False)
         else:
+            if self.model.layer_file_changed_on_disk(layer.real_path):
+                choice = FileChangedMessage.before_save(layer.real_path,
+                                                        parent=self)
+                if choice == FileChangedMessage.RELOAD:
+                    self.reload_layer_source(layer)
+                    return
+                if choice != FileChangedMessage.OVERWRITE:
+                    return
             self.set_waiting_cursor(True)
             self.nxt.save_layer(layer)
             layer_saved = True
@@ -1701,6 +1766,7 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
         self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
+        self.options_menu.addAction(self.app_actions.check_disk_action)
         self.options_menu.addAction(self.app_actions.ai_settings_action)
         self.options_menu.addAction(
             self.app_actions.optional_components_action)

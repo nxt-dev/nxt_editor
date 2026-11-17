@@ -156,6 +156,15 @@ class StageModel(QtCore.QObject):
         self.layer_removed.connect(self._forget_unloaded_hidden_layers)
         self.layers_restacked.connect(self._forget_unloaded_hidden_layers)
         self.layer_saved.connect(self._check_hidden_graph)
+        # When and how big each layer's file was when it was last read or
+        # written here, {real_path: (mtime, size)}. A file that no longer
+        # matches was changed by something else, a version control update
+        # most often, and saving would write over that without a word.
+        self.disk_stamps = {}
+        for layer in stage._sub_layers:
+            self.stamp_layer_file(layer.real_path)
+        self.layer_saved.connect(self.stamp_layer_file)
+        self.layer_added.connect(self._stamp_new_layer_file)
         # attribute display state
         # {/node/path: STATE_INT}
         # 0 = no attributes
@@ -727,6 +736,67 @@ class StageModel(QtCore.QObject):
             return False
         self.undo_stack.push(ReloadLayers(layer_paths, self))
         return True
+
+    @staticmethod
+    def read_disk_stamp(layer_path):
+        """When and how big the file at layer_path is now, None when
+        there is no file.
+
+        :rtype: tuple or None
+        """
+        if not layer_path:
+            return None
+        try:
+            info = os.stat(layer_path)
+        except OSError:
+            return None
+        return info.st_mtime, info.st_size
+
+    def stamp_layer_file(self, layer_path):
+        """Note the file as it is now, as what this graph last read or
+        wrote. Called once a layer is loaded, saved or reloaded.
+        """
+        stamp = self.read_disk_stamp(layer_path)
+        if stamp is None:
+            self.disk_stamps.pop(layer_path, None)
+        else:
+            self.disk_stamps[layer_path] = stamp
+
+    def _stamp_new_layer_file(self, layer_path):
+        # A layer referenced after the graph was opened is read as it is
+        # added. A file already noted keeps its stamp: another copy of it
+        # in the stack does not mean it was read again.
+        if layer_path not in self.disk_stamps:
+            self.stamp_layer_file(layer_path)
+
+    def layer_file_changed_on_disk(self, layer_path):
+        """Whether something else has written the layer's file since this
+        graph last read or wrote it. A file that has gone away is not
+        counted, saving puts it back.
+
+        :rtype: bool
+        """
+        known = self.disk_stamps.get(layer_path)
+        if known is None:
+            return False
+        now = self.read_disk_stamp(layer_path)
+        return now is not None and now != known
+
+    def layer_files_changed_on_disk(self):
+        """The real paths of the loaded layers whose files have changed on
+        disk, each once, in stack order. A stat of each file, cheap enough
+        to ask whenever the window comes back to the front.
+
+        :rtype: list
+        """
+        changed = []
+        for layer in self.stage._sub_layers:
+            path = layer.real_path
+            if path in changed:
+                continue
+            if self.layer_file_changed_on_disk(path):
+                changed.append(path)
+        return changed
 
     def get_layer_colors(self, layer_list):
         layers_colors = []

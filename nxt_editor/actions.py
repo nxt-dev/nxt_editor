@@ -508,6 +508,17 @@ class AppActions(NxtActionContainer):
         self.toggle_ding_action.triggered.connect(toggle_ding)
         self.toggle_ding_action.setShortcutContext(context)
         self.available_without_model.append(self.toggle_ding_action)
+        # Notice files changed on disk
+        pref_key = user_dir.USER_PREF.CHECK_DISK_CHANGES
+        self.check_disk_action = BoolUserPrefAction(
+            'Notice Files Changed on Disk', pref_key, default=True,
+            parent=self)
+        self.check_disk_action.setWhatsThis(
+            'When the editor comes back to the front, offer to reload the '
+            "graph's files that something else has changed on disk. Saving "
+            'over a changed file asks first either way.')
+        self.check_disk_action.setShortcutContext(context)
+        self.available_without_model.append(self.check_disk_action)
 
         # Font size actions
         self.increase_font_size_action = NxtAction(text='Increase Font '
@@ -549,6 +560,7 @@ class AppActions(NxtActionContainer):
                                      self.ai_assistant_action,
                                      self.ai_settings_action,
                                      self.toggle_ding_action,
+                                     self.check_disk_action,
                                      self.clear_logs_action,
                                      self.close_action]
 

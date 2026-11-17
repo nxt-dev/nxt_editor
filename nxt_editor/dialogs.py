@@ -737,3 +737,76 @@ class UnsavedChangesMessage(QtWidgets.QMessageBox):
                                    message.Cancel)
         message.setIcon(message.Warning)
         return message.exec_()
+
+
+class FileChangedMessage(QtWidgets.QMessageBox):
+    """Asks what to do about a layer file something else has changed on
+    disk since the editor last read or wrote it.
+    """
+    OVERWRITE = 'overwrite'
+    RELOAD = 'reload'
+    CANCEL = 'cancel'
+
+    @classmethod
+    def before_save(cls, layer_path, parent=None):
+        """Ask before saving over a file that changed on disk.
+
+        :param layer_path: the file about to be saved over
+        :param parent: widget to parent the message to
+        :return: OVERWRITE, RELOAD or CANCEL
+        :rtype: str
+        """
+        message = cls(parent)
+        message.setWindowTitle('File Changed on Disk')
+        message.setIcon(cls.Icon.Warning)
+        message.setText('"{}" has changed on disk since it was opened or '
+                        'last saved.'.format(os.path.basename(layer_path)))
+        message.setInformativeText(
+            'Overwrite it with this graph, losing what changed on disk, or '
+            'reload it, losing what is unsaved here?')
+        message.setDetailedText(layer_path)
+        overwrite = message.addButton('Overwrite', cls.ButtonRole.AcceptRole)
+        reload_button = message.addButton('Reload...', cls.ButtonRole.ActionRole)
+        cancel = message.addButton(cls.StandardButton.Cancel)
+        message.setDefaultButton(cancel)
+        message.exec_()
+        clicked = message.clickedButton()
+        if clicked is overwrite:
+            return cls.OVERWRITE
+        if clicked is reload_button:
+            return cls.RELOAD
+        return cls.CANCEL
+
+    @classmethod
+    def offer_reload(cls, layer_paths, unsaved=(), parent=None):
+        """Offer to reload files that changed on disk while the editor was
+        in the background.
+
+        :param layer_paths: files that changed
+        :param unsaved: those of them with unsaved changes here
+        :param parent: widget to parent the message to
+        :return: whether to reload them
+        :rtype: bool
+        """
+        message = cls(parent)
+        message.setWindowTitle('Files Changed on Disk')
+        message.setIcon(cls.Icon.Question)
+        names = [os.path.basename(p) for p in layer_paths]
+        if len(names) == 1:
+            text = '"{}" has changed on disk.'.format(names[0])
+        else:
+            text = '{} files of this graph have changed on disk.'.format(
+                len(names))
+        message.setText(text)
+        info = 'Reload to see the changes. Reloading can be undone.'
+        if unsaved:
+            info += ('\nUnsaved changes to {} are replaced by what is on '
+                     'disk.'.format(', '.join('"{}"'.format(
+                        os.path.basename(p)) for p in unsaved)))
+        message.setInformativeText(info)
+        message.setDetailedText('\n'.join(layer_paths))
+        reload_button = message.addButton('Reload', cls.ButtonRole.AcceptRole)
+        message.addButton('Keep Mine', cls.ButtonRole.RejectRole)
+        message.setDefaultButton(reload_button)
+        message.exec_()
+        return message.clickedButton() is reload_button
