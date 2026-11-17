@@ -67,8 +67,10 @@ Each zip also contains a `README.md` with these same steps.
 
 ## Maya
 
-The Maya plugin is a Maya module folder that carries nxt, nxt_editor and
-Qt.py. Maya ships its own PySide6, so there is nothing else to install.
+The Maya plugin is a Maya module folder that carries nxt, nxt_editor,
+Qt.py, and jedi for the
+[Python Analysis](reference.md#python-analysis-with-jedi) completion source.
+Maya ships its own PySide6, so there is nothing else to install.
 
 ### Automated install
 
