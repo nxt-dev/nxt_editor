@@ -336,6 +336,11 @@ drawn in a warning colour.
 Syntax colouring applies to every match on a line, so a line with several
 tokens or strings has all of them coloured, not only the first.
 
+Strings and comments are found by reading each line from the left, the way
+Python does, so a `#` inside a string is part of the string and a quote
+inside a comment is part of the comment. A triple quoted string, such as a
+docstring, stays coloured on every line it spans.
+
 ### Auto-pairing
 
 While you edit, brackets and quotes come in pairs:
