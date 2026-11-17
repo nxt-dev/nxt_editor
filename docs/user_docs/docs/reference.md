@@ -679,6 +679,13 @@ not hold anything up, so you can look at the graph first or close it with
 **Ignore**. References that are not found are kept as written, in case they
 resolve on another machine.
 
+A graph saved by a newer version of nxt, or one referencing such a file, is
+not opened straight away. The editor says which version saved it and asks
+first. **Open Anyway** opens it, but anything this version does not
+understand is left out, and saving writes the file without it, so updating
+nxt is the safe way to open it. From Python, open one inside
+`nxt_io.allow_newer_files()`.
+
 ![The Reference Editor](images/reference_editor.png)
 
 - **Layer** picks which layer's references you are editing. Only layers that

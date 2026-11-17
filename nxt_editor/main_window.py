@@ -46,6 +46,7 @@ from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
     FileChangedMessage,
     MissingReferencesMessage,
+    NxtConfirmDialog,
     NxtFileDialog,
     NxtWarningDialog,
     ReloadSourceDialog,
@@ -65,6 +66,13 @@ import nxt.remote.contexts
 
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
+
+
+class _NoNewerFileError(Exception):
+    """Stands in with an nxt_core too old to open newer files anyway."""
+
+
+NewerFileError = getattr(nxt_io, 'NewerFileError', _NoNewerFileError)
 
 # Widget classes given the editor's font when the QApplication is nxt's own.
 WIDGETS_WITH_FONTS = (
@@ -786,8 +794,21 @@ QCheckBox::indicator {
         new_stage = None
         try:
             new_stage = self.nxt.load_file(potential_path)
+        except NewerFileError as e:
+            self.set_waiting_cursor(False)
+            if self.confirm_open_newer([(potential_path, e.version)]):
+                new_stage = self._load_allowing_newer(potential_path)
         except IOError as e:
             NxtWarningDialog.show_message("Failed to Open", str(e))
+        if new_stage and NewerFileError is not _NoNewerFileError:
+            # A reference saved by a newer nxt is left out, as one that is
+            # not found is. That can be opened anyway too.
+            newer = self.newer_references(new_stage)
+            if newer:
+                self.set_waiting_cursor(False)
+                if self.confirm_open_newer(newer):
+                    self.nxt.unload_file(new_stage.uid)
+                    new_stage = self._load_allowing_newer(potential_path)
         self.set_waiting_cursor(False)
         if new_stage:
             self.new_tab(initial_stage=new_stage, update=not self.in_startup)
@@ -795,6 +816,64 @@ QCheckBox::indicator {
             for open_file in self.open_files.values():
                 if open_file['stage'] is new_stage:
                     self.notify_missing_references(open_file['model'])
+
+    @staticmethod
+    def newer_references(stage):
+        """The references of a loaded graph that were left out because a
+        newer nxt saved them.
+
+        :return: [(reference, version), ...]
+        :rtype: list
+        """
+        newer = []
+        for layer in stage._sub_layers:
+            layer_dir = os.path.dirname(layer.real_path or '') or None
+            for data in layer.sub_layers:
+                if data.get('layer') is not None:
+                    continue
+                reference = data.get(nxt_layer.SAVE_KEY.FILEPATH)
+                try:
+                    nxt_io.load_file_data(reference, layer_dir)
+                except NewerFileError as e:
+                    newer.append((reference, e.version))
+                except Exception:
+                    # Not found, or broken some other way. Not this.
+                    pass
+        return newer
+
+    @staticmethod
+    def confirm_open_newer(files):
+        """Ask whether to open files saved by a newer nxt anyway.
+
+        :param files: [(path, version), ...]
+        :rtype: bool
+        """
+        if len(files) == 1:
+            path, version = files[0]
+            text = ('"{}" was saved by a newer nxt ({}).'
+                    ''.format(os.path.basename(path), version))
+        else:
+            text = '{} files were saved by a newer nxt ({}).'.format(
+                len(files), ', '.join(sorted(set(v for _, v in files))))
+        info = ('Open anyway? Anything this version does not understand is '
+                'left out, and saving writes the file without it. Updating '
+                'nxt is the safe way to open it.')
+        button_text = {NxtConfirmDialog.Ok: 'Open Anyway',
+                       NxtConfirmDialog.Cancel: 'Cancel'}
+        return NxtConfirmDialog.show_message(
+            text=text, info=info, button_text=button_text,
+            icon=QtWidgets.QMessageBox.Icon.Warning)
+
+    def _load_allowing_newer(self, filepath):
+        self.set_waiting_cursor(True)
+        try:
+            with nxt_io.allow_newer_files():
+                return self.nxt.load_file(filepath)
+        except IOError as e:
+            NxtWarningDialog.show_message("Failed to Open", str(e))
+        finally:
+            self.set_waiting_cursor(False)
+        return None
 
     def notify_missing_references(self, model):
         """Say which references a graph could not load, with a button to
