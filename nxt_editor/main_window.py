@@ -757,9 +757,24 @@ QCheckBox::indicator {
         finally:
             self.set_waiting_cursor(False)
 
+    def layer_or_target(self, layer=None):
+        """The layer to act on: the given one when it belongs to the graph
+        being looked at, otherwise that graph's target layer.
+
+        A layer from another tab is never the one meant. Saving one saved
+        a new graph over the file of a layer right clicked earlier in
+        another tab.
+        """
+        if not self.model:
+            return None
+        if layer is not None:
+            if any(layer is l for l in self.model.stage._sub_layers):
+                return layer
+            logger.debug('Ignoring a layer from another graph.')
+        return self.model.target_layer
+
     def save_layer(self, layer=None):
-        if not layer:
-            layer = self.model.target_layer
+        layer = self.layer_or_target(layer)
         if not layer:
             return
         if not layer.real_path:
@@ -790,8 +805,9 @@ QCheckBox::indicator {
         :return: True if save was successful, false otherwise.
         :rtype: bool
         """
+        layer = self.layer_or_target(layer)
         if not layer:
-            layer = self.model.target_layer
+            return False
         old_real_path = layer.real_path
         old_path = layer.filepath
         if not old_real_path:
