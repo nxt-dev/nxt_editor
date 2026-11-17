@@ -17,8 +17,10 @@ def not_beside_the_layer(path, layer_dir):
 
     A file under one of NXT_FILE_ROOTS is written relative to that root,
     the way it would have been typed, so it loads from whichever root holds
-    it on another machine. The core works that out, and only offers a path
-    that resolves back to this very file. Anything else is stored whole.
+    it on another machine. A file in a folder that an env file variable
+    names is written from that variable. The core works both out, and only
+    offers a path that resolves back to this very file. Anything else is
+    stored whole.
     """
     compact = getattr(nxt_io, 'compact_reference_path', None)
     if compact is None:
