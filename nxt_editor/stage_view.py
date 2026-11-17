@@ -158,6 +158,9 @@ class StageView(QtWidgets.QGraphicsView):
         # Whether a layer was hidden the last time visibility was applied,
         # so a graph with every layer showing never pays for the check.
         self._layers_were_hidden = False
+        # The roots hidden with their layers, worked out once each time
+        # visibility is applied. See apply_layer_visibility.
+        self._hidden_roots = frozenset()
         # What a backdrop being moved or resized started from, see
         # backdrop_press.
         self._backdrop_drag = None
@@ -206,7 +209,8 @@ class StageView(QtWidgets.QGraphicsView):
         self.model.collapse_changed.connect(self.handle_collapse_changed)
         self.model.backdrops_changed.connect(self.draw_backdrops)
         self.model.layer_visibility_changed.connect(
-            self.apply_layer_visibility)
+            self.on_layer_visibility_changed)
+        self.model.status_message.connect(self.show_status)
         self.model.wires_changed.connect(self.draw_wires)
         # A reloaded or muted layer can bring or take away points.
         self.model.comp_layer_changed.connect(self.draw_wires)
@@ -237,6 +241,20 @@ class StageView(QtWidgets.QGraphicsView):
                                     QtCore.Qt.AlignBottom)
         if user_prefs.get(USER_PREF.FPS, True):
             self.hud_layout.addWidget(self.fps_label, 1, 3)
+
+        # A word about something the editor did, or chose not to do, by
+        # itself. See show_status.
+        text_color = theme.color(theme.TEXT)
+        self.status_label = HUDItem(text='', fade_time=0,
+                                    start_color=text_color,
+                                    end_color=text_color)
+        self.status_label.setAlignment(QtCore.Qt.AlignLeft |
+                                       QtCore.Qt.AlignBottom)
+        self.hud_layout.addWidget(self.status_label, 1, 0)
+        self._status_timer = QtCore.QTimer(self)
+        self._status_timer.setSingleShot(True)
+        self._status_timer.timeout.connect(
+            lambda: self.status_label.setText(''))
 
         # mini map
         # Anything that changes what the graph looks like invalidates the
@@ -489,31 +507,21 @@ class StageView(QtWidgets.QGraphicsView):
         """Show or hide what belongs to layers hidden in the Layer Manager.
 
         Root nodes, with everything under them, the lines to and from
-        them, and the backdrops only those layers draw. Nothing is removed:
-        the items are there, drawn or not.
+        them, with their points, and the backdrops only those layers draw.
+        Nothing is removed: the items are there, drawn or not.
         """
         hiding = bool(self.model.hidden_layer_paths())
         if not hiding and not self._layers_were_hidden:
             return
         self._layers_were_hidden = hiding
-        hidden_roots = {}
-
-        def root_hidden(node_path):
-            root = nxt_path.get_root_path(node_path)
-            if root not in hidden_roots:
-                hidden_roots[root] = self.model.is_node_hidden(root)
-            return hidden_roots[root]
-
+        self._hidden_roots = self.model.hidden_roots()
         for node_path, graphic in list(self._node_graphics.items()):
             if graphic.parentItem() is None:
-                graphic.setVisible(not root_hidden(node_path))
-        for graphic in self._connection_graphics:
-            ends = (getattr(graphic, 'src_node_path', None),
-                    getattr(graphic, 'tgt_node_path', None))
-            graphic.setVisible(not any(root_hidden(path) for path in ends
-                                       if path))
+                graphic.setVisible(not self.node_hidden(node_path))
+        self.update_lines_shown()
+        hidden_backdrops = self.model.hidden_backdrop_ids()
         for backdrop_id, graphic in self._backdrop_graphics.items():
-            graphic.setVisible(not self.model.is_backdrop_hidden(backdrop_id))
+            graphic.setVisible(backdrop_id not in hidden_backdrops)
         self.mini_map.mark_dirty()
 
     def frame_opened(self):
@@ -593,10 +601,59 @@ class StageView(QtWidgets.QGraphicsView):
         self.centerOn(rect.center())
         return True
 
+    def on_layer_visibility_changed(self):
+        """A layer was hidden or shown. What went out of sight is taken out
+        of the selection too, so nothing done to the selection, such as
+        copy or delete, reaches what cannot be seen."""
+        self.apply_layer_visibility()
+        if not self._hidden_roots:
+            return
+        hidden = [path for path in self.model.selection
+                  if self.node_hidden(path)]
+        if hidden:
+            self.model.remove_from_selection(hidden)
+        self.select_points(ref for ref in self._selected_points
+                           if self._point_line_shown(ref))
+        self.select_backdrops([backdrop_id for backdrop_id
+                               in self.selected_backdrops
+                               if self._backdrop_graphics[backdrop_id]
+                               .isVisible()])
+
+    def node_hidden(self, node_path):
+        """Whether a node is hidden with its layers. See
+        StageModel.hidden_roots."""
+        return nxt_path.get_root_path(node_path) in self._hidden_roots
+
+    def _point_line_shown(self, ref):
+        for connection in self._connection_graphics:
+            if connection.key == ref[0]:
+                return connection.isVisible()
+        return False
+
+    def show_status(self, text, msecs=4000):
+        """Show a short message in the corner of the graph for a while."""
+        self.status_label.setText(text)
+        self._status_timer.start(msecs)
+
     def frame_selection(self):
         self.frame_nodes(self.model.selection)
 
     def frame_nodes(self, node_paths):
+        """Frame the given nodes. Nodes hidden with their layers are left
+        out, and when that is all of them nothing is framed: the view stays
+        put and says why. Their layer is shown from the Layer Manager."""
+        node_paths = list(node_paths)
+        hidden = [path for path in node_paths if self.node_hidden(path)]
+        if hidden:
+            node_paths = [path for path in node_paths if path not in hidden]
+            if not node_paths:
+                if len(hidden) == 1:
+                    text = '{} is on a layer hidden in the graph'.format(
+                        hidden[0])
+                else:
+                    text = '{} nodes are on layers hidden in the '                            'graph'.format(len(hidden))
+                self.show_status(text)
+                return
         bounding_rect = QtCore.QRectF()
         for path in node_paths:
             graphic = self.get_node_graphic(path)
@@ -931,10 +988,13 @@ class StageView(QtWidgets.QGraphicsView):
 
         Asked of each line rather than of the scene: a point keeps its
         size on screen as the view zooms, and the scene does not find
-        items like that by area reliably.
+        items like that by area reliably. Points on hidden lines are left
+        out.
         """
         refs = set()
         for connection in self._connection_graphics:
+            if not connection.isVisible():
+                continue
             for index, graphic in enumerate(connection.point_graphics):
                 if scene_rect.contains(graphic.scenePos()):
                     refs.add((connection.key, index))
@@ -963,7 +1023,12 @@ class StageView(QtWidgets.QGraphicsView):
         """Whether a line is shown. Exec lines always are. Others when
         lines are, its kind is, and for a property line, the property is
         showing on at least one of its nodes, so with every node's
-        properties hidden there are none."""
+        properties hidden there are none. A line to or from a node hidden
+        with its layers never is, exec lines included."""
+        if self._hidden_roots:
+            for path in (line.src_node_path, line.tgt_node_path):
+                if path and self.node_hidden(path):
+                    return False
         kind = line.kind
         if kind == lines.EXEC_LINES:
             return True
@@ -1551,7 +1616,10 @@ class StageView(QtWidgets.QGraphicsView):
         stack.endMacro()
 
     def select_all(self):
-        node_paths = list(self._node_graphics.keys())
+        """Select every node in sight. Nodes hidden with their layers are
+        not."""
+        node_paths = [path for path in self._node_graphics
+                      if not self.node_hidden(path)]
         self.model.set_selection(paths=node_paths)
 
     # Aligning, see nxt_editor.align -----------------------------------------
@@ -1973,7 +2041,8 @@ class StageView(QtWidgets.QGraphicsView):
             # get items under selection area
             node_paths = []
             for item in self.scene().items(selection_area_rect):
-                if isinstance(item, NodeGraphicsItem):
+                if (isinstance(item, NodeGraphicsItem) and
+                        not self.node_hidden(item.node_path)):
                     node_paths.append(item.node_path)
             self.box_select_points(self.points_in(selection_area_rect),
                                    event.modifiers())

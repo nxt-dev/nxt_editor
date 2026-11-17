@@ -161,6 +161,14 @@ Each item links to the part of the docs that explains it in full.
   This changes what is stored for anyone with `NXT_FILE_ROOTS` set. See
   [How references are found](reference.md#how-references-are-found).
 
+## Next release
+
+- An eye at the end of each row in the Layer Manager, and **Hide In
+  Graph** on a layer's menu, hide that layer's nodes, lines and backdrops
+  in the graph while it still composites and runs, for example a library
+  layer of nodes that are only there to be instanced. See
+  [Hiding a layer in the graph](reference.md#hiding-a-layer-in-the-graph).
+
 ## nxt_editor 4.6.1
 
 **New**
