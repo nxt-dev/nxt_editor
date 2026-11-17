@@ -6,6 +6,7 @@ given, so everything after pip is real: the move into place, the status,
 and jedi being picked up by completion without a restart.
 """
 # Builtin
+import gc
 import os
 import shutil
 import sys
@@ -23,16 +24,20 @@ from nxt_editor.test.test_optional_deps import ENV_VARS, make_jedi
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
 
-def dispose(widget):
-    """Finish with a window now, rather than leaving it to the collector.
+def put_away(widget):
+    """Close a window and keep it, the way conftest.keep_windows keeps
+    every window a test leaves.
 
-    close() only hides it. Left for garbage collection, its widgets are
-    freed at whatever later moment something else collects, which on macOS
-    can crash the test that happens to be running then.
+    Freeing a window in the middle of a run, through Qt or the collector,
+    is what crashes on macOS and corrupts the heap on Windows, so a closed
+    window is only hidden and lives until the run ends.
     """
     widget.close()
-    widget.deleteLater()
-    app.processEvents()
+    _PUT_AWAY.append(widget)
+
+
+#: Windows closed by these tests, kept until the run ends. See put_away.
+_PUT_AWAY = []
 
 from nxt_editor import optional_components as oc  # noqa: E402
 from nxt_editor.dockwidgets import code_completion  # noqa: E402
@@ -133,7 +138,7 @@ class DialogTest(unittest.TestCase):
     def dialog(self, host='maya'):
         dialog = oc.OptionalComponentsDialog(host=host, crt=(14, 44, 0),
                                              process_factory=FakeProcess)
-        self.addCleanup(dispose, dialog)
+        self.addCleanup(put_away, dialog)
         return dialog
 
     def visible(self, widget):
@@ -204,7 +209,7 @@ class TestCards(DialogTest):
         dialog = oc.OptionalComponentsDialog(host='blender', crt=(14, 44, 0),
                                              process_factory=FakeProcess,
                                              status_func=status)
-        self.addCleanup(dispose, dialog)
+        self.addCleanup(put_away, dialog)
         self.assertFalse(self.visible(dialog.card('pyside6').button))
         dialog.status_func = lambda comp: deps.Status(
             comp, deps.Status.UPDATE, '6.5.0', '/deps/py311', '>=6,<6.12',
@@ -355,16 +360,21 @@ class TestEditor(DialogTest):
     def setUpClass(cls):
         from nxt_editor.main_window import MainWindow
         cls.win = MainWindow()
+        # conftest freezes what exists after each test, but this window is
+        # made before the first one ends. Frozen now, nothing it left for
+        # the collector can be freed in the middle of a test, which on
+        # macOS crashed whatever that test was doing at the time.
+        gc.freeze()
 
     @classmethod
     def tearDownClass(cls):
-        dispose(cls.win)
+        put_away(cls.win)
         cls.win = None
 
     def setUp(self):
         super(TestEditor, self).setUp()
         if self.win.optional_components_dialog is not None:
-            dispose(self.win.optional_components_dialog)
+            put_away(self.win.optional_components_dialog)
         self.win.optional_components_dialog = None
         self.win.jedi_offered = False
         if code_completion.Jedi.installed():
