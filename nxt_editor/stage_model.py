@@ -74,6 +74,10 @@ class StageModel(QtCore.QObject):
     node_added = QtCore.Signal(str)
     node_deleted = QtCore.Signal(str)
     node_moved = QtCore.Signal(str, list)
+    # Where a root node's graphic is whenever it moves, which includes
+    # every step of a drag, before the move is set on a layer when the
+    # mouse is let go. Nothing goes on the undo stack for these.
+    node_graphic_moved = QtCore.Signal(str, list)
     selection_changed = QtCore.Signal(tuple)  # new selection
     node_focus_changed = QtCore.Signal(str)
     node_name_changed = QtCore.Signal(str, str)  # old node path, new node path

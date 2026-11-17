@@ -272,6 +272,12 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         stacked under it, as it moves."""
         if self.scene() is None:
             return
+        # The Property Editor shows where a root node is as it is dragged.
+        # Only root nodes have a position of their own, a child's is where
+        # it sits under its parent.
+        if nxt_path.get_root_path(self.node_path) == self.node_path:
+            self.model.node_graphic_moved.emit(
+                self.node_path, [self.pos().x(), self.pos().y()])
         stack = [self]
         while stack:
             node = stack.pop()

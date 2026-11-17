@@ -479,6 +479,7 @@ class PropertyEditor(DockWidgetBase):
             (model.attrs_changed, self.handle_attrs_changed),
             (model.data_state_changed, self.update_resolved),
             (model.node_moved, self.handle_node_moved),
+            (model.node_graphic_moved, self.handle_node_graphic_moved),
             (model.comp_layer_changed, self.set_represented_node),
             (model.target_layer_changed, self.set_represented_node),
         ]
@@ -531,6 +532,23 @@ class PropertyEditor(DockWidgetBase):
         if node_path == self.node_path:
             self.node_pos = self.stage_model.get_node_pos(node_path)
             self.update_properties()
+
+    def handle_node_graphic_moved(self, node_path, pos):
+        """Follow the node in the position fields while it is dragged.
+
+        Only the fields change: the move is set, as one undo, when the
+        drag ends, and node_moved brings that in as usual.
+        """
+        if node_path != self.node_path:
+            return
+        for field, value in ((self.positionX_field, pos[0]),
+                             (self.positionY_field, pos[1])):
+            if field.hasFocus():
+                # Being typed in, so leave what is being typed alone.
+                continue
+            blocked = field.blockSignals(True)
+            field.setValue(int(round(value)))
+            field.blockSignals(blocked)
 
     def set_represented_node(self):
         self.node_path = self.stage_model.node_focus

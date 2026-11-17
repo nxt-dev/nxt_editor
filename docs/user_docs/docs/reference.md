@@ -791,6 +791,12 @@ and stays in view however far you scroll the table. The source looks like a
 button only under the mouse; click it to go to that node. It is off by
 default and remembered with your preferences.
 
+### Position
+
+The **Position** fields show where the selected root node is in the
+graph, and follow it while you drag it. The move goes on the undo stack
+once, when you let go.
+
 # Terms and Definitions
 
 ## Stage
