@@ -35,6 +35,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
     EXEC_PLUG_RADIUS = 6
     # A chip of a weaker layer's color at the title bar's right end.
     LAYER_CHIP = 8
+    # The dot after a node's name while it has unsaved changes.
+    UNSAVED_DOT_RADIUS = 3
+    UNSAVED_DOT_SPACE = 14
     ROUND_X = theme.NODE_RADIUS
     ROUND_Y = theme.NODE_RADIUS
     # Room around a root node for its shadow: left, top, right, bottom.
@@ -98,6 +101,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
         self.model.build_idx_changed.connect(self.update_build_focus)
         self.model.executing_changed.connect(self.update_build_focus)
+        self.model.unsaved_nodes_changed.connect(self.on_unsaved_changed)
         self.xChanged.connect(self._moved)
         self.yChanged.connect(self._moved)
         # draw node
@@ -503,6 +507,10 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         width = self.max_width - 40 - self.chips_width()
         if self.error_list:
             width -= 20
+        unsaved = self.has_unsaved_changes()
+        if unsaved:
+            # Room for the unsaved dot after the name.
+            width -= self.UNSAVED_DOT_SPACE
         # Light or dark, whichever reads on this layer's color.
         text_color = QtGui.QColor(self.header_text)
         if not self.node_enabled:
@@ -513,6 +521,17 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                             QtCore.Qt.ElideRight, width)
             painter.drawText(14, 0, self.max_width - 14, self.title_rect_height,
                              QtCore.Qt.AlignVCenter, title)
+            if unsaved:
+                # A small dot after the name, in the title's own color,
+                # while the node has changes that are not saved yet.
+                dot_x = (14 + font_metrics.horizontalAdvance(title) +
+                         self.UNSAVED_DOT_SPACE / 2.0)
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.setBrush(text_color)
+                painter.drawEllipse(QtCore.QPointF(dot_x,
+                                                   self.title_rect_height / 2),
+                                    self.UNSAVED_DOT_RADIUS,
+                                    self.UNSAVED_DOT_RADIUS)
         else:
             painter.setBrush(text_color)
             proxy_rect = font_metrics.boundingRect(title_str)
@@ -745,6 +764,16 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.is_hovered = False
         self.update()
         super(NodeGraphicsItem, self).hoverLeaveEvent(event)
+
+    def on_unsaved_changed(self, node_paths):
+        if self.node_path in node_paths:
+            self.update()
+
+    def has_unsaved_changes(self):
+        """Whether this node has changes on any layer that are not saved
+        yet, drawn as a dot after its name.
+        """
+        return bool(self.model.get_node_unsaved_layers(self.node_path))
 
     def update_build_focus(self, *signal_args, force=False):
         """Draw this node as the one running, or not.
