@@ -24,6 +24,9 @@ Each item links to the part of the docs that explains it in full.
   in the graph while it still composites and runs, for example a library
   layer of nodes that are only there to be instanced. See
   [Hiding a layer in the graph](reference.md#hiding-a-layer-in-the-graph).
+- The editor's title shows the name of the Maya scene or `.blend` file its
+  host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
+  of the same host can be told apart in the taskbar.
 
 **Fixed**
 - Clicking into a node's code and away without typing no longer adds an

@@ -98,6 +98,10 @@ WIDGETS_WITH_FONTS = (
 FONT_FOLLOWS_WINDOW = 'nxt_font_follows_window'
 
 
+# Longest host label the window title shows before it is shortened.
+HOST_LABEL_MAX = 40
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """The main window of the nxt UI. Includes the menu bar, tool bar, and dock widgets."""
 
@@ -153,10 +157,10 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             context = os.environ.get(NXT_DCC_ENV_VAR) or ""
         self.host_app = context
-        self.setWindowTitle(
-            "nxt {} - Editor v{} | Graph v{} | API v{} "
+        self.host_label = ""
+        self._title_versions = (
+            " - Editor v{} | Graph v{} | API v{} "
             "(Python {}) {}".format(
-                self.host_app,
                 EDITOR_VERSION.VERSION_STR,
                 GRAPH_VERSION.VERSION_STR,
                 API_VERSION.VERSION_STR,
@@ -164,6 +168,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 current_branch,
             )
         )
+        self.set_host_label("")
         self.setObjectName("Main Window")
         self.zoom_keys = QtGui.QKeySequence(QtCore.Qt.Key_Alt)
         self.zoom_keys_down = False
@@ -1483,6 +1488,28 @@ QCheckBox::indicator {
         self._closing = True
         self.close_signal.emit()
         super(MainWindow, self).closeEvent(event)
+
+    def set_host_label(self, text):
+        """Say in the title which session of the host this editor belongs
+        to, a scene's file name for example. Two sessions of one host each
+        have an editor, and their titles are otherwise the same. A host can
+        call this whenever the label changes. Long labels are shortened in
+        the title, `host_label` keeps the whole text.
+
+        :param text: Short text shown after the host's name, empty for none.
+        :type text: str
+        """
+        self.host_label = (text or "").strip()
+        shown = self.host_label
+        if len(shown) > HOST_LABEL_MAX:
+            # The start says what it is, the end which version and type.
+            keep = (HOST_LABEL_MAX - 3) // 2
+            shown = shown[:keep] + "..." + shown[-keep:]
+        if shown:
+            shown = " [{}]".format(shown)
+        self.setWindowTitle(
+            "nxt {}{}".format(self.host_app, shown) + self._title_versions
+        )
 
     def validate_layers_saved(self, model=None, single_layer=None):
         model = model or self.model

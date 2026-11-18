@@ -293,6 +293,39 @@ def _start_pump():
     __PUMPING__[0] = True
 
 
+@bpy.app.handlers.persistent
+def _label_windows(*args):
+    """Put the open .blend file's name in every editor's title, so the
+    editors of two Blender sessions can be told apart. Blender calls this
+    after a file is loaded or saved, and nothing raised here may reach it.
+    """
+    try:
+        from nxt_editor.integration import scene_label
+        label = scene_label(bpy.data.filepath)
+        for window in _live_windows():
+            window.set_host_label(label)
+    except Exception:
+        pass
+
+
+def _file_handlers():
+    """Blender's lists of functions called after a load and after a save.
+
+    :return: the lists this add-on puts _label_windows in.
+    :rtype: list
+    """
+    return [bpy.app.handlers.load_post, bpy.app.handlers.save_post]
+
+
+def _track_file(track=True):
+    """Start or stop keeping the editors' titles on the open file."""
+    for handlers in _file_handlers():
+        if track and _label_windows not in handlers:
+            handlers.append(_label_windows)
+        elif not track and _label_windows in handlers:
+            handlers.remove(_label_windows)
+
+
 def launch_nxt(graph=None):
     """Open an nxt editor window inside this Blender.
 
@@ -310,6 +343,8 @@ def launch_nxt(graph=None):
     window = nxt_editor.show_new_editor([graph] if graph else None)
     window.show()
     __NXT_WINDOWS__.append(window)
+    _track_file()
+    _label_windows()
     _start_pump()
     return window
 
@@ -326,6 +361,7 @@ def close_nxt():
             window.close()
         except RuntimeError:
             pass
+    _track_file(False)
 
 
 def source_hash():
