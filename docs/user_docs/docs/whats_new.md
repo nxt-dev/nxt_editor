@@ -177,6 +177,11 @@ Each item links to the part of the docs that explains it in full.
 - The Environment Variables dialog shows its Name and List column titles
   whole in an empty table, and a long file path no longer makes it wide.
 
+**Fixed**
+- Clicking into a node's code and away without typing no longer adds an
+  undo step, marks the layer as unsaved, or copies inherited code onto the
+  target layer.
+
 ## nxt_editor 4.12.0
 
 **New**
