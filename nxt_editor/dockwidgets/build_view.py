@@ -10,7 +10,7 @@ from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt import nxt_path
 from nxt_editor.dockwidgets.layer_manager import LetterCheckboxDelegeate
 import nxt_editor
-from nxt_editor import colors, theme
+from nxt_editor import colors, theme, user_dir
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -463,6 +463,7 @@ class BuildPathDelegate(QtWidgets.QStyledItemDelegate):
         text = opt.fontMetrics.elidedText(opt.text, QtCore.Qt.ElideLeft,
                                           int(text_rect.width()))
         painter.drawText(text_rect, QtCore.Qt.AlignVCenter, text)
+        painter.setBrush(QtCore.Qt.NoBrush)
         if self.table.is_selected_row(index.row()):
             painter.setPen(QtGui.QPen(colors.SELECTED, 2))
             painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
@@ -471,6 +472,18 @@ class BuildPathDelegate(QtWidgets.QStyledItemDelegate):
             painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5),
                                     3, 3)
         painter.restore()
+
+
+class BreakCheckboxDelegate(LetterCheckboxDelegeate):
+    """The B box, an outline while breakpoints are ignored, as they are in
+    the graph and the Outliner."""
+
+    def __init__(self):
+        super(BreakCheckboxDelegate, self).__init__('B')
+
+    def hollow(self, index):
+        return bool(user_dir.user_prefs.get(
+            user_dir.USER_PREF.IGNORE_BREAKS, False))
 
 
 class BuildTable(QtWidgets.QTableView):
@@ -483,7 +496,7 @@ class BuildTable(QtWidgets.QTableView):
         self.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
         self.horizontalHeader().hide()
         self.verticalHeader().hide()
-        self.break_delegate = LetterCheckboxDelegeate('B')
+        self.break_delegate = BreakCheckboxDelegate()
         self.setItemDelegateForColumn(BuildModel.BREAK_COLUMN,
                                       self.break_delegate)
         self.skip_delegate = LetterCheckboxDelegeate('S')
