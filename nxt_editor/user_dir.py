@@ -6,6 +6,7 @@ made to create the user dir if necessary, and an `assert`
 will be made that the user directory is a directory.
 """
 # Built-in
+import contextlib
 import os
 
 import json
@@ -257,6 +258,10 @@ class EDITOR_CACHE():
 
 
 class PrefFile(dict):
+    #: While above 0, a pref file already read is not looked at on disk
+    #: again, see holding_prefs.
+    held = 0
+
     def __init__(self, path, handlers=None):
         """
         Prefs uses the dictionary api to facilitate writing to the
@@ -302,6 +307,8 @@ class PrefFile(dict):
         the parse when the file has not moved. Our own `write` changes the
         file, so the next read picks it up like any other edit.
         """
+        if PrefFile.held and self._stamp is not None:
+            return self._stamp
         try:
             stat = os.stat(self.path)
         except OSError:
@@ -344,6 +351,22 @@ class PrefFile(dict):
     def pop(self, key):
         super(PrefFile, self).pop(key)
         self.write()
+
+
+@contextlib.contextmanager
+def holding_prefs():
+    """Read each pref file from disk at most once while in this.
+
+    Drawing thousands of nodes reads the break and skip points for every
+    one of them, and each read looked at the file on disk. Nothing outside
+    the editor changes a pref file part way through one redraw, so once is
+    enough. A write is still read back.
+    """
+    PrefFile.held += 1
+    try:
+        yield
+    finally:
+        PrefFile.held -= 1
 
 
 class JsonPref(PrefFile):
