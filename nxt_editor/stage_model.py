@@ -118,8 +118,6 @@ class StageModel(QtCore.QObject):
     request_ding = QtCore.Signal()
     # A node raised an error and the build stopped there. The node's path.
     build_failed = QtCore.Signal(str)
-    # Nodes that came to have unsaved changes, or stopped having them.
-    unsaved_nodes_changed = QtCore.Signal(tuple)
 
     def __init__(self, stage):
         super(StageModel, self).__init__()
@@ -127,19 +125,6 @@ class StageModel(QtCore.QObject):
         self.clipboard = QtWidgets.QApplication.clipboard()
         self.undo_stack = NxtUndoStack(self)
         self.effected_layers = UnsavedLayerSet()
-        # Which nodes have unsaved changes, by layer. A node has them when
-        # a command that changed it on that layer is on one side of where
-        # the layer was last saved and the undo stack is on the other.
-        # Where each layer was saved, as an undo stack index, 0 for one
-        # nobody has changed since it was opened:
-        self._saved_stack_index = {}
-        # Nodes changed by commands the stack has since thrown away, which
-        # it does with everything undone when something new is done. What
-        # they changed can no longer be undone back to what is saved.
-        self._lost_node_edits = {}
-        # {layer real path: set of node paths}, see unsaved_node_paths.
-        self._unsaved_nodes = {}
-        self.undo_stack.indexChanged.connect(self._refresh_unsaved_nodes)
 
         # execution
         self.is_standalone = is_standalone()
@@ -196,7 +181,6 @@ class StageModel(QtCore.QObject):
         for layer in stage._sub_layers:
             self.stamp_layer_file(layer.real_path)
         self.layer_saved.connect(self.stamp_layer_file)
-        self.layer_saved.connect(self._on_layer_saved_nodes)
         self.layer_added.connect(self._stamp_new_layer_file)
         # attribute display state
         # {/node/path: STATE_INT}
@@ -769,82 +753,6 @@ class StageModel(QtCore.QObject):
             return False
         self.undo_stack.push(ReloadLayers(layer_paths, self))
         return True
-
-    def _on_layer_saved_nodes(self, layer_path):
-        self.mark_nodes_saved([layer_path])
-
-    def mark_nodes_saved(self, layer_paths, index=None):
-        """Note that what these layers hold in memory is what is on disk:
-        they were saved, or read again.
-
-        :param layer_paths: real paths of the layers
-        :param index: the undo stack index that is true at, defaults to
-            where the stack is now
-        """
-        if index is None:
-            index = self.undo_stack.index()
-        for layer_path in layer_paths:
-            self._saved_stack_index[layer_path] = index
-            self._lost_node_edits.pop(layer_path, None)
-        self._refresh_unsaved_nodes()
-
-    def forget_commands_past_index(self):
-        """Called just before the undo stack throws away the commands that
-        were undone, see NxtUndoStack. A layer saved with some of them
-        applied can no longer be undone back to as saved, so the nodes
-        they changed stay changed until it is saved again.
-        """
-        stack = self.undo_stack
-        index = stack.index()
-        for layer_path, saved in list(self._saved_stack_index.items()):
-            if saved <= index:
-                continue
-            lost = self._lost_node_edits.setdefault(layer_path, set())
-            for i in range(index, min(saved, stack.count())):
-                lost |= touched_nodes(stack.command(i), layer_path)
-            self._saved_stack_index[layer_path] = index
-
-    def _refresh_unsaved_nodes(self, *args):
-        """Work out again which nodes have unsaved changes, and tell the
-        ones whose state changed.
-        """
-        stack = self.undo_stack
-        index = stack.index()
-        unsaved = {}
-        layer_paths = set(l.real_path for l in self.stage._sub_layers)
-        for layer_path in layer_paths:
-            saved = min(self._saved_stack_index.get(layer_path, 0),
-                        stack.count())
-            nodes = set(self._lost_node_edits.get(layer_path, ()))
-            for i in range(min(saved, index), max(saved, index)):
-                nodes |= touched_nodes(stack.command(i), layer_path)
-            if nodes:
-                unsaved[layer_path] = nodes
-        before = set().union(*self._unsaved_nodes.values())
-        after = set().union(*unsaved.values())
-        self._unsaved_nodes = unsaved
-        changed = before.symmetric_difference(after)
-        if changed:
-            self.unsaved_nodes_changed.emit(tuple(changed))
-
-    def unsaved_node_paths(self, layer_path=None):
-        """The nodes with changes not saved yet, on one layer or on any.
-
-        :param layer_path: real path of a layer, or None for all of them
-        :rtype: set
-        """
-        if layer_path is not None:
-            return set(self._unsaved_nodes.get(layer_path, ()))
-        return set().union(*self._unsaved_nodes.values())
-
-    def get_node_unsaved_layers(self, node_path):
-        """The real paths of the layers on which a node has changes that
-        are not saved yet, strongest first.
-
-        :rtype: list
-        """
-        return [l.real_path for l in self.stage._sub_layers
-                if node_path in self._unsaved_nodes.get(l.real_path, ())]
 
     def missing_references(self):
         """The references that did not load, by the loaded layer holding
@@ -4707,31 +4615,7 @@ class NxtUndoStack(QtWidgets.QUndoStack):
             logger.warning('The target layer is locked!')
             model.request_ding.emit()
             return
-        if not self._macro_depth:
-            self._before_dropping_undone()
         super(NxtUndoStack, self).push(command)
-
-    # Pushing, or starting a macro, throws away what was undone. Inside a
-    # macro nothing is: it was thrown away when the macro began.
-    _macro_depth = 0
-
-    def beginMacro(self, text):
-        if not self._macro_depth:
-            self._before_dropping_undone()
-        self._macro_depth += 1
-        super(NxtUndoStack, self).beginMacro(text)
-
-    def endMacro(self):
-        super(NxtUndoStack, self).endMacro()
-        self._macro_depth = max(0, self._macro_depth - 1)
-
-    def _before_dropping_undone(self):
-        if self.index() >= self.count():
-            return
-        model = self.parent()
-        forget = getattr(model, 'forget_commands_past_index', None)
-        if forget:
-            forget()
 
 
 class UnsavedLayerSet(set):

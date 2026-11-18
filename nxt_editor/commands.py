@@ -34,51 +34,12 @@ def processing(func):
     return wrapper
 
 
-# Where commands keep the paths of the nodes they change. A single path, or
-# a list of them, or the keys of a dict of them.
-NODE_PATH_ATTRS = ('node_path', 'old_node_path', 'new_path')
-NODE_PATHS_ATTRS = ('node_paths', 'new_node_paths', 'created_node_paths',
-                    'new_positions')
-
-
-def touched_nodes(command, layer_path):
-    """The node paths a command on the undo stack changed on a layer, its
-    children's included, which is how a macro holds the commands in it.
-
-    :param command: QUndoCommand
-    :param layer_path: real path of the layer
-    :rtype: set
-    """
-    paths = set(getattr(command, 'nodes_touched', {}).get(layer_path, ()))
-    for i in range(command.childCount()):
-        paths |= touched_nodes(command.child(i), layer_path)
-    return paths
-
-
 class NxtCommand(QUndoCommand):
     def __init__(self, model):
         super(NxtCommand, self).__init__()
         self.model = model
         self.model.layer_saved.connect(self.reset_layer_effected)
         self._layers_effected_by_me = {}
-        # The nodes this command has changed, by layer real path, so the
-        # graph can show which nodes have unsaved changes. See
-        # StageModel.unsaved_node_paths.
-        self.nodes_touched = {}
-
-    def _note_touched_nodes(self, layer_path):
-        """Remember the nodes this command changes on a layer. Called as
-        it marks the layer unsaved, by when it knows what it changed.
-        """
-        paths = self.nodes_touched.setdefault(layer_path, set())
-        for name in NODE_PATH_ATTRS:
-            path = getattr(self, name, None)
-            if isinstance(path, str):
-                paths.add(path)
-        for name in NODE_PATHS_ATTRS:
-            for path in getattr(self, name, None) or ():
-                if isinstance(path, str):
-                    paths.add(path)
 
     def _get_effects(self, layer_path):
         """Gets the effected state for a given layer with context to this
@@ -135,7 +96,6 @@ class NxtCommand(QUndoCommand):
         :param layer_path: string of layer real path
         :return: None
         """
-        self._note_touched_nodes(layer_path)
         layer_unsaved = layer_path in self.model.effected_layers
         eff_by_undo, eff_by_redo = self._get_effects(layer_path)
         if not eff_by_undo and layer_unsaved:
@@ -160,7 +120,6 @@ class NxtCommand(QUndoCommand):
         :param layer_path: string of layer real path
         :return: None
         """
-        self._note_touched_nodes(layer_path)
         eff_by_undo, eff_by_redo = self._get_effects(layer_path)
         layer_saved = layer_path not in self.model.effected_layers
         if layer_saved:
@@ -626,10 +585,6 @@ class RenameNode(SetNodeAttributeValue):
         self.model.about_to_rename.emit()
         super(RenameNode, self).redo()
         self.node_path = self.return_value
-        # The new name only exists now, after the layer was marked.
-        layer = self.model.lookup_layer(self.layer_path)
-        if layer is not None:
-            self._note_touched_nodes(layer.real_path)
         self.model.selection = [self.node_path]
         if self.model.get_is_node_start(self.node_path, self.model.comp_layer):
             self.model.starts_changed.emit(self.model.get_start_nodes())
@@ -1983,10 +1938,6 @@ class ReloadLayers(NxtCommand):
         self.old_stamps = {p: self.model.disk_stamps.get(p) for p in reloaded}
         for layer_path in reloaded:
             self.model.stamp_layer_file(layer_path)
-        # And no node in them is changed from what is saved. Once this is
-        # on the stack, so one past where the stack is now.
-        self.model.mark_nodes_saved(reloaded,
-                                    self.model.undo_stack.index() + 1)
         self.was_unsaved = [p for p in reloaded
                             if p in self.model.effected_layers]
         for layer_path in self.was_unsaved:

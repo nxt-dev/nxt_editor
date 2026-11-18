@@ -87,13 +87,6 @@ and Blender.
   any other.
 - A selected node has an amber outline, and the node under the mouse a thin
   white one.
-- A small dot after a node's name means it has changes that are not saved
-  yet, on any of its layers: anything that changes the node, moving it
-  included. Saving the layer clears it, and undoing back to where the layer
-  was saved clears it too. Undoing past a save marks the node again,
-  because it no longer matches the file. Reloading a layer clears it as
-  well. Reloading can be undone, but a node whose reload was undone is not
-  marked again; the layer still shows as unsaved in the Layer Manager.
 - Start, skip and break points sit on the node's exec input: a green
   triangle, an orange bar and a red square.
 
