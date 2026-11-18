@@ -25,6 +25,11 @@ Each item links to the part of the docs that explains it in full.
   layer of nodes that are only there to be instanced. See
   [Hiding a layer in the graph](reference.md#hiding-a-layer-in-the-graph).
 
+**Fixed**
+- Clicking into a node's code and away without typing no longer adds an
+  undo step, marks the layer as unsaved, or copies inherited code onto the
+  target layer.
+
 ## nxt_editor 4.12.0
 
 **New**
