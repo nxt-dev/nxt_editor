@@ -88,6 +88,39 @@ class Highlight(unittest.TestCase):
         # Hover leaves the inside alone.
         self.assertEqual(self.pixel(1, 'inside'), self.pixel(2, 'inside'))
 
+    def test_a_selected_node_with_a_breakpoint_keeps_its_name(self):
+        # The B box's red was left on the painter and filled the selected
+        # row's outline, covering the name.
+        plain = self.pixel(1, 'inside')
+        self.model.set_breakpoints(['/build'], True)
+        self.model.set_selection(['/build'])
+        self.assertEqual(plain, self.pixel(1, 'inside'))
+        self.table.set_hover_row(1)
+        self.assertEqual(plain, self.pixel(1, 'inside'))
+
+    def break_box(self, row):
+        """The color just inside the B box's edge, filled or not."""
+        app.processEvents()
+        self.table.viewport().repaint()
+        image = self.table.viewport().grab().toImage()
+        rect = self.table.visualRect(
+            self.table.model().index(row, BuildModel.BREAK_COLUMN))
+        return QtGui.QColor(image.pixel(rect.left() + 5,
+                                        rect.top() + 5)).name()
+
+    def test_an_ignored_breakpoint_is_an_outline(self):
+        from nxt_editor import user_dir
+        pref = user_dir.USER_PREF.IGNORE_BREAKS
+        self.addCleanup(user_dir.user_prefs.__setitem__, pref, False)
+        user_dir.user_prefs[pref] = False
+        self.model.set_breakpoints(['/build'], True)
+        self.assertEqual(colors.BREAK_COLOR.name(), self.break_box(1))
+        action = self.win.execute_actions.ignore_breaks_action
+        action.setChecked(False)
+        action.trigger()
+        self.assertNotEqual(colors.BREAK_COLOR.name(), self.break_box(1))
+        action.trigger()
+        self.assertEqual(colors.BREAK_COLOR.name(), self.break_box(1))
 
     def move_mouse(self, row, column):
         from Qt import QtTest

@@ -788,15 +788,31 @@ class LetterCheckboxDelegeate(QtWidgets.QStyledItemDelegate):
         self.initStyleOption(option, index)
         inner_rect = QtCore.QRect().united(option.rect)
         inner_rect = inner_rect.marginsRemoved(QtCore.QMargins(1, 1, 1, 1))
+        # The view hands every cell the same painter, so what is set here
+        # must not be left for the next cell to draw with.
+        painter.save()
         painter.setPen(QtCore.Qt.NoPen)
         painter.setBrush(option.backgroundBrush)
-        if option.checkState == QtCore.Qt.CheckState.Checked:
+        if option.checkState != QtCore.Qt.CheckState.Checked:
+            painter.setPen(QtCore.Qt.gray)
+        elif self.hollow(index):
+            color = option.backgroundBrush.color()
+            painter.setRenderHint(QtGui.QPainter.Antialiasing)
+            painter.setBrush(QtCore.Qt.NoBrush)
+            painter.setPen(QtGui.QPen(color, 1.5))
+            painter.drawRoundedRect(QtCore.QRectF(inner_rect).adjusted(
+                1, 1, -1, -1), 2, 2)
+        else:
             painter.drawRoundedRect(inner_rect, 2, 2)
             painter.setPen(theme.readable_text(
                 option.backgroundBrush.color()))
-        else:
-            painter.setPen(QtCore.Qt.gray)
         painter.drawText(inner_rect, QtCore.Qt.AlignCenter, self.letter)
+        painter.restore()
+
+    def hollow(self, index):
+        """Whether a checked box is drawn as an outline in its color, set
+        but not in effect, rather than filled."""
+        return False
 
     def sizeHint(self, option, index):
         return QtCore.QSize(self.height, self.height)

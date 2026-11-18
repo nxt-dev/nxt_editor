@@ -9,7 +9,7 @@ from Qt import QtWidgets, QtGui, QtCore
 import nxt_editor
 from nxt import nxt_path
 from nxt.nxt_layer import LayerReturnTypes
-from nxt_editor import colors, node_search, theme
+from nxt_editor import colors, node_search, theme, user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.label_edit import NameEditDialog
 
@@ -471,11 +471,23 @@ class NodeRowDelegate(QtWidgets.QStyledItemDelegate):
             painter.setBrush(colors.SKIP_COLOR)
             painter.drawRoundedRect(QtCore.QRectF(x - 5.5, y - 2.5, 11, 5),
                                     2.5, 2.5)
+        elif point == BREAK and breakpoints_ignored():
+            # Hollow while runs go through it, a red edge round the graph's
+            # background as in the graph, so it shows on a red row too.
+            painter.setBrush(colors.GRAPH_BG_COLOR)
+            painter.setPen(QtGui.QPen(colors.BREAK_COLOR, 2))
+            painter.drawRoundedRect(QtCore.QRectF(x - 4, y - 4, 8, 8),
+                                    1.5, 1.5)
         elif point == BREAK:
             painter.setBrush(colors.BREAK_COLOR)
             painter.drawRoundedRect(QtCore.QRectF(x - 4.5, y - 4.5, 9, 9),
                                     1.5, 1.5)
         painter.restore()
+
+
+def breakpoints_ignored():
+    return bool(user_dir.user_prefs.get(user_dir.USER_PREF.IGNORE_BREAKS,
+                                        False))
 
 
 class Outliner(DockWidgetBase):
@@ -723,6 +735,8 @@ class Outliner(DockWidgetBase):
         self.point_sets = self.read_points()
         for path, item in self.items.items():
             self.set_points(item, path)
+        # Ignoring breakpoints changes how they are drawn, not the rows.
+        self.tree.viewport().update()
 
     def on_nodes_changed(self, paths=()):
         """Nodes were edited. The rows are filled in again where they are,
