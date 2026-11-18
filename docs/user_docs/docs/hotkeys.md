@@ -23,10 +23,24 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Close Tab           |                Close active tab                 | Close Tab           |    Ctrl+W    |
 | Find and Open Graph |                                                 | Find and Open Graph |    Ctrl+P    |
 
+!!! note "New Graph from the tabs"
+    The **+** after the open graphs' tabs, or a double click on the empty
+    bar beside them, does the same as New Graph, with whatever shortcut
+    New Graph has. See [Tabs](reference.md#tabs).
+
 ## Alignment
 |         Name         |                What's this                |      Tool tip       | Shortcut |
 | :------------------- | :---------------------------------------: | :------------------ | :------: |
 | Toggle Grid Snapping | Toggles grid snapping while moving nodes. | Toggle snap to grid |  Ctrl+G  |
+| Align Left | Line the selected nodes and points up on the left most one. | Align Left | Shift+A |
+| Align Center | Line the selected nodes and points up on a line down the middle of them. | Align Center | Alt+Shift+S |
+| Align Right | Line the selected nodes and points up on the right most one. | Align Right | Shift+D |
+| Align Top | Line the selected nodes and points up on the top most one. | Align Top | Shift+W |
+| Align Middle | Line the selected nodes and points up on a line across the middle of them. | Align Middle | Alt+Shift+W |
+| Align Bottom | Line the selected nodes and points up on the bottom most one. | Align Bottom | Shift+S |
+| Distribute Horizontally | Space the selected nodes and points out evenly from left to right, leaving the ends where they are. | Distribute Horizontally | Alt+Shift+A |
+| Distribute Vertically | Space the selected nodes and points out evenly from top to bottom, leaving the ends where they are. | Distribute Vertically | Alt+Shift+D |
+| Layout Nodes | Arrange the selected top level nodes, or every one when none are selected, by the order they run in: each exec chain left to right, with its branches stacked below. | Layout Nodes | Shift+L |
 
 ## Display
 |     Name      |               What's this                |       Tool tip       | Shortcut |
@@ -35,12 +49,26 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Resolved View |  Displays resolved values for this tab.  | Toggle resolved view |    W     |
 | Cached View   |   Displays cached values for this tab.   | Toggle cached view   |    E     |
 
+!!! note "Typing in a list finds rows"
+    Q, W and E work from anywhere in the window, except while you are
+    typing. In a text field, the Property Editor's attribute table or the
+    Hotkey Editor's table, letters go to what has focus: in a table, typing
+    jumps to the row starting with what you typed. Shortcuts with `Ctrl` or
+    `Alt`, and any you give the Property Editor's own actions, still work
+    there.
+
 ## Graph
 |            Name             |                      What's this                      |             Tool tip             |  Shortcut   |
 | :-------------------------- | :---------------------------------------------------: | :------------------------------- | :---------: |
 | Display Node Tooltips       |                                                       | Display Node Tooltips            |             |
 | Frame All                   |         Frames all nodes so they are visible.         | Frame all nodes                  |      A      |
 | Frame Selection             |               Frames the selected node.               | Frame selected node              |      F      |
+| Add Bookmark...             | Save the part of the graph in view under a name, to go back to from the Bookmarks menu. Saved with the graph. | Bookmark this view of the graph | Ctrl+B |
+| Go to Bookmark 1            | Show the part of the graph saved as the graph's bookmark number 1. | Go to Bookmark 1 | Ctrl+1 |
+| Go to Bookmark 2            | Show the part of the graph saved as the graph's bookmark number 2. | Go to Bookmark 2 | Ctrl+2 |
+| Go to Bookmark 3            | Show the part of the graph saved as the graph's bookmark number 3. | Go to Bookmark 3 | Ctrl+3 |
+| Go to Bookmark 4            | Show the part of the graph saved as the graph's bookmark number 4. | Go to Bookmark 4 | Ctrl+4 |
+| Frame All on Open           | When on, a graph is framed to show all of its nodes when it is first shown, never zoomed in past 100%. When off, it is shown at the origin. On by default. | Frame all nodes when a graph is opened | |
 | Display No Attrs            |                 Display no attributes                 | Display No Attrs                 |      0      |
 | Display Local Attrs         |             Display local attributes only             | Display Local Attrs              |      1      |
 | Display Local+Inst Attrs    |        Display local and instanced attributes         | Display Local+Inst Attrs         |      2      |
@@ -58,6 +86,10 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Nudge up                    |                                                       | Nudge up                         |  Shift+Up   |
 | Nudge left                  |                                                       | Nudge left                       | Shift+Left  |
 | Nudge right                 |                                                       | Nudge right                      | Shift+Right |
+
+Hold `Space` and drag with the left mouse button to pan the graph, as a
+middle button drag does. It is a mouse action rather than a shortcut, so it
+is not in the Hotkey Editor; see [Moving around](reference.md#moving-around).
 
 ## Layers
 |          Name          |           What's this           |        Tool tip        |   Shortcut   |
@@ -95,6 +127,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Remove Instance                | Removes instance path from node overloading weaker layer instance opinions. | Removes Instance               | Ctrl+Shift+I |
 | Localize Node                  |                                                                             | Localize Node                  |              |
 | Revert Node                    |                                                                             | Revert Node                    |              |
+| Push Positions to Target Layer | Write where the selected nodes are now onto the target layer, so it keeps this layout without the layers above it. | Push Positions to Target Layer | |
 | Enable/Disable Node            |                                                                             | Enable/Disable Node            |      D       |
 | Parent                         |                               Parent node(s).                               | Parent                         |      P       |
 | Un-Parent                      |                             Un-parent node(s).                              | Un-Parent                      |   Shift+P    |
@@ -116,6 +149,13 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Remove Attribute       |             | Remove Attribute       |          |
 | Localize Attribute     |             | Localize Attribute     |          |
 | Revert Attribute       |             | Revert Attribute       |          |
+| Copy Attributes        | Copy the selected attributes, with their values, types and comments, to paste onto other nodes. | Copy Attributes | Ctrl+C |
+| Paste Attributes       | Add the copied attributes to the selected node(s) on the target layer, or set them where a node already has them. | Paste Attributes | Ctrl+V |
+
+!!! note "Property Editor shortcuts apply while it has focus"
+    `Ctrl+C` and `Ctrl+V` copy and paste attributes while the Property
+    Editor has focus, and copy and paste nodes in the graph. In a text
+    field they copy and paste text as usual.
 
 ## Node Comment
 |        Name         |                           What's this                            |      Tool tip       |  Shortcut   |
@@ -138,6 +178,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Add Breakpoint               |                Adds the breakpoint on the selected node(s).                | Add Breakpoint               |          |
 | Remove Breakpoint            |              Removes the breakpoint on the selected node(s).               | Remove Breakpoint            |          |
 | Clear All Breakpoints        |                                                                            | Clear All Breakpoints        |          |
+| Ignore Breakpoints           | Runs go straight through every breakpoint while this is on. The breakpoints are kept. | Ignore Breakpoints |          |
 | Clear Cache                  |               Clears the Python interpreter and cached data.               | Clear Cache Now              |          |
 | Workflow Tools Always Recomp |                                                                            | Workflow Tools Always Recomp |          |
 | Toggle Start Point           |                 Toggles a startpoint on the selected node.                 | Toggle Start Point           |    S     |
@@ -173,6 +214,10 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Move Line Down             | Swap the selected line(s) with the line below. | Move Line Down | Alt+Down |
 | Delete Line                | Delete the selected line(s). | Delete Line | Ctrl+Shift+K |
 | Expand Selection           | Grow the selection from the word under the cursor, to the line, to everything. | Expand Selection | Ctrl+D |
+| Fold Block                 | Fold away the indented block the cursor is in. | Fold Block | Ctrl+Shift+[ |
+| Unfold Block               | Show the block folded away behind the line the cursor is on. | Unfold Block | Ctrl+Shift+] |
+| Fold All                   | Fold away every indented block. | Fold All | Ctrl+K, Ctrl+0 |
+| Unfold All                 | Show every folded block. | Unfold All | Ctrl+K, Ctrl+J |
 | Complete Word              | Offer completions for the word being typed. | Complete Word | Ctrl+Space |
 | Code Editor Autocomplete   | When on, completions are offered as you type. Ctrl+Space always offers them either way. | Code Editor Autocomplete | |
 

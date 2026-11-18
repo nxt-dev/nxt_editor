@@ -5,14 +5,21 @@ Install: Edit > Preferences > Add-ons > Install from Disk, pick the
 the top bar, the same place the Maya plugin puts its "nxt" menu.
 
 **What it runs.** The release add-on carries nxt, nxt_editor and Qt.py in
-its ``lib`` folder and uses those. With nothing bundled -- this file
-installed on its own -- it uses whatever nxt and nxt_editor Blender's
-python can already import.
+its ``lib`` folder and uses those. With nothing bundled it uses an
+nxt_editor that is already importable -- the rez package puts this add-on
+on ``BLENDER_SYSTEM_SCRIPTS`` and nxt on PYTHONPATH -- and failing that the
+nxt and nxt_editor checkouts in the folder ``SB_DEV_ROOT`` names, which is
+how it is developed.
 
 **Qt.** Blender ships no Qt and the editor is a Qt application, so PySide6
 has to be installed once; the menu offers to do it, into a folder outside
-Blender (see ``nxt_editor/integration/qt_deps.py``). Graphs run without
+Blender (see ``nxt_editor/integration/optional_deps.py``). The editor's
+Options > Optional Components does the rest, jedi say. Graphs run without
 it. Only the editor window needs it.
+
+**No menu.** ``NXT_NO_MENU=1`` leaves the menu out, by the same rule as
+Maya and Unreal. The operators are still registered, so a studio's own menu
+can call ``bpy.ops.nxt.open_editor()``.
 
 **Blender owns the event loop.** Maya is a Qt application already, so an
 nxt window just joins its loop. Blender knows nothing about Qt, so a timer
@@ -20,10 +27,12 @@ hands Qt a slice of Blender's loop while an editor is open; without it
 the window paints once and then ignores everything.
 
 **Reload Code is not a convenience.** Blender caches modules for the life
-of the session, so a newer nxt on disk is not picked up by running a
-graph again; what was already imported runs instead. It reads as a graph
-problem rather than a stale import, so Run Graph forgets nxt first.
+of the session, so editing ``core/blender/*.py`` and running a graph again
+quietly re-runs what was already imported. It reads as an edit that did
+nothing, and it has cost real time. The menu marks the loaded code stale
+when it no longer matches the files.
 """
+import hashlib
 import importlib
 import importlib.util
 import json
@@ -35,7 +44,7 @@ from bpy_extras.io_utils import ImportHelper
 
 bl_info = {
     "name": "NXT for Blender",
-    "author": "The nxt contributors",
+    "author": "Squarebit Studios",
     "version": (0, 2, 0),
     "blender": (4, 2, 0),
     "location": "Top bar > NXT",
@@ -45,6 +54,10 @@ bl_info = {
 
 #: Where the release add-on keeps nxt, nxt_editor and Qt.py.
 BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lib")
+
+#: Where the nxt and nxt_editor checkouts live, for developing the add-on
+#: with nothing bundled. Only used when ``SB_DEV_ROOT`` is set.
+DEV_ROOT = os.environ.get("SB_DEV_ROOT", "")
 
 #: How often to let Qt do its work, in seconds. Small enough that typing
 #: feels immediate, large enough that Blender is not spending its life in
@@ -69,22 +82,47 @@ def is_bundled():
     return os.path.isdir(os.path.join(BUNDLED_DIR, "nxt_editor"))
 
 
+def _installed_dir():
+    """The folder an already importable nxt_editor lives in, if any.
+
+    This is how the rez package delivers it: the studio launcher starts
+    Blender with ``--python-use-system-env``, so PYTHONPATH already carries
+    nxt, nxt_editor, Qt.py and PySide6. Found without importing, because
+    importing nxt_editor imports Qt.
+
+    :return: the folder holding the ``nxt_editor`` package, or "".
+    :rtype: str
+    """
+    try:
+        spec = importlib.util.find_spec("nxt_editor")
+    except (ImportError, ValueError):
+        return ""
+    if spec is None or not spec.submodule_search_locations:
+        return ""
+    package_dir = list(spec.submodule_search_locations)[0]
+    return os.path.dirname(os.path.abspath(package_dir))
+
+
 def _source_dirs():
     """The folders nxt, nxt_editor and Qt.py are imported from.
+
+    In order: the release add-on's own copy, an nxt_editor already on
+    ``sys.path`` (the rez package), then the ``SB_DEV_ROOT`` checkouts.
 
     :return: paths to put on ``sys.path``, first wins.
     :rtype: list[str]
     """
     if is_bundled():
         return [BUNDLED_DIR]
-    # Not bundled: wherever Blender's python already finds nxt_editor.
-    try:
-        spec = importlib.util.find_spec("nxt_editor")
-    except (ImportError, ValueError):
-        spec = None
-    if spec is None or not spec.submodule_search_locations:
+    installed = _installed_dir()
+    if installed:
+        return [installed]
+    if not DEV_ROOT:
         return []
-    return [os.path.dirname(list(spec.submodule_search_locations)[0])]
+    return [os.path.join(DEV_ROOT, "nxt"),
+            os.path.join(DEV_ROOT, "nxt_editor"),
+            # Qt.py, for a Blender that has none of its own.
+            os.path.join(DEV_ROOT, "nxt_dev_deps")]
 
 
 def _where():
@@ -108,7 +146,7 @@ def _put_first(path):
 
 
 def _paths():
-    """Put nxt, nxt_editor and Qt.py on ``sys.path``.
+    """Put nxt, nxt_editor, Qt.py and core on ``sys.path``.
 
     :return: None
     :rtype: None
@@ -116,31 +154,83 @@ def _paths():
     for path in reversed(_source_dirs()):
         if os.path.isdir(path):
             _put_first(path)
+    # A studio library of graph code, checked out beside nxt. Optional:
+    # graphs that do not use it run without it. Only the fallback: when
+    # the environment already provides core (a rez resolve, dev or not),
+    # that one is used, so a prod gig never runs a developer's checkout.
+    if _core_dir():
+        return
+    core = os.path.join(DEV_ROOT, "core") if DEV_ROOT else ""
+    if core and os.path.isdir(core) and core not in sys.path:
+        sys.path.insert(0, core)
 
 
-def qt_deps():
-    """nxt_editor's Qt installer, loaded by path.
+def _core_dir():
+    """The ``core`` package folder that an import would load, if any.
+
+    Found without importing it, so asking does not load stale code.
+
+    :return: the package folder, or "".
+    :rtype: str
+    """
+    try:
+        spec = importlib.util.find_spec("core")
+    except (ImportError, ValueError):
+        return ""
+    if spec is None or not spec.submodule_search_locations:
+        return ""
+    return os.path.abspath(list(spec.submodule_search_locations)[0])
+
+
+def _load_integration(module_name, file_name):
+    """A file from nxt_editor/integration, loaded by path.
 
     Loaded that way because importing anything under nxt_editor imports Qt,
     which is the thing that may not be there yet.
 
+    :param module_name: the name to keep it under in ``sys.modules``.
+    :type module_name: str
+    :param file_name: the file in nxt_editor/integration.
+    :type file_name: str
     :return: the module, or ``None`` when nxt_editor cannot be found.
     :rtype: module | None
     """
-    found = sys.modules.get("nxt_qt_deps")
+    found = sys.modules.get(module_name)
     if found is not None:
         return found
     for root in _source_dirs():
-        path = os.path.join(root, "nxt_editor", "integration", "qt_deps.py")
+        path = os.path.join(root, "nxt_editor", "integration", file_name)
         if os.path.isfile(path):
             break
     else:
         return None
-    spec = importlib.util.spec_from_file_location("nxt_qt_deps", path)
+    spec = importlib.util.spec_from_file_location(module_name, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    sys.modules["nxt_qt_deps"] = module
+    sys.modules[module_name] = module
     return module
+
+
+def qt_deps():
+    """nxt_editor's Qt installer.
+
+    :return: the module, or ``None`` when nxt_editor cannot be found.
+    :rtype: module | None
+    """
+    return _load_integration("nxt_qt_deps", "qt_deps.py")
+
+
+def wants_menu():
+    """Whether to add the NXT menu, by the same rule as Maya and Unreal.
+
+    ``NXT_NO_MENU=1`` leaves it out. The operators are registered either
+    way, so ``bpy.ops.nxt.open_editor()`` still opens the editor.
+
+    :return: whether to add it.
+    :rtype: bool
+    """
+    integration = _load_integration("nxt_integration", "__init__.py")
+    return integration is None or integration.wants_menu()
 
 
 def has_qt():
@@ -153,6 +243,12 @@ def has_qt():
     deps = qt_deps()
     if deps is None:
         return False
+    if not is_bundled():
+        # The dev launcher's install, beside the repos.
+        dev = os.path.join(DEV_ROOT, "nxt_dev_deps",
+                           "py%d%d" % sys.version_info[:2])
+        if os.path.isdir(dev) and dev not in sys.path:
+            sys.path.append(dev)
     return deps.add_to_path()
 
 
@@ -232,6 +328,45 @@ def close_nxt():
             pass
 
 
+def source_hash():
+    """A digest of the core Blender sources on disk.
+
+    :return: a short hash, or empty when there is nothing to read.
+    :rtype: str
+    """
+    core = _core_dir()
+    folder = os.path.join(core, "blender") if core else ""
+    if not folder or not os.path.isdir(folder):
+        return ""
+    digest = hashlib.md5()
+    for name in sorted(os.listdir(folder)):
+        if name.endswith(".py"):
+            with open(os.path.join(folder, name), "rb") as handle:
+                digest.update(handle.read())
+    return digest.hexdigest()[:12]
+
+
+def loaded_hash():
+    """The digest recorded when core was last (re)loaded.
+
+    :return: the hash, or empty when core is not loaded.
+    :rtype: str
+    """
+    module = sys.modules.get("core.blender")
+    return getattr(module, "_nxt_menu_hash", "") if module else ""
+
+
+def _stamp():
+    """Record which sources the loaded core came from.
+
+    :return: None
+    :rtype: None
+    """
+    module = sys.modules.get("core.blender")
+    if module is not None:
+        module._nxt_menu_hash = source_hash()
+
+
 class NXT_OT_open_editor(bpy.types.Operator):
     """Open an nxt editor window inside Blender"""
 
@@ -250,8 +385,7 @@ class NXT_OT_open_editor(bpy.types.Operator):
         if qt_deps() is None:
             self.report({"ERROR"},
                         "nxt_editor not found in {}. Reinstall the add-on, "
-                        "or pip install nxt-editor into Blender's python."
-                        .format(_where()))
+                        "or set SB_DEV_ROOT.".format(_where()))
             return {"CANCELLED"}
         if not has_qt():
             print(qt_deps().install_instructions())
@@ -311,7 +445,7 @@ class NXT_OT_install_qt(bpy.types.Operator):
         deps = qt_deps()
         print("nxt: installing PySide6 into {}".format(deps.deps_dir()))
         try:
-            where = deps.install()
+            where = deps.install(on_line=print)
         except RuntimeError as error:
             print(error)
             self.report({"ERROR"},
@@ -409,7 +543,7 @@ class NXT_OT_run_last(bpy.types.Operator):
 
 
 class NXT_OT_reload(bpy.types.Operator):
-    """Forget cached nxt modules so the next run reads the files"""
+    """Forget cached core modules so the next run reads the files"""
 
     bl_idname = "nxt.reload_code"
     bl_label = "Reload Code"
@@ -424,8 +558,9 @@ class NXT_OT_reload(bpy.types.Operator):
         :rtype: set
         """
         _paths()
-        dropped = _drop_nxt()
+        dropped = _drop_core()
         _paths()
+        _stamp()
         self.report({"INFO"}, "Forgot {} module(s); {}".format(
             dropped, nxt_report()))
         return {"FINISHED"}
@@ -451,7 +586,7 @@ def nxt_report():
     here = os.path.dirname(getattr(module, "__file__", "") or "")
     version = "?"
     try:
-        with open(os.path.join(here, "version.json")) as handle:
+        with open(os.path.join(here, "version.json"), encoding="utf-8") as handle:
             api = json.load(handle).get("API", {})
         version = "{}.{}.{}".format(api.get("MAJOR"), api.get("MINOR"),
                                     api.get("PATCH"))
@@ -468,13 +603,14 @@ def nxt_report():
         "" if resolves else "  -- TOO OLD to resolve nested references")
 
 
-def _drop_nxt():
-    """Forget the nxt modules.
+def _drop_core():
+    """Forget the core modules AND nxt.
 
-    Blender caches modules for the life of the session, so a session that
-    first imported an older nxt keeps it until it is dropped. The graphs
-    then stop resolving their nested references and the fault reads as a
-    graph problem rather than a stale import.
+    ``nxt`` is dropped as well as ``core``. It used not to be, and that is
+    a trap: Blender caches modules for the life of the session, so a
+    session that first imported an older nxt kept it through every Reload
+    Code. The graphs then stop resolving their nested references and the
+    fault reads as a graph problem rather than a stale import.
 
     ``nxt_editor`` and ``Qt`` are left alone when an editor window is open,
     because dropping the module out from under a live Qt window crashes it.
@@ -482,7 +618,7 @@ def _drop_nxt():
     :return: how many were dropped.
     :rtype: int
     """
-    roots = ["nxt"]
+    roots = ["core", "nxt"]
     if not _live_windows():
         roots.append("nxt_editor")
     names = [n for n in list(sys.modules)
@@ -513,7 +649,7 @@ def _run(operator, graph, fresh):
 
     _paths()
     if fresh:
-        _drop_nxt()
+        _drop_core()
         _paths()
 
     try:
@@ -524,9 +660,26 @@ def _run(operator, graph, fresh):
                             _where(), error))
         return {"CANCELLED"}
 
-    try:
+    # Ask BEFORE anything is cleared, the way Maya's /init/new_scene does.
+    # The dialog cannot block, so the build goes behind it: press Run, get
+    # asked, and nothing happens until you answer. A clean scene and a
+    # --background run are never asked and go straight through.
+    def _build():
         print("nxt: running {}".format(graph))
         Session().execute_graph(graph)
+
+    # A studio library can offer to ask before a build clears the scene.
+    # Used when it is there and has it; otherwise the graph just runs.
+    try:
+        from core.blender.ui import confirm_scene_build
+    except ImportError:
+        confirm_scene_build = None
+
+    try:
+        if confirm_scene_build is not None:
+            confirm_scene_build(_build, label=os.path.basename(graph))
+        else:
+            _build()
     except Exception as error:                  # noqa: BLE001
         # nxt prints the failing node's path and traceback to the console,
         # which locates the problem far better than a dialog can.
@@ -536,6 +689,7 @@ def _run(operator, graph, fresh):
         raise
 
     LAST_GRAPH = graph
+    _stamp()
     operator.report({"INFO"}, "Ran {}".format(os.path.basename(graph)))
     return {"FINISHED"}
 
@@ -567,6 +721,11 @@ class NXT_MT_menu(bpy.types.Menu):
         layout.separator()
         layout.operator(NXT_OT_reload.bl_idname, icon="SCRIPT")
 
+        on_disk, loaded = source_hash(), loaded_hash()
+        if loaded and on_disk and loaded != on_disk:
+            layout.separator()
+            layout.label(text="core is STALE -- reload", icon="ERROR")
+
 
 def _draw_menu(self, context):
     """Put the menu in the top bar.
@@ -584,6 +743,9 @@ def _draw_menu(self, context):
 CLASSES = (NXT_OT_open_editor, NXT_OT_install_qt, NXT_OT_close_editor,
            NXT_OT_run_graph, NXT_OT_run_last, NXT_OT_reload, NXT_MT_menu)
 
+#: Whether register() put the menu in the top bar, for unregister().
+__MENU_ADDED__ = [False]
+
 
 def register():
     """Register the add-on.
@@ -594,7 +756,9 @@ def register():
     _paths()
     for item in CLASSES:
         bpy.utils.register_class(item)
-    bpy.types.TOPBAR_MT_editor_menus.append(_draw_menu)
+    if wants_menu():
+        bpy.types.TOPBAR_MT_editor_menus.append(_draw_menu)
+        __MENU_ADDED__[0] = True
 
 
 def unregister():
@@ -604,7 +768,9 @@ def unregister():
     :rtype: None
     """
     close_nxt()
-    bpy.types.TOPBAR_MT_editor_menus.remove(_draw_menu)
+    if __MENU_ADDED__[0]:
+        bpy.types.TOPBAR_MT_editor_menus.remove(_draw_menu)
+        __MENU_ADDED__[0] = False
     for item in reversed(CLASSES):
         bpy.utils.unregister_class(item)
 

@@ -245,7 +245,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         """
         out_rect = self.get_selection_rect()
         for child in self.childItems():
-            if isinstance(child, NodeGraphicsItem):
+            if (isinstance(child, NodeGraphicsItem) and
+                    not self.view.node_hidden(child.node_path)):
                 child_rect = child.stack_bounding_rect
                 out_rect.setHeight(child_rect.height() + out_rect.height())
         return out_rect
@@ -272,6 +273,12 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         stacked under it, as it moves."""
         if self.scene() is None:
             return
+        # The Property Editor shows where a root node is as it is dragged.
+        # Only root nodes have a position of their own, a child's is where
+        # it sits under its parent.
+        if nxt_path.get_root_path(self.node_path) == self.node_path:
+            self.model.node_graphic_moved.emit(
+                self.node_path, [self.pos().x(), self.pos().y()])
         stack = [self]
         while stack:
             node = stack.pop()
@@ -740,13 +747,25 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.update()
         super(NodeGraphicsItem, self).hoverLeaveEvent(event)
 
-    def update_build_focus(self):
+    def update_build_focus(self, *signal_args, force=False):
+        """Draw this node as the one running, or not.
+
+        Every node hears about every step of a build, so only the ones
+        whose look changes are redrawn. Redrawing them all made a build
+        cost the square of its length in drawing, which a host, running
+        nodes on the thread that draws, spent stalled.
+
+        :param signal_args: what the signal calling this carried, unused
+        :param force: redraw even if nothing changed here
+        """
+        was_focus = self.is_build_focus
         if not self.model.executing:
             self.is_build_focus = False
+        else:
+            focus = self.model.get_build_focus()
+            self.is_build_focus = self.node_path == focus
+        if force or self.is_build_focus != was_focus:
             self.update()
-            return
-        self.is_build_focus = self.node_path == self.model.get_build_focus()
-        self.update()
 
     def update_from_model(self):
         """Sync the visible state of this node with the model."""
@@ -764,7 +783,7 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                                            comp)
         self.node_enabled = self.model.get_node_enabled(self.node_path)
         self.update_color()
-        self.update_build_focus()
+        self.update_build_focus(force=True)
         self._update_collapse()
         self.error_list = self.model.get_node_error(node_path, comp)
         self.update_fonts()
@@ -926,7 +945,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                                         layer_path=LAYERS.TOP)
 
     def arrange_descendants(self):
-        """Recursively arrange this node's descendants
+        """Recursively arrange this node's descendants. A child hidden with
+        its layers takes no room, so the children after it close up, see
+        StageView.apply_layer_visibility.
         """
         self.stack_height = self.get_selection_rect().height()
         if self.model.get_node_collapse(self.node_path):
@@ -942,6 +963,11 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                 continue
             child.setParentItem(self)
             child.setFlag(QtWidgets.QGraphicsItem.ItemIsMovable, False)
+            if self.view.node_hidden(child_path):
+                # Kept under this node, so it is shown with it again, but
+                # it takes no room in the stack.
+                child.arrange_descendants()
+                continue
 
             if prev_child:
                 y = prev_child.stack_height
@@ -1184,6 +1210,12 @@ class NodeExecutionPlug(NodeGraphicsPlug):
             painter.setBrush(colors.BREAK_COLOR)
             painter.setPen(shape_border_pen)
             painter.drawRect(self.radius * -1, self.radius * -1, self.radius * 2, self.radius * 2)
+            if self.model.breakpoints_ignored():
+                # Hollow while runs go through it, kept but not stopping.
+                inner = self.radius - 3
+                painter.setBrush(colors.GRAPH_BG_COLOR)
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.drawRect(inner * -1, inner * -1, inner * 2, inner * 2)
 
     def _buildTriangle(self, offset, side_length):
         polygon = QtGui.QPolygonF()

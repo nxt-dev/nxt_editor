@@ -1,20 +1,18 @@
 <div align="center">
 
-[![Release](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml/badge.svg?branch=release)](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml)
-[![Unittests](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml?query=branch%3Adev)
+[![Unittests](https://github.com/squarebit-studios/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/unittests.yml?query=branch%3Adev)
+[![Rez Release](https://github.com/squarebit-studios/nxt_editor/actions/workflows/rez_release.yml/badge.svg?branch=release)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/rez_release.yml)
+[![Host packages](https://github.com/squarebit-studios/nxt_editor/actions/workflows/maya_module_release.yml/badge.svg)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/maya_module_release.yml)
 
-[![Version](https://img.shields.io/badge/version-4.7.0-green?logo=rocket&logoColor=green)](https://github.com/nxt-dev/nxt_editor/releases/latest)
+[![Version](https://img.shields.io/badge/version-4.12.0-green?logo=rocket&logoColor=green)](https://github.com/squarebit-studios/nxt_editor/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)&nbsp;&nbsp;
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-0078D6?style=flat)
 
-![Python39](https://img.shields.io/badge/python-3.9-3776AB.svg?logo=python&logoColor=3776AB)
-![Python310](https://img.shields.io/badge/python-3.10-3776AB.svg?logo=python&logoColor=3776AB)
 ![Python311](https://img.shields.io/badge/python-3.11-3776AB.svg?logo=python&logoColor=3776AB)
 ![Python312](https://img.shields.io/badge/python-3.12-3776AB.svg?logo=python&logoColor=3776AB)
 ![Python313](https://img.shields.io/badge/python-3.13-3776AB.svg?logo=python&logoColor=3776AB)
-![Python314](https://img.shields.io/badge/python-3.14-3776AB.svg?logo=python&logoColor=3776AB)
 
 ![Maya2025](https://img.shields.io/badge/maya-2025-37A5CC?logo=autodeskmaya&logoColor=37A5CC)
 ![Maya2026](https://img.shields.io/badge/maya-2026-37A5CC?logo=autodeskmaya&logoColor=37A5CC)
@@ -37,7 +35,7 @@ Only clone this repo if you're [contributing](CONTRIBUTING.md) to the NXT codeba
 <br>
 
 #### Requirements
-- Python [3.9](https://www.python.org/downloads/release/python-390/) to [3.14](https://www.python.org/downloads/release/python-3140/)
+- Python [3.11](https://www.python.org/downloads/release/python-3110/) to [3.13](https://www.python.org/downloads/release/python-3130/)
 - We strongly recommend using a Python [virtual environment](https://docs.python.org/3/library/venv.html)
 
 *[Requirements for contributors](CONTRIBUTING.md#python-environment)*  
@@ -45,9 +43,13 @@ Only clone this repo if you're [contributing](CONTRIBUTING.md) to the NXT codeba
 ### NXT Standalone
 Our releases are hosted on [PyPi](https://pypi.org/project/nxt-editor/).
 
+> **This is the Square Bit fork.** It is distributed internally as the
+> `nxt_editor` rez package, not from PyPI. The PyPI release is upstream's and
+> lags behind: 4.0.2 at the time of writing, and capped at Python `<3.12`, so
+> it will not install into Maya 2027. Use the rez package for anything on
+> Python 3.12 or newer.
 - Install:
     - `pip install nxt-editor`
-    - Optionally, for richer code completion: `pip install nxt-editor[completion]`
 - Launch:
     - `nxt ui`
 - Update:

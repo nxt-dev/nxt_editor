@@ -36,6 +36,9 @@ KEYS = (user_dir.USER_PREF.COLOR_RANGE_MODE,
 class RangeCase(unittest.TestCase):
 
     def setUp(self):
+        # Let anything an earlier test left waiting run first, so it can't
+        # change the range part way through this one.
+        app.processEvents()
         saved = {key: (key in user_dir.user_prefs,
                        user_dir.user_prefs.get(key)) for key in KEYS}
 
@@ -149,6 +152,9 @@ class TheDialog(RangeCase):
         app.processEvents()
 
     def tearDown(self):
+        # A change still waiting to be applied would otherwise set the
+        # range in whichever test runs next.
+        self.dialog.apply_timer.stop()
         self.dialog.deleteLater()
         app.processEvents()
 
@@ -256,12 +262,20 @@ class ThePicker(RangeCase):
     def test_it_shows_how_the_color_will_look_in_your_view(self):
         dialog = self.open('#ffee00')
         self.assertTrue(dialog.view_preview.isVisible())
+        dialog.show_color()
         self.assertEqual(color_range.shown(dialog.color).name(),
                          dialog.view_preview.color.name())
         self.even(0.75, 0.1)
         dialog = self.open('#991c24')
+        # Set and shown again once it is open: in a full run a window an
+        # earlier test left open can apply its own range while this one
+        # opens, between the preview being drawn and the check below.
+        self.even(0.75, 0.1)
+        dialog.show_color()
         self.assertEqual(color_range.shown(dialog.color).name(),
                          dialog.view_preview.color.name())
+        self.assertNotEqual(dialog.color.name(),
+                            dialog.view_preview.color.name())
 
 
 class TheEditor(RangeCase):

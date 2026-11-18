@@ -8,23 +8,35 @@ the other, and only the relative one survived the graph being moved.
 # Builtin
 import os
 
+# Internal
+from nxt import nxt_io
+
 
 def stored_reference_path(path, layer_dir):
     """The path to store for a file chosen to be referenced.
 
     Relative to the layer when it sits alongside it, which is what keeps a
-    graph portable. Anything else is stored whole: making a path relative
-    across drives or out of the layer's folder would be worse than being
-    explicit, and would get in the way of NXT_FILE_ROOTS.
+    graph portable. With a core that knows how, relative to a root when it
+    is under one of NXT_FILE_ROOTS, or from a variable when it is in a
+    folder an env file variable names, see nxt.nxt_io.stored_reference_path.
+    Anything else is stored whole: making a path relative across drives or
+    out of the layer's folder would be worse than being explicit.
 
     :param path: the file as the file picker handed it back
     :type path: str
     :param layer_dir: folder of the layer that will hold the reference, or
         None when that layer has never been saved
     :type layer_dir: str | None
-    :return: forward slashed path, relative when the file is beside the layer
+    :return: forward slashed path, relative when the file is beside the
+        layer or under a root
     :rtype: str
     """
+    if hasattr(nxt_io, 'compact_reference_path'):
+        # The core works it all out, and only offers a root or variable
+        # path that resolves back to this very file.
+        return nxt_io.stored_reference_path(path, layer_dir)
+    # An nxt core from before roots and variables were asked: beside the
+    # layer or whole, as it does it.
     path = path.replace(os.path.sep, '/')
     if not layer_dir:
         return path

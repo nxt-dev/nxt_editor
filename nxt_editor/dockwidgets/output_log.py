@@ -1,4 +1,6 @@
 # Built-in
+import codecs
+import contextlib
 import logging
 import re
 from code import InteractiveConsole
@@ -161,7 +163,12 @@ class FileTailingThread(QtCore.QThread):
         super(FileTailingThread, self).__init__()
         self.watch_path = path
         self.last_mtime = 0
+        # In bytes, not characters: a character outside English can take
+        # several, and seeking by a character count lands mid-line.
         self.last_read_pos = 0
+        # Holds the start of a character a write has only half finished,
+        # until the rest of it arrives.
+        self.decoder = codecs.getincrementaldecoder('utf-8')('replace')
 
     def run(self):
         while not self.isInterruptionRequested():
@@ -176,15 +183,19 @@ class FileTailingThread(QtCore.QThread):
             if current_mtime == self.last_mtime:
                 continue
             self.last_mtime = current_mtime
-            with open(self.watch_path, 'r') as fp:
+            with open(self.watch_path, 'rb') as fp:
                 fp.seek(self.last_read_pos)
-                new_text = fp.read()
-            self.last_read_pos += len(new_text)
-            self.new_text.emit(new_text)
+                new_bytes = fp.read()
+            self.last_read_pos += len(new_bytes)
+            new_text = self.decoder.decode(new_bytes)
+            if new_text:
+                self.new_text.emit(new_text)
 
 
 class OutputLog(DockWidgetBase):
     write_raw = QtCore.Signal(str, float)
+    #: Lines each log keeps. Older ones are dropped from the top.
+    MAX_LINES = 10000
 
     def __init__(self, graph_model=None, parent=None):
         super(OutputLog, self).__init__('Output Log', graph_model=graph_model,
@@ -245,6 +256,22 @@ class OutputLog(DockWidgetBase):
 
         self.main_layout.addWidget(self.tabs_widget)
 
+        # Long logs made every resize of the window slow, because each one
+        # re-wrapped every line in them. The logs keep only their last
+        # MAX_LINES lines, and wrapping can be turned off, after which a
+        # resize has nothing to lay out again.
+        for text_edit in self.text_edits():
+            text_edit.document().setMaximumBlockCount(self.MAX_LINES)
+        self.wrap_action = QtWidgets.QAction('Wrap Lines', self)
+        self.wrap_action.setCheckable(True)
+        self.wrap_action.setToolTip('Wrap long lines to the width of the '
+                                    'log. Off is faster to resize.')
+        wrap = user_dir.user_prefs.get(user_dir.USER_PREF.OUTPUT_LOG_WRAP,
+                                       True)
+        self.wrap_action.setChecked(bool(wrap))
+        self.wrap_action.toggled.connect(self.set_wrap_lines)
+        self.set_wrap_lines(self.wrap_action.isChecked(), save=False)
+
         self.log_watcher = None
         self.wrapped_stdout = None
         self.wrapped_stderr = None
@@ -253,7 +280,8 @@ class OutputLog(DockWidgetBase):
         self.wrap_std_streams_for_raw_output()
 
         # Catch-up visual log to file log
-        with open(self.parent().nxt.log_file, 'r') as fp:
+        with open(self.parent().nxt.log_file, 'r', encoding='utf-8',
+                  errors='replace') as fp:
             catch_up = fp.read()
         catch_up = catch_up.rstrip()  # removing hanging newlines.
         self.rich_output_textedit.append(catch_up)
@@ -263,6 +291,32 @@ class OutputLog(DockWidgetBase):
         self.visual_handler.addFilter(self.log_filter_button)
         nxt_logger = logging.getLogger('nxt')
         nxt_logger.addHandler(self.visual_handler)
+
+    def text_edits(self):
+        """The rich and the raw log."""
+        return self.rich_output_textedit, self.raw_output_textedit
+
+    def set_wrap_lines(self, wrap, save=True):
+        """Wrap long lines in both logs to their width, or not at all.
+
+        :param wrap: True to wrap
+        :type wrap: bool
+        :param save: remember it in the user preferences
+        :type save: bool
+        """
+        mode = (QtWidgets.QTextEdit.WidgetWidth if wrap
+                else QtWidgets.QTextEdit.NoWrap)
+        for text_edit in self.text_edits():
+            text_edit.setLineWrapMode(mode)
+        if save:
+            user_dir.user_prefs[user_dir.USER_PREF.OUTPUT_LOG_WRAP] = bool(wrap)
+
+    def add_menu_actions(self, menu, text_edit):
+        """What both logs add to their right click menus."""
+        menu.addAction('Clear', text_edit.clear)
+        menu.addAction(self.parent().app_actions.clear_logs_action)
+        menu.addSeparator()
+        menu.addAction(self.wrap_action)
 
     def wrap_std_streams_for_raw_output(self):
         if self.log_watcher:
@@ -346,15 +400,9 @@ class OutputLog(DockWidgetBase):
         :param val: Text to add to textedit
         :type val: str
         """
-        _max = self.raw_output_textedit.verticalScrollBar().maximum()
-        cur = self.raw_output_textedit.verticalScrollBar().value()
-        self.raw_output_textedit.moveCursor(QtGui.QTextCursor.End)
-        self.raw_output_textedit.insertPlainText(val)
-        if _max == cur:
-            new_max = self.raw_output_textedit.verticalScrollBar().maximum()
-            self.raw_output_textedit.verticalScrollBar().setValue(new_max)
-        else:
-            self.raw_output_textedit.verticalScrollBar().setValue(cur)
+        with self.raw_output_textedit.stick_to_bottom.writing():
+            self.raw_output_textedit.moveCursor(QtGui.QTextCursor.End)
+            self.raw_output_textedit.insertPlainText(val)
 
     def write_rich_output(self, val, level=None):
         """Neighbor to write_raw_output. Use of write as naming is specific,
@@ -365,33 +413,29 @@ class OutputLog(DockWidgetBase):
         :param level: logging level to color text as, defaults to None
         :type level: int, optional
         """
-        _max = self.rich_output_textedit.verticalScrollBar().maximum()
-        cur = self.rich_output_textedit.verticalScrollBar().value()
-        self.rich_output_textedit.moveCursor(QtGui.QTextCursor.End)
-        if val == '\n':
-            self.rich_output_textedit.append('')
-        else:
-            final_newline = False
-            if val.endswith('\n'):
-                final_newline = True
-                text = val[:-1]
+        rich = self.rich_output_textedit
+        with rich.stick_to_bottom.writing():
+            rich.moveCursor(QtGui.QTextCursor.End)
+            if val == '\n':
+                rich.append('')
             else:
-                text = val
-            color = colors.LOGGING_COLORS.get(level, 'white')
-            html = '<font face="{}" color="{}">'.format(FONTS.MONOSPACE, color)
-            style = ("<style type='text/css'> "
-                     "pre {margin: 0; font-family: '%s';} "
-                     "</style>" % (FONTS.DEFAULT_FAMILY,))
-            text = style + ("<pre>{}</pre>".format(text))
-            html += text + '</font>'
-            self.rich_output_textedit.insertHtml(html)
-            if final_newline:
-                self.rich_output_textedit.append('')
-        if _max == cur:
-            new_max = self.rich_output_textedit.verticalScrollBar().maximum()
-            self.rich_output_textedit.verticalScrollBar().setValue(new_max)
-        else:
-            self.rich_output_textedit.verticalScrollBar().setValue(cur)
+                final_newline = False
+                if val.endswith('\n'):
+                    final_newline = True
+                    text = val[:-1]
+                else:
+                    text = val
+                color = colors.LOGGING_COLORS.get(level, 'white')
+                html = '<font face="{}" color="{}">'.format(FONTS.MONOSPACE,
+                                                            color)
+                style = ("<style type='text/css'> "
+                         "pre {margin: 0; font-family: '%s';} "
+                         "</style>" % (FONTS.DEFAULT_FAMILY,))
+                text = style + ("<pre>{}</pre>".format(text))
+                html += text + '</font>'
+                rich.insertHtml(html)
+                if final_newline:
+                    rich.append('')
 
     def tail_file_for_raw_output(self, file_path):
         """Treats the given file as what should be displayed in "raw output"
@@ -451,18 +495,75 @@ class OutputLog(DockWidgetBase):
         super(OutputLog, self).closeEvent(event)
 
 
+class StickToBottom(QtCore.QObject):
+    """Keeps a log scrolled to the bottom while the user leaves it there.
+
+    Whether to follow new text used to be decided by comparing the scroll
+    bar to its maximum just before each write. Resizing the log re-wraps
+    its lines, which moves the maximum without moving the bar, so after a
+    resize the bar no longer looked like it was at the bottom and the log
+    stopped following. Now the decision is only changed by the bar moving,
+    and whenever the range changes, a log that was at the bottom is put
+    back there.
+    """
+
+    def __init__(self, text_edit):
+        super(StickToBottom, self).__init__(text_edit)
+        self.text_edit = text_edit
+        self.bar = text_edit.verticalScrollBar()
+        #: Whether the log follows new text to the bottom.
+        self.stuck = True
+        self.busy = False
+        self.bar.valueChanged.connect(self.on_value_changed)
+        self.bar.rangeChanged.connect(self.on_range_changed)
+
+    def on_value_changed(self, value):
+        if self.busy:
+            return
+        self.stuck = value >= self.bar.maximum()
+
+    def on_range_changed(self, minimum, maximum):
+        if self.stuck:
+            self.set_value(maximum)
+
+    def set_value(self, value):
+        """Move the bar without it counting as the user scrolling."""
+        busy = self.busy
+        self.busy = True
+        try:
+            self.bar.setValue(value)
+        finally:
+            self.busy = busy
+
+    @contextlib.contextmanager
+    def writing(self):
+        """Wrap a write: follows it to the bottom if the log was there,
+        otherwise leaves the view where the user scrolled it, even though
+        writing moves the text cursor to the end.
+        """
+        stuck = self.stuck
+        value = self.bar.value()
+        self.busy = True
+        try:
+            yield
+        finally:
+            self.busy = False
+            self.stuck = stuck
+            self.set_value(self.bar.maximum() if stuck else value)
+
+
 class OutputTextEdit(QtWidgets.QTextEdit):
     def __init__(self, parent):
         super(OutputTextEdit, self).__init__(parent=parent)
         self._parent = parent
+        self.stick_to_bottom = StickToBottom(self)
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setReadOnly(True)
         self.setFont(FONTS.monospace_font(10))
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
-        menu.addAction('Clear', self.clear)
-        menu.addAction(self._parent.parent().app_actions.clear_logs_action)
+        self._parent.add_menu_actions(menu, self)
         menu.exec_(event.globalPos())
 
 
@@ -470,6 +571,7 @@ class OutputTextBrowser(QtWidgets.QTextBrowser):
     def __init__(self, parent):
         super(OutputTextBrowser, self).__init__(parent=parent)
         self._parent = parent
+        self.stick_to_bottom = StickToBottom(self)
         self.anchorClicked.connect(self.parent().link_clicked)
         self.setStyleSheet(self.parent().parent().styleSheet())
         self.setOpenLinks(False)
@@ -477,8 +579,7 @@ class OutputTextBrowser(QtWidgets.QTextBrowser):
 
     def contextMenuEvent(self, event):
         menu = self.createStandardContextMenu()
-        menu.addAction('Clear', self.clear)
-        menu.addAction(self._parent.parent().app_actions.clear_logs_action)
+        self._parent.add_menu_actions(menu, self)
         menu.exec_(event.globalPos())
 
 

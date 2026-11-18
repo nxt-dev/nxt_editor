@@ -3,8 +3,8 @@
 An **NXT** menu in Blender's top bar, the same place
 [nxt_maya](../maya/README.md) puts its `nxt` menu.
 
-There is also the separate
-[nxt-blender](https://github.com/nxt-dev/nxt-blender) project.
+If you want the upstream project instead, there is
+[nxt-blender](https://github.com/nxt-dev/nxt-blender).
 
 # Installation
 
@@ -22,9 +22,10 @@ to be installed or put on a path.
 ## Developing it
 
 Installed on its own, as `nxt_blender.py`, it has nothing bundled and uses
-whatever `nxt` and `nxt_editor` Blender's python can already import, such as
-a `pip install nxt-editor` into it. Without one it has nothing to run, and
-says so. `build/make_blender_addon.py` builds the release zip.
+the `nxt` and `nxt_editor` checkouts in the folder `SB_DEV_ROOT` names, with
+Qt.py and PySide6 from an `nxt_dev_deps` folder beside them. Without
+`SB_DEV_ROOT` set it has nothing to run, and says so.
+`build/make_blender_addon.py` builds the release zip.
 
 # Usage
 
@@ -32,7 +33,14 @@ says so. `build/make_blender_addon.py` builds the release zip.
 * **Close Editor** — closes the windows this session opened.
 * **Run Graph...** — pick a `.nxt` and execute it in the current scene.
 * **Run Last Graph** — the same graph again.
-* **Reload Code** — forget the cached `nxt` modules.
+* **Reload Code** — forget the cached `core` modules.
+
+## No menu
+
+Set `NXT_NO_MENU=1` before Blender starts to leave the **NXT** menu out, as
+in Maya and Unreal. The operators are still registered, so a studio menu
+can call `bpy.ops.nxt.open_editor()`, `bpy.ops.nxt.install_qt()` and the
+others.
 
 ## Qt
 
@@ -60,14 +68,15 @@ Graphs still run without Qt. Only the editor window needs it, so
 
 ## Reload Code is not a convenience
 
-Blender caches imported modules for the life of the session. Updating nxt
-and running a graph again re-runs the nxt that was already imported, which
-looks like a graph problem rather than a stale import. **Run Graph** reloads
-first by default.
+Blender caches imported modules for the life of the session. Editing
+`core/blender/*.py` and running a graph again re-runs what was already
+imported, which looks exactly like the edit having had no effect. **Run
+Graph** reloads first by default, and the menu marks the loaded code
+`STALE` when it stops matching the files on disk.
 
 ## Editing graphs
 
 The editor edits; it does not have to be open to run anything. Editing can
 also be done outside Blender entirely, with the standalone editor under a
-Python that has PySide6.
+Python that has PySide6 — see `templates/templates/blender/launch_nxt.py`.
 Graphs whose nodes call `bpy` can only be *executed* in Blender.

@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -98,10 +99,15 @@ class FindNode(unittest.TestCase):
         app.processEvents()
 
     def test_nothing_is_listed_until_typing_stops(self):
+        # Typing only starts the search timer. Checked before the event
+        # loop runs, so a slow machine can't let the delay pass first.
         QtTest.QTest.keyClicks(self.box, 'ctrl')
-        app.processEvents()
+        self.assertTrue(self.box.search_timer.isActive())
         self.assertEqual([], self.box.matches)
-        QtTest.QTest.qWait(finder.SEARCH_DELAY_MS + 100)
+        # Then wait for the search itself, as long as a busy machine needs.
+        deadline = time.time() + 5
+        while not self.box.matches and time.time() < deadline:
+            QtTest.QTest.qWait(finder.SEARCH_DELAY_MS)
         self.assertEqual(['/rig/arm_ctrl', '/rig/leg_ctrl'], self.box.matches)
 
     def test_enter_before_the_list_shows_still_finds_them(self):

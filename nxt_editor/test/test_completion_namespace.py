@@ -270,8 +270,18 @@ class CompletionNamespace(unittest.TestCase):
                                staticmethod(lambda: False)):
             from nxt_editor.actions import CodeEditorActions
             actions = CodeEditorActions(self.win)
-        self.assertFalse(actions.complete_jedi_action.isEnabled())
-        self.assertIn('pip install', actions.complete_jedi_action.whatsThis())
+        # Off, and turning it on offers to install it rather than doing
+        # nothing.
+        action = actions.complete_jedi_action
+        self.assertTrue(action.isEnabled())
+        self.assertFalse(action.isChecked())
+        self.assertIn('Optional Components', action.whatsThis())
+        with mock.patch.object(self.win, 'offer_jedi') as offer, \
+                mock.patch.object(code_completion.Jedi, 'installed',
+                                  staticmethod(lambda: False)):
+            action.trigger()
+        offer.assert_called_once_with()
+        self.assertFalse(action.isChecked())
 
 
 if __name__ == '__main__':

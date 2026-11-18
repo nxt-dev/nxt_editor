@@ -6,6 +6,7 @@ made to create the user dir if necessary, and an `assert`
 will be made that the user directory is a directory.
 """
 # Built-in
+import contextlib
 import os
 
 import json
@@ -56,7 +57,9 @@ def write_whole_file(path, mode, dump):
     """
     tmp = '{}.{}.tmp'.format(path, os.getpid())
     try:
-        with open(tmp, mode) as fp:
+        # Text is always UTF-8, whatever the system's own encoding is.
+        encoding = None if 'b' in mode else 'utf-8'
+        with open(tmp, mode, encoding=encoding) as fp:
             dump(fp)
             fp.flush()
             os.fsync(fp.fileno())
@@ -161,9 +164,13 @@ class USER_PREF():
     LAST_OPEN = 'last_open'
     RECENT_FILES = 'recent_files'
     LOG_FILTERS = 'log_filters'
+    # Whether the Output Log wraps long lines to its width.
+    OUTPUT_LOG_WRAP = 'output_log_wrap'
     ATTR_SORTING = 'attribute_sorting'
     EXEC_FRAMING = 'execution_framing'
     SKIP_INITIAL_BREAK = 'skip_initial_breakpoint'
+    # Runs go straight through every breakpoint, which are kept as they are.
+    IGNORE_BREAKS = 'ignore_breakpoints'
     HISTORICAL_LABEL_FORMAT = 'historical_label_format'
     NODE_TOOLTIPS = 'node_tooltips'
     GRID_SNAP = 'snap_to_grid'
@@ -187,6 +194,9 @@ class USER_PREF():
     CE_COMPLETE_HOST = 'code_editor_complete_host'
     CE_COMPLETE_JEDI = 'code_editor_complete_jedi'
     DING = 'ding'
+    # Offer to reload layer files changed on disk when the editor comes
+    # back to the front.
+    CHECK_DISK_CHANGES = 'check_files_changed_on_disk'
     SHOW_GRID = 'show_grid'
     # Property Editor rows in neutral text, the layer as a color beside
     # them, rather than in their layer's color.
@@ -198,8 +208,19 @@ class USER_PREF():
     COLOR_RANGE_MODE = 'color_range_mode'
     COLOR_RANGE_LIGHTNESS = 'color_range_lightness'
     COLOR_RANGE_CHROMA = 'color_range_chroma'
+    # Whether the graph shows lines other than exec lines, which always
+    # show, and which kinds. The lines toggle once hid instance and code
+    # lines together, under SHOW_IMPLICIT, which those two still start
+    # from.
     SHOW_IMPLICIT = 'show_implicit_connections'
+    SHOW_LINES = 'show_lines'
+    SHOW_INSTANCE_LINES = 'show_instance_lines'
+    SHOW_PROPERTY_LINES = 'show_property_lines'
+    SHOW_CODE_LINES = 'show_code_lines'
     SHOW_MINI_MAP = 'show_mini_map'
+    # Whether a graph is framed when it is first shown, rather than
+    # centered on the origin.
+    FRAME_ON_OPEN = 'frame_all_on_open'
     FONT_SIZE = 'font_size'
     # Whether the graph is shown. On unless turned off in the Window menu.
     SHOW_STAGE_VIEW = 'show_stage_view'
@@ -233,9 +254,14 @@ class EDITOR_CACHE():
     MAIN_WIN_GEO = 'main_window_geo'
     LAST_CLOSED = 'last_closed'
     NODE_PROPERTY_STATE = 'node_property_state'
+    HIDDEN_LAYERS = 'hidden_layers'
 
 
 class PrefFile(dict):
+    #: While above 0, a pref file already read is not looked at on disk
+    #: again, see holding_prefs.
+    held = 0
+
     def __init__(self, path, handlers=None):
         """
         Prefs uses the dictionary api to facilitate writing to the
@@ -281,6 +307,8 @@ class PrefFile(dict):
         the parse when the file has not moved. Our own `write` changes the
         file, so the next read picks it up like any other edit.
         """
+        if PrefFile.held and self._stamp is not None:
+            return self._stamp
         try:
             stat = os.stat(self.path)
         except OSError:
@@ -325,6 +353,22 @@ class PrefFile(dict):
         self.write()
 
 
+@contextlib.contextmanager
+def holding_prefs():
+    """Read each pref file from disk at most once while in this.
+
+    Drawing thousands of nodes reads the break and skip points for every
+    one of them, and each read looked at the file on disk. Nothing outside
+    the editor changes a pref file part way through one redraw, so once is
+    enough. A write is still read back.
+    """
+    PrefFile.held += 1
+    try:
+        yield
+    finally:
+        PrefFile.held -= 1
+
+
 class JsonPref(PrefFile):
     if sys.version_info[0] == 2:
         json_decode_err = Exception
@@ -347,7 +391,7 @@ class JsonPref(PrefFile):
         if stamp == self._stamp:
             return
         try:
-            with open(self.path, 'r') as fp:
+            with open(self.path, 'r', encoding='utf-8') as fp:
                 contents = json.load(fp)
         except (self.json_decode_err, OSError):
             # Keep what we have, the next write puts the file right.

@@ -17,7 +17,8 @@ from Qt import QtCore
 
 # Internal
 import nxt_editor
-from nxt_editor import file_browser, theme, user_dir, wires
+from nxt_editor import (connection_graphics_item, file_browser, theme,
+                        user_dir, wires)
 from nxt_editor.ai import providers as ai_providers
 from nxt.session import Session
 from nxt_editor.constants import EDITOR_VERSION, FONTS
@@ -43,6 +44,9 @@ from nxt_editor.dockwidgets.code_editor import NxtCodeEditor
 from nxt_editor.dockwidgets.reference_editor import ReferenceEditor
 from nxt import nxt_log, nxt_io, nxt_layer
 from nxt_editor.dialogs import (
+    FileChangedMessage,
+    MissingReferencesMessage,
+    NxtConfirmDialog,
     NxtFileDialog,
     NxtWarningDialog,
     ReloadSourceDialog,
@@ -62,6 +66,13 @@ import nxt.remote.contexts
 
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
+
+
+class _NoNewerFileError(Exception):
+    """Stands in with an nxt_core too old to open newer files anyway."""
+
+
+NewerFileError = getattr(nxt_io, 'NewerFileError', _NoNewerFileError)
 
 # Widget classes given the editor's font when the QApplication is nxt's own.
 WIDGETS_WITH_FONTS = (
@@ -128,7 +139,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except:  # Broad because Maya
             # Failed to run git branch, attempting fallback method
             try:
-                with open("../../.git/HEAD") as f:
+                with open("../../.git/HEAD", encoding='utf-8') as f:
                     head = f.read()
                 _, __, current_branch = head.rpartition("/")
             except:
@@ -158,6 +169,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.zoom_keys_down = False
         self._held_keys = []
         self._closing = False
+        # Files changed on disk already offered for reload, per tab,
+        # {model uid: {real_path: disk stamp}}. See check_files_changed_on_disk.
+        self._offered_disk_stamps = {}
+        self._asking_about_disk = False
+        self._was_deactivated = False
+        # The notice about references a graph could not load, kept so it
+        # is not collected while it is up.
+        self.missing_references_message = None
         self.last_focused_start = 0  # Start point focus tracker
         # FIXME: Fix with MV signal
         self.last_focused_tab = -1  # Tab tracker for upating the comp layer
@@ -281,6 +300,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.ai_assistant)
         self.ai_assistant.hide()
         self.ai_settings_dialog = None
+        self.optional_components_dialog = None
+        self.jedi_offered = False
 
         self.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
         self.setCorner(QtCore.Qt.BottomLeftCorner, QtCore.Qt.LeftDockWidgetArea)
@@ -360,6 +381,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         app = QtWidgets.QApplication.instance()
         app.aboutToQuit.connect(self.shutdown_rpc_server)
+        # Once the window is up, say if an optional component needs an
+        # update. Once a session at most.
+        QtCore.QTimer.singleShot(1500, self.show_component_notice)
 
     # RPC
     def startup_rpc_server(self, join=True):
@@ -429,7 +453,58 @@ class MainWindow(QtWidgets.QMainWindow):
         if event.type() == QtCore.QEvent.WindowDeactivate:
             self._held_keys = []
             self.zoom_keys_down = False
+            self._was_deactivated = True
+        elif (event.type() == QtCore.QEvent.WindowActivate and
+              self._was_deactivated):
+            # Coming back to the editor is when a file changed by
+            # something else, a version control update say, is worth
+            # mentioning. Not the first time the window comes up, it has
+            # only just read its files. After the event, so the window is
+            # up first.
+            self._was_deactivated = False
+            QtCore.QTimer.singleShot(0, self.check_files_changed_on_disk)
         return super(MainWindow, self).event(event)
+
+    def check_files_changed_on_disk(self):
+        """Offer to reload the current graph's layer files that something
+        else has changed on disk. Each change is offered once: keeping
+        what is here is remembered until the file changes again, and
+        saving over it still asks first, see save_layer.
+
+        :return: whether anything was reloaded
+        :rtype: bool
+        """
+        pref_key = user_dir.USER_PREF.CHECK_DISK_CHANGES
+        if not user_dir.user_prefs.get(pref_key, True):
+            return False
+        model = self.model
+        if not model or self._asking_about_disk or not self.isVisible():
+            return False
+        offered = self._offered_disk_stamps.setdefault(model.uid, {})
+        changed = []
+        for layer_path in model.layer_files_changed_on_disk():
+            stamp = model.read_disk_stamp(layer_path)
+            if offered.get(layer_path) != stamp:
+                offered[layer_path] = stamp
+                changed.append(layer_path)
+        if not changed:
+            return False
+        unsaved = [p for p in changed if p in model.effected_layers]
+        # The message takes the focus and gives it back, which would ask
+        # again before this has been answered.
+        self._asking_about_disk = True
+        try:
+            reload = FileChangedMessage.offer_reload(changed, unsaved,
+                                                     parent=self)
+        finally:
+            self._asking_about_disk = False
+        if not reload:
+            return False
+        self.set_waiting_cursor(True)
+        try:
+            return model.reload_layers(changed)
+        finally:
+            self.set_waiting_cursor(False)
 
     @staticmethod
     def set_waiting_cursor(state=True):
@@ -635,6 +710,7 @@ QCheckBox::indicator {
         model = StageModel(stage=stage)
         model.processing.connect(self.set_waiting_cursor)
         model.request_ding.connect(self.ding)
+        model.build_failed.connect(self.on_build_failed)
         model.layer_alias_changed.connect(partial(self.update_tab_title, model))
         # create view
         view = StageView(model=model, parent=self)
@@ -657,6 +733,26 @@ QCheckBox::indicator {
             self.update()  # TODO: Make this better
         self.set_waiting_cursor(False)
 
+    def on_ignore_breaks_toggled(self, ignored=None):
+        """Redraw the breakpoints of every open graph, which are hollow
+        while they are ignored. Nodes cache how they look, so each is told.
+        """
+        for open_file in self.open_files.values():
+            model = open_file.get('model')
+            if model:
+                model.breaks_changed.emit(tuple(model.get_breakpoints()))
+
+    def on_build_failed(self, node_path=None):
+        """A node failed and its build stopped. Builds can run long, so
+        ding (unless the error sound is off in the Options menu) and, when
+        the editor is not the window in front, flash it in the taskbar or
+        dock until it is looked at.
+        """
+        self.ding()
+        window = self.window()
+        if not window.isActiveWindow():
+            QtWidgets.QApplication.alert(window, 0)
+
     @staticmethod
     def ding():
         if user_dir.user_prefs.get(user_dir.USER_PREF.DING, True):
@@ -665,7 +761,7 @@ QCheckBox::indicator {
     def center_view(self):
         target_graph_view = self.get_current_view()
         if target_graph_view:
-            target_graph_view.centerOn(0, 0)
+            target_graph_view.frame_opened()
 
     def load_file(self, filepath=None):
         """Open an NxtFileDialog to allow user to select .nxt file to open.
@@ -698,12 +794,109 @@ QCheckBox::indicator {
         new_stage = None
         try:
             new_stage = self.nxt.load_file(potential_path)
+        except NewerFileError as e:
+            self.set_waiting_cursor(False)
+            if self.confirm_open_newer([(potential_path, e.version)]):
+                new_stage = self._load_allowing_newer(potential_path)
         except IOError as e:
             NxtWarningDialog.show_message("Failed to Open", str(e))
+        if new_stage and NewerFileError is not _NoNewerFileError:
+            # A reference saved by a newer nxt is left out, as one that is
+            # not found is. That can be opened anyway too.
+            newer = self.newer_references(new_stage)
+            if newer:
+                self.set_waiting_cursor(False)
+                if self.confirm_open_newer(newer):
+                    self.nxt.unload_file(new_stage.uid)
+                    new_stage = self._load_allowing_newer(potential_path)
         self.set_waiting_cursor(False)
         if new_stage:
             self.new_tab(initial_stage=new_stage, update=not self.in_startup)
             user_dir.editor_cache[user_dir.USER_PREF.LAST_OPEN] = potential_path
+            for open_file in self.open_files.values():
+                if open_file['stage'] is new_stage:
+                    self.notify_missing_references(open_file['model'])
+
+    @staticmethod
+    def newer_references(stage):
+        """The references of a loaded graph that were left out because a
+        newer nxt saved them.
+
+        :return: [(reference, version), ...]
+        :rtype: list
+        """
+        newer = []
+        for layer in stage._sub_layers:
+            layer_dir = os.path.dirname(layer.real_path or '') or None
+            for data in layer.sub_layers:
+                if data.get('layer') is not None:
+                    continue
+                reference = data.get(nxt_layer.SAVE_KEY.FILEPATH)
+                try:
+                    nxt_io.load_file_data(reference, layer_dir)
+                except NewerFileError as e:
+                    newer.append((reference, e.version))
+                except Exception:
+                    # Not found, or broken some other way. Not this.
+                    pass
+        return newer
+
+    @staticmethod
+    def confirm_open_newer(files):
+        """Ask whether to open files saved by a newer nxt anyway.
+
+        :param files: [(path, version), ...]
+        :rtype: bool
+        """
+        if len(files) == 1:
+            path, version = files[0]
+            text = ('"{}" was saved by a newer nxt ({}).'
+                    ''.format(os.path.basename(path), version))
+        else:
+            text = '{} files were saved by a newer nxt ({}).'.format(
+                len(files), ', '.join(sorted(set(v for _, v in files))))
+        info = ('Open anyway? Anything this version does not understand is '
+                'left out, and saving writes the file without it. Updating '
+                'nxt is the safe way to open it.')
+        button_text = {NxtConfirmDialog.Ok: 'Open Anyway',
+                       NxtConfirmDialog.Cancel: 'Cancel'}
+        return NxtConfirmDialog.show_message(
+            text=text, info=info, button_text=button_text,
+            icon=QtWidgets.QMessageBox.Icon.Warning)
+
+    def _load_allowing_newer(self, filepath):
+        self.set_waiting_cursor(True)
+        try:
+            with nxt_io.allow_newer_files():
+                return self.nxt.load_file(filepath)
+        except IOError as e:
+            NxtWarningDialog.show_message("Failed to Open", str(e))
+        finally:
+            self.set_waiting_cursor(False)
+        return None
+
+    def notify_missing_references(self, model):
+        """Say which references a graph could not load, with a button to
+        fix them in the Reference Editor. Not modal, so it neither holds up
+        a script opening graphs nor stops the graph being looked at first.
+
+        :param model: StageModel of the graph just opened
+        :return: the notice, or None when nothing was missing
+        """
+        missing = model.missing_references()
+        if not missing:
+            return None
+        if self.missing_references_message is not None:
+            self.missing_references_message.close()
+        message = MissingReferencesMessage(missing, parent=self)
+        layer = missing[0][0]
+
+        def edit_references():
+            self.edit_layer_references(layer, model=model)
+        message.edit_requested.connect(edit_references)
+        self.missing_references_message = message
+        message.show()
+        return message
 
     def save_open_tab(self):
         """Save the file that corresponds to the currently selected tab."""
@@ -715,18 +908,20 @@ QCheckBox::indicator {
         for layer in self.model.stage._sub_layers:
             self.save_layer(layer)
 
-    def edit_layer_references(self, layer=None):
+    def edit_layer_references(self, layer=None, model=None):
         """Open the reference editor on a layer.
 
         :param layer: layer to edit, defaults to the one being targeted
+        :param model: graph the layer is in, defaults to the current one
         :return: whether the dialog was accepted
         :rtype: bool
         """
-        if not self.model:
+        model = model or self.model
+        if not model:
             return False
-        layer = layer or self.model.target_layer
+        layer = layer or model.target_layer
         layer_path = getattr(layer, 'real_path', None)
-        dialog = ReferenceEditor(self.model, layer_path=layer_path,
+        dialog = ReferenceEditor(model, layer_path=layer_path,
                                  parent=self)
         return bool(dialog.exec_())
 
@@ -751,14 +946,37 @@ QCheckBox::indicator {
         finally:
             self.set_waiting_cursor(False)
 
+    def layer_or_target(self, layer=None):
+        """The layer to act on: the given one when it belongs to the graph
+        being looked at, otherwise that graph's target layer.
+
+        A layer from another tab is never the one meant. Saving one saved
+        a new graph over the file of a layer right clicked earlier in
+        another tab.
+        """
+        if not self.model:
+            return None
+        if layer is not None:
+            if any(layer is l for l in self.model.stage._sub_layers):
+                return layer
+            logger.debug('Ignoring a layer from another graph.')
+        return self.model.target_layer
+
     def save_layer(self, layer=None):
-        if not layer:
-            layer = self.model.target_layer
+        layer = self.layer_or_target(layer)
         if not layer:
             return
         if not layer.real_path:
             layer_saved = self.save_layer_as(layer, open_in_new_tab=False)
         else:
+            if self.model.layer_file_changed_on_disk(layer.real_path):
+                choice = FileChangedMessage.before_save(layer.real_path,
+                                                        parent=self)
+                if choice == FileChangedMessage.RELOAD:
+                    self.reload_layer_source(layer)
+                    return
+                if choice != FileChangedMessage.OVERWRITE:
+                    return
             self.set_waiting_cursor(True)
             self.nxt.save_layer(layer)
             layer_saved = True
@@ -784,8 +1002,9 @@ QCheckBox::indicator {
         :return: True if save was successful, false otherwise.
         :rtype: bool
         """
+        layer = self.layer_or_target(layer)
         if not layer:
-            layer = self.model.target_layer
+            return False
         old_real_path = layer.real_path
         old_path = layer.filepath
         if not old_real_path:
@@ -847,30 +1066,6 @@ QCheckBox::indicator {
             self.last_focused_start = idx
         self.last_focused_start += 1
         self.model.select_and_frame(start_nodes[idx])
-
-    def align_left(self):
-        logger.info("align left")
-
-    def align_hcenter(self):
-        logger.info("align hcenter")
-
-    def align_right(self):
-        logger.info("align right")
-
-    def align_top(self):
-        logger.info("align top")
-
-    def align_vcenter(self):
-        logger.info("align vcenter")
-
-    def align_bottom(self):
-        logger.info("align bottom")
-
-    def distribute_horizontal(self):
-        logger.info("distribute horizontal")
-
-    def distribute_vertical(self):
-        logger.info("distribute vertical")
 
     def undo(self):
         current_view = self.get_current_view()
@@ -1007,7 +1202,7 @@ QCheckBox::indicator {
 
     def update_implicit_action(self):
         self.view_actions.implicit_action.blockSignals(True)
-        state = self.model.implicit_connections
+        state = connection_graphics_item.lines_shown()
         self.view_actions.implicit_action.setChecked(state)
         self.view_actions.implicit_action.blockSignals(False)
 
@@ -1087,8 +1282,7 @@ QCheckBox::indicator {
                 tab_bar.installEventFilter(self)
 
     def show(self):
-        """Centering after the window is shown because the center is based on the window's size."""
-        # Todo: add previous rect to the bookmarks data for the layer - use this instead of center if it exists
+        """Framing after the window is shown because the frame is based on the window's size."""
         super(MainWindow, self).show()
         self.center_view()
 
@@ -1122,6 +1316,16 @@ QCheckBox::indicator {
         if getattr(editor, 'stage_model', None):
             editor.set_represented_node()
 
+    def open_env_files(self):
+        """Options > Environment Variables."""
+        from nxt_editor import env_dialog
+        if not env_dialog.available():
+            # The menu item is hidden, see AppActions.
+            return None
+        dialog = env_dialog.EnvFilesDialog(parent=self)
+        dialog.exec_()
+        return dialog
+
     def open_ai_settings(self):
         """Options > AI Assistant."""
         from nxt_editor.ai.settings_dialog import AiSettingsDialog
@@ -1133,6 +1337,63 @@ QCheckBox::indicator {
                 self.ai_assistant.refresh_providers)
         self.ai_settings_dialog.show()
         self.ai_settings_dialog.raise_()
+
+    def open_optional_components(self, focus=None):
+        """Options > Optional Components.
+
+        :param focus: the id of a component to point at
+        """
+        from nxt_editor.optional_components import OptionalComponentsDialog
+        if self.optional_components_dialog is None:
+            dialog = OptionalComponentsDialog(parent=self)
+            dialog.changed.connect(self.on_optional_component_changed)
+            self.optional_components_dialog = dialog
+        dialog = self.optional_components_dialog
+        if not dialog.busy():
+            dialog.refresh()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        if focus:
+            dialog.focus(focus)
+        return dialog
+
+    def offer_jedi(self):
+        """Python Analysis was picked without jedi: ask, the first time a
+        session, whether to install it, and after that go straight to the
+        dialog."""
+        from nxt_editor.integration import optional_deps
+        from nxt_editor.optional_components import Hint
+        if self.jedi_offered:
+            return self.open_optional_components(focus=optional_deps.JEDI.id)
+        self.jedi_offered = True
+        hint = Hint(parent=self)
+        if hint.exec_() != QtWidgets.QDialog.Accepted:
+            return None
+        dialog = self.open_optional_components(focus=optional_deps.JEDI.id)
+        dialog.install(optional_deps.JEDI)
+        return dialog
+
+    def on_optional_component_changed(self, component_id):
+        """Pick up what was just installed or removed, without a restart."""
+        from nxt_editor.dockwidgets import code_completion
+        from nxt_editor.integration import optional_deps
+        if component_id != optional_deps.JEDI.id:
+            return
+        code_completion.JEDI.reset()
+        self.code_editor_actions.refresh_jedi_action()
+        editor = getattr(self, 'code_editor', None)
+        if editor is not None:
+            editor.editor.invalidate_completion_words()
+
+    def show_component_notice(self):
+        from nxt_editor import optional_components
+        try:
+            return optional_components.show_startup_notice(
+                self.status_bar, self.open_optional_components)
+        except RuntimeError:
+            # The window went before the timer did.
+            return None
 
     def on_ai_enabled_changed(self, enabled):
         if enabled:
@@ -1322,6 +1583,18 @@ class NodeAuthoringToolBar(ToolBar):
         # revert node
         self.addAction(self.node_actions.revert_node_action)
         self.addSeparator()
+        # align, one button with every way in its menu
+        alignment = self.main_window.alignment_actions
+        self.align_menu = alignment.align_menu(self)
+        self.align_button = QtWidgets.QToolButton(self)
+        self.align_button.setIcon(self.align_menu.icon())
+        self.align_button.setToolTip('Align and distribute the selected '
+                                     'nodes and points')
+        self.align_button.setMenu(self.align_menu)
+        self.align_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.align_button.setIconSize(self.iconSize())
+        self.iconSizeChanged.connect(self.align_button.setIconSize)
+        self.addWidget(self.align_button)
         # select all
         self.addAction(self.node_actions.select_all_action)
 
@@ -1334,8 +1607,7 @@ class AlignDistributeToolBar(ToolBar):
         )
         self.setObjectName("Alignment Tools")
         self.main_window = parent
-        # ACTIONS
-        self.addActions(self.main_window.alignment_actions.actions())
+        self.addAction(self.main_window.alignment_actions.snap_action)
 
 
 class ExecuteToolBar(ToolBar):
@@ -1368,6 +1640,7 @@ class ExecuteToolBar(ToolBar):
                 self.exec_actions.add_break_action,
                 self.exec_actions.remove_break_action,
                 self.exec_actions.clear_breaks_action,
+                self.exec_actions.ignore_breaks_action,
             ]
         )
 
@@ -1386,10 +1659,29 @@ class DisplayToolBar(ToolBar):
         self.addSeparator()
         # Connection view
         self.addAction(self.view_actions.grid_action)
-        self.addAction(self.view_actions.implicit_action)
+        self.lines_menu = self.view_actions.lines_menu(self)
+        self.lines_button = QtWidgets.QToolButton(self)
+        self.lines_button.setIcon(self.view_actions.lines_icon)
+        self.lines_button.setToolTip('Choose which lines are shown')
+        self.lines_button.setMenu(self.lines_menu)
+        self.lines_button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        self.lines_button.setIconSize(self.iconSize())
+        self.iconSizeChanged.connect(self.lines_button.setIconSize)
+        self.addWidget(self.lines_button)
         self.addSeparator()
         self.addAction(self.view_actions.frame_all_action)
         self.addAction(self.view_actions.frame_selection_action)
+        self.bookmarks_menu = self.view_actions.bookmarks_menu(self)
+        self.bookmarks_button = QtWidgets.QToolButton(self)
+        self.bookmarks_button.setIcon(self.view_actions.bookmarks_icon)
+        self.bookmarks_button.setToolTip('Bookmarks: add one, go to one, '
+                                         'rename or delete one')
+        self.bookmarks_button.setMenu(self.bookmarks_menu)
+        self.bookmarks_button.setPopupMode(
+            QtWidgets.QToolButton.InstantPopup)
+        self.bookmarks_button.setIconSize(self.iconSize())
+        self.iconSizeChanged.connect(self.bookmarks_button.setIconSize)
+        self.addWidget(self.bookmarks_button)
         self.addSeparator()
         self.addAction(self.view_actions.hide_attrs_action)
         self.addAction(self.view_actions.disp_local_attrs_action)
@@ -1479,12 +1771,15 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_menu.setTearOffEnabled(True)
         self.view_menu.addAction(self.view_actions.frame_selection_action)
         self.view_menu.addAction(self.view_actions.frame_all_action)
+        self.view_menu.addAction(self.view_actions.frame_on_open_action)
+        self.bookmarks_menu = self.view_actions.bookmarks_menu(self.view_menu)
+        self.view_menu.addMenu(self.bookmarks_menu)
         self.view_menu.addSeparator()
         self.view_menu.addAction(self.display_actions.raw_action)
         self.view_menu.addAction(self.display_actions.resolve_action)
         self.view_menu.addAction(self.display_actions.cached_action)
         self.view_menu.addSeparator()
-        self.view_menu.addAction(self.view_actions.implicit_action)
+        self.view_menu.addMenu(self.view_actions.lines_menu(self.view_menu))
         self.view_menu.addAction(self.view_actions.curved_action)
         self.view_menu.addAction(self.view_actions.grid_action)
         self.view_menu.addAction(self.view_actions.mini_map_action)
@@ -1519,6 +1814,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.graph_menu = self.addMenu("Graph")
         self.graph_menu.setTearOffEnabled(True)
         self.graph_menu.addAction(self.node_actions.add_node_action)
+        self.graph_menu.addAction(
+            self.main_window.alignment_actions.layout_action)
 
         # execute menu
         self.execute_menu = self.addMenu("Execute")
@@ -1527,6 +1824,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.execute_menu.addAction(self.exec_actions.execute_selected_action)
         self.execute_menu.addAction(self.exec_actions.execute_hierarchy_action)
         self.execute_menu.addAction(self.exec_actions.execute_graph_action)
+        self.execute_menu.addSeparator()
+        self.execute_menu.addAction(self.exec_actions.ignore_breaks_action)
+        self.execute_menu.addSeparator()
         self.execute_menu.addAction(self.exec_actions.clear_cache_action)
         self.execute_menu.addAction(self.exec_actions.wt_recomp_action)
         # Populate action data for window actions
@@ -1577,7 +1877,11 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
         self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
+        self.options_menu.addAction(self.app_actions.check_disk_action)
         self.options_menu.addAction(self.app_actions.ai_settings_action)
+        self.options_menu.addAction(
+            self.app_actions.optional_components_action)
+        self.options_menu.addAction(self.app_actions.env_files_action)
         self.options_view_sub = self.options_menu.addMenu("View")
         self.options_view_sub.setTearOffEnabled(True)
         self.options_view_sub.addActions(self.view_opt_menu.actions())
@@ -1586,6 +1890,8 @@ class MenuBar(QtWidgets.QMenuBar):
         ce_actions = self.main_window.code_editor_actions
         self.options_complete_sub = self.options_menu.addMenu("Autocomplete")
         self.options_complete_sub.setTearOffEnabled(True)
+        # Python Analysis says how to get jedi when it is missing.
+        self.options_complete_sub.setToolTipsVisible(True)
         self.options_complete_sub.addAction(ce_actions.autocomplete_action)
         self.options_complete_sub.addSeparator()
         for source_action, _pref, _default in                 ce_actions.completion_source_actions:
@@ -1654,11 +1960,19 @@ class MenuBar(QtWidgets.QMenuBar):
             action.setChecked(widget.isVisible())
             self.window_menu.addAction(action)
         self.window_menu.addSeparator()
+        current = self.main_window.get_current_view()
         for file_dict in self.main_window.open_files.values():
             widget = file_dict["view"]
             name = file_dict["model"].top_layer.get_alias()
+            if widget is current:
+                # The graph being viewed stands out, without a check box.
+                name = u'▸ ' + name
             new_action = self.window_menu.addAction(name)
             new_action.setData(widget)
+            if widget is current:
+                font = new_action.font()
+                font.setBold(True)
+                new_action.setFont(font)
 
     def window_action_triggered(self, action=None):
         if not action:
@@ -1826,13 +2140,368 @@ class MenuBar(QtWidgets.QMenuBar):
         proxy.kill()
 
 
+class NewGraphButton(QtWidgets.QToolButton):
+    """The plus after the open graphs' tabs, which makes a new graph.
+
+    It paints itself from the theme rather than taking a style, so it is
+    the same in every host, and it stays clear of the tab widget's
+    stylesheet, which the layer color replaces whole.
+    """
+    SIZE = 22
+    GLYPH = 10
+    STROKE = 1.5
+    RADIUS = 4
+
+    def __init__(self, action, parent=None):
+        super(NewGraphButton, self).__init__(parent=parent)
+        self.action = action
+        self.setFixedSize(self.SIZE, self.SIZE)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setAccessibleName('New Graph')
+        self.setAttribute(QtCore.Qt.WA_Hover)
+        self.setEnabled(action.isEnabled())
+        action.changed.connect(self.follow_action)
+
+    def follow_action(self):
+        self.setEnabled(self.action.isEnabled())
+
+    def tooltip_text(self):
+        """The tooltip, with the shortcut the action has right now."""
+        keys = self.action.shortcut().toString(
+            QtGui.QKeySequence.NativeText)
+        return 'New Graph ({})'.format(keys) if keys else 'New Graph'
+
+    def event(self, event):
+        if event.type() == QtCore.QEvent.ToolTip:
+            # Read as it is about to show, so a rebound key is right.
+            self.setToolTip(self.tooltip_text())
+        return super(NewGraphButton, self).event(event)
+
+    def mousePressEvent(self, event):
+        # Only the left button makes a graph. The others are taken here so
+        # they do nothing, rather than reaching the tabs behind.
+        if event.button() != QtCore.Qt.LeftButton:
+            event.accept()
+            return
+        super(NewGraphButton, self).mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != QtCore.Qt.LeftButton:
+            event.accept()
+            return
+        super(NewGraphButton, self).mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        # Not a double click on the bar behind it.
+        event.accept()
+        if event.button() == QtCore.Qt.LeftButton:
+            super(NewGraphButton, self).mouseDoubleClickEvent(event)
+
+    def enterEvent(self, event):
+        super(NewGraphButton, self).enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event):
+        super(NewGraphButton, self).leaveEvent(event)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        down = self.isDown()
+        hovered = self.isEnabled() and self.underMouse()
+        if down or hovered:
+            painter.setPen(QtGui.QPen(theme.color(theme.BORDER), 1))
+            painter.setBrush(theme.color(theme.PRESSED if down
+                                         else theme.HOVER))
+            painter.drawRoundedRect(
+                QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5),
+                self.RADIUS, self.RADIUS)
+        if not self.isEnabled():
+            ink = theme.TEXT_FAINT
+        elif down or hovered:
+            ink = theme.TEXT
+        else:
+            ink = theme.TEXT_DIM
+        pen = QtGui.QPen(theme.color(ink), self.STROKE)
+        pen.setCapStyle(QtCore.Qt.RoundCap)
+        painter.setPen(pen)
+        center = QtCore.QRectF(self.rect()).center()
+        half = self.GLYPH / 2.0
+        painter.drawLine(QtCore.QPointF(center.x() - half, center.y()),
+                         QtCore.QPointF(center.x() + half, center.y()))
+        painter.drawLine(QtCore.QPointF(center.x(), center.y() - half),
+                         QtCore.QPointF(center.x(), center.y() + half))
+        painter.end()
+
+
+class LinkLabel(QtWidgets.QWidget):
+    """Text that runs an action when clicked, with the action's shortcut
+    after it. It paints itself from the theme, so a host's link color never
+    shows.
+    """
+    GAP = 8
+
+    def __init__(self, text, action, parent=None):
+        super(LinkLabel, self).__init__(parent=parent)
+        self.text = text
+        self.action = action
+        self.setAttribute(QtCore.Qt.WA_Hover)
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.setAccessibleName(text)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed,
+                           QtWidgets.QSizePolicy.Fixed)
+        self.text_font = theme.font(theme.TEXT_PX)
+
+    def shortcut_text(self):
+        """The action's shortcut as it is now, or an empty string."""
+        return self.action.shortcut().toString(QtGui.QKeySequence.NativeText)
+
+    def sizeHint(self):
+        metrics = QtGui.QFontMetrics(self.text_font)
+        width = metrics.horizontalAdvance(self.text)
+        keys = self.shortcut_text()
+        if keys:
+            width += self.GAP + metrics.horizontalAdvance(keys)
+        return QtCore.QSize(width + 2, metrics.height() + 6)
+
+    def showEvent(self, event):
+        # The shortcut may have been rebound since this last showed.
+        self.updateGeometry()
+        super(LinkLabel, self).showEvent(event)
+
+    def enterEvent(self, event):
+        self.update()
+
+    def leaveEvent(self, event):
+        self.update()
+
+    def mouseReleaseEvent(self, event):
+        if (event.button() == QtCore.Qt.LeftButton and
+                self.rect().contains(event.pos())):
+            self.action.trigger()
+
+    def paintEvent(self, event):
+        painter = QtGui.QPainter(self)
+        hovered = self.underMouse()
+        font = QtGui.QFont(self.text_font)
+        font.setUnderline(hovered)
+        painter.setFont(font)
+        painter.setPen(theme.color(theme.TEXT if hovered else theme.TEXT_DIM))
+        align = QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter
+        painter.drawText(self.rect(), align, self.text)
+        keys = self.shortcut_text()
+        if keys:
+            metrics = QtGui.QFontMetrics(self.text_font)
+            left = metrics.horizontalAdvance(self.text) + self.GAP
+            painter.setFont(self.text_font)
+            painter.setPen(theme.color(theme.TEXT_FAINT))
+            painter.drawText(self.rect().adjusted(left, 0, 0, 0), align, keys)
+        painter.end()
+
+
+class EmptyGraphsHint(QtWidgets.QWidget):
+    """What shows where the graph goes when no graph is open."""
+
+    def __init__(self, app_actions, parent=None):
+        super(EmptyGraphsHint, self).__init__(parent=parent)
+        self.new_link = LinkLabel('New Graph', app_actions.new_graph_action,
+                                  parent=self)
+        self.open_link = LinkLabel('Open...', app_actions.open_file_action,
+                                   parent=self)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(2)
+        layout.addStretch()
+        layout.addWidget(self.new_link, 0, QtCore.Qt.AlignHCenter)
+        layout.addWidget(self.open_link, 0, QtCore.Qt.AlignHCenter)
+        layout.addStretch()
+
+
+class ButtonCorner(QtWidgets.QWidget):
+    """Empty room at the end of a tab bar, kept for a button laid over it.
+    Clicks go through to the tab widget behind."""
+
+    def __init__(self, width, parent=None):
+        super(ButtonCorner, self).__init__(parent=parent)
+        self.room = width
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+
+    def sizeHint(self):
+        return QtCore.QSize(self.room, 1)
+
+
+class OpenFilesTabBar(QtWidgets.QTabBar):
+    """The open graphs' tabs. They say when their layout changes, and keep
+    their height with no tabs, so the new graph button has a bar to sit in.
+    """
+    layout_changed = QtCore.Signal()
+    empty_double_clicked = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        super(OpenFilesTabBar, self).__init__(parent=parent)
+        self._tab_height = 0
+
+    def sizeHint(self):
+        hint = super(OpenFilesTabBar, self).sizeHint()
+        if self.count():
+            self._tab_height = hint.height()
+            return hint
+        return QtCore.QSize(0, self.empty_height())
+
+    def minimumSizeHint(self):
+        if self.count():
+            return super(OpenFilesTabBar, self).minimumSizeHint()
+        return QtCore.QSize(0, self.empty_height())
+
+    def empty_height(self):
+        """The height of the bar while it had tabs, or of one tab."""
+        if not self._tab_height:
+            option = QtWidgets.QStyleOptionTab()
+            option.initFrom(self)
+            option.shape = self.shape()
+            option.text = 'untitled'
+            metrics = self.fontMetrics()
+            contents = QtCore.QSize(metrics.horizontalAdvance(option.text),
+                                    metrics.height())
+            size = self.style().sizeFromContents(
+                QtWidgets.QStyle.CT_TabBarTab, option, contents, self)
+            return size.height()
+        return self._tab_height
+
+    def tabLayoutChange(self):
+        super(OpenFilesTabBar, self).tabLayoutChange()
+        self.layout_changed.emit()
+
+    def resizeEvent(self, event):
+        super(OpenFilesTabBar, self).resizeEvent(event)
+        self.layout_changed.emit()
+
+    def moveEvent(self, event):
+        super(OpenFilesTabBar, self).moveEvent(event)
+        self.layout_changed.emit()
+
+    def mouseDoubleClickEvent(self, event):
+        if (event.button() == QtCore.Qt.LeftButton and
+                self.tabAt(event.pos()) == -1):
+            self.empty_double_clicked.emit()
+            return
+        super(OpenFilesTabBar, self).mouseDoubleClickEvent(event)
+
+
 class OpenFilesTabWidget(QtWidgets.QTabWidget):
+    #: Between the last tab and the new graph button, and past the button.
+    BUTTON_GAP = 4
+
     def __init__(self, parent=None):
         super(OpenFilesTabWidget, self).__init__(parent=parent)
         self.main_window = parent
+        bar = OpenFilesTabBar(self)
+        self.setTabBar(bar)
         self.setTabsClosable(True)
         self.setMovable(True)
+        # Arrows in every style, so tabs that do not fit scroll the same
+        # way everywhere.
+        bar.setUsesScrollButtons(True)
         self.tabCloseRequested.connect(self.close_tab)
+        app_actions = self.main_window.app_actions
+        self.new_graph_button = NewGraphButton(app_actions.new_graph_action,
+                                               parent=self)
+        self.new_graph_button.clicked.connect(self.new_graph)
+        # Holds the bar's far end for the button when it and the tabs do
+        # not fit, which puts the scroll arrows to its left.
+        self.button_corner = ButtonCorner(
+            NewGraphButton.SIZE + 2 * self.BUTTON_GAP, parent=self)
+        self.button_corner.hide()
+        self.empty_hint = EmptyGraphsHint(app_actions, parent=self)
+        self._placing = False
+        bar.layout_changed.connect(self.place_new_graph_button)
+        bar.tabMoved.connect(self.place_new_graph_button)
+        bar.empty_double_clicked.connect(self.new_graph)
+        self.place_new_graph_button()
+
+    def new_graph(self):
+        """Make a new graph as File > New Graph does, and give its view the
+        keyboard."""
+        action = self.main_window.app_actions.new_graph_action
+        if not action.isEnabled():
+            return
+        action.trigger()
+        view = self.currentWidget()
+        if view is not None:
+            view.setFocus()
+
+    def overflowing(self):
+        """Whether the button is pinned to the end of the bar."""
+        corner = self.cornerWidget(QtCore.Qt.TopRightCorner)
+        return corner is self.button_corner
+
+    def place_new_graph_button(self):
+        """Put the new graph button after the last tab, or at the end of
+        the bar when they do not both fit."""
+        if self._placing:
+            return
+        self._placing = True
+        try:
+            self._place_new_graph_button()
+        finally:
+            self._placing = False
+
+    def _place_new_graph_button(self):
+        bar = self.tabBar()
+        size = NewGraphButton.SIZE
+        gap = self.BUTTON_GAP
+        count = bar.count()
+        tabs_width = bar.sizeHint().width() if count else 0
+        fits = bar.x() + tabs_width + gap + size + gap <= self.width()
+        if fits == self.overflowing():
+            self.setCornerWidget(None if fits else self.button_corner,
+                                 QtCore.Qt.TopRightCorner)
+            self.button_corner.setVisible(not fits)
+        # A tab that is not current is drawn lower, which puts the middle of
+        # its text a pixel below the middle of the bar.
+        y = bar.y() + bar.height() // 2 + 1 - size // 2
+        if not fits:
+            x = self.width() - gap - size
+        elif count:
+            x = bar.x() + bar.tabRect(count - 1).right() + 1 + gap
+        else:
+            x = bar.x() + gap
+        self.new_graph_button.move(x, y)
+        self.new_graph_button.raise_()
+        self.empty_hint.setVisible(not count)
+        if not count:
+            top = bar.geometry().bottom() + 1
+            self.empty_hint.setGeometry(0, top, self.width(),
+                                        max(0, self.height() - top))
+            self.empty_hint.raise_()
+
+    def tabInserted(self, index):
+        super(OpenFilesTabWidget, self).tabInserted(index)
+        self.place_new_graph_button()
+
+    def tabRemoved(self, index):
+        super(OpenFilesTabWidget, self).tabRemoved(index)
+        self.place_new_graph_button()
+
+    def resizeEvent(self, event):
+        super(OpenFilesTabWidget, self).resizeEvent(event)
+        self.place_new_graph_button()
+
+    def showEvent(self, event):
+        super(OpenFilesTabWidget, self).showEvent(event)
+        self.place_new_graph_button()
+
+    def mouseDoubleClickEvent(self, event):
+        # The bar is only as wide as its tabs. The space after them, still
+        # in the bar's band, is this widget's.
+        bar = self.tabBar().geometry()
+        pos = event.pos()
+        if (event.button() == QtCore.Qt.LeftButton and
+                pos.y() <= bar.bottom() and pos.x() >= bar.left()):
+            self.new_graph()
+            return
+        super(OpenFilesTabWidget, self).mouseDoubleClickEvent(event)
 
     def close_tab(self, index):
         model = self.widget(index).model
@@ -1943,10 +2612,9 @@ class StartRPCThread(QtCore.QThread):
                 logger.warning("Failed to tail remote rpc server log!")
         if remote_rpc_log_file_path:
             self.main_window.rpc_log_tail.watch_path = remote_rpc_log_file_path
-            with open(remote_rpc_log_file_path, "r") as fp:
-                text = fp.read()
-                end_pos = len(text)
-            self.main_window.rpc_log_tail.last_read_pos = end_pos
+            # Picks up from the end, in bytes, as the tail counts them.
+            self.main_window.rpc_log_tail.last_read_pos = os.path.getsize(
+                remote_rpc_log_file_path)
         if self.main_window.model:
             self.main_window.model.processing.emit(False)
 

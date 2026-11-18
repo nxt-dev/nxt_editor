@@ -23,8 +23,8 @@ from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 import nxt_editor
-from nxt import nxt_path
-from nxt_editor import colors, theme, user_dir
+from nxt import nxt_node, nxt_path
+from nxt_editor import colors, connection_graphics_item, theme, user_dir
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -256,21 +256,41 @@ class InstanceLinkItem(QtWidgets.QGraphicsPathItem):
         super(InstanceLinkItem, self).__init__()
         self.source_item = source_item
         self.instance_item = instance_item
-        pen = QtGui.QPen(QtCore.Qt.gray, 2, QtCore.Qt.DashDotDotLine)
-        pen.setCosmetic(True)
-        self.setPen(pen)
+        self.arrow = QtGui.QPolygonF()
+        self.setPen(connection_graphics_item.instance_pen())
         self.setZValue(-1)
         self.update_path()
+
+    @property
+    def line(self):
+        """(source path, instance attr path), as the graph names the line."""
+        return (self.source_item.node_path, nxt_path.make_attr_path(
+            self.instance_item.node_path,
+            nxt_node.INTERNAL_ATTRS.INSTANCE_PATH))
+
+    def distance(self, scene_pos):
+        """How far scene_pos is from the line, or 0 on its arrow."""
+        if self.arrow.containsPoint(scene_pos, QtCore.Qt.OddEvenFill):
+            return 0.0
+        return connection_graphics_item.path_distance(self.path(), scene_pos)
 
     def update_path(self):
         start = self.source_item.pos() + QtCore.QPointF(NODE_WIDTH,
                                                         NODE_HEIGHT / 2.0)
         end = self.instance_item.pos() + QtCore.QPointF(0, NODE_HEIGHT / 2.0)
-        bend = max(abs(end.x() - start.x()) * 0.5, 40)
-        path = QtGui.QPainterPath(start)
-        path.cubicTo(start + QtCore.QPointF(bend, 0),
-                     end - QtCore.QPointF(bend, 0), end)
+        path, self.arrow = connection_graphics_item.arrow_line(
+            [start, end], curved=True)
         self.setPath(path)
+
+    def boundingRect(self):
+        rect = super(InstanceLinkItem, self).boundingRect()
+        return rect.united(self.arrow.boundingRect())
+
+    def paint(self, painter, option, widget=None):
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        connection_graphics_item.paint_arrow_line(
+            painter, self.path(), self.arrow,
+            connection_graphics_item.instance_pen())
 
 
 class InstanceGraphicsView(QtWidgets.QGraphicsView):
@@ -278,6 +298,8 @@ class InstanceGraphicsView(QtWidgets.QGraphicsView):
     mouse button, box select, F frames, double click a node to show its
     instances."""
     focus_requested = QtCore.Signal(str)
+    # A right click on a line: the line, and where to show its menu.
+    line_menu_requested = QtCore.Signal(object, QtCore.QPoint)
 
     def __init__(self, parent=None):
         super(InstanceGraphicsView, self).__init__(parent)
@@ -292,15 +314,22 @@ class InstanceGraphicsView(QtWidgets.QGraphicsView):
         self._pan_from = None
 
     def frame_all(self):
+        """Fit the nodes in the view, centered, and never larger than
+        life."""
         rect = self.scene().itemsBoundingRect()
         if rect.isEmpty():
             return
+        # The scene only ever grows to fit what has been drawn in it, and
+        # a scene smaller than the view, or one the nodes sit at one end
+        # of, is pinned to a side rather than centered. Room all round
+        # lets the nodes sit in the middle.
+        room = max(rect.width(), rect.height(), 2000.0) * 4
+        self.setSceneRect(rect.adjusted(-room, -room, room, room))
         self.fitInView(rect.adjusted(-40, -40, 40, 40),
                        QtCore.Qt.KeepAspectRatio)
-        # Never larger than life.
         if self.transform().m11() > 1.0:
             self.resetTransform()
-            self.centerOn(rect.center())
+        self.centerOn(rect.center())
 
     def wheelEvent(self, event):
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
@@ -337,6 +366,30 @@ class InstanceGraphicsView(QtWidgets.QGraphicsView):
             self.focus_requested.emit(item.node_path)
             return
         super(InstanceGraphicsView, self).mouseDoubleClickEvent(event)
+
+    def link_at(self, view_pos):
+        """The instance line under a click, allowing some room."""
+        scene_pos = self.mapToScene(view_pos)
+        room = (connection_graphics_item.HIT_PIXELS /
+                (self.transform().m11() or 1.0))
+        area = QtCore.QRectF(scene_pos.x() - room, scene_pos.y() - room,
+                             room * 2, room * 2)
+        nearest, best = None, None
+        for item in self.scene().items(
+                area, QtCore.Qt.IntersectsItemBoundingRect):
+            if not isinstance(item, InstanceLinkItem):
+                continue
+            gap = item.distance(scene_pos)
+            if gap <= room and (best is None or gap < best):
+                nearest, best = item, gap
+        return nearest
+
+    def contextMenuEvent(self, event):
+        link = self.link_at(event.pos())
+        if link is None:
+            super(InstanceGraphicsView, self).contextMenuEvent(event)
+            return
+        self.line_menu_requested.emit(link, event.globalPos())
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_F:
@@ -382,6 +435,7 @@ class InstanceView(DockWidgetBase):
         layout.addLayout(bar)
         self.view = InstanceGraphicsView(main)
         self.view.focus_requested.connect(self.set_focus_path)
+        self.view.line_menu_requested.connect(self.show_line_menu)
         self.view.scene().selectionChanged.connect(self.on_view_selection)
         layout.addWidget(self.view, 1)
         self.message = QtWidgets.QLabel(self.view)
@@ -416,10 +470,50 @@ class InstanceView(DockWidgetBase):
         self.model_signal_connections = [
             (model.comp_layer_changed, self.request_rebuild),
             (model.nodes_changed, self.request_rebuild),
+            (model.attrs_changed, self.on_attrs_changed),
             (model.layer_color_changed, self.request_rebuild),
             (model.selection_changed, self.on_model_selection),
         ]
         super(InstanceView, self).set_stage_model_connections(model, connect)
+
+    def on_attrs_changed(self, attr_paths):
+        """Instances made or removed change what is drawn here."""
+        inst = nxt_node.INTERNAL_ATTRS.INSTANCE_PATH
+        if any(nxt_path.attr_name_from_attr_path(path) == inst
+               for path in attr_paths):
+            self.request_rebuild()
+
+    # Lines --------------------------------------------------------------
+
+    def line_menu(self, link):
+        """The right click menu for an instance line, as in the graph:
+        break it, which removes the instance, or go to either end."""
+        menu = QtWidgets.QMenu(self)
+        model = self.stage_model
+        source, target = link.line
+        if model and model._breakable(target):
+            action = menu.addAction('Break Connection')
+            action.triggered.connect(
+                lambda: model.break_connections([link.line]))
+            menu.addSeparator()
+        for text, path in (('Go to Source', link.source_item.node_path),
+                           ('Go to Target', link.instance_item.node_path)):
+            go = menu.addAction('{}: {}'.format(text, path))
+            go.triggered.connect(
+                lambda checked=False, p=path: self.go_to_node(p))
+        return menu
+
+    def show_line_menu(self, link, global_pos):
+        self.line_menu(link).exec_(global_pos)
+
+    def go_to_node(self, node_path):
+        """Select a node everywhere it is shown, and bring it into view in
+        the graph."""
+        view = getattr(self.main_window, 'view', None)
+        if view is not None:
+            view.go_to_node(node_path)
+        elif self.stage_model:
+            self.stage_model.set_selection([node_path])
 
     def on_stage_model_destroyed(self):
         super(InstanceView, self).on_stage_model_destroyed()

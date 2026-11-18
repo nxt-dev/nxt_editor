@@ -1,17 +1,60 @@
 name: Unittests
 
+# The nxt-dev copy of squarebit-studios' dev: the suite on hosted
+# runners. The squarebit job and its release workflows use private
+# shared workflows and studio runners, which can't run here.
+
 on:
   workflow_dispatch:
-    branches-ignore: [release]
-  workflow_call:
   pull_request:
-    branches-ignore: [release]
+    branches-ignore: [ release ]
   push:
-    branches-ignore: [release]
+    branches-ignore: [ release ]
 
 jobs:
-  test-python:
-    secrets: inherit
-    uses: nxt-dev/nxt/.github/workflows/unittests.yml@dev
-    with:
-      QT_DEPENDENCIES: true
+  # The same suite on hosted runners, for the copies of this repo outside
+  # squarebit-studios (nxt-dev), which can't reach the studio runners.
+  test-public:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+        python-version: ["3.11", "3.13"]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Qt's system libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-x11-0 libxcb-cursor0             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0             libxcb-shape0 libxcb-xfixes0 libxcb-randr0 libxcb-xinerama0             libxcb-util1 libegl1 libgl1 xvfb
+
+      - name: Install nxt-core from the matching branch
+        shell: bash
+        run: |
+          case "${{ github.head_ref || github.ref_name }}" in
+            release) branch=release ;;
+            next) branch=next ;;
+            *) branch=dev ;;
+          esac
+          pip install "git+https://github.com/${{ github.repository_owner }}/nxt.git@$branch"
+
+      - name: Install this package
+        run: pip install . pytest
+
+      - name: Run the tests (Linux)
+        if: runner.os == 'Linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: xvfb-run -s "-screen 0 1280x1024x24" python -m pytest -q -p no:cacheprovider nxt_editor/test
+
+      - name: Run the tests (Windows)
+        if: runner.os == 'Windows'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q -p no:cacheprovider nxt_editor/test

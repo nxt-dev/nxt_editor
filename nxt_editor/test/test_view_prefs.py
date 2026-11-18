@@ -18,7 +18,7 @@ from Qt import QtGui, QtWidgets
 
 # Internal
 from nxt.session import Session
-from nxt_editor import stage_model, user_dir
+from nxt_editor import connection_graphics_item, stage_model, user_dir
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
 
@@ -50,16 +50,14 @@ class ViewPrefs(unittest.TestCase):
         cls.win = None
 
     def test_the_lines_toggle_is_remembered_for_new_tabs(self):
-        key = user_dir.USER_PREF.SHOW_IMPLICIT
+        key = user_dir.USER_PREF.SHOW_LINES
         saved = user_dir.user_prefs.get(key)
         try:
             action = self.win.view_actions.implicit_action
             action.setChecked(True)
             action.trigger()
             self.assertFalse(user_dir.user_prefs.get(key))
-            os.chdir(TEST_DIR)
-            stage = Session().load_file('StageInstanceTest.nxt')
-            self.assertFalse(stage_model.StageModel(stage).implicit_connections)
+            self.assertFalse(connection_graphics_item.lines_shown())
         finally:
             restore(key, saved)
 

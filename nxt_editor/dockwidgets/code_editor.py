@@ -1,10 +1,13 @@
 # Builtin
 import builtins
 import importlib
+import io
 import keyword
 import logging
+import os
 import re
 import sys
+import threading
 from collections import OrderedDict
 from functools import partial
 
@@ -20,6 +23,7 @@ from nxt_editor.label_edit import LabelEdit
 from nxt_editor import colors, theme, user_dir
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, nxt_path, tokens
+from nxt.tokens import TOKENTYPE
 from nxt.nxt_node import INTERNAL_ATTRS
 from nxt_editor.dockwidgets import syntax
 from nxt_editor.dockwidgets import code_completion
@@ -313,6 +317,7 @@ class CodeEditor(DockWidgetBase):
             action.setEnabled(not self.locked)
 
     def set_represented_node(self):
+        previous_path = self.node_path
         self.node_path = self.stage_model.node_focus
         if not self.node_path:
             self.clear()
@@ -322,7 +327,12 @@ class CodeEditor(DockWidgetBase):
         if not self.node_name:
             self.clear()
         else:
-            self.editor.verticalScrollBar().setValue(0)
+            # Changing the target layer, accepting an edit or editing an
+            # attribute all land here with the same node still showing.
+            # Only a different node starts at the top; the same one stays
+            # where it was scrolled to.
+            if self.node_path != previous_path:
+                self.editor.verticalScrollBar().setValue(0)
             self.update_editor()
             self.update_border_color()
             self.update_format_characters()
@@ -551,6 +561,15 @@ class CodeEditor(DockWidgetBase):
         self.exit_editing()
 
 
+class JediAnswer(QtCore.QObject):
+    """Carries word from jedi's worker thread back to the editor's.
+
+    Emitted on the worker, it is delivered on the thread this object lives
+    on, so the editor only ever touches its widgets from its own thread.
+    """
+    answered = QtCore.Signal(object)
+
+
 class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
     """NxtCodeEditor inherited from QPlainTextEdit providing:
@@ -605,6 +624,14 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                                       'brackets')
         self.extra_selection_layers = OrderedDict()
         self.completion_words = None
+        # The prefix the open list was built for, so typing more of the
+        # same name only filters it. None when it has to be built again.
+        self.completion_base = None
+        self.completion_width = 0
+        # What the compute's import lines ask for, kept while they stay the
+        # same, since every key changes the text. See imported_modules.
+        self.imports_key = None
+        self.imports_found = None
         self.prev_v_scroll_value = 0
         self.prev_h_scroll_value = 0
         self.changed_lines = []
@@ -722,14 +749,27 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.completer.setWidget(self)
         self.completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
         self.completer.setCaseSensitivity(QtCore.Qt.CaseSensitive)
+        self.completer.setMaxVisibleItems(12)
         self.completer.activated.connect(self.insert_completion)
         self.completer.popup().installEventFilter(self)
-        # jedi is asked once typing pauses rather than on every key, since
-        # a fresh question can take a moment.
+        # The list opens once typing pauses, so a fast typist is never
+        # waiting on it. While it is open, each key only filters it.
+        self.completion_timer = QtCore.QTimer(self)
+        self.completion_timer.setSingleShot(True)
+        self.completion_timer.setInterval(150)
+        self.completion_timer.timeout.connect(self.completions_due)
+        self.completion_position = None
+        # jedi is asked once typing pauses rather than on every key, and
+        # on a worker thread, since a fresh question can take seconds.
         self.jedi_timer = QtCore.QTimer(self)
         self.jedi_timer.setSingleShot(True)
-        self.jedi_timer.setInterval(250)
+        self.jedi_timer.setInterval(300)
         self.jedi_timer.timeout.connect(self.ask_jedi)
+        self.jedi_answer = JediAnswer(self)
+        self.jedi_answer.answered.connect(self.jedi_answered)
+        self.jedi_busy = False
+        self.jedi_again = None
+        self.jedi_force = False
         # The word list is rebuilt from the document, so it goes stale on
         # every edit. Rebuilding is deferred until a completion is asked for.
         self.textChanged.connect(self.invalidate_completion_words)
@@ -750,12 +790,109 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.viewport().setMouseTracking(True)
         self._cursor_before_token = None
 
+        # code folding, see the folding section below
+        self.folding = False
+        self.document().contentsChange.connect(self.unfold_edited)
+        self.cursorPositionChanged.connect(self.unfold_at_cursor)
+        self.ce_actions.fold_block_action.triggered.connect(
+            self.fold_current)
+        self.ce_actions.unfold_block_action.triggered.connect(
+            self.unfold_current)
+        self.ce_actions.fold_all_action.triggered.connect(self.fold_all)
+        self.ce_actions.unfold_all_action.triggered.connect(self.unfold_all)
+
     def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat("text/plain"):
+        mime = event.mimeData()
+        if mime.hasFormat("text/plain") or self.dropped_files(mime):
             event.acceptProposedAction()
             self.setFocus()
             return
         super(NxtCodeEditor, self).dragEnterEvent(event)
+
+    @staticmethod
+    def dropped_files(mime):
+        """The files, not folders, on this computer that are being dropped.
+
+        :param mime: QMimeData of the drag
+        :return: their paths
+        :rtype: list
+        """
+        if not mime.hasUrls():
+            return []
+        paths = []
+        for url in mime.urls():
+            if not url.isLocalFile():
+                continue
+            path = url.toLocalFile()
+            if os.path.isfile(path):
+                paths.append(path)
+        return paths
+
+    @staticmethod
+    def file_drop_text(paths, contents=False):
+        """What dropping files into the code writes.
+
+        A ${contents::} token for each file, so the compute reads the file
+        when it runs and keeps up with it as it changes. Or, with
+        ``contents``, the text in the files as it is now.
+
+        :param paths: the dropped files
+        :type paths: list
+        :param contents: True to write what is in the files
+        :type contents: bool
+        :rtype: str
+        """
+        pieces = []
+        for path in paths:
+            if not contents:
+                path = path.replace(os.path.sep, '/')
+                token = tokens.make_token_str(TOKENTYPE.CONTENTS.prefix +
+                                              path)
+                pieces.append(token)
+                continue
+            try:
+                with io.open(path, 'r', encoding='utf-8',
+                             errors='replace') as fp:
+                    text = fp.read()
+            except (IOError, OSError):
+                logger.warning('Could not read {}'.format(path))
+                continue
+            # The editor's lines end in \n whatever the file used.
+            pieces.append(text.replace('\r\n', '\n').replace('\r', '\n'))
+        return '\n'.join(pieces)
+
+    def canInsertFromMimeData(self, source):
+        # Without this Qt shows files can not be dropped here, since they
+        # carry no text of their own.
+        if self.dropped_files(source):
+            return True
+        return super(NxtCodeEditor, self).canInsertFromMimeData(source)
+
+    def dropEvent(self, event):
+        """Dropping files writes a ${contents::} token for each where they
+        land, or with Ctrl held the text in them. Anything else, such as
+        dragged text, drops the usual way.
+        """
+        paths = self.dropped_files(event.mimeData())
+        if not paths or self.isReadOnly():
+            super(NxtCodeEditor, self).dropEvent(event)
+            return
+        # Qt 6 renamed both of these.
+        if hasattr(event, 'position'):
+            pos = event.position().toPoint()
+        else:
+            pos = event.pos()
+        if hasattr(event, 'modifiers'):
+            modifiers = event.modifiers()
+        else:
+            modifiers = event.keyboardModifiers()
+        contents = bool(modifiers & QtCore.Qt.ControlModifier)
+        text = self.file_drop_text(paths, contents=contents)
+        cursor = self.cursorForPosition(pos)
+        cursor.insertText(text)
+        self.setTextCursor(cursor)
+        event.acceptProposedAction()
+        self.setFocus()
 
     def get_text_changed(self):
         """Check if the text has changed since editing was entered.
@@ -811,8 +948,275 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         self.document().setDefaultTextOption(option)
 
     def get_lines(self):
-        doc = self.document()
-        return [str(doc.findBlockByLineNumber(i).text()) for i in range(doc.lineCount())]
+        # Every block, folded away or not. The document's line count only
+        # counts the lines on show, so reading by line number would leave
+        # folded code out of what is saved.
+        lines = []
+        block = self.document().firstBlock()
+        while block.isValid():
+            lines.append(str(block.text()))
+            block = block.next()
+        return lines
+
+    def setPlainText(self, text):
+        # The code is set again on every refresh of the node, entering
+        # editing among them. When it is the same code, what was folded
+        # stays folded.
+        folded = []
+        if text == self.toPlainText():
+            folded = self.folded_block_numbers()
+        super(NxtCodeEditor, self).setPlainText(text)
+        document = self.document()
+        for number in folded:
+            self.fold_block(document.findBlockByNumber(number))
+
+    # -- folding ----------------------------------------------------------
+    # Folding hides the lines of an indented block behind the line that
+    # opens it. It only hides them from view: they are still in the
+    # document, so what is saved and run is the whole code. Nothing about
+    # a fold is stored either. A line is folded when it shows and the line
+    # after it does not, so the document itself is the only state.
+
+    @staticmethod
+    def block_indent(block):
+        """How far a line is indented, or None for a blank line, which
+        belongs to whichever block is around it."""
+        text = block.text().expandtabs(4)
+        stripped = text.lstrip()
+        if not stripped:
+            return None
+        return len(text) - len(stripped)
+
+    def fold_end(self, block):
+        """The last line of the indented block this line opens.
+
+        :param block: QTextBlock of the opening line
+        :return: QTextBlock, or None if the line opens no block
+        """
+        indent = self.block_indent(block)
+        if indent is None:
+            return None
+        last = None
+        following = block.next()
+        while following.isValid():
+            following_indent = self.block_indent(following)
+            if following_indent is not None:
+                if following_indent <= indent:
+                    break
+                # Blank lines after the block stay out of it.
+                last = following
+            following = following.next()
+        return last
+
+    def opens_fold(self, block):
+        """Whether the line is followed by lines indented further."""
+        indent = self.block_indent(block)
+        if indent is None:
+            return False
+        following = block.next()
+        while following.isValid():
+            following_indent = self.block_indent(following)
+            if following_indent is not None:
+                return following_indent > indent
+            following = following.next()
+        return False
+
+    @staticmethod
+    def is_folded(block):
+        following = block.next()
+        return (block.isVisible() and following.isValid() and
+                not following.isVisible())
+
+    def folded_block_numbers(self):
+        numbers = []
+        block = self.document().firstBlock()
+        while block.isValid():
+            if self.is_folded(block):
+                numbers.append(block.blockNumber())
+            block = block.next()
+        return numbers
+
+    def set_blocks_visible(self, first, last, visible):
+        """Show or hide the lines from first to last, both included."""
+        document = self.document()
+        block = first
+        end = last.blockNumber()
+        self.folding = True
+        try:
+            while block.isValid() and block.blockNumber() <= end:
+                block.setVisible(visible)
+                block = block.next()
+            start = first.position()
+            length = last.position() + last.length() - start
+            length = min(length, document.characterCount() - start)
+            document.markContentsDirty(start, length)
+        finally:
+            self.folding = False
+        self.viewport().update()
+        if self.display_line_numbers:
+            self.number_bar.update()
+
+    def fold_block(self, block):
+        """Fold away the indented block this line opens.
+
+        :return: True if there was one to fold
+        :rtype: bool
+        """
+        if not block.isValid() or not block.isVisible():
+            return False
+        last = self.fold_end(block)
+        if last is None:
+            return False
+        first = block.next()
+        cursor = self.textCursor()
+        hidden_start = first.position()
+        hidden_end = last.position() + last.length()
+        if (hidden_start <= cursor.position() < hidden_end or
+                hidden_start <= cursor.anchor() < hidden_end):
+            # The cursor would be left in lines that are not on show.
+            cursor = QtGui.QTextCursor(block)
+            cursor.movePosition(QtGui.QTextCursor.EndOfBlock)
+            self.setTextCursor(cursor)
+        self.set_blocks_visible(first, last, False)
+        return True
+
+    def unfold_block(self, block):
+        """Show the lines folded away behind this line.
+
+        :return: True if it was folded
+        :rtype: bool
+        """
+        if not self.is_folded(block):
+            return False
+        first = block.next()
+        last = first
+        while last.next().isValid() and not last.next().isVisible():
+            last = last.next()
+        self.set_blocks_visible(first, last, True)
+        return True
+
+    def toggle_fold(self, block):
+        if not self.unfold_block(block):
+            self.fold_block(block)
+
+    def fold_header(self, block):
+        """The line on show that a hidden line is folded behind."""
+        while block.isValid() and not block.isVisible():
+            block = block.previous()
+        return block
+
+    def fold_current(self):
+        """Fold the block the cursor is in, or the one its line opens."""
+        block = self.textCursor().block()
+        if self.opens_fold(block) and not self.is_folded(block):
+            self.fold_block(block)
+            return
+        indent = self.block_indent(block)
+        opener = block.previous()
+        while opener.isValid():
+            opener_indent = self.block_indent(opener)
+            if (opener_indent is not None and
+                    (indent is None or opener_indent < indent) and
+                    self.opens_fold(opener)):
+                last = self.fold_end(opener)
+                if (last is not None and
+                        last.blockNumber() >= block.blockNumber()):
+                    self.fold_block(opener)
+                    return
+                if indent is None:
+                    # A blank line past the end of a block is in no block.
+                    return
+            opener = opener.previous()
+
+    def unfold_current(self):
+        self.unfold_block(self.textCursor().block())
+
+    def fold_all(self):
+        """Fold every outermost block. The ones inside them go with them."""
+        block = self.document().firstBlock()
+        while block.isValid():
+            if block.isVisible() and self.opens_fold(block):
+                last = self.fold_end(block)
+                self.fold_block(block)
+                block = last.next()
+                continue
+            block = block.next()
+
+    def unfold_all(self):
+        document = self.document()
+        self.set_blocks_visible(document.firstBlock(), document.lastBlock(),
+                                True)
+
+    def unfold_edited(self, position, removed, added):
+        """Show any fold an edit touches.
+
+        Editing the line that opens a fold, or text that lands in or next
+        to hidden lines, puts the hidden lines on show rather than leaving
+        changes out of sight.
+        """
+        if self.folding:
+            return
+        document = self.document()
+        edited_first = document.findBlock(position)
+        edited_last = document.findBlock(position + added)
+        if not edited_last.isValid():
+            edited_last = document.lastBlock()
+        last = edited_last.blockNumber()
+        block = edited_first
+        while block.isValid() and block.blockNumber() <= last:
+            if not block.isVisible():
+                self.unfold_block(self.fold_header(block))
+            elif self.is_folded(block):
+                # Also catches removing the line that opened a fold, which
+                # leaves its hidden lines behind the line before it.
+                self.unfold_block(block)
+            block = block.next()
+
+    def unfold_at_cursor(self):
+        """The cursor never sits in a hidden line: find, go to line and
+        the arrow keys can all take it there, so the fold opens."""
+        block = self.textCursor().block()
+        if not block.isVisible():
+            self.unfold_block(self.fold_header(block))
+
+    def paintEvent(self, event):
+        super(NxtCodeEditor, self).paintEvent(event)
+        self.paint_fold_markers(event)
+
+    def paint_fold_markers(self, event):
+        """Draw a small ... box after each line with code folded behind it."""
+        block = self.firstVisibleBlock()
+        if not block.isValid():
+            return
+        painter = None
+        offset = self.contentOffset()
+        bottom = event.rect().bottom()
+        metrics = self.fontMetrics()
+        while block.isValid():
+            geometry = self.blockBoundingGeometry(block).translated(offset)
+            if geometry.top() > bottom:
+                break
+            if block.isVisible() and self.is_folded(block):
+                if painter is None:
+                    painter = QtGui.QPainter(self.viewport())
+                    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+                    painter.setFont(self.font())
+                line = block.layout().lineAt(0)
+                left = (geometry.left() + line.x() +
+                        line.naturalTextWidth() +
+                        metrics.horizontalAdvance(' '))
+                label = '...'
+                width = metrics.horizontalAdvance(label) + 8
+                rect = QtCore.QRectF(left, geometry.top() + 1, width,
+                                     metrics.height() - 2)
+                painter.setPen(QtGui.QColor(theme.BORDER_STRONG))
+                painter.setBrush(QtGui.QColor(theme.RAISED))
+                painter.drawRoundedRect(rect, 3, 3)
+                painter.setPen(QtGui.QColor(theme.TEXT_DIM))
+                painter.drawText(rect, QtCore.Qt.AlignCenter, label)
+            block = block.next()
+        if painter is not None:
+            painter.end()
 
     def resizeEvent(self, *e):
         """overload resizeEvent handler"""
@@ -1176,16 +1580,20 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         :return: {name used in the code: module}
         :rtype: dict
         """
+        source = self.import_source()
+        # Every key changes the text, but rarely its import lines, so what
+        # they ask for, and what would not import, is kept while they stay
+        # the same. The modules themselves are looked up each time, so one
+        # reloaded since is the one offered and the old one is not kept.
+        key = tuple(line for line in source.splitlines() if 'import' in line)
+        if key != self.imports_key:
+            self.imports_key = key
+            self.imports_found = {'wanted': self.imports_wanted(source),
+                                  'failed': set()}
+        failed = self.imports_found['failed']
         found = {}
-        for match in self.IMPORT_RE.finditer(self.import_source()):
-            module_name = match.group('mod') or match.group('from')
-            if not module_name:
-                continue
-            local_name = match.group('alias') or module_name.split('.')[0]
-            if match.group('mod') and not match.group('alias'):
-                # "import os.path" binds os, not os.path
-                module_name = module_name.split('.')[0]
-            if local_name in found:
+        for local_name, module_name in self.imports_found['wanted']:
+            if local_name in found or module_name in failed:
                 continue
             module = sys.modules.get(module_name)
             if module is None:
@@ -1194,9 +1602,24 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
                 except Exception:
                     logger.debug('No completions for %s, it would not import'
                                  % module_name)
+                    failed.add(module_name)
                     continue
             found[local_name] = module
         return found
+
+    def imports_wanted(self, source):
+        """(name used in the code, module name) for each import line."""
+        wanted = []
+        for match in self.IMPORT_RE.finditer(source):
+            module_name = match.group('mod') or match.group('from')
+            if not module_name:
+                continue
+            local_name = match.group('alias') or module_name.split('.')[0]
+            if match.group('mod') and not match.group('alias'):
+                # "import os.path" binds os, not os.path
+                module_name = module_name.split('.')[0]
+            wanted.append((local_name, module_name))
+        return wanted
 
     def world_source(self):
         """The world node's code, when this is another node.
@@ -1219,15 +1642,22 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         code = self.toPlainText()
         return world + '\n' + code if world else code
 
-    def completion_namespace(self):
+    def completion_namespace(self, live=True):
         """Names the compute can use without importing them itself.
 
+        :param live: include STAGE and self as the last build left them.
+            jedi is never given those: it would call their __getattr__ and
+            read them from wherever it runs, while a build may be using them.
         :return: {name: object}, from each source that is switched on
         :rtype: dict
         """
         namespace = {}
         if self.completion_source_enabled('complete_node_action'):
-            namespace.update(code_completion.RUNTIME_GLOBALS)
+            model = self.ce_widget.stage_model
+            rt_layer = (getattr(model, 'current_rt_layer', None)
+                        if live else None)
+            namespace.update(code_completion.runtime_namespace(
+                rt_layer, self.ce_widget.node_path))
         if self.completion_source_enabled('complete_host_action'):
             namespace.update(code_completion.host_modules())
         if self.completion_source_enabled('complete_modules_action'):
@@ -1244,7 +1674,9 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if '.' not in prefix or prefix.startswith(tokens.TOKEN_PREFIX):
             return []
         root, _, rest = prefix.partition('.')
-        module = self.completion_namespace().get(root)
+        if root in code_completion.LIVE_GLOBALS:
+            return self.live_completions(prefix)
+        module = self.completion_namespace(live=False).get(root)
         if module is None:
             return []
         walked = root
@@ -1252,12 +1684,48 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         # inside os.path rather than os.
         parts = rest.split('.')
         for part in parts[:-1]:
-            module = getattr(module, part, None)
+            module = code_completion.attr_for_completion(module, part)
             if module is None:
                 return []
             walked += '.' + part
         return ['%s.%s' % (walked, name) for name in dir(module)
                 if not name.startswith('_')]
+
+    def live_completions(self, prefix):
+        """Names after STAGE. or self., from what the last build left there.
+
+        Read fresh on every key, so a build that has moved on since is what
+        completes, and read without running any of the graph's code. Not
+        while a node is running, since the build is using these right then.
+
+        :param prefix: the partial word being typed, like STAGE.rig.bu
+        :type prefix: str
+        :rtype: list
+        """
+        root, dot, rest = prefix.partition('.')
+        if not dot or root not in code_completion.LIVE_GLOBALS:
+            return []
+        if not self.completion_source_enabled('complete_node_action'):
+            return []
+        model = self.ce_widget.stage_model
+        if getattr(model, '_running_node', False):
+            return []
+        obj = code_completion.runtime_namespace(
+            getattr(model, 'current_rt_layer', None),
+            self.ce_widget.node_path).get(root)
+        if obj is None:
+            return []
+        return [root + dot + name
+                for name in code_completion.live_completions(obj, rest)]
+
+    @staticmethod
+    def node_attr_names(model, node_path):
+        """Every attribute a node's compute can use, see
+        code_completion.node_attr_names.
+
+        :rtype: list
+        """
+        return code_completion.node_attr_names(model, node_path)
 
     def build_completion_words(self):
         """Everything worth offering as a completion for this node.
@@ -1279,20 +1747,20 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             node_path = self.ce_widget.node_path
             if model and node_path:
                 try:
-                    for name in model.get_node_attr_names(node_path):
+                    for name in self.node_attr_names(model, node_path):
                         words.add(name)
                         words.add('self.' + name)
-                        # How an attribute is written in a compute
-                        words.add(tokens.TOKEN_PREFIX + name
-                                  + tokens.TOKEN_SUFFIX)
                 except Exception:
                     logger.debug('Could not read attrs for completion on '
                                  + str(node_path), exc_info=True)
-            all_tokens = (tuple(tokens.TOKENTYPE.ALL)
-                          + tuple(tokens.plugin_tokens))
-            for token in all_tokens:
-                if token.prefix:
-                    words.add(tokens.TOKEN_PREFIX + token.prefix)
+            # How an attribute is written in a compute, and the token
+            # prefixes, as the Property Editor's values offer them too.
+            try:
+                words.update(code_completion.token_words(model, node_path))
+            except Exception:
+                logger.debug('Could not read tokens for completion on '
+                             + str(node_path), exc_info=True)
+                words.update(code_completion.token_words(None, None))
         if self.completion_source_enabled('complete_modules_action'):
             # The bare module names. What is inside them is resolved per
             # prefix, since dir() on everything imported would be huge.
@@ -1300,7 +1768,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if self.completion_source_enabled('complete_host_action'):
             words.update(code_completion.host_modules())
         if self.completion_source_enabled('complete_document_action'):
-            words.update(re.findall(r'[A-Za-z_][A-Za-z0-9_]{2,}',
+            # A name can be in any language: \w is any letter or digit.
+            words.update(re.findall(r'[^\W\d]\w{2,}',
                                     self.toPlainText()))
         return sorted(words)
 
@@ -1311,7 +1780,7 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
     # why only python builtins ever appeared.
     # Slashes too, but only inside a token, where they are a node path:
     # anywhere else a slash is division and starts a new word.
-    PREFIX_CHARS = r'[A-Za-z0-9_.:${}/]*$'
+    PREFIX_CHARS = r'[\w.:${}/]*$'
 
     def completion_prefix(self):
         """The partial word in front of the cursor.
@@ -1343,15 +1812,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         model = self.ce_widget.stage_model
         if not model:
             return []
-        body = prefix[len(tokens.TOKEN_PREFIX):]
         try:
-            if '.' in body:
-                node_path = body.rpartition('.')[0]
-                return [tokens.TOKEN_PREFIX + node_path + '.' + name
-                        + tokens.TOKEN_SUFFIX
-                        for name in model.get_node_attr_names(node_path)]
-            return [tokens.TOKEN_PREFIX + path
-                    for path in model.get_descendants(nxt_path.WORLD)]
+            return code_completion.token_completions(model, prefix)
         except Exception:
             logger.debug('No token completions for ' + prefix, exc_info=True)
             return []
@@ -1396,31 +1858,91 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         question = self.jedi_question(prefix)
         if question is None:
             return []
+        # jedi never sees STAGE or self as the build left them, so what
+        # follows them comes from the build instead. That is read fresh on
+        # every key and never kept, so a build that moves on is seen.
+        live = self.live_completions(prefix)
         source, line, column, key, before = question
         names = None if fresh else code_completion.JEDI.cached(key)
         if names is None:
             if not ask:
                 self.jedi_timer.start()
-                return []
+                return live
             names = code_completion.JEDI.complete(
-                source, line, column, self.completion_namespace(), key,
-                fresh=fresh)
-        return [before + name for name in names]
+                source, line, column, self.completion_namespace(live=False),
+                key, fresh=fresh)
+        return live + [before + name for name in names]
 
-    def ask_jedi(self):
-        """Typing paused: ask jedi, and show what it says."""
+    def ask_jedi(self, fresh=False, force=False):
+        """Typing paused: ask jedi on a worker thread, and show what it
+        says when it answers, if the cursor is still where it was asked.
+
+        :param fresh: ask again even if this spot was asked before
+        :param force: show the answer even with auto-complete off, which
+            is what Ctrl+Space does
+        """
         if self.isReadOnly() or not self.hasFocus():
             return
-        if self.jedi_completions(self.completion_prefix(), ask=True):
-            self.update_completions()
+        question = self.jedi_question(self.completion_prefix())
+        if question is None:
+            return
+        source, line, column, key, _ = question
+        if not fresh and code_completion.JEDI.cached(key) is not None:
+            return
+        if self.jedi_busy:
+            # One at a time. When this one answers, ask about wherever the
+            # cursor is then.
+            self.jedi_again = (fresh, force)
+            return
+        self.jedi_busy = True
+        self.jedi_force = force
+        # The names are gathered here, on the main thread; jedi only reads
+        # them on the worker. STAGE and self are left out, see
+        # completion_namespace.
+        namespace = self.completion_namespace(live=False)
+        answer = self.jedi_answer
 
-    def update_completions(self, force=False):
+        def work():
+            try:
+                code_completion.JEDI.complete(source, line, column,
+                                              namespace, key, fresh=fresh)
+            finally:
+                try:
+                    answer.answered.emit(key)
+                except RuntimeError:
+                    # The editor closed while jedi was thinking.
+                    pass
+
+        threading.Thread(target=work, name='nxt-jedi', daemon=True).start()
+
+    def jedi_answered(self, key):
+        """jedi has an answer: show it if it is still about this spot."""
+        self.jedi_busy = False
+        force = self.jedi_force
+        again, self.jedi_again = self.jedi_again, None
+        question = self.jedi_question(self.completion_prefix())
+        if question is not None and question[3] == key:
+            if not self.isReadOnly() and self.hasFocus():
+                self.update_completions(force=force, from_jedi=True)
+        elif again is not None:
+            self.ask_jedi(*again)
+
+    def update_completions(self, force=False, from_jedi=False):
         """Offer completions for the word being typed.
 
+        While the list is open and the same name is still being typed, the
+        list is only filtered, which is what keeps typing quick. It is
+        built again when the part before the last dot changes.
+
         :param force: show them even when the prefix is short or the
-            auto-complete preference is off, which is what Ctrl+Space does
+            auto-complete preference is off, which is what Ctrl+Space does.
+            It also asks jedi again, in the background.
         :type force: bool
+        :param from_jedi: jedi has just answered, so the list is built again
+            with what it said, and jedi is not asked again
+        :type from_jedi: bool
         """
+        self.completion_timer.stop()
         if self.isReadOnly():
             self.hide_completions()
             return
@@ -1432,16 +1954,44 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         if not force and len(prefix) < 2:
             self.hide_completions()
             return
+        if not force and not from_jedi and self.can_filter(prefix):
+            self.show_completions(prefix)
+            return
+        if force and not from_jedi:
+            # Ctrl+Space is how a module imported since is picked up.
+            self.imports_key = None
         if self.completion_words is None:
             self.completion_words = self.build_completion_words()
         # Module contents, node paths and what jedi says depend on what is
         # being typed, so they are worked out per prefix rather than kept in
-        # the cached list.
+        # the cached list. jedi only adds what it already knows here; a new
+        # question goes to the worker and the list is built again when it
+        # answers.
         words = (self.completion_words + self.module_completions(prefix)
                  + self.token_completions(prefix)
-                 + self.jedi_completions(prefix, ask=force, fresh=force))
+                 + self.jedi_completions(prefix))
+        if force and not from_jedi:
+            self.ask_jedi(fresh=True, force=True)
         model = QtCore.QStringListModel(sorted(set(words)), self.completer)
         self.completer.setModel(model)
+        self.completion_base = prefix
+        self.completion_width = 0
+        self.show_completions(prefix)
+
+    def can_filter(self, prefix):
+        """Whether the open list still holds every answer for prefix.
+
+        It does while more of the same name is typed: the list was built
+        for the start of it, and what comes before the last dot decides
+        what is in it.
+        """
+        base = self.completion_base
+        return (base is not None and self.completer.popup().isVisible()
+                and prefix.startswith(base)
+                and prefix.rpartition('.')[0] == base.rpartition('.')[0])
+
+    def show_completions(self, prefix):
+        """Filter the list to prefix and put it up at the cursor."""
         self.completer.setCompletionPrefix(prefix)
         if not self.completer.completionCount():
             self.hide_completions()
@@ -1454,14 +2004,43 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         popup = self.completer.popup()
         popup.setFont(self.font())
         popup.setCurrentIndex(self.completer.completionModel().index(0, 0))
+        if not self.completion_width:
+            # Measured once per list rather than on every key, since it
+            # looks at every row.
+            self.completion_width = (
+                popup.sizeHintForColumn(0)
+                + popup.verticalScrollBar().sizeHint().width() + 12)
         rect = self.cursorRect()
-        width = (popup.sizeHintForColumn(0)
-                 + popup.verticalScrollBar().sizeHint().width() + 12)
-        rect.setWidth(width)
+        rect.setWidth(self.completion_width)
         self.set_completion_shortcuts(False)
         self.completer.complete(rect)
 
+    def request_completions(self, typed):
+        """A key was typed: filter the open list now, or open one once
+        typing pauses.
+
+        A dot, and a slash inside a token, open it at once, since that is
+        where someone stops to see what comes next.
+        """
+        prefix = self.completion_prefix()
+        now = (self.completer.popup().isVisible() or typed == '.'
+               or (typed == '/' and prefix.startswith(tokens.TOKEN_PREFIX)))
+        if now:
+            self.update_completions()
+            return
+        self.completion_position = self.textCursor().position()
+        self.completion_timer.start()
+
+    def completions_due(self):
+        """Typing paused. Open the list, unless the cursor has gone."""
+        if (not self.hasFocus() or
+                self.textCursor().position() != self.completion_position):
+            return
+        self.update_completions()
+
     def hide_completions(self):
+        self.completion_timer.stop()
+        self.completion_base = None
         if self.completer.popup().isVisible():
             self.completer.popup().hide()
         self.set_completion_shortcuts(True)
@@ -1526,8 +2105,8 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             return
         typed = event.text()
         if typed and (typed.isalnum() or typed in '_./'):
-            self.update_completions()
-        elif self.completer.popup().isVisible():
+            self.request_completions(typed)
+        else:
             self.hide_completions()
 
     def char_after_cursor(self, cursor=None):
@@ -1686,6 +2265,12 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         edit_menu.addAction(self.ce_actions.delete_line)
         edit_menu.addAction(self.ce_actions.expand_selection)
         edit_menu.setEnabled(not self.isReadOnly())
+        # Folding only changes what is on show, so it works read only too.
+        fold_menu = self.standard_menu.addMenu('Folding')
+        fold_menu.addAction(self.ce_actions.fold_block_action)
+        fold_menu.addAction(self.ce_actions.unfold_block_action)
+        fold_menu.addAction(self.ce_actions.fold_all_action)
+        fold_menu.addAction(self.ce_actions.unfold_all_action)
 
         self.standard_menu.exec_(event.globalPos())
 
@@ -2224,7 +2809,13 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
 
 
 class NumberBar(QtWidgets.QWidget):
-    """class that defines textEditor numberBar"""
+    """class that defines textEditor numberBar
+
+    Also holds the fold markers, in a column on the right of the numbers:
+    one on each line that opens an indented block, pointing down while the
+    block shows and right while it is folded. Clicking a line with a
+    marker folds or unfolds it.
+    """
 
     width_changed = QtCore.Signal()
 
@@ -2235,7 +2826,13 @@ class NumberBar(QtWidgets.QWidget):
         self.editor.blockCountChanged.connect(self.update_width)
         self.editor.updateRequest.connect(self.update_contents)
         self.color = QtGui.QColor(color)
+        # Tracked so the pointer can show which lines can be clicked.
+        self.setMouseTracking(True)
         self.update_width()
+
+    def fold_width(self):
+        """Width of the fold marker column."""
+        return self.fontMetrics().height()
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -2245,14 +2842,19 @@ class NumberBar(QtWidgets.QWidget):
             changed_lines = self.editor.changed_lines[:]
         else:
             changed_lines = []
+        fold_width = self.fold_width()
         # Iterate over all visible text blocks in the document.
         while block.isValid():
+            if not block.isVisible():
+                # Folded away, there is no line to number.
+                block = block.next()
+                continue
             self.font().setBold(False)
             block_number = block.blockNumber()
             block_top = self.editor.blockBoundingGeometry(block).translated(
                 self.editor.contentOffset()).top()
             # Check if the position of the block is out side of the visible area
-            if not block.isVisible() or block_top >= event.rect().bottom():
+            if block_top >= event.rect().bottom():
                 break
             # We want the line number for the selected line to be bold.
             painter.setPen(QtGui.QColor(colors.LIGHTER_TEXT))
@@ -2269,9 +2871,16 @@ class NumberBar(QtWidgets.QWidget):
                 painter.setPen(colors.LIGHTEST_TEXT)
                 changed_lines.remove(block_number)
             painter.setFont(self.font())
-            text_rect = paint_rect.marginsAdded(QtCore.QMargins(0, 0, -4, 0))
+            text_rect = paint_rect.marginsAdded(
+                QtCore.QMargins(0, 0, -fold_width, 0))
             painter.drawText(text_rect, QtCore.Qt.AlignRight,
                              str(block_number + 1))
+            if self.editor.opens_fold(block):
+                folded = self.editor.is_folded(block)
+                marker_rect = QtCore.QRectF(
+                    paint_rect.right() - fold_width + 1, paint_rect.top(),
+                    fold_width, paint_rect.height())
+                self.paint_fold_marker(painter, marker_rect, folded)
             painter.setPen(QtCore.Qt.NoPen)
             block = block.next()
             if not block.isValid() and changed_lines:
@@ -2285,10 +2894,73 @@ class NumberBar(QtWidgets.QWidget):
 
         QtWidgets.QWidget.paintEvent(self, event)
 
+    @staticmethod
+    def paint_fold_marker(painter, rect, folded):
+        """A small triangle, pointing right when folded and down when not."""
+        size = min(rect.width(), rect.height()) * 0.45
+        center = rect.center()
+        if folded:
+            points = [QtCore.QPointF(center.x() - size * 0.45,
+                                     center.y() - size * 0.6),
+                      QtCore.QPointF(center.x() + size * 0.55, center.y()),
+                      QtCore.QPointF(center.x() - size * 0.45,
+                                     center.y() + size * 0.6)]
+            color = QtGui.QColor(theme.TEXT_DIM)
+        else:
+            points = [QtCore.QPointF(center.x() - size * 0.6,
+                                     center.y() - size * 0.4),
+                      QtCore.QPointF(center.x() + size * 0.6,
+                                     center.y() - size * 0.4),
+                      QtCore.QPointF(center.x(), center.y() + size * 0.55)]
+            color = QtGui.QColor(colors.DEFAULT_TEXT)
+        painter.save()
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawPolygon(QtGui.QPolygonF(points))
+        painter.restore()
+
+    def block_at(self, y):
+        """The line on show at a height in this bar, or None."""
+        block = self.editor.firstVisibleBlock()
+        offset = self.editor.contentOffset()
+        while block.isValid():
+            if block.isVisible():
+                geometry = self.editor.blockBoundingGeometry(
+                    block).translated(offset)
+                if geometry.top() > y:
+                    return None
+                if y < geometry.bottom():
+                    return block
+            block = block.next()
+        return None
+
+    def foldable_block_at(self, y):
+        block = self.block_at(y)
+        if block is not None and self.editor.opens_fold(block):
+            return block
+        return None
+
+    def mousePressEvent(self, event):
+        if event.button() == QtCore.Qt.LeftButton:
+            block = self.foldable_block_at(event.pos().y())
+            if block is not None:
+                self.editor.toggle_fold(block)
+                event.accept()
+                return
+        super(NumberBar, self).mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.foldable_block_at(event.pos().y()) is not None:
+            self.setCursor(QtCore.Qt.PointingHandCursor)
+        else:
+            self.unsetCursor()
+        super(NumberBar, self).mouseMoveEvent(event)
+
     def get_width(self):
         count = self.editor.blockCount()
-        width = self.fontMetrics().horizontalAdvance(str(count)) + 10
-        return width
+        width = self.fontMetrics().horizontalAdvance(str(count)) + 6
+        return width + self.fold_width()
 
     def update_width(self):
         width = self.get_width()

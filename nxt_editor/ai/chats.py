@@ -91,7 +91,7 @@ class ChatStore(object):
             record = self.memory.get(chat_id)
             return json.loads(json.dumps(record)) if record else None
         try:
-            with open(self._path(chat_id), 'r') as fp:
+            with open(self._path(chat_id), 'r', encoding='utf-8') as fp:
                 record = json.load(fp)
         except (OSError, ValueError):
             return None

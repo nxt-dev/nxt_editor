@@ -8,6 +8,7 @@ nav:
     - Concepts: concepts.md
     - Tutorials: tutorials.md
     - Installation: install.md
+    - Optional Components: optional_components.md
     - Reference: reference.md
     - Extensions: extensions.md
     - API: api/index.html

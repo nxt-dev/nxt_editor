@@ -140,8 +140,16 @@ def arm(code_editor, text=CODE):
     cursor.movePosition(QtGui.QTextCursor.End)
     editor.setTextCursor(cursor)
     editor.invalidate_completion_words()
-    editor.update_completions(force=True)
-    app.processEvents()
+    # Qt closes a popup whenever another window becomes active, and on a
+    # desktop someone is using that can happen at any moment of a long
+    # run. Put it back up rather than fail over something the test is
+    # not about. Once it is up the tests send keys straight to the
+    # editor, so nothing else gets the chance to close it.
+    for _ in range(5):
+        editor.update_completions(force=True)
+        app.processEvents()
+        if editor.completer.popup().isVisible():
+            break
 
 
 class WhatTheEditorDoesWithAKey(unittest.TestCase):

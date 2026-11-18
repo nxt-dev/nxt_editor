@@ -37,6 +37,37 @@ so switching back to a tab is instant.
 and shows it again. The editor remembers your choice. With the graph
 hidden, switch between open files from the bottom of the **Window** menu.
 
+### Tabs
+
+Each open graph has a tab above the stage view. The **+** after the last
+tab, or a double click on the empty bar beside the tabs, makes a new
+graph, the same as **File > New Graph** (`Ctrl+N`). With no graph open,
+the empty space offers **New Graph** and **Open...**.
+
+### Moving around
+
+- **Pan** by dragging with the middle mouse button, or hold `Space` and
+  drag with the left button, for a trackpad or a mouse without a middle
+  button. The cursor turns into a hand while `Space` is held, and a left
+  drag then only pans: it does not select or move anything.
+- **Zoom** with the scroll wheel, or hold `Alt` and drag with the right
+  mouse button.
+- **Frame** everything with `A`, or the selected nodes with `F`.
+- **Frame All on Open**: a graph is framed to show all of its nodes when
+  it is first shown, zoomed out as far as that takes but never zoomed in
+  past 100%, so a small graph looks as it always has. Turn it off in the
+  **View** menu, next to **Frame All**, to have graphs open at the origin
+  instead. The choice is remembered.
+- **Bookmarks** save a view of the graph under a name to come back to.
+  `Ctrl+B`, or **Add Bookmark...** in the **View > Bookmarks** menu or
+  the bookmark button on the toolbar, saves the part of the graph in view,
+  and picking a bookmark from the same menu shows that part again. The
+  first four go to with `Ctrl+1` to `Ctrl+4`, shown beside their names.
+  The menu also renames and deletes them. Bookmarks are saved with the
+  graph, in the top layer's meta data like node positions, so they are
+  there for anyone who opens it, and adding, renaming and deleting them
+  can be undone.
+
 ### How nodes look
 
 The editor is drawn in neutral dark greys, so the only color on screen is
@@ -98,6 +129,18 @@ what it runs.
   runs the selected node, then on down its exec chain.
 - **Execute Hierarchy**, the play button with a parent and its children:
   runs the selected node and every node under it.
+
+**Ignore Breakpoints**, in the Execute menu and on the toolbar beside the
+other breakpoint buttons, lets every run go straight through breakpoints
+without taking any of them off. While it is on, breakpoints are drawn as
+hollow red squares. It can be turned on while a build is paused at a
+breakpoint, and the rest of the run goes through. The editor remembers it
+between sessions.
+
+When a node fails and stops the build, the editor plays its error sound
+and, if another window is in front, flashes in the taskbar (or bounces in
+the Dock) until you look at it. **Options > Error sound** turns the sound
+off.
 
 ### Find Node
 
@@ -164,6 +207,13 @@ was.
 
 ### Lines between nodes
 
+- **Connect by dragging**: drag out of a plug and drop on another to
+  connect them. The line does not have to land right on the plug: it
+  snaps to the nearest plug that can take it within a few pixels on
+  screen, at any zoom, and that plug is ringed in white while you drag so
+  you can see where it will go. An output connects to an input and the
+  other way round, an exec plug only to another node's exec plug, and an
+  attribute only to an attribute. Locked nodes take nothing.
 - **Straight or curved**: **View > Curved Connections** draws the graph's
   lines as curves that leave and meet each plug going across. The choice
   is saved with the graph, so everyone who opens it sees the same lines.
@@ -175,6 +225,13 @@ was.
   can have as many points as you like, and the line passes through them in
   order. Hold `Shift`, or turn on grid snapping, to snap a point to the
   grid.
+- **Points turn with the line**: on a curved line, each point is passed
+  going right while the next point or plug is to the right of the one
+  before, and going left once it is to the left, so the line runs
+  smoothly through the point instead of looping back round it. A point
+  only turns round once the things either side of it have crossed over,
+  so it does not flicker back and forth while you drag.
+
 - **Remove a point** by double clicking it, or select it and press `Del`.
   `Shift` click adds points to or takes them out of the selection.
 - **Select points with a box**: dragging a selection box picks up the
@@ -198,6 +255,65 @@ saved in the top layer's meta data, and points from referenced layers are
 shown too. A line's points belong to that one connection, so if the
 connection is removed and made again its points come back.
 
+### Aligning nodes and points
+
+Line up the selected nodes and the points on their lines, or space them
+out evenly. Select them together with a box, or `Ctrl+Shift` click to add
+to the selection, then pick a way from **Align** in the right click menu,
+from the Align button on the toolbar, or with its shortcut. Each is one
+step on the undo stack, nodes and points together.
+
+| Action | Shortcut | What it does |
+| :----- | :------: | :----------- |
+| Align Left | `Shift+A` | Moves everything to the left most left edge. |
+| Align Center | `Alt+Shift+S` | Lines everything up on a line down the middle of them all. |
+| Align Right | `Shift+D` | Moves everything to the right most right edge. |
+| Align Top | `Shift+W` | Moves everything to the top most top edge. |
+| Align Middle | `Alt+Shift+W` | Lines everything up on a line across the middle of them all. |
+| Align Bottom | `Shift+S` | Moves everything to the bottom most bottom edge. |
+| Distribute Horizontally | `Alt+Shift+A` | Leaves the left and right most where they are and evens out the gaps between the rest. |
+| Distribute Vertically | `Alt+Shift+D` | Leaves the top and bottom most where they are and evens out the gaps between the rest. |
+
+A node is lined up by the box it is drawn in, and a point by its center.
+Only top level nodes move: a child stays stacked under its parent.
+**Align** is greyed out until there are two things selected, and the
+distributes need three. The shortcuts only work while the graph has focus,
+so typing in the code editor never moves anything, and they can be changed
+in the [Hotkey Editor](hotkeys.md#alignment).
+
+Aligning a line's point with the nodes either side of it straightens the
+line. For example, **Align Middle** on three nodes and the point between
+two of them puts them all in a straight line.
+
+The Align button sits on the toolbar just before **Select All**, with the
+same menu. **Select All** (`Ctrl+A`) is the icon of two nodes in a dashed
+box, and hovering it shows its shortcut.
+
+### Laying out nodes
+
+**Layout Nodes** (`Shift+L`) tidies the graph up by the order it runs in.
+It arranges the selected top level nodes, or every one when none are
+selected, as one undo:
+
+- Each exec chain runs left to right, a column per node, in the order the
+  nodes run. Builds from start points come first, as in the
+  [Outliner](#outliner).
+- Where a node runs more than one node after it, the one that runs first
+  carries on along the same row and each of the others starts a row of its
+  own below, laid out the same way.
+- Nodes on no chain get a row each, below the chains.
+- Each column is as wide as its widest node and each row as tall as its
+  tallest, children stacked under a node included, so nothing overlaps.
+- The nodes start from the top left of where they were, so the layout
+  stays in the same part of the graph. With grid snapping on, they land on
+  the grid.
+- A backdrop with nodes being laid out in it is fitted around them again
+  afterwards, so they stay in it.
+
+It is in the **Graph** menu, the right click menu of selected nodes, and
+the right click menu of empty space when nothing is selected. Locked nodes
+are left where they are.
+
 ### Animate Nodes
 
 Nodes no longer slide open when a parent is expanded. Every child is
@@ -218,6 +334,25 @@ descendants.
 
 Pasting nodes (`Ctrl+V`) is a single step on the undo stack however many
 nodes are pasted.
+
+The world node (`/`) can be copied too: double click a layer in the Layer
+Manager to select it, then `Ctrl+C`. Pasting it into another graph or onto
+another layer does not make a new node, as a graph has only one world
+node. Its attributes are set on the target layer's world node, taking the
+place of any of the same name and leaving the others, and its code and
+comment, when it has them, take the place of the world node's own. It is
+one step on the undo stack. Cutting the world node copies it and leaves it
+where it is.
+
+### Pushing positions to a lower layer
+
+Moving a node always saves where it is on the top layer, so a layer below
+keeps the layout it had when it was last the top, or none. To give a lower
+layer the layout you see, make it the target layer, select the nodes and
+pick **Push Positions to Target Layer** from the right click menu. It
+writes where the selected top level nodes are now onto the target layer,
+as one undo, and nothing moves. It is greyed out while the top layer is
+the target, as that is where positions go already.
 
 ## Code Editor
 
@@ -243,6 +378,8 @@ editor's right click menu, with the line commands under **Line**.
 | Move Line Up / Down | `Alt+Up` / `Alt+Down` | |
 | Delete Line | `Ctrl+Shift+K` | |
 | Expand Selection | `Ctrl+D` | The word under the cursor, then the line, then everything |
+| Fold / Unfold Block | `Ctrl+Shift+[` / `Ctrl+Shift+]` | See [Folding](#folding) |
+| Fold All / Unfold All | `Ctrl+K, Ctrl+0` / `Ctrl+K, Ctrl+J` | |
 | Complete Word | `Ctrl+Space` | See [Completion](#completion) |
 | Go to a token's node | `Ctrl+click` | See [Following tokens](#following-tokens) |
 | Indent / Un-Indent Line | `Tab` / `Shift+Tab` | Works on several lines at once |
@@ -295,6 +432,11 @@ drawn in a warning colour.
 Syntax colouring applies to every match on a line, so a line with several
 tokens or strings has all of them coloured, not only the first.
 
+Strings and comments are found by reading each line from the left, the way
+Python does, so a `#` inside a string is part of the string and a quote
+inside a comment is part of the comment. A triple quoted string, such as a
+docstring, stays coloured on every line it spans.
+
 ### Auto-pairing
 
 While you edit, brackets and quotes come in pairs:
@@ -312,6 +454,41 @@ While you edit, brackets and quotes come in pairs:
 - Keyboard layouts that type `[` and `{` with `AltGr` pair them too.
 - Accepting a token completion inside `${}` does not leave a spare `}`
   behind.
+
+### Folding
+
+A line that opens an indented block, such as a `def`, a `class`, an `if` or
+a `for`, has a small arrow in the gutter next to its line number. Click the
+arrow, or anywhere on that line's number, to fold the block away behind the
+line, which then ends in a `...` marker. Click it again to show the block.
+Blank lines after a block stay on show.
+
+- `Ctrl+Shift+[` folds the block the cursor is in, and `Ctrl+Shift+]`
+  unfolds the folded line the cursor is on.
+- `Ctrl+K, Ctrl+0` folds every outermost block, and `Ctrl+K, Ctrl+J` shows
+  everything again.
+- The same commands are under **Folding** in the right click menu.
+
+Folding only changes what is on show. The folded lines are still part of
+the code, so they are saved and run as usual, and copying across a fold
+copies them too. Folding works while the code is read only, and what is
+folded stays folded when you double click to edit. Editing a folded line,
+or moving the cursor into a fold, for example with find or go to line,
+opens it. Selecting another node, or the code changing, shows everything
+again.
+
+### Dropping files
+
+While you edit, drop a file from your file browser into the code to write
+a `${contents::}` token for it where it lands, such as
+`${contents::D:/scripts/setup.py}`. The compute then reads the file each
+time it runs, so it keeps up as the file changes. Hold `Ctrl` as you drop
+to write the text in the file instead. Dropping several files writes one
+line for each. Dropped text is inserted as usual.
+
+The token holds the file's full path. To keep a graph portable, you can
+change it to a path relative to the layer, as in
+`${contents::${file::setup.py}}`; see [Tokens](#tokens).
 
 ### Following tokens
 
@@ -342,7 +519,9 @@ take you to another node, and accept your edit on the way, by accident.
 `Ctrl+Space` offers completions for the word in front of the cursor. Use the
 arrow keys to choose one and `Enter` or `Tab` to insert it; `Esc` closes the
 list. With **Code Editor Autocomplete** on, the list also appears by itself
-once you have typed two characters of a word.
+once you have typed two characters of a word and paused, or straight away
+after a `.`. While it is open, typing more of the word narrows it, and it
+shows up to 12 names at a time.
 
 Completions come from six sources:
 
@@ -366,6 +545,9 @@ nodes in the graph (`${/settings`, `${/export/report`). Once a node path is
 followed by a dot, it offers that node's attributes as whole tokens, so
 choosing one writes `${/settings.out_dir}` complete with its closing brace.
 
+Attribute values in the Property Editor complete tokens the same way; see
+[Completing paths and tokens](#completing-paths-and-tokens).
+
 #### Python analysis with jedi
 
 ![jedi completing a string's methods](images/completion_jedi.png)
@@ -375,19 +557,37 @@ is imported, but not what `os.path.join(...)` returns. jedi analyses the
 code, so after `path = os.path.join(out_dir, name)` it knows `path` is a
 string and offers `path.split` and `path.splitlines`.
 
-- It is optional. Install it with `pip install nxt-editor[completion]` (see
-  [Standalone Installation](install.md#standalone-installation)). Without
-  it, **Python Analysis (jedi)** is greyed out in the menu, and its
-  description says how to install it.
+- It is optional. Install it from **Options > Optional Components**, in
+  any host, or with `pip install nxt-editor[completion]` (see
+  [Optional Components](optional_components.md)). Without it, **Python
+  Analysis (jedi)** in the menu offers to install it. Once installed it
+  is used straight away, with no restart.
 - It is only asked after a dot. Bare names still come from the other
   sources, so switching one of those off keeps its names out of the list.
-- It is asked once typing pauses, or straight away with `Ctrl+Space`. The
+- It is asked once typing pauses, or straight away with `Ctrl+Space`, and
+  works in the background, so typing never waits for it. Its names join the
+  list when it answers, if the cursor is still where it was asked. The
   answer is kept while you type more of the same name.
+- The first time it reads a library it takes a moment longer, as it saves
+  what it learned for next time.
 - It sees the world node's imports and the names nxt gives every compute.
   `${}` tokens are read as plain strings, so a compute full of tokens can
   still be analysed.
 - jedi is loaded the first time it is needed, not when the editor starts,
   and keeps its cache in the nxt user directory.
+
+#### STAGE and self after a build
+
+Before the graph has run there is nothing to offer after `STAGE.`, and
+`self.` only offers the node's attributes. Once it has run, both complete on
+what the build left behind: `STAGE.` on whatever the graph stored on the
+stage (`STAGE.rig`, then `STAGE.rig.build_guides`), and `self.` on the node
+being edited as it ran. This needs **Node Attributes And Tokens** switched
+on, and works with or without jedi. Nothing is run to complete: a property
+is listed, but its value is not looked inside, and the names come from what
+is stored on each object rather than from its `__dir__` or `__getattr__`.
+At most 2000 names that match what you typed are offered, and nothing is
+offered while a node is running.
 
 #### Autocomplete options
 
@@ -406,17 +606,92 @@ even to a list that is already open.
 ## Layer Manager
 
 The Layer Manager lists the layers of the open graph: the top layer and,
-nested under it, the layers it references. Right click a layer for its
-menu.
+nested under it, the layers it references. Click a layer's arrow to open
+or close it, or hold `Shift` to open or close every layer under it too, as
+in the [Outliner](#outliner). Right click a layer for its menu.
 
 ![The layer menu](images/layer_menu.png)
 
 Two items on this menu change what a layer pulls in from disk:
 **Edit References...** and **Reload Source...**.
 
+### Layer toggles
+
+![The toggles in the Layer Manager](images/layer_columns.png)
+
+Each row ends in five toggles, drawn as icons. A toggle that is on sits on
+a chip of the layer's color; one that is off is a dim outline. Hover over
+an icon for a tooltip that says what a click does and what the toggle
+means. Click an icon to toggle it; mute, solo and lock can be undone.
+
+| Icon | Off | On | What it does |
+|------|-----|----|--------------|
+| Stack of layers | Outline | Filled, on a chip | Picks the display layer: the graph shows the comp of that layer and the layers under it. Click another layer's stack to display from it. |
+| Speaker | Sounding | Crossed out, on a chip | **Mute**: a muted layer is left out of the comp and builds. |
+| Headphones | Outline | Filled, on a chip | **Solo**: while any layer is soloed, only soloed layers are comped. |
+| Padlock | Open | Shut, on a chip | **Lock**: a locked layer cannot be edited or made the target layer. |
+| Eye | Open | Struck through, on a chip | **Hide** the layer's nodes in the graph. See below. |
+
+The layer's name shows some of this too: a muted layer is outlined with a
+dashed line, and a soloed layer has a round swatch and a bold name.
+
+### Hiding a layer in the graph
+
+![The eye in the Layer Manager](images/layer_eye.png)
+
+The eye at the end of each row hides that layer's nodes in the graph, for
+example a library layer of nodes that are only there to be instanced. Click
+it again, or use **Show In Graph** on the layer's menu, to bring them back.
+
+- Only what that layer alone has is hidden, a node at a time: a node goes
+  when every layer with an opinion on it is hidden, along with the lines to
+  and from it, and the backdrops only hidden layers draw. A node that a
+  layer still showing also has an opinion on stays in view, and so does a
+  parent while anything under it is showing. So hiding a layer that adds
+  steps under a shared node such as `/load` hides just those steps.
+- A hidden child takes no room: the children under the same parent close
+  up, and open up again when it is shown. A node made by an instance goes
+  with the node it is under, so an instance that is showing shows what it
+  brings, whichever layer that comes from.
+- It is a way of looking at the graph. The layer still composites and
+  runs, which is the difference from **Mute**, and its nodes are still in
+  the Outliner.
+- Only what is showing can be selected in the graph: **Select All** and a
+  box leave hidden nodes, and points on hidden lines, out, and hiding a
+  layer takes its nodes out of the selection. Copy and delete only reach
+  what you can see.
+- A node you make, paste, duplicate or instance on a hidden target layer
+  would vanish as it was made, so the layer is shown again and the graph
+  says so in its bottom left corner.
+- Framing leaves hidden nodes out. When everything there is to frame is
+  hidden, for example a node picked in the Outliner, the graph stays where
+  it is and says the node is on a hidden layer. Show the layer to see it.
+  **Go to Source** and **Go to Target** on a line, in the graph or the
+  Instance View, do the same.
+- Lines to and from a hidden node are hidden whatever the line toggles
+  say, exec lines included.
+- It is remembered for you, per graph. It is not saved in the layer and
+  does not mark anything unsaved. Saving the graph to a new file keeps it,
+  a reference you remove is forgotten, and two tabs on the same graph each
+  keep their own.
+
 ### Reference Editor
 
 **Edit References...** opens the Reference Editor on that layer.
+
+Opening a graph with references that cannot be found or opened shows a
+notice listing them (**Show Details...**), with **Edit References...** to
+open the Reference Editor on the first layer holding one. The notice does
+not hold anything up, so you can look at the graph first or close it with
+**Ignore**. References that are not found are kept as written, in case they
+resolve on another machine.
+
+A graph saved by a newer version of nxt, or one referencing such a file, is
+not opened straight away. The editor says which version saved it and asks
+first. **Open Anyway** opens it, but anything this version does not
+understand is left out, and saving writes the file without it, so updating
+nxt is the safe way to open it. From Python, open one inside
+`nxt_io.allow_newer_files()`.
 
 ![The Reference Editor](images/reference_editor.png)
 
@@ -431,8 +706,12 @@ Two items on this menu change what a layer pulls in from disk:
   [file roots](#how-references-are-found) keeps working on other machines.
   The folder button next to the field picks a file with a file browser
   instead. A picked file that sits next to the layer, or in a folder below
-  it, is stored relative to the layer; anything else is stored as a full
-  path. A relative path is looked for under your file roots before the
+  it, is stored relative to the layer; one under a file root is stored
+  relative to that root, unless an earlier root holds a file of the same
+  name; one in a folder that an [env file](extensions.md#env-files) variable
+  names is stored from that variable, as `$PROJECT_GRAPHS/rig.nxt`; anything
+  else is stored as a full path. A relative path is looked for under your
+  file roots before the
   layer's folder, so check the resolved view if a root might hold a file of
   the same name.
 - **+** adds an empty row and puts the cursor in the field, ready to type.
@@ -476,15 +755,18 @@ layers can appear, disappear or change order. Reloading is one step on the
 undo stack, and undoing it puts back exactly what each layer held before,
 without reading the files again.
 
-### Show in Explorer
+### Files changed on disk
 
-**Show in Explorer** opens the folder a layer is saved in, with the layer's
-file selected. On a Mac it is called **Reveal in Finder** and opens the
-Finder; on Linux it is **Show in File Manager**. It is on every layer's
-right click menu, and in the **File** menu, where it acts on the target
-layer. A layer that has never been saved has no file to show, so the item is
-greyed out. If the file has been moved or deleted, the nearest folder that
-still exists is opened instead.
+The editor notes when each layer file was last read or written. If
+something else changes a file after that, a version control update for
+example, saving that layer asks first: **Overwrite** writes the graph over
+the changes on disk, **Reload...** opens Reload Source instead, and
+**Cancel** leaves the file alone.
+
+When you come back to the editor from another window, it also offers to
+reload the current graph's files that have changed. **Keep Mine** is
+remembered until the file changes again. Turn this off with **Options >
+Notice Files Changed on Disk**; saving over a changed file still asks.
 
 ## Build View
 
@@ -551,6 +833,13 @@ on from **Window > Outliner**.
   collapse every node in that build, or in **Not in a build**. When they
   all are, it expands them all. A plain click on the arrow only opens or
   closes the group.
+- Drag rows onto another row to parent their nodes to its node, or drag
+  them below the rows or onto a group's heading to unparent them, as one
+  undo. The row they would go under is outlined in amber while you drag,
+  and the whole list with a dashed amber line when they would go to the
+  top of the hierarchy. A node cannot be dropped onto itself or anything
+  below it, or where it already is. Dragging a node and its child together
+  only moves the node, the child going with it.
 - Right click below the rows for the graph's menu for empty space, to add
   or paste a node at the top of the hierarchy. It lands in the middle of
   the graph's view.
@@ -582,11 +871,122 @@ Turn it on from **Window > Instance View**.
 - Scroll to zoom, drag with the middle mouse button to pan, drag to box
   select, and press `F` to frame everything.
 
+## AI Assistant
+
+The AI Assistant is a panel for chatting with Claude, OpenAI, Grok or a local
+model about the open graph. It can look over the graph, explain it, change it
+and test its changes, and it shows each step it takes as it works.
+
+It is off until it is turned on in **Options > AI Assistant**. Once it is on,
+**Window > AI Assistant** opens the panel. Nothing is sent to a provider until
+you ask it something.
+
+### The parts of the panel
+
+1. **Provider and model.** Who answers, and which of their models. The line
+   under them says which sign in or key is being used. **Settings** opens
+   **Options > AI Assistant**.
+2. **Chats.** Every chat is kept, so **New Chat** does not lose the last
+   one. Click a chat to go back to it and carry on. Right click a chat to
+   **Pin** it to the top or **Delete** it. Pinned chats are listed first,
+   then the rest, most recent first. Chats are saved in the editor's prefs
+   folder, on this computer only.
+3. **The conversation.** Your messages and the replies, each with the time
+   it was sent, and the day wherever it changes. Each reply lists the steps
+   it took, with a dot for each kind: blue for looking, purple for selecting
+   nodes to show you, green for changing the graph, orange for running code,
+   and a red cross for a step that could not be done. Changes it made are
+   listed in a green box under the reply.
+4. **Apply Code** and **Copy Code** show when a reply has a block of code.
+   **Apply Code** puts it in the selected node, and undo puts the old code
+   back. **Copy Code** copies it.
+5. **The message box.** `Ctrl+Enter` sends. While a reply is coming,
+   **Send** becomes **Stop**.
+6. **What it may do.** These toggles are remembered:
+    - **Selection** sends the selected nodes, their attributes and code with
+      your message.
+    - **Edit graph** lets it make, change and delete nodes, hierarchies,
+      code, attributes and layers. All the changes in one reply are one undo
+      step, so `Ctrl+Z` takes them back.
+    - **Run code** lets it run nodes, builds and snippets of Python, in the
+      editor or in the host such as Maya, to test its work and read what
+      they print. It is off until you turn it on, and shows orange when on.
+
+### Signing in
+
+**Options > AI Assistant > Sign In** has a box for each provider:
+
+- **Claude** uses the Claude Code app's sign in, so any Claude plan works
+  and the editor never sees the account's token. **Sign in with Claude
+  Code** (or **Switch Account**) runs Claude Code's own sign in in the
+  browser. Claude Code needs to be installed for this.
+- **OpenAI** can sign in with a ChatGPT plan, and **Grok** with SuperGrok.
+- Each can use an **API key** instead, or the usual environment variable
+  (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `XAI_API_KEY`).
+- **Local Model** points at a server on this computer or the network:
+  Ollama, LM Studio, llama.cpp, vLLM or Jan. **Find** looks for one that is
+  running.
+
+**Ask ... first** picks the provider the panel starts with, and **Check**
+asks a provider for its models. Keys and sign ins are kept in the operating
+system's secure store.
+
+### How it works with the graph
+
+The assistant uses tools to look at the graph rather than guessing: it can
+look over the layers and nodes, list a hierarchy, read a node's attributes
+and code, search, check the build order, find problems and read the Output
+Log. With **Edit graph** on it can change the graph, and with **Run code** on
+it can run what it changed and read the output.
+
+With a Claude sign in, the tools are served to Claude Code by the editor's
+own MCP server, which only listens on this computer and takes a new key for
+every reply. The other providers use the same tools through their own tool
+calling. A model that can not use tools answers without them, and changes
+the graph with a block of changes the editor applies instead.
+
+### Reading code and imports
+
+The assistant can read code on this computer. The open graph's folder is
+free to read. Before it reads anywhere else it asks, with its reason:
+
+- **Allow** lets it read that folder for the rest of the chat.
+- **Always allow** lets it read the folder in every chat, and remembers it
+  in **Memory** with what the folder holds, so later chats know to look
+  there.
+- **Deny** says no, and it does not ask again in that reply.
+
+It can also inspect the modules a graph imports: where each one is found,
+what functions and classes it has and their arguments, or one of them in
+full. Modules are read as source, without being imported, so their code is
+not run. A module that is already imported, such as `maya.cmds` in Maya, is
+looked at as it is.
+
+### Memory
+
+Ask the assistant to remember something, such as how you name controls, and
+it saves a short note. Notes are sent at the start of every chat.
+**Options > AI Assistant > Memory** lists them, and the folders it can
+always read with what each one holds. Double click a note, or what a folder
+holds, to change it; **Remove** takes it away, and **Add Note** and **Add
+Folder...** add your own.
+
 ## Property Editor, History View, Output Log and Workflow Tools
 
 See the [tutorial videos](tutorials.md) for a tour of these. The History
 View lists every step on the undo stack, including reference edits and
 reloads.
+
+The Output Log follows new text while it is scrolled to the bottom, and
+resizing it keeps it there. Scroll up to read something and it stays where
+you left it; scroll back to the bottom and it follows again.
+
+Each log keeps its last 10,000 lines, and drops older ones from the top.
+Long lines wrap to the width of the log. Turn off **Wrap Lines** in the
+log's right click menu to show them on one line with a horizontal scroll
+bar instead, which also keeps resizing the window quick when the log is
+long. The setting applies to both the Rich Output and Raw Output tabs and
+is remembered with your preferences.
 
 In the Property Editor's attribute table, each row is in the color of the
 layer its value comes from, lighter where the selected node sets the value
@@ -599,6 +999,64 @@ inherits it. The row header on the left is filled with the layer's color,
 and stays in view however far you scroll the table. The source looks like a
 button only under the mouse; click it to go to that node. It is off by
 default and remembered with your preferences.
+
+### Types changed by running
+
+A compute can leave an attribute a different type than the graph gives
+it, a string where it was a list say. In the Cached view (`E`) the
+Property Editor highlights that attribute's **Type** in orange, and its
+tooltip says what changed, such as "was list, now raw". Attributes a
+compute made itself, and the Raw and Resolved views, are not marked.
+
+### Filtering attributes
+
+Type in the **Filter attributes** field above the attribute table to show
+only the attributes whose name or value has what you typed in it, ignoring
+case. As in the node searches, `*` stands for anything and commas separate
+terms, any of which can match: `arm*len, side` shows `arm_length` and
+`side`. Values match as the table shows them, raw, resolved or cached. The
+filter stays on as you select other nodes; clear it with the button at its
+end.
+
+### Copying and pasting attributes
+
+Select attributes in the table and choose **Copy Attributes** from the
+right click menu, or press `Ctrl+C`, to copy them with their values, types
+and comments. Select one or more nodes, in this graph or another, and
+choose **Paste Attributes**, or press `Ctrl+V` with the Property Editor in
+focus, to add them to every selected node on the target layer. A node
+that already has one of them gets the copied value instead. The paste is
+one undo. The clipboard holds them as JSON, so they can be read or edited
+as text too.
+
+To copy only a value, right click it and choose **Copy Raw**, **Copy
+Resolved** or **Copy Cached**.
+
+### Completing paths and tokens
+
+The **Instance** field offers the paths of the other nodes in the graph as
+you type, and **Exec Input** the other root nodes. Both match anywhere in
+the path and ignore case, so typing `arm` offers `/rig/arm`.
+
+While you edit an attribute's value, typing `${` offers the node's
+attributes as tokens (`${side}`) and the token prefixes nxt knows about
+(`${file::` and so on), `${/` offers every node path, and a node path
+followed by a dot offers that node's attributes as whole tokens, as in the
+[Code Editor](#node-paths-and-their-attributes). Choose one with the arrow
+keys and Return, or the mouse; it replaces only the token you were typing.
+
+### Position
+
+The **Position** fields show where the selected root node is in the
+graph, and follow it while you drag it. The move goes on the undo stack
+once, when you let go.
+
+With several nodes selected, the fields move all of them. Typing a value
+puts every selected node there on that axis, each keeping its place on
+the other one. Stepping with the arrows, the arrow keys or the mouse
+wheel moves every selected node by the same amount, so they keep their
+places relative to each other. Either is one undo. Child nodes in the
+selection are left where they are under their parents.
 
 # Terms and Definitions
 
@@ -820,6 +1278,19 @@ machine, or for another project, with different roots.
     changing the graph. Take the folder out of `NXT_FILE_ROOTS` to go back.
     To always use one particular file, reference it by an absolute path, or
     by a path built from an environment variable.
+
+!!! note "Picked files under a root are stored short"
+    Once `NXT_FILE_ROOTS` is set, by an [env file](extensions.md#env-files)
+    or any other way, a file you pick in a file browser that sits under one
+    of the roots is stored relative to that root, as `lib/shared_steps.nxt`,
+    not as its full path. This is so for everyone with `NXT_FILE_ROOTS` set,
+    whether or not they use env files: before, a picked file was always
+    stored whole. A file in a folder that an env file variable names is
+    stored from that variable, as `$PROJECT_GRAPHS/rig.nxt`. The short path
+    is only used when it resolves back to the file you picked, and it keeps
+    the folders you picked it through: picked as `current/rig.nxt`, with
+    `current` a link to `v12`, it stays `current/rig.nxt`. Type the full
+    path in the Reference Editor to store that instead.
 
 The [Reference Editor](#reference-editor) shows where each reference
 resolves on this machine with its resolved toggle, and the tooltip on a row

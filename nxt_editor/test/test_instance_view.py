@@ -311,5 +311,77 @@ class Syncing(InstanceViewCase):
             user_dir.USER_PREF.INSTANCE_VIEW_FOLLOW))
 
 
+class LineMenu(InstanceViewCase):
+    """A right click on a line here offers what it does in the graph."""
+
+    def setUp(self):
+        super(LineMenu, self).setUp()
+        self.open_view()
+        self.select(['/arm_L'])
+
+    def link(self, instance):
+        return [link for link in self.view.links
+                if link.instance_item.node_path == instance][0]
+
+    def menu_texts(self, link):
+        return [a.text() for a in self.view.line_menu(link).actions()
+                if not a.isSeparator()]
+
+    def trigger(self, link, text):
+        menu = self.view.line_menu(link)
+        [a for a in menu.actions() if a.text() == text][0].trigger()
+        app.processEvents()
+
+    def test_a_click_on_a_line_finds_it(self):
+        link = self.link('/arm_L')
+        middle = self.view.view.mapFromScene(link.path().pointAtPercent(0.5))
+        self.assertIs(link, self.view.view.link_at(middle))
+
+    def test_it_has_break_and_go_to(self):
+        self.assertEqual(['Break Connection', 'Go to Source: /arm',
+                          'Go to Target: /arm_L'],
+                         self.menu_texts(self.link('/arm_L')))
+
+    def test_breaking_removes_the_instance_and_the_view_keeps_up(self):
+        self.trigger(self.link('/arm_L_twist'), 'Break Connection')
+        self.assertFalse(self.model.get_node_instance_path(
+            '/arm_L_twist', self.model.comp_layer))
+        self.assertNotIn('/arm_L_twist', self.view.items)
+        self.model.undo_stack.undo()
+        app.processEvents()
+        self.assertIn('/arm_L_twist', self.view.items)
+
+    def test_go_to_selects_the_node(self):
+        self.view.follow_button.setChecked(False)
+        self.trigger(self.link('/arm_L'), 'Go to Source: /arm')
+        self.assertEqual(['/arm'], self.model.selection)
+
+
+class Framing(InstanceViewCase):
+    """Whatever is shown sits in the middle of the view."""
+
+    def assert_centered(self):
+        graph = self.view.view
+        rect = graph.scene().itemsBoundingRect()
+        middle = graph.mapFromScene(rect.center())
+        centre = graph.viewport().rect().center()
+        self.assertLessEqual(abs(middle.x() - centre.x()), 2)
+        self.assertLessEqual(abs(middle.y() - centre.y()), 2)
+
+    def test_a_long_lineage_is_centered(self):
+        self.open_view()
+        self.select(['/arm_L'])
+        self.assert_centered()
+
+    def test_a_lone_node_is_centered(self):
+        self.open_view()
+        self.select(['/loose'])
+        self.assert_centered()
+        # And after showing a wider one first.
+        self.select(['/arm_L_twist'])
+        self.select(['/loose'])
+        self.assert_centered()
+
+
 if __name__ == '__main__':
     unittest.main()

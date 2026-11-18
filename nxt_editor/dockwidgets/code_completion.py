@@ -1,5 +1,8 @@
 """Where the code editor's completions come from, beyond the editor itself.
 
+Node paths and ${} tokens come from here too, for the code editor and for
+the Property Editor's path fields and attribute values alike.
+
 Three things a compute can use without importing them, and an optional
 python analyser:
 
@@ -8,23 +11,27 @@ python analyser:
   so cmds. completes before an import line is written. Only modules the
   host has already loaded are offered; nothing is imported for them,
   because importing pymel alone can take seconds.
-- jedi, when it is installed (pip install nxt-editor[completion]). It knows
-  what a name is, so it can complete what a call returns or what a local
-  variable holds, which reading import lines cannot.
+- jedi, when it is installed: from Options > Optional Components, or with
+  pip install nxt-editor[completion]. It knows what a name is, so it can
+  complete what a call returns or what a local variable holds, which
+  reading import lines cannot.
 
 The jedi support, the token sanitizing and the host module lists come
 from a pull request by @enriquevelmai (nxt-dev/nxt_editor#298).
 """
 # Builtin
+import contextlib
+import importlib
 import importlib.util
 import logging
 import os
 import re
 import sys
+import threading
 import types
 
 # Internal
-from nxt import nxt_path
+from nxt import nxt_path, tokens
 from nxt.constants import NXT_DCC_ENV_VAR, USER_DIR
 from nxt.runtime import ExitNode, ExitGraph
 
@@ -42,6 +49,203 @@ RUNTIME_GLOBALS = {
     'ExitNode': ExitNode,
     'ExitGraph': ExitGraph,
 }
+
+#: The names above that a graph fills in when it runs.
+LIVE_GLOBALS = tuple(name for name, value in RUNTIME_GLOBALS.items()
+                     if value is None)
+
+
+def runtime_namespace(rt_layer=None, node_path=None):
+    """What can be completed after the dot of a name nxt gives a compute.
+
+    The None placeholders are left out. Completing on None offered what
+    None has, __bool__, __class__ and the rest, after STAGE. and self.,
+    which is worse than offering nothing. Once the graph has run, the
+    runtime layer holds the real things: STAGE with whatever the graph
+    stored on it, and this node as it ran, for self.
+
+    :param rt_layer: the runtime layer of the last build, if there was one
+    :param node_path: the node being edited, which is what self means
+    :type node_path: str | None
+    :return: {name: object}
+    :rtype: dict
+    """
+    namespace = {name: value for name, value in RUNTIME_GLOBALS.items()
+                 if value is not None}
+    console = getattr(rt_layer, '_console', None)
+    live = getattr(console, 'globals', None) or {}
+    for name in LIVE_GLOBALS:
+        value = live.get(name)
+        if value is not None:
+            namespace[name] = value
+    # The console's self is whichever node ran last. In the code editor
+    # self is the node being edited.
+    namespace.pop('self', None)
+    if node_path and live:
+        try:
+            node = rt_layer.lookup(node_path)
+        except Exception:
+            node = None
+        if node is not None:
+            namespace['self'] = node
+    return namespace
+
+
+#: Most names offered after the dot of something a graph left behind. A rig
+#: can keep thousands of things on STAGE, and a list that long is no help.
+LIVE_NAME_LIMIT = 2000
+
+# Read straight from type, so a class cannot answer with code of its own.
+_class_dict = type.__dict__['__dict__'].__get__
+_class_mro = type.__dict__['__mro__'].__get__
+
+# What reading a slot or an instance's __dict__ goes through. They copy a
+# value out of the object, no python runs.
+_PLAIN_READS = (types.MemberDescriptorType, types.GetSetDescriptorType)
+
+_MISSING = object()
+
+
+def _is_a(obj, klass):
+    """isinstance without asking obj, which could answer through __class__."""
+    return any(base is klass for base in _class_mro(type(obj)))
+
+
+def _has_on_class(klass, name):
+    return any(name in _class_dict(base) for base in _class_mro(klass))
+
+
+def _instance_dict(obj):
+    """obj's own __dict__, or None, read without running anything of obj's."""
+    for base in _class_mro(type(obj)):
+        entry = _class_dict(base).get('__dict__')
+        if entry is None:
+            continue
+        if type(entry) not in _PLAIN_READS:
+            # A class that makes __dict__ a property of its own.
+            return None
+        found = entry.__get__(obj)
+        return found if _is_a(found, dict) else None
+    return None
+
+
+def _namespaces(obj):
+    """(obj's own __dict__ or None, its classes' dicts in lookup order)."""
+    if _is_a(obj, type):
+        return None, [_class_dict(base) for base in _class_mro(obj)]
+    return (_instance_dict(obj),
+            [_class_dict(base) for base in _class_mro(type(obj))])
+
+
+def static_attr(obj, name):
+    """An attribute of a live object, without running any of its code.
+
+    No __getattr__, no __getattribute__, no property. A value stored on the
+    object or its class is read; a method is read as the function it is; a
+    property or any other computed attribute is where the walk stops.
+
+    :return: the attribute, or None when there is none or it would have to
+        be computed
+    """
+    try:
+        own, classes = _namespaces(obj)
+        on_class = next((namespace[name] for namespace in classes
+                         if name in namespace), _MISSING)
+        computed = (on_class is not _MISSING and
+                    _has_on_class(type(on_class), '__get__'))
+        if own is not None and dict.__contains__(own, name):
+            data = computed and (_has_on_class(type(on_class), '__set__') or
+                                 _has_on_class(type(on_class), '__delete__'))
+            if not data:
+                # Python reads the object's own value first, unless the
+                # class has a property of that name.
+                return dict.__getitem__(own, name)
+        if on_class is _MISSING:
+            return None
+        if _is_a(on_class, staticmethod) or _is_a(on_class, classmethod):
+            return on_class.__func__
+        if not computed or _is_a(on_class, types.FunctionType):
+            return on_class
+        if (type(on_class) is types.MemberDescriptorType and
+                not _is_a(obj, type)):
+            # A __slots__ entry, copied out of the object.
+            return on_class.__get__(obj)
+        return None
+    except Exception:
+        return None
+
+
+def static_names(obj, start='', limit=LIVE_NAME_LIMIT):
+    """The public names on a live object, without running any of its code.
+
+    dir() calls the object's __dir__, which is its code to run. These come
+    from the object's own __dict__ and its classes' instead, which is also
+    where __slots__ entries are listed.
+
+    :param start: only names that start with this, the part already typed
+    :param limit: stop after this many
+    :rtype: list
+    """
+    names = []
+    seen = set()
+    try:
+        own, classes = _namespaces(obj)
+        if own is not None:
+            classes.insert(0, own)
+        for namespace in classes:
+            if _is_a(namespace, dict):
+                keys = list(dict.keys(namespace))
+            else:
+                keys = list(namespace.keys())
+            for key in keys:
+                if (type(key) is not str or key.startswith('_') or
+                        not key.startswith(start) or key in seen):
+                    continue
+                seen.add(key)
+                names.append(key)
+                if len(names) >= limit:
+                    return names
+    except Exception:
+        # A build in another thread can change a dict while it is read.
+        logger.debug('Could not list names for completion', exc_info=True)
+    return names
+
+
+def live_completions(obj, rest, limit=LIVE_NAME_LIMIT):
+    """What follows the dots after something a graph left behind.
+
+    Only names come back, never the objects they name, so nothing that
+    belongs to the graph is held on to or handed elsewhere.
+
+    :param obj: STAGE or self, as the build left it
+    :param rest: what is typed after its first dot, like rig.bu
+    :return: the dotted names after the first dot, like rig.build_guides
+    :rtype: list
+    """
+    parts = rest.split('.')
+    walked = ''
+    for part in parts[:-1]:
+        obj = static_attr(obj, part)
+        if obj is None:
+            return []
+        walked += part + '.'
+    return [walked + name for name in static_names(obj, parts[-1], limit)]
+
+
+def attr_for_completion(obj, name):
+    """An attribute to look inside, read without running anything.
+
+    Walking os.path.jo needs os.path, and getattr is fine on a module.
+    On anything else getattr can run a property or a __getattr__, which on
+    a scene object can do anything, so those are read with static_attr.
+
+    :return: the attribute, or None when there is none or it would have to
+        be computed
+    """
+    if _is_a(obj, types.ModuleType):
+        return getattr(obj, name, None)
+    return static_attr(obj, name)
+
 
 #: Modules each host keeps loaded, by the name scripts usually give them.
 HOST_MODULES = {
@@ -78,6 +282,79 @@ def host_modules():
     return found
 
 
+def node_paths(model):
+    """Every node path in the graph, as the path fields and ${/ offer them.
+
+    :param model: StageModel
+    :rtype: list
+    """
+    return sorted(model.get_descendants(nxt_path.WORLD))
+
+
+def node_attr_names(model, node_path):
+    """Every attribute a node's compute can use, as the Property Editor
+    lists them: its own from every layer, then what it inherits from its
+    parents and gets from what it instances.
+
+    Asked of the composited graph, because the target layer alone only
+    knows what that layer says about the node.
+
+    :rtype: list
+    """
+    comp = model.comp_layer
+    names = []
+    for found in (model.get_node_local_attr_names(node_path, comp),
+                  model.get_node_inherited_attr_names(node_path, comp),
+                  model.get_node_instanced_attr_names(node_path, comp)):
+        for name in found:
+            if name not in names:
+                names.append(name)
+    return names
+
+
+def token_words(model, node_path):
+    """The tokens worth offering on a node whatever is being typed: each
+    of its attributes as ${name}, and the token prefixes nxt knows about,
+    ${file:: and the rest, including any added by plugins.
+
+    :param model: StageModel, or None for the prefixes alone
+    :param node_path: the node being edited, or None
+    :rtype: list
+    """
+    words = set()
+    if model is not None and node_path:
+        for name in node_attr_names(model, node_path):
+            words.add(tokens.TOKEN_PREFIX + name + tokens.TOKEN_SUFFIX)
+    all_tokens = tuple(tokens.TOKENTYPE.ALL) + tuple(tokens.plugin_tokens)
+    for token in all_tokens:
+        if token.prefix:
+            words.add(tokens.TOKEN_PREFIX + token.prefix)
+    return sorted(words)
+
+
+def token_completions(model, prefix):
+    """Node paths inside ${/, and a node's attributes after its dot.
+
+    ${/ offers every node path, and ${/some/node. offers that node's
+    attributes as whole tokens.
+
+    :param model: StageModel
+    :param prefix: the partial token being typed
+    :type prefix: str
+    :rtype: list
+    """
+    start = tokens.TOKEN_PREFIX + nxt_path.WORLD
+    if not model or not prefix.startswith(start):
+        return []
+    body = prefix[len(tokens.TOKEN_PREFIX):]
+    if '.' in body:
+        node_path = body.rpartition('.')[0]
+        return [tokens.TOKEN_PREFIX + node_path + '.' + name
+                + tokens.TOKEN_SUFFIX
+                for name in node_attr_names(model, node_path)]
+    return [tokens.TOKEN_PREFIX + path for path in node_paths(model)]
+
+
 # A ${...} token. nxt resolves these before python sees the code, so to a
 # python parser they are syntax errors.
 _TOKEN_RE = re.compile(r'\$\{[^{}]*\}')
@@ -105,6 +382,9 @@ class Jedi(object):
     should pay for at startup, least of all inside a host. Its results for
     one dotted prefix are kept until the code around it changes, so typing
     more of a name only filters what it already said.
+
+    The editor asks it from a worker thread, so a slow answer never holds
+    up typing. One question is answered at a time.
     """
 
     #: Where jedi keeps its parse cache. Its own default is shared by every
@@ -115,11 +395,17 @@ class Jedi(object):
         self._module = None
         self._tried = False
         self._failed_once = False
-        self._cache_key = None
-        self._cache_names = []
+        # The key and its names, swapped together so a reader on another
+        # thread never sees one without the other.
+        self._cache = (None, [])
+        self._lock = threading.Lock()
 
     def module(self):
         """jedi itself, or None when it is not installed."""
+        with self._lock:
+            return self._load()
+
+    def _load(self):
         if self._tried:
             return self._module
         self._tried = True
@@ -134,6 +420,22 @@ class Jedi(object):
         self._module = jedi
         return jedi
 
+    def reset(self):
+        """Forget whether jedi was found, so it is looked for again. For
+        when it has just been installed, or removed, while nxt runs.
+        """
+        importlib.invalidate_caches()
+        # Under the lock, where completion is asked from another thread.
+        lock = getattr(self, '_lock', None) or contextlib.nullcontext()
+        with lock:
+            self._module = None
+            self._tried = False
+            self._failed_once = False
+            self._cache_key = None
+            self._cache_names = []
+            if hasattr(self, '_cache'):
+                self._cache = (None, [])
+
     def available(self):
         return self.module() is not None
 
@@ -147,7 +449,8 @@ class Jedi(object):
 
     def cached(self, key):
         """The names last worked out for `key`, or None."""
-        return self._cache_names if key == self._cache_key else None
+        cache_key, names = self._cache
+        return names if key == cache_key else None
 
     def complete(self, source, line, column, namespace, key, fresh=False):
         """Names that can follow the cursor, as jedi sees the code.
@@ -162,12 +465,18 @@ class Jedi(object):
         :return: completed names, without the part before the last dot
         :rtype: list
         """
-        cached = None if fresh else self.cached(key)
-        if cached is not None:
-            return cached
-        jedi = self.module()
-        if jedi is None:
-            return []
+        with self._lock:
+            cached = None if fresh else self.cached(key)
+            if cached is not None:
+                return cached
+            jedi = self._load()
+            if jedi is None:
+                return []
+            names = self._complete(jedi, source, line, column, namespace)
+            self._cache = (key, names)
+            return names
+
+    def _complete(self, jedi, source, line, column, namespace):
         try:
             script = jedi.Interpreter(sanitize_tokens(source),
                                       namespaces=[namespace])
@@ -179,8 +488,6 @@ class Jedi(object):
                 logger.debug('jedi could not complete here', exc_info=True)
                 self._failed_once = True
             names = []
-        self._cache_key = key
-        self._cache_names = names
         return names
 
 

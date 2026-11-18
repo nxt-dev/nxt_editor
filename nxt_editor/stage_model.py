@@ -22,6 +22,7 @@ from nxt import (nxt_path, nxt_layer, tokens, DATA_STATE,
 import nxt_editor
 from nxt_editor import DIRECTIONS, StringSignaler, color_range, theme, user_dir
 from nxt_editor import backdrops
+from nxt_editor import bookmarks
 from nxt_editor import wires
 from nxt.nxt_layer import LAYERS, CompLayer, SAVE_KEY
 from nxt.nxt_node import (get_node_attr, META_ATTRS, get_node_as_dict,
@@ -40,6 +41,23 @@ class EXEC_FRAMING:
     NEVER = 0
     STEPPING = 1
     ALWAYS = 2
+
+
+#: The types a value has when its text reads back as itself, which is what
+#: determine_nxt_type names. Anything else it calls raw.
+LITERAL_TYPES = (bool, int, float, complex, list, tuple, dict, set,
+                 type(None))
+
+
+def cached_type_name(value):
+    """The type of a cached value, named as determine_nxt_type names the
+    type of the same value written out, without writing it out.
+
+    :rtype: str
+    """
+    if isinstance(value, LITERAL_TYPES):
+        return type(value).__name__
+    return 'raw'
 
 
 class StageModel(QtCore.QObject):
@@ -62,6 +80,12 @@ class StageModel(QtCore.QObject):
     layer_solo_changed = QtCore.Signal(tuple)  # Layer paths whose solo changed
     layer_alias_changed = QtCore.Signal(str)  # Layer path whose alias changed
     layer_lock_changed = QtCore.Signal(str)  # Layer path whose locked changed
+    # Which layers are hidden in the graph changed. Nothing about the graph
+    # itself did.
+    layer_visibility_changed = QtCore.Signal()
+    # A short message about something the editor did by itself, for the
+    # graph to show.
+    status_message = QtCore.Signal(str)
     layer_removed = QtCore.Signal(str)  # Layer path who was removed
     layer_added = QtCore.Signal(str)  # Layer path who was added
     # Which layers are loaded, or the order they stack in, changed.
@@ -74,6 +98,10 @@ class StageModel(QtCore.QObject):
     node_added = QtCore.Signal(str)
     node_deleted = QtCore.Signal(str)
     node_moved = QtCore.Signal(str, list)
+    # Where a root node's graphic is whenever it moves, which includes
+    # every step of a drag, before the move is set on a layer when the
+    # mouse is let go. Nothing goes on the undo stack for these.
+    node_graphic_moved = QtCore.Signal(str, list)
     selection_changed = QtCore.Signal(tuple)  # new selection
     node_focus_changed = QtCore.Signal(str)
     node_name_changed = QtCore.Signal(str, str)  # old node path, new node path
@@ -84,9 +112,12 @@ class StageModel(QtCore.QObject):
     collapse_changed = QtCore.Signal(tuple)  # node paths where changed
     backdrops_changed = QtCore.Signal()
     wires_changed = QtCore.Signal()  # line style or points
+    bookmarks_changed = QtCore.Signal()
     frame_items = QtCore.Signal(tuple)
     server_log = QtCore.Signal(str)
     request_ding = QtCore.Signal()
+    # A node raised an error and the build stopped there. The node's path.
+    build_failed = QtCore.Signal(str)
 
     def __init__(self, stage):
         super(StageModel, self).__init__()
@@ -135,6 +166,22 @@ class StageModel(QtCore.QObject):
         # to keep them by in the user's prefs. {'breaks': {None: [paths]}}
         self._unsaved_points = {'breaks': {}, 'skips': {}}
         self.layer_saved.connect(self._keep_unsaved_points)
+        # Layers hidden in the graph, read from the cache by the graph's
+        # file when first asked for. See hidden_layer_paths.
+        self._hidden_layers = None
+        self._hidden_graph = None
+        self.layer_removed.connect(self._forget_unloaded_hidden_layers)
+        self.layers_restacked.connect(self._forget_unloaded_hidden_layers)
+        self.layer_saved.connect(self._check_hidden_graph)
+        # When and how big each layer's file was when it was last read or
+        # written here, {real_path: (mtime, size)}. A file that no longer
+        # matches was changed by something else, a version control update
+        # most often, and saving would write over that without a word.
+        self.disk_stamps = {}
+        for layer in stage._sub_layers:
+            self.stamp_layer_file(layer.real_path)
+        self.layer_saved.connect(self.stamp_layer_file)
+        self.layer_added.connect(self._stamp_new_layer_file)
         # attribute display state
         # {/node/path: STATE_INT}
         # 0 = no attributes
@@ -707,6 +754,89 @@ class StageModel(QtCore.QObject):
         self.undo_stack.push(ReloadLayers(layer_paths, self))
         return True
 
+    def missing_references(self):
+        """The references that did not load, by the loaded layer holding
+        them. A file that could not be found or opened is kept as a
+        reference with no layer behind it.
+
+        :return: [(layer, [reference as stored, ...]), ...] in stack order,
+            each file once however many times it is loaded
+        :rtype: list
+        """
+        missing = []
+        seen = set()
+        for layer in self.stage._sub_layers:
+            if layer.real_path in seen:
+                continue
+            seen.add(layer.real_path)
+            references = [data.get(SAVE_KEY.FILEPATH)
+                          for data in layer.sub_layers
+                          if data.get('layer') is None]
+            if references:
+                missing.append((layer, references))
+        return missing
+
+    @staticmethod
+    def read_disk_stamp(layer_path):
+        """When and how big the file at layer_path is now, None when
+        there is no file.
+
+        :rtype: tuple or None
+        """
+        if not layer_path:
+            return None
+        try:
+            info = os.stat(layer_path)
+        except OSError:
+            return None
+        return info.st_mtime, info.st_size
+
+    def stamp_layer_file(self, layer_path):
+        """Note the file as it is now, as what this graph last read or
+        wrote. Called once a layer is loaded, saved or reloaded.
+        """
+        stamp = self.read_disk_stamp(layer_path)
+        if stamp is None:
+            self.disk_stamps.pop(layer_path, None)
+        else:
+            self.disk_stamps[layer_path] = stamp
+
+    def _stamp_new_layer_file(self, layer_path):
+        # A layer referenced after the graph was opened is read as it is
+        # added. A file already noted keeps its stamp: another copy of it
+        # in the stack does not mean it was read again.
+        if layer_path not in self.disk_stamps:
+            self.stamp_layer_file(layer_path)
+
+    def layer_file_changed_on_disk(self, layer_path):
+        """Whether something else has written the layer's file since this
+        graph last read or wrote it. A file that has gone away is not
+        counted, saving puts it back.
+
+        :rtype: bool
+        """
+        known = self.disk_stamps.get(layer_path)
+        if known is None:
+            return False
+        now = self.read_disk_stamp(layer_path)
+        return now is not None and now != known
+
+    def layer_files_changed_on_disk(self):
+        """The real paths of the loaded layers whose files have changed on
+        disk, each once, in stack order. A stat of each file, cheap enough
+        to ask whenever the window comes back to the front.
+
+        :rtype: list
+        """
+        changed = []
+        for layer in self.stage._sub_layers:
+            path = layer.real_path
+            if path in changed:
+                continue
+            if self.layer_file_changed_on_disk(path):
+                changed.append(path)
+        return changed
+
     def get_layer_colors(self, layer_list):
         layers_colors = []
         for layer in layer_list:
@@ -766,6 +896,233 @@ class StageModel(QtCore.QObject):
             return
         cmd = SetLayerLock(lock, layer_path, self)
         self.undo_stack.push(cmd)
+
+    # -- hiding a layer's nodes ------------------------------------------
+    # A view of the graph, like the layer color view: it is kept per user
+    # and per graph in the editor's cache, never in the layer, so it does
+    # not mark anything unsaved and is not somebody else's view too. A
+    # hidden layer still comps, still runs, and is still in the Outliner.
+
+    def hidden_layer_paths(self):
+        """Real paths of the layers hidden in the graph. Only ever loaded
+        layers: one taken out of the graph is forgotten, see
+        _forget_unloaded_hidden_layers.
+
+        :rtype: set
+        """
+        graph = self.top_layer.real_path
+        if self._hidden_layers is None:
+            self._hidden_layers = set(self._stored_hidden_layers(graph))
+        elif graph != self._hidden_graph:
+            self._move_hidden_layers(self._hidden_graph, graph)
+        self._hidden_graph = graph
+        return self._hidden_layers
+
+    @staticmethod
+    def _stored_hidden_layers(graph):
+        stored = user_dir.editor_cache.get(
+            user_dir.EDITOR_CACHE.HIDDEN_LAYERS) or {}
+        return stored.get(graph, ())
+
+    def _move_hidden_layers(self, old_graph, graph):
+        """The graph was saved to a new file. What is remembered for that
+        file is read, if there is anything, and otherwise what was hidden
+        stays hidden and is remembered for it from now on."""
+        stored = self._stored_hidden_layers(graph)
+        if stored:
+            self._hidden_layers = set(stored)
+            return
+        if old_graph in self._hidden_layers:
+            # The top layer is the file that moved.
+            self._hidden_layers.discard(old_graph)
+            self._hidden_layers.add(graph)
+        self._store_hidden_layers(graph, hide=self._hidden_layers)
+
+    @staticmethod
+    def _store_hidden_layers(graph, hide=(), show=()):
+        """Change what is remembered for a graph by the paths that changed.
+
+        Read again first: another tab on the same graph has hidden layers
+        of its own, and writing this one's whole set would undo what that
+        one did.
+        """
+        if not graph:
+            # A graph that was never saved has nowhere to be remembered by.
+            return
+        key = user_dir.EDITOR_CACHE.HIDDEN_LAYERS
+        stored = dict(user_dir.editor_cache.get(key) or {})
+        paths = (set(stored.get(graph, ())) | set(hide)) - set(show)
+        if paths:
+            stored[graph] = sorted(paths)
+        else:
+            stored.pop(graph, None)
+        user_dir.editor_cache[key] = stored
+
+    def _forget_unloaded_hidden_layers(self, *args):
+        """Forget hidden layers that are no longer loaded, such as a
+        reference that was removed. Nothing in the Layer Manager could
+        show one again."""
+        if self._hidden_layers is None:
+            return
+        loaded = {layer.real_path for layer in self.stage._sub_layers}
+        gone = self._hidden_layers - loaded
+        if not gone:
+            return
+        self._hidden_layers -= gone
+        self._store_hidden_layers(self._hidden_graph, show=gone)
+        self.layer_visibility_changed.emit()
+
+    def _check_hidden_graph(self, *args):
+        """After a save, which can be to a new file. See
+        _move_hidden_layers."""
+        if self._hidden_layers is None:
+            return
+        before = set(self._hidden_layers)
+        if self.hidden_layer_paths() != before:
+            self.layer_visibility_changed.emit()
+
+    def get_layer_hidden(self, layer_path):
+        """Whether a layer's own nodes are hidden in the graph.
+
+        :param layer_path: layer real path
+        :type layer_path: str
+        :rtype: bool
+        """
+        return layer_path in self.hidden_layer_paths()
+
+    def set_layer_hidden(self, layer_path, hidden=True):
+        """Hide, or show again, the nodes only this layer has.
+
+        :param layer_path: layer real path
+        :type layer_path: str
+        :param hidden: True to hide
+        :type hidden: bool
+        """
+        paths = self.hidden_layer_paths()
+        if bool(hidden) == (layer_path in paths):
+            return
+        if hidden:
+            paths.add(layer_path)
+            self._store_hidden_layers(self._hidden_graph, hide=[layer_path])
+        else:
+            paths.discard(layer_path)
+            self._store_hidden_layers(self._hidden_graph, show=[layer_path])
+        self.layer_visibility_changed.emit()
+
+    def hidden_nodes(self):
+        """Paths of the nodes hidden in the graph.
+
+        Decided a node at a time. A node is hidden when every layer that
+        says anything about that node itself is hidden, and nothing under
+        it is shown. So hiding a layer takes away the nodes it adds, even
+        inside a tree other layers add to, while a node a layer that is
+        showing also has an opinion on stays, and so does every node above
+        one that is shown.
+
+        A proxy node, made by an instance and with no opinion of its own on
+        any layer, goes with the node it is stacked under: what an instance
+        brings with it is shown with the instance, wherever its source is.
+
+        Worked out in one pass over every layer's nodes, so ask once and
+        look each node up in the answer.
+
+        :rtype: frozenset
+        """
+        hidden_layers = self.hidden_layer_paths()
+        if not hidden_layers:
+            return frozenset()
+        world = nxt_path.WORLD
+        get_parent = nxt_path.get_parent_path
+        shown = set()
+        hidden = set()
+        for layer in self.stage._sub_layers:
+            if layer.real_path in hidden_layers:
+                hidden.update(layer._nodes_path_as_key)
+            else:
+                shown.update(layer._nodes_path_as_key)
+        # Up from every node, to take in the parents only implied by the
+        # nodes under them, and to show every parent of a shown node. A
+        # walk stops at a parent already known, which was or will be
+        # walked up from itself.
+        for found in (shown, hidden):
+            for path in list(found):
+                parent = get_parent(path)
+                while parent != world and parent not in found:
+                    found.add(parent)
+                    parent = get_parent(parent)
+        hidden -= shown
+        hidden.discard(world)
+        if not hidden:
+            return frozenset()
+        # Proxies, parents first, so each one's parent is decided.
+        proxies = [path for path in self.comp_layer._nodes_path_as_key
+                   if path != world and path not in shown and
+                   path not in hidden]
+        proxies.sort(key=lambda path: path.count(nxt_path.NODE_SEP))
+        for path in proxies:
+            if get_parent(path) in hidden:
+                hidden.add(path)
+        return frozenset(hidden)
+
+    def is_node_hidden(self, node_path, hidden_nodes=None):
+        """Whether a node is out of sight because its layers are hidden.
+        See hidden_nodes.
+
+        :param node_path: any node path
+        :type node_path: str
+        :param hidden_nodes: hidden_nodes, when it is already known
+        :rtype: bool
+        """
+        if hidden_nodes is None:
+            hidden_nodes = self.hidden_nodes()
+        return node_path in hidden_nodes
+
+    def hidden_backdrop_ids(self):
+        """Ids of the backdrops only hidden layers draw.
+
+        :rtype: set
+        """
+        hidden = self.hidden_layer_paths()
+        if not hidden:
+            return set()
+        shown = backdrops.merged([layer for layer in self.stage._sub_layers
+                                  if layer.real_path not in hidden])
+        return set(self.get_backdrops()) - set(shown)
+
+    def is_backdrop_hidden(self, backdrop_id):
+        """Whether a backdrop only hidden layers draw.
+
+        :rtype: bool
+        """
+        return backdrop_id in self.hidden_backdrop_ids()
+
+    def _show_layer_for_new_nodes(self, node_paths, layer_path,
+                                  why='a node was made on it'):
+        """Show a hidden layer again when nodes made on it would be hidden
+        the moment they are made, and say so.
+
+        :param node_paths: the nodes just made
+        :param layer_path: real path of the layer they were made on, or a
+            LAYERS constant
+        :param why: the end of the message: what was done on the layer
+        """
+        node_paths = [path for path in node_paths or () if path]
+        layer = self.lookup_layer(layer_path)
+        if not node_paths or layer is None:
+            return
+        layer_path = layer.real_path
+        if not self.get_layer_hidden(layer_path):
+            return
+        hidden_nodes = self.hidden_nodes()
+        if not any(self.is_node_hidden(path, hidden_nodes)
+                   for path in node_paths):
+            return
+        self.set_layer_hidden(layer_path, False)
+        name = layer.get_alias()
+        message = 'Showing layer "{}" in the graph again, {}'.format(name,
+                                                                   why)
+        logger.info(message)
+        self.status_message.emit(message)
 
     def get_layer(self, layer_alias):
         """Gets a layer via its alias.
@@ -1047,6 +1404,7 @@ class StageModel(QtCore.QObject):
                       pos=pos, model=self, layer_path=layer.real_path)
         self.undo_stack.push(cmd)
         new_node_path = cmd.node_path
+        self._show_layer_for_new_nodes([new_node_path], layer.real_path)
         return new_node_path
 
     def delete_is_orphaning(self, node_path, layer):
@@ -1169,7 +1527,7 @@ class StageModel(QtCore.QObject):
                              source_layer_path=source_layer_path,
                              target_layer_path=target_layer_path)
         self.undo_stack.push(cmd)
-
+        self._show_layer_for_new_nodes(cmd.new_node_paths, target_layer_path)
         return cmd.new_node_paths
 
     def instance_nodes(self, node_paths=(), source_layer=None,
@@ -1195,6 +1553,7 @@ class StageModel(QtCore.QObject):
         if new_nodes:
             self.selection = new_nodes
         self.undo_stack.endMacro()
+        self._show_layer_for_new_nodes(new_nodes, target_layer_path)
 
     def localize_nodes(self, node_paths=()):
         if not node_paths:
@@ -1312,7 +1671,11 @@ class StageModel(QtCore.QObject):
                                                  sort_keys=False))
 
         if cut:
-            self.delete_nodes(node_paths, layer or self.target_layer)
+            # The world node is copied but never deleted: a graph always
+            # has one.
+            node_paths = [p for p in node_paths if p != nxt_path.WORLD]
+            if node_paths:
+                self.delete_nodes(node_paths, layer or self.target_layer)
 
         output = ',\n'.join(node_copy_data)
         output = '\t' + '\t'.join(output.splitlines(True))
@@ -1330,6 +1693,95 @@ class StageModel(QtCore.QObject):
                                            data_state=data_state)
             vals += [str(val)]
         self.clipboard.setText(','.join(vals))
+
+    # The key copied attributes sit under on the clipboard, which is how a
+    # paste tells them from copied nodes or any other text.
+    ATTRS_CLIPBOARD_KEY = 'nxt_attrs'
+
+    def copy_attrs(self, node_path, attr_names, layer=None):
+        """Put attributes on the clipboard as JSON: each one's name, raw
+        value, type and comment, in the order given. paste_attrs puts them
+        on other nodes, in this graph or another.
+
+        :param node_path: the node they are on
+        :param attr_names: their names
+        :param layer: where to read them, the comp layer by default
+        :return: the attributes copied, as they are on the clipboard
+        :rtype: list
+        """
+        layer = layer or self.comp_layer
+        attrs = []
+        for attr_name in attr_names:
+            value = self.get_node_attr_value(node_path, attr_name, layer,
+                                             data_state=DATA_STATE.RAW,
+                                             as_string=True)
+            attrs += [{'name': attr_name,
+                       'value': value,
+                       'type': self.get_node_attr_type(node_path, attr_name,
+                                                       layer),
+                       'comment': self.get_node_attr_comment(node_path,
+                                                             attr_name,
+                                                             layer)}]
+        if not attrs:
+            return []
+        text = json.dumps({self.ATTRS_CLIPBOARD_KEY: attrs}, indent=4)
+        self.clipboard.setText(text)
+        return attrs
+
+    def get_clipboard_attrs(self):
+        """The attributes copy_attrs put on the clipboard, or an empty
+        list when it holds anything else.
+
+        :rtype: list
+        """
+        try:
+            data = json.loads(self.clipboard.text())
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(data, dict):
+            return []
+        attrs = data.get(self.ATTRS_CLIPBOARD_KEY)
+        if not isinstance(attrs, list):
+            return []
+        return [attr for attr in attrs
+                if isinstance(attr, dict) and attr.get('name')]
+
+    def paste_attrs(self, node_paths, layer=None):
+        """Add the attributes on the clipboard to each of the nodes, on the
+        target layer, or set them where a node already has them. Their
+        comments come along too. It is one undo however many nodes and
+        attributes there are.
+
+        :param node_paths: the nodes to paste onto
+        :param layer: where to set them, the target layer by default
+        :return: whether anything was pasted
+        :rtype: bool
+        """
+        attrs = self.get_clipboard_attrs()
+        node_paths = [path for path in node_paths if path]
+        if not attrs or not node_paths:
+            return False
+        layer = layer or self.target_layer
+        msg = 'Paste {} attribute(s) onto {}'.format(
+            len(attrs), node_paths[0] if len(node_paths) == 1 else
+            '{} nodes'.format(len(node_paths)))
+        self.undo_stack.beginMacro(msg)
+        try:
+            for node_path in node_paths:
+                for attr in attrs:
+                    attr_name = str(attr['name'])
+                    value = attr.get('value')
+                    if value is None:
+                        value = ''
+                    self.set_node_attr_value(node_path, attr_name, value,
+                                             layer)
+                    comment = attr.get('comment')
+                    if comment:
+                        self.node_setattr_comment(node_path, attr_name,
+                                                  comment, layer)
+        finally:
+            self.undo_stack.endMacro()
+        return True
 
     def cut_nodes(self, node_paths=(), layer=None):
         if not node_paths:
@@ -1357,13 +1809,26 @@ class StageModel(QtCore.QObject):
             return []
         pos = pos or [0.0, 0.0]
         pasted = []
+        # The world node is not pasted as a node of its own, there is only
+        # one, so what it holds is merged into the target layer's.
+        worlds = [list(d.values())[0] for d in node_load_data
+                  if list(d.keys())[0] == nxt_path.WORLD]
+        node_load_data = [d for d in node_load_data
+                          if list(d.keys())[0] != nxt_path.WORLD]
         # A single node is already a single command; wrapping it would only
-        # bury the name of what was pasted under a macro.
-        as_macro = len(node_load_data) > 1
+        # bury the name of what was pasted under a macro. The world node's
+        # attributes and code are a command each.
+        as_macro = len(node_load_data) > 1 or bool(worlds)
         if as_macro:
-            msg = 'Paste {} nodes'.format(len(node_load_data))
+            if not node_load_data:
+                msg = 'Paste world node'
+            else:
+                count = len(node_load_data) + len(worlds)
+                msg = 'Paste {} nodes'.format(count)
             self.undo_stack.beginMacro(msg)
         try:
+            for data in worlds:
+                self._paste_world(data, layer)
             for node_data in node_load_data:
                 node_path, data = list(node_data.items())[0]
                 name = nxt_path.node_name_from_node_path(node_path)
@@ -1391,13 +1856,46 @@ class StageModel(QtCore.QObject):
         finally:
             if as_macro:
                 self.undo_stack.endMacro()
+        if worlds:
+            pasted = [nxt_path.WORLD] + pasted
         if not pasted:
             return []
         self.update_comp_layer()
         for new_node_path in pasted:
-            self.node_added.emit(new_node_path)
+            if new_node_path != nxt_path.WORLD:
+                self.node_added.emit(new_node_path)
         self.selection = pasted
         return pasted
+
+    def _paste_world(self, data, layer=None):
+        """Merge a copied world node into the layer's world node: its
+        attributes are set on it, a pasted one taking the place of one of
+        the same name, and its code and comment, when it has them, take
+        the place of the layer's. The world node is made if the layer has
+        none.
+
+        :param data: the world node as copied, see copy_nodes
+        :param layer: the layer to paste on, the target layer by default
+        """
+        layer = layer or self.target_layer
+        layer_path = self.get_layer_path(layer, fallback=LAYERS.TARGET)
+        world = nxt_path.WORLD
+        attrs = data.get(nxt_io.SAVE_KEY.ATTRS) or {}
+        for attr_name, attr_data in attrs.items():
+            attr_data = dict(attr_data or {})
+            attr_data.setdefault(META_ATTRS.VALUE, None)
+            cmd = SetNodeAttributeData(node_path=world, attr_name=attr_name,
+                                       data=attr_data, model=self,
+                                       layer_path=layer_path)
+            self.undo_stack.push(cmd)
+        code_key = INTERNAL_ATTRS.as_save_key(INTERNAL_ATTRS.COMPUTE)
+        code = data.get(code_key)
+        if code:
+            self.set_node_code_lines(world, list(code), layer=layer)
+        comment_key = INTERNAL_ATTRS.as_save_key(INTERNAL_ATTRS.COMMENT)
+        comment = data.get(comment_key)
+        if comment:
+            self.set_node_comment(world, comment, layer=layer)
 
     def get_node_attr_names(self, node_path, layer=None):
         layer = layer or self.target_layer
@@ -1494,6 +1992,11 @@ class StageModel(QtCore.QObject):
             cmd = ParentNodes(node_paths=node_paths,
                               parent_node_path=parent_path, model=self)
             self.undo_stack.push(cmd)
+            # Parented on a hidden target layer, a node would vanish from
+            # the graph as it moved, as a node made there would.
+            self._show_layer_for_new_nodes(
+                list(cmd.node_path_data.values()), LAYERS.TARGET,
+                why='a node was parented on it')
             return cmd.node_path_data
 
     def get_node_child_order(self, node_path, layer=None):
@@ -1704,9 +2207,20 @@ class StageModel(QtCore.QObject):
     def get_node_attr_type(self, node_path, attr_name, layer=None):
         layer = layer or self.target_layer
         node = layer.lookup(node_path)
-        if node:
-            value = self.stage.get_node_attr_value(node, attr_name, layer)
-            return determine_nxt_type(value)
+        if not node:
+            return None
+        if isinstance(layer, nxt_layer.CacheLayer):
+            # A cached value is whatever object a node's code left there,
+            # so its type is right there. Working it out the way a saved
+            # value's is, by resolving tokens in its text and parsing that
+            # back, took seconds for a big list and stalled the editor,
+            # and the host it runs in, at the end of every build.
+            value = self.stage.get_node_attr_value(node, attr_name, layer,
+                                                   resolved=False)
+            if not isinstance(value, str):
+                return cached_type_name(value)
+        value = self.stage.get_node_attr_value(node, attr_name, layer)
+        return determine_nxt_type(value)
 
     def get_node_attr_comment(self, node_path, attr_name, layer=None):
         layer = layer or self.target_layer
@@ -2143,6 +2657,40 @@ class StageModel(QtCore.QObject):
                                layer_path=layer.real_path)
         self.undo_stack.push(cmd)
 
+    def push_node_positions(self, node_paths=None, layer=None):
+        """Write where nodes are shown onto a layer, the target layer by
+        default, as one undo. Moving a node only ever writes its position
+        to the top layer, so a layer below keeps where the nodes were when
+        it was last the top, or nothing. Only top level nodes have a
+        position: children are stacked under their root.
+
+        :param node_paths: the nodes, the selected ones by default
+        :param layer: the layer to write to
+        :return: how many positions were written
+        """
+        layer = layer or self.target_layer
+        if node_paths is None:
+            node_paths = self.get_selected_nodes()
+        positions = {}
+        for path in node_paths:
+            if nxt_path.get_root_path(path) != path:
+                continue
+            if not (self.node_exists(path) or self.node_is_implied(path)):
+                continue
+            positions[path] = list(self.get_node_pos(path))
+        if not positions:
+            return 0
+        if len(positions) == 1:
+            text = 'Push position of {} to {}'.format(
+                list(positions)[0], layer.get_alias())
+        else:
+            text = 'Push {} positions to {}'.format(len(positions),
+                                                    layer.get_alias())
+        cmd = PushNodePositions(positions, model=self,
+                                layer_path=layer.real_path, text=text)
+        self.undo_stack.push(cmd)
+        return len(positions)
+
     # Backdrops, see nxt_editor.backdrops ----------------------------------
 
     def get_backdrops(self):
@@ -2216,6 +2764,54 @@ class StageModel(QtCore.QObject):
         cmd = SetBackdrops(changes, model=self,
                            layer_path=self.top_layer.real_path, text=text)
         self.undo_stack.push(cmd)
+
+    # Camera bookmarks, see nxt_editor.bookmarks ----------------------------
+
+    def get_bookmarks(self):
+        """The graph's camera bookmarks, in order.
+
+        :return: [{'name': str, 'rect': [x, y, w, h]}]
+        """
+        return bookmarks.layer_bookmarks(self.top_layer)
+
+    def set_bookmarks(self, records, text='Edit bookmarks'):
+        """Save the graph's bookmarks, all of them, as one undo."""
+        cmd = SetBookmarks(records, model=self,
+                           layer_path=self.top_layer.real_path, text=text)
+        self.undo_stack.push(cmd)
+
+    def add_bookmark(self, rect, name=None):
+        """Bookmark a part of the graph.
+
+        :param rect: (x, y, width, height) in the scene
+        :param name: what to call it, "Bookmark 1" and so on by default
+        :return: the new bookmark's index
+        """
+        records = self.get_bookmarks()
+        name = (name or '').strip() or bookmarks.unique_name(records)
+        records.append(bookmarks.make(name, rect))
+        self.set_bookmarks(records, text='Add bookmark "{}"'.format(name))
+        return len(records) - 1
+
+    def rename_bookmark(self, index, name):
+        records = self.get_bookmarks()
+        name = (name or '').strip()
+        if not (0 <= index < len(records)) or not name:
+            return
+        if records[index][bookmarks.NAME] == name:
+            return
+        old = records[index][bookmarks.NAME]
+        records[index][bookmarks.NAME] = name
+        self.set_bookmarks(records, text='Rename bookmark "{}" to "{}"'.format(
+            old, name))
+
+    def remove_bookmark(self, index):
+        records = self.get_bookmarks()
+        if not (0 <= index < len(records)):
+            return
+        removed = records.pop(index)
+        self.set_bookmarks(records, text='Delete bookmark "{}"'.format(
+            removed[bookmarks.NAME]))
 
     # Line style and points, see nxt_editor.wires ------------------------
 
@@ -2295,7 +2891,8 @@ class StageModel(QtCore.QObject):
         and an attribute loses the reference, keeping any other text it
         has, and is left empty when that was all it held. Should a weaker
         layer still make the connection, the target layer is given an
-        empty value over it. The line's points go too.
+        empty value over it. An instance is removed from the node whichever
+        layer made it, as Remove Instance does. The line's points go too.
 
         :param lines: (source path, target attr path) pairs, as the graph
             draws them
@@ -2305,11 +2902,14 @@ class StageModel(QtCore.QObject):
         for src, tgt in lines:
             if not self._breakable(tgt):
                 continue
+            attr = nxt_path.attr_name_from_attr_path(tgt)
             owner = self._connection_layer(tgt)
-            if owner is not None and owner != self.target_layer.real_path:
-                # nxt reads an empty exec input or instance as no opinion,
-                # so a stronger layer cannot clear a weaker one's. It is
-                # broken on the layer that made it.
+            if (attr != INTERNAL_ATTRS.INSTANCE_PATH and owner is not None and
+                    owner != self.target_layer.real_path):
+                # nxt reads an empty exec input as no opinion, so a
+                # stronger layer cannot clear a weaker one's. It is broken
+                # on the layer that made it. An empty instance path is an
+                # opinion, so an instance is removed on any layer.
                 logger.warning(
                     'The connection into {} is made on {}. Make that the '
                     'target layer to break it.'.format(tgt, owner),
@@ -2369,8 +2969,16 @@ class StageModel(QtCore.QObject):
             return
         if attr == INTERNAL_ATTRS.INSTANCE_PATH:
             # An empty instance path is how an instance is removed, see
-            # the Remove Instance action.
-            self.set_node_instance(node_path, '', layer)
+            # the Remove Instance action. It is only written when a weaker
+            # layer would still instance the node.
+            def write(value):
+                if value is not None:
+                    self.set_node_instance(node_path, value, layer)
+                elif layer.lookup(node_path) is not None:
+                    self.revert_node_instance(node_path, layer)
+            self._clear_link(node_path, attr, layer, write,
+                             lambda: bool(self.get_node_instance_path(
+                                 node_path, self.comp_layer)))
             return
         value = self.get_node_attr_value(node_path, attr, self.comp_layer,
                                          data_state=DATA_STATE.RAW)
@@ -2518,8 +3126,11 @@ class StageModel(QtCore.QObject):
         :return: [float, float]
         """
         grid_size = GRID_SIZE
-        x = math.floor(pos[0] / grid_size) * grid_size
-        y = math.floor(pos[1] / grid_size) * grid_size
+        # The nearest line either way, not the one up and to the left, so
+        # a node dragged just short of a grid line still lands on it. Half
+        # way rounds up, the same in both directions.
+        x = math.floor(pos[0] / grid_size + .5) * grid_size
+        y = math.floor(pos[1] / grid_size + .5) * grid_size
         snapped_pos = [x, y]
         return snapped_pos
 
@@ -2612,6 +3223,16 @@ class StageModel(QtCore.QObject):
             points = self._unsaved_points[name].pop(None, None)
             if points:
                 prefs[layer_path] = points
+
+    @staticmethod
+    def breakpoints_ignored():
+        """Whether runs are going through every breakpoint, as the Ignore
+        Breakpoints toggle asks. The breakpoints themselves are kept.
+
+        :rtype: bool
+        """
+        pref_key = user_dir.USER_PREF.IGNORE_BREAKS
+        return bool(user_dir.user_prefs.get(pref_key, False))
 
     def get_breakpoints(self, layer=None):
         """The paths of the nodes with a breakpoint, on layer or the top
@@ -3547,6 +4168,9 @@ class StageModel(QtCore.QObject):
         if self._build_should_stop and not t.raised_exception:
             # Stop was pressed while the node ran, after it last looked.
             raise BuildStop
+        if t.failed:
+            # Told before the invalid node dialog below, which waits.
+            self.build_failed.emit(node_path)
         if t.raised_exception:
             if isinstance(t.raised_exception, InvalidNodeError):
                 details = ("A build runs against the graph as it was when "
@@ -3797,6 +4421,11 @@ class StageModel(QtCore.QObject):
         if self.last_hit_break is not None:
             if self.last_hit_break in breaks:
                 breaks.remove(self.last_hit_break)
+        # Ignored breakpoints stay where they are, a run just goes through.
+        if breaks and self.breakpoints_ignored():
+            logger.execinfo('Ignoring {} breakpoint(s), see Execute > Ignore '
+                            'Breakpoints.'.format(len(breaks)))
+            breaks = []
         self._set_build_paused(False)
         for i in range(start, stop):
             node_path = self.current_build_order[i]
@@ -4328,6 +4957,9 @@ class ExecuteNodeThread(QtCore.QThread):
         # Linux won't raise exceptions in threads so this is how we catch it
         # and let the model raise it in the main thread.
         self.raised_exception = None
+        # Whether the node raised an error, rather than the build being
+        # stopped or the graph exiting on purpose.
+        self.failed = False
 
     def run(self):
         self._run()
@@ -4347,6 +4979,7 @@ class ExecuteNodeThread(QtCore.QThread):
                                                           layer)
             except GraphError as err:
                 logger.grapherror(str(err), links=[self.node_path])
+                self.failed = True
                 if isinstance(err, InvalidNodeError):
                     self.raised_exception = err
                 else:

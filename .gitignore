@@ -14,3 +14,4 @@ docs/build/
 !/build/vendor/
 site/
 nxt_editor/qresources.py*
+.rez_build/

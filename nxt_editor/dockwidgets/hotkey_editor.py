@@ -8,7 +8,7 @@ from Qt import QtWidgets, QtGui, QtCore
 import nxt_editor
 from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
-from nxt_editor import colors, dialogs, theme
+from nxt_editor import colors, dialogs, theme, typed_keys
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 TOOLTIP_INFO = ('<p style="font-size:12px;color:white;">'
@@ -364,6 +364,15 @@ class HotkeyView(QtWidgets.QTableView):
         self.hotkey_editor = parent
         style = self.parent().styleSheet() + TOOLTIP_STYLE + TABLE_STYLE
         self.setStyleSheet(style)
+
+    def event(self, event):
+        # Typing a letter jumps to the action starting with it, rather
+        # than setting off a window shortcut such as Q, W or E. See
+        # typed_keys.
+        if typed_keys.wants_typed_key(self, event):
+            event.accept()
+            return True
+        return super(HotkeyView, self).event(event)
 
 
 class KeySequenceDelegate(QtWidgets.QStyledItemDelegate):

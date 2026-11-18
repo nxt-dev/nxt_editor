@@ -1,4 +1,5 @@
 # Built-in
+import re
 import textwrap
 import sys
 import logging
@@ -18,9 +19,10 @@ except AttributeError:
 from nxt_editor import user_dir
 from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
+from nxt_editor.dockwidgets import code_completion
 from nxt_editor.pixmap_button import PixmapButton
 from nxt_editor.label_edit import LabelEdit
-from nxt_editor import colors, theme, LOGGER_NAME
+from nxt_editor import colors, theme, typed_keys, LOGGER_NAME
 from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
@@ -28,6 +30,18 @@ from nxt import tokens
 
 # Fixme: Should this be a pref?
 HISTORICAL_MAX_CHARS = 50
+# How much of a cached value is shown. A node can leave a value millions of
+# characters long, and laying that out in a cell, or wrapping it for the
+# tooltip, held up the editor for seconds after every build.
+CACHED_MAX_CHARS = 2000
+
+
+def shorten_cached(text):
+    """A cached value's text, cut short if it is too long to show."""
+    if not text or len(text) <= CACHED_MAX_CHARS:
+        return text
+    return '{} ... ({:,} characters)'.format(text[:CACHED_MAX_CHARS],
+                                            len(text))
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -106,6 +120,11 @@ class PropertyEditor(DockWidgetBase):
         self.add_attr_action.triggered.connect(self.add_attr)
         self.remove_attr_action = self._actions.remove_attr_action
         self.remove_attr_action.triggered.connect(self.remove_selected_attrs)
+        # Copy and paste attributes
+        self.copy_attrs_action = self._actions.copy_attrs_action
+        self.copy_attrs_action.triggered.connect(self.copy_attrs)
+        self.paste_attrs_action = self._actions.paste_attrs_action
+        self.paste_attrs_action.triggered.connect(self.paste_attrs)
         # Copy Actions
         self.copy_raw_action = self._actions.copy_raw_action
         copy_raw = partial(self.copy_selected_attrs, DATA_STATE.RAW)
@@ -184,9 +203,8 @@ class PropertyEditor(DockWidgetBase):
         self.instance_layout.addWidget(self.instance_field, 0, 0)
 
         self.instance_field_model = QtCore.QStringListModel()
-        self.instance_field_completer = QtWidgets.QCompleter()
-        self.instance_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
-        self.instance_field_completer.setModel(self.instance_field_model)
+        self.instance_field_completer = node_path_completer(
+            self.instance_field_model, self)
         self.instance_field.setCompleter(self.instance_field_completer)
         self.instance_field.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.instance_field.customContextMenuRequested.connect(self.instance_context_menu)
@@ -234,10 +252,10 @@ class PropertyEditor(DockWidgetBase):
         self.execute_layout.addWidget(self.execute_field, 0, 0)
 
         self.execute_field_model = QtCore.QStringListModel()
-        self.execute_field_completer = QtWidgets.QCompleter()
-        self.execute_field_completer.popup().setStyleSheet(theme.fill('border: 1px solid transparent; background-color: {RAISED}; color: white'))
-        self.execute_field_completer.setModel(self.execute_field_model)
+        self.execute_field_completer = node_path_completer(
+            self.execute_field_model, self)
         self.execute_field.setCompleter(self.execute_field_completer)
+        self.execute_field.focus_changed.connect(self.focus_execute_field)
         self.execute_opinions = OpinionDots(self, 'Execute Opinions')
         self.execute_layout.addWidget(self.execute_opinions, 0, 1)
         self.revert_exec_source_button = PixmapButton(
@@ -299,8 +317,10 @@ class PropertyEditor(DockWidgetBase):
         self.positionX_field.setSingleStep(1)
         self.positionX_field.setMaximum(10000)
         self.positionX_field.setMinimum(-10000)
-        self.positionX_field.stepChanged.connect(self.edit_position)
-        self.positionX_field.editingFinished.connect(self.edit_position)
+        self.positionX_field.stepChanged.connect(
+            partial(self.step_position, 0))
+        self.positionX_field.valueTyped.connect(
+            partial(self.edit_position, 0))
         self.position_layout.addWidget(self.positionX_field, 0, QtCore.Qt.AlignLeft)
 
         self.positionY_field = NodePositionSpinbox(parent=self)
@@ -308,8 +328,10 @@ class PropertyEditor(DockWidgetBase):
         self.positionY_field.setSingleStep(1)
         self.positionY_field.setMaximum(10000)
         self.positionY_field.setMinimum(-10000)
-        self.positionY_field.stepChanged.connect(self.edit_position)
-        self.positionY_field.editingFinished.connect(self.edit_position)
+        self.positionY_field.stepChanged.connect(
+            partial(self.step_position, 1))
+        self.positionY_field.valueTyped.connect(
+            partial(self.edit_position, 1))
         self.position_layout.addWidget(self.positionY_field, 0,
                                        QtCore.Qt.AlignLeft)
         spacer = QtWidgets.QSpacerItem(10, 0, QtWidgets.QSizePolicy.Expanding,
@@ -383,6 +405,39 @@ class PropertyEditor(DockWidgetBase):
         self.attributes_layout.setSpacing(0)
         self.attributes_widget.setLayout(self.attributes_layout)
 
+        # filter
+        self.attr_filter_layout = QtWidgets.QHBoxLayout()
+        self.attr_filter_layout.setContentsMargins(0, 4, 0, 4)
+        self.attributes_layout.addLayout(self.attr_filter_layout)
+        self.attr_filter_field = QtWidgets.QLineEdit(parent=self)
+        self.attr_filter_field.setObjectName('Attribute Filter')
+        self.attr_filter_field.setPlaceholderText('Filter attributes')
+        self.attr_filter_field.setClearButtonEnabled(True)
+        self.attr_filter_field.setToolTip(
+            'Show the attributes whose name or value has what you type in '
+            'it, ignoring case. * stands for anything and commas separate '
+            'more than one.')
+        self.attr_filter_field.setFont(theme.font())
+        self.attr_filter_field.setStyleSheet(theme.fill('''
+            QLineEdit {
+                background-color: {RAISED};
+                border: 1px solid transparent;
+                border-radius: 11px;
+                padding: 2px 8px;
+                color: {TEXT};
+            }
+
+            QLineEdit:hover {
+                border: 1px solid {BORDER_STRONG};
+            }
+
+            QLineEdit:focus {
+                border: 1px solid {ACCENT};
+            }
+            '''))
+        self.attr_filter_field.textChanged.connect(self.filter_attrs)
+        self.attr_filter_layout.addWidget(self.attr_filter_field)
+
         self.table_view = AttrsTableView(self)
         self.table_view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.table_view.setEditTriggers(QtWidgets.QAbstractItemView.DoubleClicked)
@@ -411,7 +466,7 @@ class PropertyEditor(DockWidgetBase):
                                    headers=self.header_names,
                                    parent=self)
 
-        self.proxy_model = QtCore.QSortFilterProxyModel()
+        self.proxy_model = AttrFilterProxyModel()
         self.proxy_model.setSourceModel(self.model)
 
         self.table_view.setModel(self.proxy_model)
@@ -479,6 +534,7 @@ class PropertyEditor(DockWidgetBase):
             (model.attrs_changed, self.handle_attrs_changed),
             (model.data_state_changed, self.update_resolved),
             (model.node_moved, self.handle_node_moved),
+            (model.node_graphic_moved, self.handle_node_graphic_moved),
             (model.comp_layer_changed, self.set_represented_node),
             (model.target_layer_changed, self.set_represented_node),
         ]
@@ -532,6 +588,23 @@ class PropertyEditor(DockWidgetBase):
             self.node_pos = self.stage_model.get_node_pos(node_path)
             self.update_properties()
 
+    def handle_node_graphic_moved(self, node_path, pos):
+        """Follow the node in the position fields while it is dragged.
+
+        Only the fields change: the move is set, as one undo, when the
+        drag ends, and node_moved brings that in as usual.
+        """
+        if node_path != self.node_path:
+            return
+        for field, value in ((self.positionX_field, pos[0]),
+                             (self.positionY_field, pos[1])):
+            if field.hasFocus():
+                # Being typed in, so leave what is being typed alone.
+                continue
+            blocked = field.blockSignals(True)
+            field.setValue(int(round(value)))
+            field.blockSignals(blocked)
+
     def set_represented_node(self):
         self.node_path = self.stage_model.node_focus
         if not self.node_path:
@@ -556,17 +629,9 @@ class PropertyEditor(DockWidgetBase):
             self.clear()
             return
         disp_layer = self.stage_model.comp_layer
-        # set instance completer options
-        # Todo: node_path completer logic needed!
-        top_nodes = self.stage_model.get_node_sibling_paths(self.node_path)
-        if top_nodes:
-            self.instance_field_model.setStringList(top_nodes)
-
         node_path = self.node_path
-        # set execute completer options
-        sibling_node_paths = self.stage_model.get_node_sibling_paths(node_path)
-        if sibling_node_paths:
-            self.execute_field_model.setStringList(sibling_node_paths)
+        # The path fields' completions are filled when they get focus,
+        # rather than for every node selected: see update_path_completions.
 
         # set node data
         if self.stage_model.data_state != DATA_STATE.RAW:
@@ -620,6 +685,30 @@ class PropertyEditor(DockWidgetBase):
         self.model.set_represented_node(node_path=self.node_path)
         self.handle_locking()
 
+    def update_path_completions(self):
+        """Fill the instance and exec input fields' completers with node
+        paths, from the same source as ${/ in the code editor. A node can
+        instance any node but itself, and its exec input can be any other
+        root node. Called when either field gets focus, so the list is as
+        the graph is then and selecting nodes never waits on it."""
+        if not self.stage_model or not self.node_path:
+            return
+        try:
+            paths = code_completion.node_paths(self.stage_model)
+        except Exception:
+            logger.debug('No node paths to complete', exc_info=True)
+            return
+        others = [path for path in paths if path != self.node_path]
+        self.instance_field_model.setStringList(others)
+        roots = [path for path in others
+                 if nxt_path.get_root_path(path) == path]
+        self.execute_field_model.setStringList(roots)
+
+    def focus_execute_field(self, in_focus):
+        # Nodes may have come and gone since this node was shown.
+        if in_focus:
+            self.update_path_completions()
+
     def view_instance_node(self):
         instance_path = self.instance_field.text()
         if instance_path:
@@ -635,6 +724,8 @@ class PropertyEditor(DockWidgetBase):
         if self.instance_field.has_focus:
             return
         if in_focus:
+            # Nodes may have come and gone since this node was shown.
+            self.update_path_completions()
             layer = self.stage_model.target_layer
         else:
             layer = self.stage_model.comp_layer
@@ -878,16 +969,68 @@ class PropertyEditor(DockWidgetBase):
         if self.stage_model:
             self.stage_model.revert_node_enabled(self.node_path)
 
-    def edit_position(self):
+    def positioned_nodes(self):
+        """The nodes the position fields move: every selected root node,
+        and the node shown here whether it is selected or not. Only root
+        nodes have a position of their own.
+
+        :rtype: list
+        """
+        node_paths = [self.node_path]
+        for node_path in self.stage_model.get_selected_nodes():
+            if node_path not in node_paths:
+                node_paths.append(node_path)
+        return [path for path in node_paths
+                if nxt_path.get_root_path(path) == path]
+
+    def edit_position(self, axis):
+        """A value was typed in one of the position fields. Every selected
+        node goes to it on that axis and keeps where it is on the other,
+        as one undo.
+
+        :param axis: 0 for x, 1 for y
+        :type axis: int
+        """
         if self.locked:
             return
-        x = self.positionX_field.value()
-        y = self.positionY_field.value()
         if not self.node_path or not self.stage_model.node_exists(self.node_path, self.stage_model.comp_layer):
             self.clear()
             return
-        self.node_pos = (x, y)
-        self.stage_model.set_nodes_pos({self.node_path: self.node_pos})
+        field = (self.positionX_field, self.positionY_field)[axis]
+        value = field.value()
+        node_positions = {}
+        for node_path in self.positioned_nodes():
+            pos = list(self.stage_model.get_node_pos(node_path))
+            if pos[axis] == value:
+                continue
+            pos[axis] = value
+            node_positions[node_path] = pos
+        if node_positions:
+            self.stage_model.set_nodes_pos(node_positions)
+
+    def step_position(self, axis, delta):
+        """A position field's arrows, arrow keys or the mouse wheel moved
+        it by delta. Every selected node moves by the same amount on that
+        axis, as one undo, so they keep their places relative to each
+        other.
+
+        :param axis: 0 for x, 1 for y
+        :type axis: int
+        :param delta: how far the field moved
+        :type delta: int
+        """
+        if self.locked:
+            return
+        if not self.node_path or not self.stage_model.node_exists(self.node_path, self.stage_model.comp_layer):
+            self.clear()
+            return
+        node_positions = {}
+        for node_path in self.positioned_nodes():
+            pos = list(self.stage_model.get_node_pos(node_path))
+            pos[axis] += delta
+            node_positions[node_path] = pos
+        if node_positions:
+            self.stage_model.set_nodes_pos(node_positions)
 
     def accept_edit_comment(self):
         comment = self.comment_field.toPlainText()
@@ -916,6 +1059,14 @@ class PropertyEditor(DockWidgetBase):
             self.stage_model.add_node_attr(node_path=self.node_path,
                                            layer=self.stage_model.target_layer)
 
+    def filter_attrs(self, text=None):
+        """Show only the attributes matching text, see
+        AttrFilterProxyModel. The filter stays as other nodes are shown, to
+        look at the same attributes on each of them."""
+        if text is None:
+            text = self.attr_filter_field.text()
+        self.proxy_model.set_filter_text(text)
+
     def get_selected_attr_names(self):
         selection = self.table_view.selectedIndexes()
         attr_names = set()
@@ -929,6 +1080,47 @@ class PropertyEditor(DockWidgetBase):
         for attr_name in self.get_selected_attr_names():
             self.stage_model.delete_node_attr(node_path=self.node_path,
                                               attr_name=attr_name)
+
+    def get_selected_attr_names_in_order(self):
+        """The selected attributes' names, top to bottom as the table
+        shows them.
+
+        :rtype: list
+        """
+        rows = set()
+        for index in self.table_view.selectedIndexes():
+            rows.add(index.row())
+        names = []
+        data = self.model.get_data()
+        for row in sorted(rows):
+            source_row = self.proxy_model.mapToSource(
+                self.proxy_model.index(row, COLUMNS.name)).row()
+            try:
+                name = data[source_row][COLUMNS.name]
+            except IndexError:
+                continue
+            if name and name not in names:
+                names.append(name)
+        return names
+
+    def copy_attrs(self):
+        """Copy the selected attributes, see StageModel.copy_attrs."""
+        if not self.stage_model or not self.node_path:
+            return
+        attr_names = self.get_selected_attr_names_in_order()
+        if attr_names:
+            self.stage_model.copy_attrs(self.node_path, attr_names)
+
+    def paste_attrs(self):
+        """Paste copied attributes onto the selected nodes, or onto the
+        node shown here when none are selected, see
+        StageModel.paste_attrs."""
+        if not self.stage_model:
+            return
+        node_paths = self.stage_model.get_selected_nodes()
+        if not node_paths and self.node_path:
+            node_paths = [self.node_path]
+        self.stage_model.paste_attrs(node_paths)
 
     def copy_selected_attrs(self, data_state):
         attr_names = self.get_selected_attr_names()
@@ -1017,6 +1209,11 @@ class PropertyEditor(DockWidgetBase):
                 hist_func = self.stage_model.get_historical_opinions
                 if locality == LOCALITIES.local and hist_func(path, name):
                     menu.addAction(self.revert_attr_action)
+            menu.addSeparator()
+            if index.row() != -1:
+                menu.addAction(self.copy_attrs_action)
+            if self.stage_model.get_clipboard_attrs():
+                menu.addAction(self.paste_attrs_action)
             if index.column() == COLUMNS.value:
                 menu.addSeparator()
                 menu.addAction(self.copy_raw_action)
@@ -1119,6 +1316,9 @@ class PropertyModel(QtCore.QAbstractTableModel):
         self.attr_data = []
         self.attr_data_resolved = []
         self.attr_data_cached = []
+        # {attr name: (type in the graph, type once run)} for attributes
+        # running the graph left a different type, in the Cached view.
+        self.attr_type_changes = {}
         self.selected_indexes = []
         self.horizontal_header = self.view.horizontalHeader()
         self.state = None
@@ -1168,6 +1368,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
         self.attr_data = []
         self.attr_data_resolved = []
         self.attr_data_cached = []
+        self.attr_type_changes = {}
         for attr_name in self.node_attr_names:
             # get cached data
             cached = DATA_STATE.CACHED
@@ -1175,7 +1376,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
                                                           attr_name,
                                                           data_state=cached,
                                                           as_string=True)
-            self.attr_data_cached += [attr_cached]
+            self.attr_data_cached += [shorten_cached(attr_cached)]
             # get resolved data
             resolved = DATA_STATE.RESOLVED
             resolved_val = stage_model.get_node_attr_value(node_path,
@@ -1205,6 +1406,18 @@ class PropertyModel(QtCore.QAbstractTableModel):
                 type_layer = stage_model.current_rt_layer.cache_layer
             attr_type = stage_model.get_node_attr_type(node_path, attr_name,
                                                        type_layer)
+            # A compute can leave an attribute a different type than the
+            # graph gives it, a list where it was a string say. Attributes
+            # the compute made itself have no type in the graph to compare.
+            if (type_layer is not comp_layer and
+                    attr_name in cached_attrs and
+                    locality != LOCALITIES.code):
+                comp_type = stage_model.get_node_attr_type(node_path,
+                                                           attr_name,
+                                                           comp_layer)
+                if comp_type and attr_type and comp_type != attr_type:
+                    self.attr_type_changes[attr_name] = (comp_type,
+                                                         attr_type)
             if locality == LOCALITIES.code:
                 attr_source = node_path
             else:
@@ -1350,6 +1563,9 @@ class PropertyModel(QtCore.QAbstractTableModel):
             if in_cached_state and not cached_data:
                 color = colors.UNCACHED_RED
                 return QtGui.QBrush(color, QtCore.Qt.BDiagPattern)
+        if role == QtCore.Qt.BackgroundRole and column == COLUMNS.nxt_type:
+            if self.type_change(row):
+                return QtGui.QBrush(colors.TYPE_CHANGED)
         if role == QtCore.Qt.DisplayRole:
             state = self.stage_model.data_state
             if column == COLUMNS.value and state is resolved_state:
@@ -1380,6 +1596,10 @@ class PropertyModel(QtCore.QAbstractTableModel):
                 cached_state = '  cached : ' + (',\n ' + (' ' * 10)).join(
                     textwrap.wrap(str(self.attr_data_cached[row]), 100))
                 return '\n'.join([value, resolved_state, cached_state])
+            elif column == COLUMNS.nxt_type:
+                change = self.type_change(row)
+                if change:
+                    return 'was {}, now {}'.format(*change)
             elif column == COLUMNS.source:
                 path = self.node_path
                 name = index.sibling(index.row(), COLUMNS.name).data()
@@ -1446,6 +1666,20 @@ class PropertyModel(QtCore.QAbstractTableModel):
         if role == QtCore.Qt.EditRole:
             return self._data[row][column]
 
+    def type_change(self, row):
+        """(type in the graph, type once run) when running the graph left
+        the row's attribute a different type, shown in the Cached view.
+
+        :rtype: tuple or None
+        """
+        if self.stage_model.data_state != DATA_STATE.CACHED:
+            return None
+        try:
+            attr_name = self._data[row][COLUMNS.name]
+        except IndexError:
+            return None
+        return self.attr_type_changes.get(attr_name)
+
     def flags(self, index):
         column = index.column()
         if column in (COLUMNS.name, COLUMNS.value, COLUMNS.comment):
@@ -1468,6 +1702,48 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
     def columnCount(self, parent):
         return len(self._data[0])
+
+
+def attr_filter_regex(text):
+    """What was typed in the attribute filter as a regex, or None when it
+    filters nothing. Like the node searches: ignoring case, * stands for
+    anything and commas separate terms, any of which can match.
+
+    :rtype: re.Pattern or None
+    """
+    terms = [term.strip() for term in (text or '').split(',')]
+    terms = ['.*'.join(re.escape(part) for part in term.split('*'))
+             for term in terms if term.strip('*')]
+    if not terms:
+        return None
+    return re.compile('|'.join(terms), re.IGNORECASE)
+
+
+class AttrFilterProxyModel(QtCore.QSortFilterProxyModel):
+    """Sorts the attribute table and hides the rows the filter field does
+    not match. A row matches on its name or on its value as the table
+    shows it, raw, resolved or cached."""
+
+    def __init__(self, parent=None):
+        super(AttrFilterProxyModel, self).__init__(parent)
+        self.filter_regex = None
+
+    def set_filter_text(self, text):
+        self.filter_regex = attr_filter_regex(text)
+        self.invalidateFilter()
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        if self.filter_regex is None:
+            return True
+        model = self.sourceModel()
+        for column in (COLUMNS.name, COLUMNS.value):
+            index = model.index(source_row, column, source_parent)
+            if not index.isValid():
+                continue
+            value = model.data(index, QtCore.Qt.DisplayRole)
+            if value is not None and self.filter_regex.search(str(value)):
+                return True
+        return False
 
 
 class AttrsTableView(QtWidgets.QTableView):
@@ -1516,6 +1792,8 @@ class AttrsTableView(QtWidgets.QTableView):
         self._parent = parent
         self.node_path_delegate = NodePathBtnDelegate(self)
         self.setItemDelegateForColumn(COLUMNS.source, self.node_path_delegate)
+        self.value_delegate = AttrValueDelegate(parent, self)
+        self.setItemDelegateForColumn(COLUMNS.value, self.value_delegate)
         # The layer each row's value comes from, as a color in the row
         # header, which stays put however far the table is scrolled.
         self.setVerticalHeader(LayerRowHeader(self))
@@ -1524,6 +1802,15 @@ class AttrsTableView(QtWidgets.QTableView):
         self.setDragEnabled(True)
         self.setMouseTracking(True)
         self.installEventFilter(self)
+
+    def event(self, event):
+        # Typing a letter jumps to the attribute starting with it, rather
+        # than setting off a window shortcut such as Q, W or E. See
+        # typed_keys.
+        if typed_keys.wants_typed_key(self, event):
+            event.accept()
+            return True
+        return super(AttrsTableView, self).event(event)
 
     def mousePressEvent(self, event):
         super(AttrsTableView, self).mousePressEvent(event)
@@ -1691,6 +1978,125 @@ class NodePathBtnDelegate(QtWidgets.QStyledItemDelegate):
         return True
 
 
+COMPLETER_POPUP_STYLE = ('border: 1px solid transparent; '
+                         'background-color: {RAISED}; color: {TEXT}')
+
+
+def node_path_completer(model, parent=None):
+    """A completer for a field that takes a node path. It matches anywhere
+    in the path, ignoring case, so typing arm finds /rig/arm.
+
+    :param model: QStringListModel of the paths to offer
+    :rtype: QtWidgets.QCompleter
+    """
+    completer = QtWidgets.QCompleter(parent)
+    completer.setModel(model)
+    completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+    completer.setFilterMode(QtCore.Qt.MatchContains)
+    completer.setMaxVisibleItems(12)
+    popup = completer.popup()
+    popup.setStyleSheet(theme.fill(COMPLETER_POPUP_STYLE))
+    popup.setFont(theme.font())
+    return completer
+
+
+class TokenLineEdit(QtWidgets.QLineEdit):
+    """An attribute value being typed, completing ${ tokens the way the
+    code editor does: ${ offers the node's attributes and the token
+    prefixes, ${/ every node path, and ${/some/node. that node's
+    attributes as whole tokens. Choosing one swaps it in for what was
+    typed of it, wherever it is in the value.
+    """
+
+    # The token being typed, up to the cursor.
+    PREFIX_RE = re.compile(r'\$\{[^{}\s]*$')
+
+    def __init__(self, stage_model, node_path, parent=None):
+        super(TokenLineEdit, self).__init__(parent)
+        self.stage_model = stage_model
+        self.node_path = node_path
+        self.completer = QtWidgets.QCompleter(self)
+        self.completer.setWidget(self)
+        self.completer.setModel(QtCore.QStringListModel(self.completer))
+        self.completer.setCompletionMode(
+            QtWidgets.QCompleter.PopupCompletion)
+        self.completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        self.completer.setMaxVisibleItems(12)
+        popup = self.completer.popup()
+        popup.setStyleSheet(theme.fill(COMPLETER_POPUP_STYLE))
+        popup.setFont(theme.font())
+        self.completer.activated.connect(self.insert_completion)
+        self.textEdited.connect(self.update_completions)
+
+    def completion_prefix(self):
+        """The ${ token in front of the cursor, or '' outside of one.
+
+        :rtype: str
+        """
+        text = self.text()[:self.cursorPosition()]
+        match = self.PREFIX_RE.search(text)
+        return match.group(0) if match else ''
+
+    def completion_words(self, prefix):
+        model = self.stage_model
+        try:
+            if prefix.startswith(tokens.TOKEN_PREFIX + nxt_path.WORLD):
+                return code_completion.token_completions(model, prefix)
+            return code_completion.token_words(model, self.node_path)
+        except Exception:
+            logger.debug('No token completions for ' + prefix,
+                         exc_info=True)
+            return []
+
+    def update_completions(self, *args):
+        """Offer what can finish the token being typed, if one is."""
+        prefix = self.completion_prefix()
+        popup = self.completer.popup()
+        if not prefix:
+            popup.hide()
+            return
+        words = sorted(set(self.completion_words(prefix)))
+        self.completer.model().setStringList(words)
+        self.completer.setCompletionPrefix(prefix)
+        count = self.completer.completionCount()
+        if not count or (count == 1 and
+                         self.completer.currentCompletion() == prefix):
+            popup.hide()
+            return
+        popup.setCurrentIndex(self.completer.completionModel().index(0, 0))
+        rect = self.cursorRect()
+        rect.setWidth(popup.sizeHintForColumn(0) +
+                      popup.verticalScrollBar().sizeHint().width() + 12)
+        self.completer.complete(rect)
+
+    def insert_completion(self, completion):
+        """Swap the typed part of the token for the chosen completion."""
+        prefix = self.completion_prefix()
+        pos = self.cursorPosition()
+        text = self.text()
+        start = pos - len(prefix)
+        after = text[pos:]
+        # A completed token brings its own closing brace.
+        if (completion.endswith(tokens.TOKEN_SUFFIX) and
+                after.startswith(tokens.TOKEN_SUFFIX)):
+            after = after[len(tokens.TOKEN_SUFFIX):]
+        self.setText(text[:start] + completion + after)
+        self.setCursorPosition(start + len(completion))
+
+
+class AttrValueDelegate(QtWidgets.QStyledItemDelegate):
+    """Edits attribute values in a TokenLineEdit, so tokens and node paths
+    complete as they are typed."""
+
+    def __init__(self, property_editor, parent=None):
+        super(AttrValueDelegate, self).__init__(parent)
+        self.property_editor = property_editor
+
+    def createEditor(self, parent, option, index):
+        editor = self.property_editor
+        return TokenLineEdit(editor.stage_model, editor.node_path, parent)
+
+
 class HistoricalContextMenu(QtWidgets.QMenu):
     class LINKS(object):
         SOURCE = 'source'
@@ -1821,13 +2227,42 @@ class HistoricalContextMenu(QtWidgets.QMenu):
 
 
 class NodePositionSpinbox(QtWidgets.QSpinBox):
-    stepChanged = QtCore.Signal()
+    """A position field, telling a step apart from a typed value.
+
+    stepChanged says how far the arrows, the arrow keys or the wheel moved
+    it, so selected nodes can all be offset by that much. valueTyped says
+    a value was typed and accepted, with Return or by leaving the field,
+    so they can all be put there. Leaving a field nobody typed in says
+    nothing, where editingFinished would.
+    """
+    stepChanged = QtCore.Signal(int)
+    valueTyped = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        super(NodePositionSpinbox, self).__init__(parent)
+        self.typed = False
+        self.lineEdit().textEdited.connect(self.on_text_edited)
+        self.editingFinished.connect(self.on_editing_finished)
+
+    def on_text_edited(self, *args):
+        self.typed = True
+
+    def on_editing_finished(self):
+        if not self.typed:
+            return
+        self.typed = False
+        self.valueTyped.emit()
 
     def stepBy(self, step):
+        if self.typed:
+            # Stepping from a half typed value: take what was typed first,
+            # so the step is from there.
+            self.interpretText()
+            self.on_editing_finished()
         value = self.value()
-        super(QtWidgets.QSpinBox, self).stepBy(step)
+        super(NodePositionSpinbox, self).stepBy(step)
         if self.value() != value:
-            self.stepChanged.emit()
+            self.stepChanged.emit(self.value() - value)
 
 
 class LineEdit(QtWidgets.QLineEdit):

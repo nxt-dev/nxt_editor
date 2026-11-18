@@ -15,6 +15,7 @@ This is a maya module folder for nxt.
 
 # Usage
 * When the nxt plugin is loaded, there is an "nxt" menu at the top of maya where you can select "Open Editor" and get started.
+* Set `NXT_NO_MENU=1` (for example in `nxt.mod`) to leave the menu out, as in Blender and Unreal. The `nxt_ui` command is still registered, so `cmds.nxt_ui()` opens the editor.
 
 # Update
 Copy the contents of `nxt_maya/scripts` and `nxt_maya/plug-ins` and replace the existing contents of your NXT Maya installation.  

@@ -10,7 +10,8 @@ from Qt import QtCore, QtGui, QtWidgets
 # Internal
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
-from nxt_editor import user_dir, wires
+from nxt_editor import (align, bookmarks, connection_graphics_item,
+                        layout_icons, user_dir, wires)
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, exec_icons, finder, file_search, file_browser
@@ -406,6 +407,31 @@ class AppActions(NxtActionContainer):
         self.ai_settings_action.setShortcutContext(context)
         self.available_without_model.append(self.ai_settings_action)
 
+        self.optional_components_action = NxtAction(
+            text='Optional Components...', parent=self)
+        self.optional_components_action.setWhatsThis(
+            'Install extras the editor can use, such as jedi for smarter '
+            'code completion.')
+        self.optional_components_action.triggered.connect(
+            lambda _=False: self.main_window.open_optional_components())
+        self.optional_components_action.setShortcutContext(context)
+        self.available_without_model.append(self.optional_components_action)
+
+        self.env_files_action = NxtAction(text='Environment Variables...',
+                                          parent=self)
+        self.env_files_action.setWhatsThis(
+            'Edit the env files nxt sets environment variables from when '
+            'it starts: your own, the site\'s, and project files kept '
+            'under version control.')
+        self.env_files_action.triggered.connect(
+            self.main_window.open_env_files)
+        self.env_files_action.setShortcutContext(context)
+        self.available_without_model.append(self.env_files_action)
+        # Hidden with an nxt core from before env files, which has nothing
+        # for it to edit.
+        from nxt_editor import env_dialog
+        self.env_files_action.setVisible(env_dialog.available())
+
         self.color_range_action = NxtAction(text='Layer Color View...',
                                             parent=self)
         self.color_range_action.setWhatsThis(
@@ -482,6 +508,17 @@ class AppActions(NxtActionContainer):
         self.toggle_ding_action.triggered.connect(toggle_ding)
         self.toggle_ding_action.setShortcutContext(context)
         self.available_without_model.append(self.toggle_ding_action)
+        # Notice files changed on disk
+        pref_key = user_dir.USER_PREF.CHECK_DISK_CHANGES
+        self.check_disk_action = BoolUserPrefAction(
+            'Notice Files Changed on Disk', pref_key, default=True,
+            parent=self)
+        self.check_disk_action.setWhatsThis(
+            'When the editor comes back to the front, offer to reload the '
+            "graph's files that something else has changed on disk. Saving "
+            'over a changed file asks first either way.')
+        self.check_disk_action.setShortcutContext(context)
+        self.available_without_model.append(self.check_disk_action)
 
         # Font size actions
         self.increase_font_size_action = NxtAction(text='Increase Font '
@@ -523,6 +560,7 @@ class AppActions(NxtActionContainer):
                                      self.ai_assistant_action,
                                      self.ai_settings_action,
                                      self.toggle_ding_action,
+                                     self.check_disk_action,
                                      self.clear_logs_action,
                                      self.close_action]
 
@@ -1017,6 +1055,18 @@ class NodeActions(NxtActionContainer):
         revert_icon.addPixmap(revert_pixmap_on, QtGui.QIcon.Normal,
                                 QtGui.QIcon.On)
         self.revert_node_action.setIcon(revert_icon)
+        # Push positions to the target layer
+
+        def push_positions():
+            self.main_window.model.push_node_positions()
+        self.push_positions_action = NxtAction(
+            text='Push Positions to Target Layer', parent=self)
+        self.push_positions_action.setToolTip(
+            'Push Positions to Target Layer')
+        self.push_positions_action.setWhatsThis(
+            'Write where the selected nodes are now onto the target layer, '
+            'so it keeps this layout without the layers above it.')
+        self.push_positions_action.triggered.connect(push_positions)
         # Select all
 
         def select_all():
@@ -1027,6 +1077,19 @@ class NodeActions(NxtActionContainer):
         self.select_all_action.setShortcut('Ctrl+A')
         self.select_all_action.triggered.connect(select_all)
         self.select_all_action.setIconText('Select All')
+        self.select_all_action.setIcon(layout_icons.select_all_icon())
+
+        def select_all_tip():
+            # With the shortcut, kept up to date when it is rebound.
+            tip = 'Select all nodes'
+            keys = self.select_all_action.shortcut().toString(
+                QtGui.QKeySequence.NativeText)
+            if keys:
+                tip += ' ({})'.format(keys)
+            if self.select_all_action.toolTip() != tip:
+                self.select_all_action.setToolTip(tip)
+        select_all_tip()
+        self.select_all_action.changed.connect(select_all_tip)
 
         # Rename node
 
@@ -1150,6 +1213,7 @@ class NodeActions(NxtActionContainer):
                                      self.remove_instance_action,
                                      self.localize_node_action,
                                      self.revert_node_action,
+                                     self.push_positions_action,
                                      self.disable_node_action,
                                      self.parent_nodes_action,
                                      self.unparent_nodes_action,
@@ -1205,6 +1269,23 @@ class PropertyEditorActions(NxtActionContainer):
                                             parent=self)
         self.revert_attr_action.setShortcutContext(context)
         self.revert_attr_action.setAutoRepeat(False)
+        # Copy and paste whole attributes, between nodes and graphs
+        self.copy_attrs_action = NxtAction(text='Copy Attributes',
+                                           parent=self)
+        self.copy_attrs_action.setShortcut('Ctrl+C')
+        self.copy_attrs_action.setShortcutContext(context)
+        self.copy_attrs_action.setAutoRepeat(False)
+        self.copy_attrs_action.setWhatsThis(
+            'Copy the selected attributes, with their values, types and '
+            'comments, to paste onto other nodes.')
+        self.paste_attrs_action = NxtAction(text='Paste Attributes',
+                                            parent=self)
+        self.paste_attrs_action.setShortcut('Ctrl+V')
+        self.paste_attrs_action.setShortcutContext(context)
+        self.paste_attrs_action.setAutoRepeat(False)
+        self.paste_attrs_action.setWhatsThis(
+            'Add the copied attributes to the selected node(s) on the '
+            'target layer, or set them where a node already has them.')
         # Copy actions
         self.copy_raw_action = NxtAction(text='Copy Raw')
         self.copy_raw_action.setShortcutContext(context)
@@ -1265,7 +1346,99 @@ class AlignmentActions(NxtActionContainer):
         snap_icon.addPixmap(snap_pixmap_off, QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.snap_action.setIcon(snap_icon)
 
-        self.action_display_order = [self.snap_action]
+        # Align and distribute the selected nodes and points.
+        def add(text, shortcut, icon, tip, call):
+            action = NxtAction(text=text, parent=self)
+            if shortcut:
+                action.setShortcut(shortcut)
+            action.setAutoRepeat(False)
+            action.setIcon(icon)
+            action.setWhatsThis(tip)
+            action.triggered.connect(call)
+            return action
+
+        def view_call(name, arg):
+            def call():
+                view = self.main_window.view
+                if view is not None:
+                    getattr(view, name)(arg)
+            return call
+        self.align_left_action = add(
+            'Align Left', 'Shift+A', layout_icons.align_icon(align.LEFT),
+            'Line the selected nodes and points up on the left most one.',
+            view_call('align', align.LEFT))
+        self.align_hcenter_action = add(
+            'Align Center', 'Alt+Shift+S',
+            layout_icons.align_icon(align.HCENTER),
+            'Line the selected nodes and points up on a line down the '
+            'middle of them.', view_call('align', align.HCENTER))
+        self.align_right_action = add(
+            'Align Right', 'Shift+D', layout_icons.align_icon(align.RIGHT),
+            'Line the selected nodes and points up on the right most one.',
+            view_call('align', align.RIGHT))
+        self.align_top_action = add(
+            'Align Top', 'Shift+W', layout_icons.align_icon(align.TOP),
+            'Line the selected nodes and points up on the top most one.',
+            view_call('align', align.TOP))
+        self.align_vcenter_action = add(
+            'Align Middle', 'Alt+Shift+W',
+            layout_icons.align_icon(align.VCENTER),
+            'Line the selected nodes and points up on a line across the '
+            'middle of them.', view_call('align', align.VCENTER))
+        self.align_bottom_action = add(
+            'Align Bottom', 'Shift+S', layout_icons.align_icon(align.BOTTOM),
+            'Line the selected nodes and points up on the bottom most one.',
+            view_call('align', align.BOTTOM))
+        self.distribute_horizontal_action = add(
+            'Distribute Horizontally', 'Alt+Shift+A',
+            layout_icons.distribute_icon(align.HORIZONTAL),
+            'Space the selected nodes and points out evenly from left to '
+            'right, leaving the ends where they are.',
+            view_call('distribute', align.HORIZONTAL))
+        self.distribute_vertical_action = add(
+            'Distribute Vertically', 'Alt+Shift+D',
+            layout_icons.distribute_icon(align.VERTICAL),
+            'Space the selected nodes and points out evenly from top to '
+            'bottom, leaving the ends where they are.',
+            view_call('distribute', align.VERTICAL))
+        self.align_actions = [self.align_left_action,
+                              self.align_hcenter_action,
+                              self.align_right_action,
+                              self.align_top_action,
+                              self.align_vcenter_action,
+                              self.align_bottom_action]
+        self.distribute_actions = [self.distribute_horizontal_action,
+                                   self.distribute_vertical_action]
+
+        def layout_nodes():
+            view = self.main_window.view
+            if view is not None:
+                view.layout_nodes()
+        self.layout_action = add(
+            'Layout Nodes', 'Shift+L', layout_icons.layout_icon(),
+            'Arrange the selected top level nodes, or every one when none '
+            'are selected, by the order they run in: each exec chain left '
+            'to right, with its branches stacked below.', layout_nodes)
+        self.layout_action.setToolTip('Layout Nodes')
+
+        self.action_display_order = [self.snap_action] + \
+            self.align_actions + self.distribute_actions + \
+            [self.layout_action]
+
+    def align_menu(self, parent=None):
+        """The Align menu: every way to line up and space out the selected
+        nodes and points, for the right click menus and the toolbar.
+
+        :rtype: QtWidgets.QMenu
+        """
+        menu = QtWidgets.QMenu('Align', parent)
+        menu.setIcon(layout_icons.align_icon(align.LEFT))
+        menu.addActions(self.align_actions[:3])
+        menu.addSeparator()
+        menu.addActions(self.align_actions[3:])
+        menu.addSeparator()
+        menu.addActions(self.distribute_actions)
+        return menu
 
 
 class DisplayActions(NxtActionContainer):
@@ -1413,24 +1586,48 @@ class StageViewActions(NxtActionContainer):
                                            'takes noticeably longer to open.')
         self.animation_action.triggered.connect(toggle_animations)
         # TOGGLE CONNECTION LINES
+        # Lines, and each kind of line but exec lines, which always show,
+        # can be hidden, remembered for the tabs opened after this one and
+        # the next session, the way the grid is.
 
-        def toggle_lines():
-            state = self.implicit_action.isChecked()
-            self.main_window.view.toggle_implicit_connections(state)
-            # Remembered for the tabs opened after this one, and the next
-            # session, the way the grid is.
-            user_dir.user_prefs[user_dir.USER_PREF.SHOW_IMPLICIT] = state
+        def lines_action(kind, text, tip):
+            action = NxtAction(text=text, parent=self)
+            action.setToolTip(tip)
+            action.setWhatsThis(tip)
+            action.setCheckable(True)
+            action.setChecked(connection_graphics_item.lines_shown(kind))
 
-        self.implicit_action = NxtAction(text='Toggle Implicit Connections',
-                                         parent=self)
-        self.implicit_action.setShortcut('Ctrl+L')
-        self.implicit_action.setToolTip('Show / Hide Implicit Connections')
-        self.implicit_action.setWhatsThis('Shows or hides the implicit '
-                                          'connections for this tab.')
-        self.implicit_action.setCheckable(True)
-        self.implicit_action.setChecked(user_dir.user_prefs.get(
-            user_dir.USER_PREF.SHOW_IMPLICIT, True))
-        self.implicit_action.triggered.connect(toggle_lines)
+            def toggle():
+                state = action.isChecked()
+                view = self.main_window.view
+                if view:
+                    view.show_lines(kind, state)
+                else:
+                    connection_graphics_item.show_lines(kind, state)
+            action.triggered.connect(toggle)
+            return action
+
+        # Ctrl+L shows or hides every line but exec lines, leaving each
+        # kind on or off as it was, so they come back as they were.
+        self.lines_action = lines_action(
+            None, 'Show Lines',
+            'Show / Hide all lines but exec lines (Ctrl+L)')
+        self.lines_action.setShortcut('Ctrl+L')
+        self.implicit_action = self.lines_action
+        self.property_lines_action = lines_action(
+            connection_graphics_item.PROPERTY_LINES, 'Property Lines',
+            'Show / Hide the lines from properties to the properties that '
+            'use them')
+        self.instance_lines_action = lines_action(
+            connection_graphics_item.INSTANCE_LINES, 'Instance Lines',
+            'Show / Hide the lines from nodes to their instances')
+        self.code_lines_action = lines_action(
+            connection_graphics_item.CODE_LINES, 'Code Lines',
+            'Show / Hide the lines to nodes from the properties their code '
+            'uses')
+        self.lines_actions = [self.property_lines_action,
+                              self.instance_lines_action,
+                              self.code_lines_action]
         lines_icon = QtGui.QIcon()
         lines_icn_on = QtGui.QPixmap(
             ':icons/icons/implicit_connections_pressed.png')
@@ -1441,7 +1638,7 @@ class StageViewActions(NxtActionContainer):
         lines_icon.addPixmap(lines_icn_hov, QtGui.QIcon.Active, QtGui.QIcon.Off)
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Active, QtGui.QIcon.On)
         lines_icon.addPixmap(lines_icn_off, QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        self.implicit_action.setIcon(lines_icon)
+        self.lines_icon = lines_icon
 
         # Straight or curved lines, saved with the graph.
         def toggle_curved():
@@ -1507,6 +1704,49 @@ class StageViewActions(NxtActionContainer):
         fs_icon.addPixmap(fs_icn_off, QtGui.QIcon.Normal,
                           QtGui.QIcon.Off)
         self.frame_selection_action.setIcon(fs_icon)
+
+        # Frame all when a graph is opened. The view reads the preference
+        # when it first shows a graph, so there is nothing to call here.
+        self.frame_on_open_action = BoolUserPrefAction(
+            'Frame All on Open', user_dir.USER_PREF.FRAME_ON_OPEN,
+            default=True, parent=self)
+        self.frame_on_open_action.setToolTip('Frame all nodes when a graph '
+                                             'is opened')
+        self.frame_on_open_action.setWhatsThis(
+            'When on, a graph is framed to show all of its nodes when it is '
+            'first shown, zoomed out as far as it takes but never in past '
+            '100%. When off, it is shown at the origin.')
+
+        # Camera bookmarks, see nxt_editor.bookmarks
+        def add_bookmark():
+            view = self.main_window.view
+            if view is not None:
+                view.add_bookmark_named()
+        self.add_bookmark_action = NxtAction(text='Add Bookmark...',
+                                             parent=self)
+        self.add_bookmark_action.setShortcut('Ctrl+B')
+        self.add_bookmark_action.setAutoRepeat(False)
+        self.add_bookmark_action.setToolTip('Bookmark this view of the graph')
+        self.add_bookmark_action.setWhatsThis(
+            'Save the part of the graph in view under a name, to go back to '
+            'from the Bookmarks menu. Saved with the graph.')
+        self.add_bookmark_action.setShortcutContext(
+            QtCore.Qt.WidgetWithChildrenShortcut)
+        self.add_bookmark_action.triggered.connect(add_bookmark)
+        self.go_to_bookmark_actions = []
+        for number in range(1, bookmarks.SHORTCUT_COUNT + 1):
+            action = NxtAction(text='Go to Bookmark {}'.format(number),
+                               parent=self)
+            action.setShortcut('Ctrl+{}'.format(number))
+            action.setAutoRepeat(False)
+            action.setToolTip('Go to Bookmark {}'.format(number))
+            action.setWhatsThis('Show the part of the graph saved as the '
+                                "graph's bookmark number {}.".format(number))
+            action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
+            action.triggered.connect(partial(self.go_to_bookmark,
+                                             number - 1))
+            self.go_to_bookmark_actions.append(action)
+        self.bookmarks_icon = layout_icons.bookmark_icon()
 
         # Attr display actions
         self.hide_attrs_action = NxtAction(text='Display No Attrs',
@@ -1642,13 +1882,19 @@ class StageViewActions(NxtActionContainer):
                                      self.neutral_property_text_action,
                                      self.frame_all_action,
                                      self.frame_selection_action,
+                                     self.frame_on_open_action,
+                                     self.add_bookmark_action] + \
+            self.go_to_bookmark_actions + [
                                      self.hide_attrs_action,
                                      self.disp_local_attrs_action,
                                      self.disp_inst_attrs_action,
                                      self.disp_all_attrs_action,
                                      self.grid_action, self.mini_map_action,
                                      self.animation_action,
-                                     self.implicit_action,
+                                     self.lines_action,
+                                     self.property_lines_action,
+                                     self.instance_lines_action,
+                                     self.code_lines_action,
                                      self.curved_action,
                                      self.pick_walk_up_action,
                                      self.pick_walk_down_action,
@@ -1658,6 +1904,71 @@ class StageViewActions(NxtActionContainer):
                                      self.nudge_down_action,
                                      self.nudge_up_action]
 
+
+    def go_to_bookmark(self, index):
+        view = self.main_window.view
+        if view is not None:
+            view.go_to_bookmark(index)
+
+    def bookmarks_menu(self, parent=None):
+        """The Bookmarks menu: add one, go to one, or rename or delete
+        one. Filled in each time it opens, from the graph shown then.
+
+        :rtype: QtWidgets.QMenu
+        """
+        menu = QtWidgets.QMenu('Bookmarks', parent)
+        menu.setIcon(self.bookmarks_icon)
+        menu.aboutToShow.connect(partial(self.fill_bookmarks_menu, menu))
+        # Something to open before it is first filled. The window has no
+        # graph to ask yet while its menus are being made.
+        menu.addAction(self.add_bookmark_action)
+        return menu
+
+    def fill_bookmarks_menu(self, menu):
+        menu.clear()
+        menu.addAction(self.add_bookmark_action)
+        view = self.main_window.view
+        model = view.model if view is not None else None
+        records = model.get_bookmarks() if model is not None else []
+        self.add_bookmark_action.setEnabled(model is not None)
+        menu.addSeparator()
+        if not records:
+            empty = menu.addAction('No bookmarks yet')
+            empty.setEnabled(False)
+            return
+        for index, record in enumerate(records):
+            text = record[bookmarks.NAME]
+            if index < len(self.go_to_bookmark_actions):
+                # Shown in the shortcut column, without taking the key.
+                shortcut = self.go_to_bookmark_actions[index].shortcut()
+                text += '\t' + shortcut.toString(
+                    QtGui.QKeySequence.NativeText)
+            go = menu.addAction(text)
+            go.triggered.connect(partial(self.go_to_bookmark, index))
+        menu.addSeparator()
+        # Made with the menu as their parent, so they live as long as it.
+        rename_menu = QtWidgets.QMenu('Rename Bookmark', menu)
+        delete_menu = QtWidgets.QMenu('Delete Bookmark', menu)
+        menu.addMenu(rename_menu)
+        menu.addMenu(delete_menu)
+        for index, record in enumerate(records):
+            rename = rename_menu.addAction(record[bookmarks.NAME])
+            rename.triggered.connect(partial(view.rename_bookmark_named,
+                                             index))
+            delete = delete_menu.addAction(record[bookmarks.NAME])
+            delete.triggered.connect(partial(model.remove_bookmark, index))
+
+    def lines_menu(self, parent=None):
+        """The Lines menu: which kinds of line the graph shows.
+
+        :rtype: QtWidgets.QMenu
+        """
+        menu = QtWidgets.QMenu('Lines', parent)
+        menu.setIcon(self.lines_icon)
+        menu.addAction(self.lines_action)
+        menu.addSeparator()
+        menu.addActions(self.lines_actions)
+        return menu
 
 class ExecuteActions(NxtActionContainer):
     def __init__(self, main_window):
@@ -1840,6 +2151,20 @@ class ExecuteActions(NxtActionContainer):
         clear_icon.addPixmap(clear_pixmap_on, QtGui.QIcon.Normal,
                              QtGui.QIcon.On)
         self.clear_breaks_action.setIcon(clear_icon)
+        # Ignore breakpoints, without taking them off. Read as a run goes,
+        # so it can be flipped while a build is paused at one.
+        self.ignore_breaks_action = BoolUserPrefAction(
+            'Ignore Breakpoints', user_dir.USER_PREF.IGNORE_BREAKS,
+            parent=self)
+        self.ignore_breaks_action.setAutoRepeat(False)
+        self.ignore_breaks_action.setShortcutContext(QtCore.Qt.WindowShortcut)
+        self.ignore_breaks_action.setToolTip('Ignore Breakpoints')
+        self.ignore_breaks_action.setWhatsThis(
+            'Runs go straight through every breakpoint while this is on. The '
+            'breakpoints are kept.')
+        self.ignore_breaks_action.setIcon(exec_icons.ignore_breakpoints())
+        self.ignore_breaks_action.toggled.connect(
+            self.main_window.on_ignore_breaks_toggled)
 
         # Toggle start point
 
@@ -2035,6 +2360,7 @@ class ExecuteActions(NxtActionContainer):
                                      self.add_break_action,
                                      self.remove_break_action,
                                      self.clear_breaks_action,
+                                     self.ignore_breaks_action,
                                      self.wt_recomp_action,
                                      self.clear_cache_action,
                                      self.enable_cmd_port_action,
@@ -2112,6 +2438,22 @@ class CodeEditorActions(NxtActionContainer):
                                            'under the cursor, to the line, to '
                                            'everything.')
         self.expand_selection.setShortcut('Ctrl+D')
+        # folding, which only changes what is on show, never the code
+        self.fold_block_action = NxtAction('Fold Block', parent=self)
+        self.fold_block_action.setWhatsThis('Fold away the indented block '
+                                            'the cursor is in.')
+        self.fold_block_action.setShortcut('Ctrl+Shift+[')
+        self.unfold_block_action = NxtAction('Unfold Block', parent=self)
+        self.unfold_block_action.setWhatsThis('Show the block folded away '
+                                              'behind the line the cursor '
+                                              'is on.')
+        self.unfold_block_action.setShortcut('Ctrl+Shift+]')
+        self.fold_all_action = NxtAction('Fold All', parent=self)
+        self.fold_all_action.setWhatsThis('Fold away every indented block.')
+        self.fold_all_action.setShortcut('Ctrl+K, Ctrl+0')
+        self.unfold_all_action = NxtAction('Unfold All', parent=self)
+        self.unfold_all_action.setWhatsThis('Show every folded block.')
+        self.unfold_all_action.setShortcut('Ctrl+K, Ctrl+J')
         # completion
         self.complete_action = NxtAction('Complete Word', parent=self)
         self.complete_action.setWhatsThis('Offer completions for the word '
@@ -2181,16 +2523,8 @@ class CodeEditorActions(NxtActionContainer):
         self.complete_jedi_action = NxtAction('Python Analysis (jedi)',
                                               parent=self)
         self.complete_jedi_action.setCheckable(True)
-        if code_completion.JEDI.installed():
-            self.complete_jedi_action.setWhatsThis(
-                'Uses jedi to work out what a name is, so that after a dot '
-                'it can complete what a call returns or what a variable '
-                'holds. Asked when typing pauses, or with Ctrl+Space.')
-        else:
-            self.complete_jedi_action.setEnabled(False)
-            self.complete_jedi_action.setWhatsThis(
-                'Needs jedi, which is not installed for this python. '
-                'pip install nxt-editor[completion] adds it.')
+        # Without jedi it offers to install it, see refresh_jedi_action.
+        self.complete_jedi_action.triggered.connect(self.on_jedi_triggered)
 
         self.completion_source_actions = (
             (self.complete_python_action,
@@ -2228,6 +2562,7 @@ class CodeEditorActions(NxtActionContainer):
 
         for source_action, pref, default in self.completion_source_actions:
             make_source_toggle(source_action, pref, default)
+        self.refresh_jedi_action()
         # accept edit
         self.accept_edit_action = NxtAction('Accept Code Edit', parent=self)
         self.accept_edit_action.setWhatsThis('Accept changes and commit them '
@@ -2336,9 +2671,60 @@ class CodeEditorActions(NxtActionContainer):
                                      self.duplicate_line,
                                      self.move_line_up, self.move_line_down,
                                      self.delete_line, self.expand_selection,
+                                     self.fold_block_action,
+                                     self.unfold_block_action,
+                                     self.fold_all_action,
+                                     self.unfold_all_action,
                                      self.complete_action,
                                      self.run_line_global_action,
                                      self.run_line_local_action]
+
+    def refresh_jedi_action(self):
+        """Python Analysis as it can be now: on as the preference says when
+        jedi is there, and off when it is not, where turning it on offers to
+        install it.
+
+        Asked again after Options > Optional Components installs or removes
+        jedi, so it is picked up without a restart. Its text stays the same,
+        because an NxtAction's hotkey is saved under its text.
+        """
+        action = self.complete_jedi_action
+        pref = user_dir.USER_PREF.CE_COMPLETE_JEDI
+        action.blockSignals(True)
+        try:
+            action.setCheckable(True)
+            if code_completion.JEDI.installed():
+                action.setChecked(user_dir.user_prefs.get(pref, True))
+                action.setWhatsThis(
+                    'Uses jedi to work out what a name is, so that after a '
+                    'dot it can complete what a call returns or what a '
+                    'variable holds. Asked when typing pauses, or with '
+                    'Ctrl+Space.')
+            else:
+                action.setChecked(False)
+                action.setWhatsThis(
+                    'Needs jedi, a free add on that is not installed yet. '
+                    'Turn this on to install it, or use Options > Optional '
+                    'Components.')
+            action.setToolTip(action.whatsThis())
+            action.setEnabled(True)
+        finally:
+            action.blockSignals(False)
+
+    def on_jedi_triggered(self, checked=False):
+        """Without jedi, turning Python Analysis on offers to install it.
+
+        The preference keeps the choice, so it is on once jedi is there.
+        """
+        if code_completion.JEDI.installed() or not checked:
+            return
+        action = self.complete_jedi_action
+        action.blockSignals(True)
+        action.setChecked(False)
+        action.blockSignals(False)
+        offer = getattr(self.main_window, 'offer_jedi', None)
+        if offer:
+            offer()
 
 
 def clear_action_data(action_list):

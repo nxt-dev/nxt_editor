@@ -22,6 +22,8 @@ GRAPH_BG_COLOR = QColor(theme.GRAPH)
 START_COLOR = QColor("#1bd40b")
 SKIP_COLOR = QColor("#f0880a")
 BREAK_COLOR = QColor(255, 0, 0)
+# Instance lines, a blue no attribute type or exec line uses.
+INSTANCE_LINE = QColor('#4fc3f7')
 
 # Layer colors: hues spread evenly around the circle, in OKLCH so the steps
 # look even, each made dark enough for white text (theme.white_text_safe),
@@ -42,6 +44,10 @@ SELECTED = QColor(theme.SELECTED)
 UNCACHED_RED = QColor(255, 0, 0, 200)
 
 UNSAVED = QColor(200, 160, 26, 80)
+
+# Behind an attribute's type in the Cached view when running the graph
+# left it a different type than the graph gives it.
+TYPE_CHANGED = QColor(255, 181, 71, 70)
 
 ERROR = QColor(204, 0, 0, 50)
 

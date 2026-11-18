@@ -9,6 +9,7 @@ from Qt.QtWidgets import QUndoCommand
 
 # Internal
 from nxt_editor import backdrops
+from nxt_editor import bookmarks
 from nxt_editor import colors
 from nxt_editor import user_dir
 from nxt_editor import wires
@@ -738,6 +739,46 @@ class SetNodesPosition(NxtCommand):
         self.redo_effected_layer(layer.real_path)
 
 
+class PushNodePositions(NxtCommand):
+
+    """Write where nodes are shown onto one layer's own positions."""
+
+    def __init__(self, node_positions, model, layer_path, text):
+        """
+        :param node_positions: {root node path: [x, y]}
+        """
+        super(PushNodePositions, self).__init__(model)
+        self.layer_path = layer_path
+        self.new = copy.deepcopy(node_positions)
+        layer = model.lookup_layer(layer_path)
+        # What the layer itself had, None where it had nothing, so undo
+        # takes away what it did not have rather than leave a copy.
+        self.old = {}
+        for path in node_positions:
+            old = layer.positions.get(path)
+            self.old[path] = copy.deepcopy(old) if old is not None else None
+        self.setText(text)
+
+    def _write(self, positions):
+        layer = self.model.lookup_layer(self.layer_path)
+        for path, pos in positions.items():
+            if pos is None:
+                layer.positions.pop(path, None)
+            else:
+                layer.positions[path] = list(pos)
+        return layer
+
+    @processing
+    def undo(self):
+        self._write(self.old)
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self._write(self.new)
+        self.redo_effected_layer(layer.real_path)
+
+
 class SetBackdrops(NxtCommand):
 
     """Add, change or remove backdrops on one layer."""
@@ -770,6 +811,38 @@ class SetBackdrops(NxtCommand):
         layer = self.model.lookup_layer(self.layer_path)
         backdrops.write(layer, self.new)
         self.model.backdrops_changed.emit()
+        self.redo_effected_layer(layer.real_path)
+
+
+class SetBookmarks(NxtCommand):
+
+    """Add, rename or remove camera bookmarks on one layer."""
+
+    def __init__(self, records, model, layer_path, text='Edit bookmarks'):
+        """
+        :param records: every bookmark the layer is to have, in order
+        """
+        super(SetBookmarks, self).__init__(model)
+        self.layer_path = layer_path
+        self.new = copy.deepcopy(list(records))
+        layer = model.lookup_layer(layer_path)
+        self.old = bookmarks.layer_bookmarks(layer)
+        self.setText(text)
+
+    def _write(self, records):
+        layer = self.model.lookup_layer(self.layer_path)
+        bookmarks.write(layer, records)
+        self.model.bookmarks_changed.emit()
+        return layer
+
+    @processing
+    def undo(self):
+        self._write(self.old)
+        self.undo_effected_layer(self.layer_path)
+
+    @processing
+    def redo(self):
+        layer = self._write(self.new)
         self.redo_effected_layer(layer.real_path)
 
 
@@ -1784,6 +1857,8 @@ class ReloadLayers(NxtCommand):
         # Which of them were unsaved before, so undoing a reload leaves
         # them marked the way they were.
         self.was_unsaved = []
+        # The model's disk stamps for them before, see redo.
+        self.old_stamps = {}
 
     def _layers(self):
         """The layers to reload that are still in the stage.
@@ -1858,6 +1933,11 @@ class ReloadLayers(NxtCommand):
         was_stacked = self._stack()
         self.stash = self.stage.reload_layers(layers)
         reloaded = list(self.stash)
+        # What is in memory is the file as it is now. The stamps it had
+        # before are kept for undo, which puts back the older contents.
+        self.old_stamps = {p: self.model.disk_stamps.get(p) for p in reloaded}
+        for layer_path in reloaded:
+            self.model.stamp_layer_file(layer_path)
         self.was_unsaved = [p for p in reloaded
                             if p in self.model.effected_layers]
         for layer_path in self.was_unsaved:
@@ -1881,6 +1961,11 @@ class ReloadLayers(NxtCommand):
         self.stage.reload_layers(layers, source=self.stash)
         for layer_path in self.was_unsaved:
             self.model.effected_layers.add(layer_path)
+        for layer_path, stamp in self.old_stamps.items():
+            if stamp is None:
+                self.model.disk_stamps.pop(layer_path, None)
+            else:
+                self.model.disk_stamps[layer_path] = stamp
         self._settle(list(self.stash), was_stacked)
 
 

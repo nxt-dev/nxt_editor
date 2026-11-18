@@ -93,7 +93,7 @@
                 "# Whatever a local checkout picked up that has no business shipping.",
                 "# A build on a build machine never has these; a build on a working",
                 "# machine does, and they went straight into the module.",
-                "junk = ('__pycache__', '.mypy_cache', '.pytest_cache')",
+                "junk = ('__pycache__', '.mypy_cache', '.pytest_cache', '.rez_build')",
                 "removed = 0",
                 "for root, dirs, files in os.walk('${mod_folder}'):",
                 "    for name in list(dirs):",
