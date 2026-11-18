@@ -936,6 +936,24 @@ class Outliner(DockWidgetBase):
 
     def toggle_collapse(self, path, modifiers):
         recursive = bool(modifiers & QtCore.Qt.ShiftModifier)
+        item = self.items.get(path)
+        if recursive and item is not None and not self.search.text().strip():
+            # Open or close the rows first: the graph hears of the change
+            # before the tree does, and drawing a big hierarchy takes it a
+            # while, so the rows would otherwise wait for it.
+            opened = self.stage_model.get_node_collapse(path)
+            syncing = self._syncing
+            self._syncing = True
+            try:
+                rows = [item]
+                while rows:
+                    row = rows.pop()
+                    if row.childCount():
+                        row.setExpanded(opened)
+                        rows.extend(row.child(i)
+                                    for i in range(row.childCount()))
+            finally:
+                self._syncing = syncing
         # The rows follow, see on_collapse_changed.
         self.stage_model.toggle_node_collapse([path],
                                               recursive_down=recursive)

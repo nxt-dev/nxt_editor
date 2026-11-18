@@ -2653,14 +2653,43 @@ class StageView(QtWidgets.QGraphicsView):
             if path != nxt_path.WORLD:
                 logger.error("Cannot find item to select: " + str(path))
 
-    def handle_nodes_changed(self, node_paths):
+    #: An expand drawing more nodes than this shows them as it goes, see
+    #: handle_nodes_changed.
+    PROGRESSIVE_DRAW = 300
+    #: Seconds before the first of the nodes drawn so far are shown, and
+    #: between showing more.
+    FIRST_SHOW = 0.15
+    SHOW_EVERY = 0.75
+
+    def handle_nodes_changed(self, node_paths, progressive=False):
+        """Draw, update or remove the graphics of node_paths.
+
+        :param progressive: show the nodes drawn so far every so often, so
+            a big expand is seen to be happening rather than leaving the
+            window frozen until it is done. Input waits until the end, so
+            nothing can change the graph part way through.
+        """
         if self.defer_update():
             # Nothing drawn to keep up with, see defer_update.
             return
+        with user_dir.holding_prefs():
+            self._handle_nodes_changed(node_paths, progressive)
+
+    def _handle_nodes_changed(self, node_paths, progressive=False):
         updated_paths = []
         roots_hit = set()
         new_nodes = []
+        progressive = progressive and len(node_paths) > self.PROGRESSIVE_DRAW
+        show_at = time.time() + self.FIRST_SHOW
         for path in node_paths:
+            if progressive and time.time() > show_at:
+                for root in roots_hit:
+                    graphic = self.get_node_graphic(root)
+                    if graphic:
+                        graphic.arrange_descendants()
+                QtWidgets.QApplication.processEvents(
+                    QtCore.QEventLoop.ExcludeUserInputEvents)
+                show_at = time.time() + self.SHOW_EVERY
             if path == nxt_path.WORLD:
                 # never draw world node.
                 continue
@@ -2772,6 +2801,13 @@ class StageView(QtWidgets.QGraphicsView):
         self.do_animations = self._do_anim_pref
         comp_layer = self.model.comp_layer
         roots_hit = set()
+        # Everything an expand shows, gathered and drawn once at the end.
+        # Expanding a hierarchy as a whole names every node in it, and
+        # drawing each one's descendants as it came laid out and lined up
+        # the whole tree again for every node, which took minutes on a big
+        # one.
+        shown = []
+        shown_set = set()
         for path in node_paths:
             if self.model.get_collapsed_ancestor(path):
                 self.remove_node_graphic(path)
@@ -2787,10 +2823,24 @@ class StageView(QtWidgets.QGraphicsView):
                     self.remove_node_graphic(child_path)
                 if descendants:
                     roots_hit.add(nxt_path.get_root_path(path))
-            else:
+            elif path not in shown_set:
+                # A node under one already gathered came with it.
                 descendants = self.model.get_descendants(path,
                                                          include_implied=True)
-                self.handle_nodes_changed(descendants)
+                for child_path in descendants:
+                    if child_path not in shown_set:
+                        shown_set.add(child_path)
+                        shown.append(child_path)
+        if shown:
+            big = len(shown) > self.PROGRESSIVE_DRAW
+            if big:
+                QtWidgets.QApplication.setOverrideCursor(
+                    QtCore.Qt.WaitCursor)
+            try:
+                self.handle_nodes_changed(shown, progressive=True)
+            finally:
+                if big:
+                    QtWidgets.QApplication.restoreOverrideCursor()
         for root_path in roots_hit:
             root_graphic = self.get_node_graphic(root_path)
             if not root_graphic:
