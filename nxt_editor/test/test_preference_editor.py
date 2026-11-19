@@ -12,7 +12,8 @@ import unittest
 from unittest import mock
 
 # External
-from Qt import QtWidgets
+from Qt import QtCore, QtWidgets
+from Qt.QtTest import QTest
 
 # Internal
 from nxt_editor import preference_editor, stage_model, user_dir
@@ -60,11 +61,18 @@ class Editing(unittest.TestCase):
         self.dialog = PreferenceEditor(main_window=self.win)
 
     def tearDown(self):
+        # Deleted here, while Qt is running: left for Python to collect as
+        # it exits, Qt is gone first and taking them down crashes it.
         self.dialog.deleteLater()
+        if self.win.preference_editor is not None:
+            self.win.preference_editor.deleteLater()
+            self.win.preference_editor = None
         with mock.patch.object(stage_model.StageModel,
                                'get_unsaved_changes', return_value=[]):
             self.win.close()
             app.processEvents()
+        self.win.deleteLater()
+        app.processEvents()
 
     def test_every_menu_toggle_named_is_there(self):
         for p in PREFERENCES:
@@ -263,11 +271,9 @@ class Editing(unittest.TestCase):
 class PagesAndHotkeys(Editing):
     """The pages that were windows of their own, and Hotkeys."""
 
-    def hotkey_row(self, name):
-        return next(row for row in self.dialog.rows.values()
-                    if getattr(row, 'action', None) is not None and
-                    row.title == name)
-
+    def hotkey(self, name):
+        return next(entry for entry in self.dialog.hotkey_list.entries()
+                    if entry.title == name)
     def test_a_page_is_made_when_first_shown(self):
         from nxt_editor.optional_components import OptionalComponentsDialog
         self.assertNotIn('Optional Components', self.dialog.pages)
@@ -292,45 +298,69 @@ class PagesAndHotkeys(Editing):
         self.dialog.hide()
 
     def test_every_action_with_a_hotkey_is_listed(self):
-        listed = [row.action for row in self.dialog.rows.values()
-                  if getattr(row, 'action', None) is not None]
+        listed = [entry.action for entry in
+                  self.dialog.hotkey_list.entries()]
         for rows in self.win.get_hotkey_map().values():
             for row in rows:
                 self.assertIn(row[4], listed)
-
     def test_a_hotkey_is_set_saved_and_reset(self):
-        row = self.hotkey_row('Frame Selection')
-        before = row.shortcut()
-        self.assertTrue(row.set('Ctrl+Alt+K'))
-        self.assertEqual('Ctrl+Alt+K', row.action.shortcut().toString())
+        entry = self.hotkey('Frame Selection')
+        before = entry.shortcut()
+        self.assertTrue(entry.set('Ctrl+Alt+K'))
+        self.assertEqual('Ctrl+Alt+K', entry.action.shortcut().toString())
         self.assertEqual('Ctrl+Alt+K', user_dir.hotkeys['Frame Selection'])
-        self.assertFalse(row.reset_button.isHidden())
-        row.reset_button.click()
-        self.assertEqual(before, row.shortcut())
-        self.assertTrue(row.reset_button.isHidden())
+        self.assertFalse(entry.is_default())
+        entry.reset()
+        self.assertEqual(before, entry.shortcut())
+        self.assertTrue(entry.is_default())
 
+    def test_clicks_on_a_row_record_clear_and_reset(self):
+        hotkeys = self.dialog.hotkey_list
+        self.dialog.select_section('Hotkeys')
+        self.dialog.show()
+        self.addCleanup(self.dialog.hide)
+        app.processEvents()
+        entry = self.hotkey('Frame Selection')
+        index = hotkeys.index_of(entry)
+        box, clear, reset = hotkeys.part_rects(hotkeys.visualRect(index))
+        QTest.mouseClick(hotkeys.viewport(), QtCore.Qt.LeftButton,
+                         pos=clear.center())
+        self.assertEqual('', entry.shortcut())
+        QTest.mouseClick(hotkeys.viewport(), QtCore.Qt.LeftButton,
+                         pos=reset.center())
+        self.assertTrue(entry.is_default())
+        QTest.mouseClick(hotkeys.viewport(), QtCore.Qt.LeftButton,
+                         pos=box.center())
+        self.assertIsNotNone(hotkeys.recorder)
+        QTest.keyClick(hotkeys.recorder, QtCore.Qt.Key_K,
+                       QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier)
+        app.processEvents()
+        self.assertEqual('Ctrl+Alt+K', entry.shortcut())
+        self.assertIsNone(hotkeys.recorder)
+        entry.reset()
     def test_a_hotkey_can_be_cleared(self):
-        row = self.hotkey_row('Frame Selection')
-        row.clear_button.click()
-        self.assertEqual('', row.action.shortcut().toString())
-        self.assertTrue(row.clear_button.isHidden())
-        row.reset_button.click()
-
+        entry = self.hotkey('Frame Selection')
+        entry.clear()
+        self.assertEqual('', entry.action.shortcut().toString())
+        entry.reset()
     def test_a_global_hotkey_can_not_be_taken(self):
-        new_graph = self.hotkey_row('New Graph')
-        self.assertEqual('Global', new_graph.tag.text())
-        row = self.hotkey_row('Frame Selection')
-        before = row.shortcut()
+        new_graph = self.hotkey('New Graph')
+        self.assertTrue(new_graph.is_global)
+        entry = self.hotkey('Frame Selection')
+        before = entry.shortcut()
         with mock.patch.object(QtWidgets.QMessageBox, 'warning') as warn:
-            self.assertFalse(row.set(new_graph.shortcut()))
+            self.assertFalse(entry.set(new_graph.shortcut()))
         warn.assert_called_once()
-        self.assertEqual(before, row.shortcut())
-
+        self.assertEqual(before, entry.shortcut())
     def test_search_finds_hotkeys_by_their_keys(self):
         self.dialog.apply_filter('ctrl+n')
-        self.assertIn('New Graph', self.shown_rows())
+        shown = [entry.title for entry in
+                 self.dialog.hotkey_list.shown_entries()]
+        self.assertIn('New Graph', shown)
         self.assertIn('Hotkeys', self.listed())
-
+        self.dialog.apply_filter('')
+        self.assertEqual(len(self.dialog.hotkey_list.entries()),
+                         len(self.dialog.hotkey_list.shown_entries()))
     def test_search_finds_a_page_and_goes_there(self):
         self.dialog.apply_filter('jedi')
         link = self.dialog.links['Optional Components']
@@ -361,6 +391,43 @@ class PagesAndHotkeys(Editing):
         discard.assert_called_once()
         self.assertFalse(self.dialog.isVisible())
 
+
+
+class Prepared(Editing):
+    """Built while the editor is idle, Preferences opens at once."""
+
+    def setUp(self):
+        super(Prepared, self).setUp()
+        self.dialog.deleteLater()
+        self.win.preference_editor = None
+
+    def test_built_ahead_while_idle(self):
+        self.win.prepare_preferences()
+        dialog = self.win.preference_editor
+        self.assertIsNotNone(dialog)
+        self.assertFalse(dialog.isVisible())
+        # Opening it shows the one already made.
+        self.assertIs(dialog, self.win.open_preferences())
+        dialog.hide()
+    def test_nothing_opens_as_a_window_of_its_own(self):
+        shown = []
+
+        class Spy(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                if (event.type() == QtCore.QEvent.Show and
+                        isinstance(obj, QtWidgets.QWidget) and
+                        obj.isWindow()):
+                    shown.append(obj)
+                return False
+        spy = Spy()
+        app.installEventFilter(spy)
+        try:
+            dialog = self.win.open_preferences('Hotkeys')
+            app.processEvents()
+        finally:
+            app.removeEventFilter(spy)
+        self.assertEqual([dialog], shown)
+        dialog.hide()
 
 if __name__ == '__main__':
     unittest.main()

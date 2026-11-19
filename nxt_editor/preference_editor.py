@@ -249,6 +249,13 @@ def sections():
     return names
 
 
+def about_style():
+    global ABOUT_STYLE
+    if not ABOUT_STYLE:
+        ABOUT_STYLE = theme.fill('color: {TEXT_DIM};')
+    return ABOUT_STYLE
+
+
 class SettingRow(QtWidgets.QFrame):
     """One setting: its name and what it does, its value, and a button
     that puts it back to its default when it is not there already.
@@ -268,10 +275,13 @@ class SettingRow(QtWidgets.QFrame):
         self.about_text = about
         self.search_text = search_text.lower()
         self.editor = editor
+        # What the labels show marked, so a search only rewrites the rows
+        # whose marks change.
+        self.marked_words = ()
+        # The row's from the start: a widget made visible before it has a
+        # parent opens as a window of its own, for a moment.
+        editor.setParent(self)
         self.setObjectName('SettingRow')
-        self.setStyleSheet(theme.fill(
-            '#SettingRow {border: none; '
-            'border-bottom: 1px solid {BORDER};}'))
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(4, 10, 4, 10)
         layout.setSpacing(16)
@@ -280,14 +290,14 @@ class SettingRow(QtWidgets.QFrame):
         name_row = QtWidgets.QHBoxLayout()
         name_row.setSpacing(8)
         # Rich text, so a search can mark the words it found.
-        self.name = QtWidgets.QLabel(marked(title, []))
+        self.name = QtWidgets.QLabel(marked(title, []), self)
         self.name.setTextFormat(QtCore.Qt.RichText)
         self.name.setFont(theme.font(theme.TEXT_PX,
                                      weight=QtGui.QFont.Medium))
         name_row.addWidget(self.name)
         self.tag = None
         if tag:
-            self.tag = QtWidgets.QLabel(tag)
+            self.tag = QtWidgets.QLabel(tag, self)
             self.tag.setFont(theme.font(theme.SMALL_PX))
             self.tag.setStyleSheet(theme.fill(
                 'color: {TEXT}; background: {ACCENT_DIM}; '
@@ -295,11 +305,11 @@ class SettingRow(QtWidgets.QFrame):
             name_row.addWidget(self.tag)
         name_row.addStretch(1)
         words.addLayout(name_row)
-        self.about = QtWidgets.QLabel(marked(about, []))
+        self.about = QtWidgets.QLabel(marked(about, []), self)
         self.about.setTextFormat(QtCore.Qt.RichText)
         self.about.setWordWrap(True)
         self.about.setFont(theme.font(theme.SMALL_PX))
-        self.about.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        self.about.setStyleSheet(about_style())
         self.about.setVisible(bool(about))
         words.addWidget(self.about)
         layout.addLayout(words, 1)
@@ -315,7 +325,7 @@ class SettingRow(QtWidgets.QFrame):
         self.extra = QtWidgets.QHBoxLayout()
         self.extra.setSpacing(4)
         layout.addLayout(self.extra)
-        self.reset_button = QtWidgets.QToolButton()
+        self.reset_button = QtWidgets.QToolButton(self)
         self.reset_button.setText(self.RESET_TEXT)
         # Keeps its room when hidden, so values do not move as it shows.
         policy = self.reset_button.sizePolicy()
@@ -334,8 +344,13 @@ class SettingRow(QtWidgets.QFrame):
 
     def mark(self, words):
         """Show the searched for words in the name and what it does."""
+        words = tuple(words)
+        if words == self.marked_words:
+            return
+        self.marked_words = words
         self.name.setText(marked(self.title, words))
-        self.about.setText(marked(self.about_text, words))
+        if self.about_text:
+            self.about.setText(marked(self.about_text, words))
 
 
 class PreferenceRow(SettingRow):
@@ -387,6 +402,9 @@ def describe(pref, value):
     if pref.kind == TEXT and not value:
         return 'empty'
     return str(value)
+
+
+ABOUT_STYLE = ''
 
 
 def heading(text, px=18):
@@ -486,13 +504,13 @@ class PreferenceEditor(QtWidgets.QDialog):
 
     def __init__(self, main_window=None, parent=None):
         super(PreferenceEditor, self).__init__(parent or main_window)
+        self.hotkey_list = None
         self.main_window = main_window
         self.setWindowTitle('Preferences')
         self.resize(900, 640)
         self.editors = {}  # key: widget
         self.rows = {}  # key: SettingRow, preferences and hotkeys
         self.blocks = {}  # section: its title and rows
-        self.hotkey_groups = []  # (title label, [HotkeyRow])
         self.links = {}  # page: PageLink, for search results
         self.pages = {}  # page: its widget, made when first shown
         self.holders = {}  # page: what the stack shows it in
@@ -537,6 +555,9 @@ class PreferenceEditor(QtWidgets.QDialog):
         body.addWidget(self.section_list)
 
         self.page = QtWidgets.QWidget()
+        self.page.setStyleSheet(theme.fill(
+            '#SettingRow {border: none; '
+            'border-bottom: 1px solid {BORDER};}'))
         self.page_layout = QtWidgets.QVBoxLayout(self.page)
         self.page_layout.setContentsMargins(4, 0, 12, 8)
         self.page_layout.setSpacing(0)
@@ -588,7 +609,7 @@ class PreferenceEditor(QtWidgets.QDialog):
         self._filling = True
         self.section_list.clear()
         self.editors, self.rows, self.blocks = {}, {}, {}
-        self.hotkey_groups, self.links = [], {}
+        self.links = {}
         self.page_layout.addWidget(self.nothing_found)
         for name in sections():
             block, block_layout = self.new_block(name)
@@ -641,14 +662,8 @@ class PreferenceEditor(QtWidgets.QDialog):
         note.setContentsMargins(4, 0, 0, 8)
         block_layout.addWidget(note)
         self.hotkeys = hotkey_settings.Hotkeys(self.main_window)
-        for group, rows in self.hotkeys.rows_by_group(self):
-            title = heading(group, px=theme.TEXT_PX + 2)
-            title.setContentsMargins(4, 14, 0, 4)
-            block_layout.addWidget(title)
-            for hotkey_row in rows:
-                self.rows[hotkey_row.key] = hotkey_row
-                block_layout.addWidget(hotkey_row)
-            self.hotkey_groups.append((title, rows))
+        self.hotkey_list = hotkey_settings.HotkeyList(self.hotkeys, block)
+        block_layout.addWidget(self.hotkey_list)
 
     def show_section(self, row):
         """The chosen section alone, or, while searching, what was found,
@@ -850,17 +865,37 @@ class PreferenceEditor(QtWidgets.QDialog):
         alone again.
         """
         words = text.lower().split()
+        if words == self.words:
+            return
         if words and not self.words:
             # Where to go back to when the search is cleared.
             self.section_before = self.current_section()
         self.words = words
+        # One redraw at the end, rather than one for each row that shows or
+        # hides, and only the rows that change are touched.
+        self.page.setUpdatesEnabled(False)
+        try:
+            self._filter_rows(words, text)
+        finally:
+            self.page.setUpdatesEnabled(True)
+
+    def _filter_rows(self, words, text):
         found = []
+        if not words:
+            # Back to one section: the results are put away first, so
+            # showing every row again does not lay them all out on screen.
+            for block in self.blocks.values():
+                block.hide()
+            for link in self.links.values():
+                link.hide()
         for row in self.rows.values():
             hide = not row.matches(words)
-            row.setHidden(hide)
-            row.mark(words)
-        for title, rows in self.hotkey_groups:
-            title.setHidden(all(row.isHidden() for row in rows))
+            if row.isHidden() != hide:
+                row.setHidden(hide)
+            if not hide:
+                row.mark(words)
+        hotkeys_shown = (self.hotkey_list.filter(words)
+                         if self.hotkey_list is not None else 0)
         names = self.section_names()
         for index, name in enumerate(names):
             if name in self.links:
@@ -869,8 +904,12 @@ class PreferenceEditor(QtWidgets.QDialog):
                 link.mark(words)
                 link.setVisible(shown)
             else:
-                shown = any(not row.isHidden() for row in self.rows.values()
-                            if row.section == name)
+                if name == HOTKEYS:
+                    shown = bool(hotkeys_shown)
+                else:
+                    shown = any(not row.isHidden()
+                                for row in self.rows.values()
+                                if row.section == name)
                 self.blocks[name].setVisible(shown and bool(words))
             self.section_list.item(index).setHidden(
                 bool(words) and not shown)

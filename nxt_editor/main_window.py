@@ -100,6 +100,15 @@ FONT_FOLLOWS_WINDOW = 'nxt_font_follows_window'
 # Longest host label the window title shows before it is shortened.
 HOST_LABEL_MAX = 40
 
+# How long after the editor shows Preferences is built, while it is idle,
+# so it opens at once: below 0 never. NXT_PREPARE_PREFERENCES_MS overrides
+# it; the tests turn it off, and build Preferences where they need it.
+try:
+    PREPARE_PREFERENCES_MS = int(
+        os.environ.get('NXT_PREPARE_PREFERENCES_MS', 1500))
+except ValueError:
+    PREPARE_PREFERENCES_MS = 1500
+
 
 class MainWindow(QtWidgets.QMainWindow):
     """The main window of the nxt UI. Includes the menu bar, tool bar, and dock widgets."""
@@ -1289,6 +1298,21 @@ QCheckBox::indicator {
         """Framing after the window is shown because the frame is based on the window's size."""
         super(MainWindow, self).show()
         self.center_view()
+        if self.preference_editor is None and PREPARE_PREFERENCES_MS >= 0:
+            QtCore.QTimer.singleShot(PREPARE_PREFERENCES_MS,
+                                     self.prepare_preferences)
+
+    def prepare_preferences(self):
+        """Build Preferences while the editor is idle, so it opens the moment
+        it is asked for."""
+        if self.preference_editor is not None:
+            return
+        from nxt_editor.preference_editor import PreferenceEditor
+        dialog = PreferenceEditor(main_window=self)
+        # Its window is made now too, which Qt otherwise does as it first
+        # shows.
+        dialog.winId()
+        self.preference_editor = dialog
 
     def reset_layout(self):
         """Restore all dock widgets and toolbars to the default layout."""

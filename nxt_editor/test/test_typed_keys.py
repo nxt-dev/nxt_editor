@@ -150,18 +150,19 @@ class TypingInTables(unittest.TestCase):
         prefs = self.win.open_preferences('Hotkeys')
         self.addCleanup(prefs.hide)
         app.processEvents()
-        row = next(row for row in prefs.rows.values()
-                   if getattr(row, 'action', None) is not None)
+        hotkeys = prefs.hotkey_list
+        entry = hotkeys.entries()[0]
         recorded = []
-        with mock.patch.object(row, 'set', side_effect=recorded.append):
-            row.field.setFocus()
+        with mock.patch.object(
+                entry, 'set',
+                side_effect=lambda text, parent=None: recorded.append(text)):
+            field = hotkeys.start_recording(hotkeys.index_of(entry))
             app.processEvents()
-            QTest.keyClick(row.field, QtCore.Qt.Key_W)
+            QTest.keyClick(field, QtCore.Qt.Key_W)
             app.processEvents()
         # The key was taken for the hotkey, not as the shortcut for raw.
         self.assertEqual(['W'], recorded)
         self.assertEqual(self.model.data_state, DATA_STATE.RAW)
-
 
 if __name__ == '__main__':
     unittest.main()
