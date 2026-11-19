@@ -200,6 +200,23 @@ class Looks(EnvDialogCase):
         self.assertIn(theme.TEXT_DIM, dialog.intro.styleSheet())
         self.assertNotIn('<b>', dialog.intro.text())
 
+    def test_an_empty_table_has_room_for_its_column_titles(self):
+        dialog = self.dialog()
+        dialog.show()
+        app.processEvents()
+        header = dialog.table.horizontalHeader()
+        for column in (env_dialog.NAME_COL, env_dialog.LIST_COL):
+            title = dialog.table.horizontalHeaderItem(column).text()
+            room = (header.sectionSize(column)
+                    - header.fontMetrics().horizontalAdvance(title))
+            self.assertGreaterEqual(room, 30, title)
+
+    def test_a_long_path_does_not_widen_the_dialog(self):
+        deep = os.path.join(self.folder, *['a_folder_with_a_long_name'] * 6)
+        os.environ[env_files.ENV_FILES_ENV_VAR] = os.path.join(deep, 'e.json')
+        dialog = self.dialog()
+        self.assertLess(dialog.minimumSizeHint().width(), 760)
+
 
 class WithAnOlderCore(unittest.TestCase):
 

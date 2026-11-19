@@ -23,7 +23,8 @@ from nxt import nxt_log
 from nxt_editor.constants import NXT_WEBSITE
 from nxt.constants import NXT_DCC_ENV_VAR
 
-from nxt_editor.integration import plugin_version, wants_menu
+from nxt_editor.integration import (plugin_version, scene_label,
+                                    wants_menu)
 
 logger = logging.getLogger('nxt')
 CREATED_UI = []
@@ -81,6 +82,40 @@ def create_remote_context(*args):
     mayapy = os.path.join(os.environ['MAYA_LOCATION'], partial_exe_path)
     create_func = nxt_editor.main_window.MainWindow.create_remote_context
     create_func(place_holder_text=t, interpreter_exe=mayapy)
+
+
+def track_scene(window):
+    """Keep the editor's title saying which scene this Maya has open, so
+    the editors of two Maya sessions can be told apart.
+
+    :return: Function that stops tracking, call it when the window closes.
+    """
+    def update(*args):
+        # Maya calls this, nothing raised here may reach it.
+        try:
+            scene = cmds.file(query=True, sceneName=True)
+            window.set_host_label(scene_label(scene))
+        except Exception:
+            logger.debug('Could not put the scene name in the title.',
+                         exc_info=True)
+
+    callback_ids = []
+    for message in (om.MSceneMessage.kAfterNew, om.MSceneMessage.kAfterOpen,
+                    om.MSceneMessage.kAfterSave):
+        try:
+            callback_ids.append(om.MSceneMessage.addCallback(message, update))
+        except Exception:
+            logger.debug('Could not watch the scene.', exc_info=True)
+    update()
+
+    def stop():
+        while callback_ids:
+            try:
+                om.MSceneMessage.removeCallback(callback_ids.pop())
+            except Exception:
+                logger.debug('Could not stop watching the scene.',
+                             exc_info=True)
+    return stop
 
 
 class NxtUiCmd(om.MPxCommand):
@@ -205,11 +240,13 @@ class NxtUiCmd(om.MPxCommand):
         sj = cmds.scriptJob(e=["quitApplication", "cmds.nxt_ui(close=True)"],
                             protected=True)
         nxt_win.output_log.unwrap_std_streams()
+        stop_tracking_scene = track_scene(nxt_win)
 
         def remove_callback():
             global __NXT_INSTANCE__
         
             om.MCommandMessage.removeCallback(cb_id)
+            stop_tracking_scene()
         
             try:
                 cmds.scriptJob(kill=sj, force=True)

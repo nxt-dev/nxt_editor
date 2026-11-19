@@ -540,16 +540,13 @@ class CodeEditor(DockWidgetBase):
         if not self.editing_active:
             return
 
-        # if nothing was changed do nothing
+        # if nothing was changed do nothing. Editing always starts from the
+        # raw code, so that is the only text that means nothing was typed.
         comp_layer = self.stage_model.comp_layer
         raw = self.stage_model.get_node_code_string(self.node_path,
                                                        DATA_STATE.RAW,
                                                        comp_layer)
-        resolved = self.stage_model.get_node_code_string(self.node_path,
-                                                            DATA_STATE.RESOLVED,
-                                                            comp_layer)
-        current_text = str(self.editor.toPlainText().encode())
-        if current_text in [raw, resolved]:
+        if self.editor.toPlainText() == raw:
             self.exit_editing()
             return
 
@@ -2010,10 +2007,37 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
             self.completion_width = (
                 popup.sizeHintForColumn(0)
                 + popup.verticalScrollBar().sizeHint().width() + 12)
-        rect = self.cursorRect()
-        rect.setWidth(self.completion_width)
         self.set_completion_shortcuts(False)
-        self.completer.complete(rect)
+        self.completer.complete(self.completion_rect(prefix))
+
+    def completion_rect(self, prefix):
+        """Where the list opens: under the line being typed, with its names
+        starting where the word being completed starts, so a row reads on
+        from what is already there and covers none of it.
+
+        :param prefix: the partial word in front of the cursor
+        :type prefix: str
+        :return: rect in this widget's coordinates, as QCompleter wants it
+        :rtype: QtCore.QRect
+        """
+        at_cursor = self.cursorRect()
+        start = self.textCursor()
+        start.setPosition(max(start.position() - len(prefix),
+                              start.block().position()))
+        rect = self.cursorRect(start)
+        if rect.top() != at_cursor.top():
+            # The word wrapped, so its start is on the row above.
+            rect = at_cursor
+        popup = self.completer.popup()
+        margin = popup.style().pixelMetric(
+            QtWidgets.QStyle.PM_FocusFrameHMargin, None, popup) + 1
+        rect.translate(-(popup.frameWidth() + margin), 0)
+        rect.moveLeft(max(rect.left(), 0))
+        # cursorRect is in the viewport, which the line numbers push in
+        # from the widget's edge, and QCompleter places from the widget.
+        rect.translate(self.viewport().pos())
+        rect.setWidth(self.completion_width)
+        return rect
 
     def request_completions(self, typed):
         """A key was typed: filter the open list now, or open one once

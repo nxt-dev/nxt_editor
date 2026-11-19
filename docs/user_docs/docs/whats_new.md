@@ -7,6 +7,11 @@ Each item links to the part of the docs that explains it in full.
 ## Unreleased
 
 **New**
+- **Three looks to choose from**, in **Options > Preferences... > Look**:
+  Modern, Classic (how the editor looked before) and Host application,
+  which looks like Maya, Blender or Unreal when the editor runs in them,
+  and a **Stylesheet** of your own to lay over it. See
+  [The editor's look](reference.md#the-editors-look).
 - **The graph has no edge.** Pan, frame and go to nodes as far out as you
   like; the canvas grows as you go.
 - **Renaming an attribute renames the tokens that use it**, and
@@ -19,13 +24,32 @@ Each item links to the part of the docs that explains it in full.
   sub-graph node runs, and the Property Editor lists that graph's world
   attributes the node does not set yet. See
   [Sub-graph nodes](reference.md#sub-graph-nodes).
-- **Options > Preferences...** lists every preference you can set, with
+- **Options > Preferences...** has every preference you can set, with
   what each does, including ones that had no menu, like drag zoom speed and
-  how the graph follows a run. See [Preferences](reference.md#preferences).
+  how the graph follows a run. Sections on the left, one page each, and a
+  search that looks through all of them. See
+  [Preferences](reference.md#preferences).
 - **AI Assistant settings** open one provider at a time: each is a section
   whose header says how it is set up, the provider asked first starts open,
   and the list scrolls so everything can be reached on a small screen. See
   [Signing in](reference.md#signing-in).
+- The editor's title shows the name of the Maya scene or `.blend` file its
+  host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
+  of the same host can be told apart in the taskbar.
+
+**Fixed**
+- The code editor's completion list opens under the line, with its names
+  starting where the word being completed starts. It was drawn to the left
+  by the width of the line numbers, and over the bottom of the line.
+- The mini map leaves out the backdrops of a layer hidden in the graph, as
+  it does that layer's nodes.
+- Two quick clicks on a Layer Manager toggle count as two: the second was
+  taken for a double click and did nothing.
+- The Environment Variables dialog shows its Name and List column titles
+  whole in an empty table, and a long file path no longer makes it wide.
+- Clicking into a node's code and away without typing no longer adds an
+  undo step, marks the layer as unsaved, or copies inherited code onto the
+  target layer.
 
 ## nxt_editor 4.13.0
 

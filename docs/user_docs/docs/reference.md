@@ -1067,13 +1067,81 @@ selection are left where they are under their parents.
 
 ## Preferences
 
-**Options > Preferences...** lists every preference you can set, by
-section (Graph, Running, Editing, Panels and Code Editor), with what each
-one does. Type in the filter to find one by its name, what it does, or its
-key in your `prefs.json`. Changes are made straight away: one that also
-has a toggle in a menu is set through that toggle, so the menu agrees.
-**Reset to Default** sets the selected one back. The AI Assistant, Layer
-Color View and Environment Variables have their own dialogs in Options.
+**Options > Preferences...** has every preference you can set. Its
+sections (Graph, Running, Editing, Panels and Code Editor) are listed on
+the left, and the one you choose is shown on the right, each preference
+with what it does. Changes are made straight away: one that also has a
+toggle in a menu is set through that toggle, so the menu agrees. A
+preference that is not at its default has a **Reset** button beside it.
+
+![Preferences](images/preferences.png)
+
+**Search all preferences**, at the top, looks through every section at
+once, by name, what a preference does, or its key in your `prefs.json`.
+It searches when you stop typing, or straight away on `Enter`. What it
+finds is shown together under each section's title, with the words found
+marked, and the list on the left keeps only those sections: choosing one
+moves to its part of the results. Clear the search to go back to the
+section you had open.
+
+![Searching all preferences](images/preferences_search.png)
+
+The AI Assistant, Layer Color View and Environment Variables have their
+own dialogs in Options.
+
+### The editor's look
+
+**Look**, under Panels, chooses how the editor is drawn:
+
+- **Modern**, the default, is the editor's own look, the same standalone
+  and in every host.
+- **Classic** is how the editor looked before the modern look: the
+  original dark stylesheet and its blue highlights, and nodes with square
+  corners and their names in the code font.
+- **Host application** looks like the host the editor runs in:
+    - In **Maya**, the editor takes Maya's colors and font, and Maya draws
+      its widgets, so it looks like a Maya window. Workflow Tools keep
+      their round buttons, in Maya's colors.
+    - In **Blender** and **Unreal**, which draw their own interface
+      without Qt, the editor draws its widgets itself in that host's
+      colors and font: Blender's default theme and its Inter font, and
+      Unreal's editor colors and Roboto.
+    - On its own, the editor is Modern, and Host application is greyed
+      out in Preferences. Chosen in a host, it is kept for the next time
+      the editor runs there.
+
+![Modern](images/look_modern.png)
+![Classic](images/look_classic.png)
+![Host application, in Maya](images/look_host.png)
+![Host application, in Blender](images/look_host_blender.png)
+![Host application, in Unreal](images/look_host_unreal.png)
+
+**Stylesheet**, beside it, names a `.qss` file of your own that is laid
+over whichever look is chosen, to restyle what you like: a studio's own
+colors, or one host's look in another. It can use the look's colors by
+name, in braces, such as `{BASE}`, `{RAISED}`, `{TEXT}` and `{ACCENT}`.
+A file that cannot be read is passed over, with a line in the log.
+
+```css
+/* studio.qss: a line under each panel's title, and larger text */
+QDockWidget::title {
+    background: {ACCENT_DIM};
+    color: {TEXT};
+    border-bottom: 2px solid #2bb3a3;
+}
+QMenuBar, QMenu, QLabel {
+    font-size: 14px;
+}
+```
+
+![Modern, with the stylesheet above](images/look_stylesheet.png)
+
+A look is put in place as the editor loads, so a change shows the next
+time the editor's host starts. A pipeline can set both for everyone with
+the environment variables `NXT_EDITOR_LOOK` (`modern`, `classic` or
+`host`) and `NXT_EDITOR_STYLESHEET` (a file), which have the last word
+over the preferences. When `NXT_EDITOR_LOOK` is set, Preferences shows
+the look it sets and can not change it.
 
 # Terms and Definitions
 

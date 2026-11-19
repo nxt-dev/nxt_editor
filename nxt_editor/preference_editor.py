@@ -1,9 +1,10 @@
-"""Options > Preferences: every preference a user can set, in one table.
+"""Options > Preferences: every preference a user can set, by section.
 
 Preferences are kept in the user's prefs.json, and many are only set from
 a menu toggle somewhere, or not at all, so the only way to find them was
-to read the source. This lists them by section with what each does, and
-sets them straight away.
+to read the source. This lists the sections on the left, and shows the
+chosen one's preferences on the right with what each does, and sets them
+straight away.
 
 A preference with a toggle in a menu is set by triggering that toggle, so
 the menu shows it and the editor does whatever the toggle does when it
@@ -12,8 +13,10 @@ time they are needed. The AI Assistant, Layer Color View and Environment
 Variables have their own dialogs in Options and are not repeated here.
 """
 # Builtin
+import html
 import logging
 import os
+import re
 from collections import namedtuple
 
 # External
@@ -111,6 +114,19 @@ PREFERENCES = (
                'Parenting nodes updates the instance paths in the layer '
                'that point at them.'),
     # Panels -------------------------------------------------------------
+    preference(PREF.LOOK, 'Panels', 'Look', CHOICE, theme.LOOK_MODERN,
+               'Modern is the editor\'s own look, the same everywhere. '
+               'Classic is how it looked before. Host application looks '
+               "like the host the editor is in: Maya's own widgets, or "
+               "Blender's or Unreal's colors and font. On its own, the "
+               'editor is Modern. '
+               'After a restart of the editor\'s host.',
+               choices=theme.LOOK_NAMES),
+    preference(PREF.LOOK_STYLESHEET, 'Panels', 'Stylesheet', TEXT, '',
+               'A .qss file of your own, laid over the look, to restyle '
+               'what you like. It can use the look\'s colors by name, such '
+               'as {BASE} and {TEXT}. After a restart of the editor\'s '
+               'host.'),
     preference(PREF.NEUTRAL_PROPERTY_TEXT, 'Panels',
                'Neutral Property Text', BOOL, False,
                'Property Editor rows in plain text with their layer\'s '
@@ -161,8 +177,11 @@ PREFERENCES = (
                action='code_editor_actions.overlay_message_action'),
 )
 
-PREF_COL, VALUE_COL, ABOUT_COL = range(3)
-KEY_ROLE = QtCore.Qt.UserRole + 1
+#: The width of a value's box, the same on every page so they line up.
+EDITOR_WIDTH = 220
+#: How long typing in the search box pauses before it searches, as in the
+#: Outliner. Enter searches at once.
+SEARCH_DELAY_MS = 300
 
 
 def current(pref):
@@ -220,15 +239,129 @@ def set_preference(main_window, pref, value):
     user_dir.user_prefs[pref.key] = value
 
 
+def sections():
+    """The sections, in the order their preferences are listed."""
+    names = []
+    for pref in PREFERENCES:
+        if pref.section not in names:
+            names.append(pref.section)
+    return names
+
+
+class PreferenceRow(QtWidgets.QFrame):
+    """One preference: its name and what it does, its value, and a button
+    that puts it back to its default when it is not there already."""
+
+    def __init__(self, pref, editor, parent=None):
+        super(PreferenceRow, self).__init__(parent)
+        self.pref = pref
+        self.editor = editor
+        self.setObjectName('PreferenceRow')
+        self.setStyleSheet(theme.fill(
+            '#PreferenceRow {border: none; '
+            'border-bottom: 1px solid {BORDER};}'))
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(4, 10, 4, 10)
+        layout.setSpacing(16)
+        words = QtWidgets.QVBoxLayout()
+        words.setSpacing(3)
+        # Rich text, so a search can mark the words it found.
+        self.name = QtWidgets.QLabel(marked(pref.label, []))
+        self.name.setTextFormat(QtCore.Qt.RichText)
+        self.name.setFont(theme.font(theme.TEXT_PX, weight=QtGui.QFont.Medium))
+        words.addWidget(self.name)
+        self.about = QtWidgets.QLabel(marked(pref.description, []))
+        self.about.setTextFormat(QtCore.Qt.RichText)
+        self.about.setWordWrap(True)
+        self.about.setFont(theme.font(theme.SMALL_PX))
+        self.about.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        words.addWidget(self.about)
+        layout.addLayout(words, 1)
+        tip = '{}\n\n{} in prefs.json'.format(pref.description, pref.key)
+        self.name.setToolTip(tip)
+        self.about.setToolTip(tip)
+        if pref.kind == BOOL:
+            layout.addWidget(editor, 0, QtCore.Qt.AlignRight |
+                             QtCore.Qt.AlignVCenter)
+        else:
+            editor.setFixedWidth(EDITOR_WIDTH)
+            layout.addWidget(editor, 0, QtCore.Qt.AlignVCenter)
+        self.reset_button = QtWidgets.QToolButton()
+        self.reset_button.setText('Reset')
+        self.reset_button.setToolTip('Back to the default, {}.'.format(
+            describe(pref, pref.default)))
+        # Keeps its room when hidden, so values do not move as it shows.
+        policy = self.reset_button.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)
+        self.reset_button.setSizePolicy(policy)
+        layout.addWidget(self.reset_button, 0, QtCore.Qt.AlignVCenter)
+        self.update_reset()
+
+    def update_reset(self):
+        self.reset_button.setVisible(current(self.pref) != self.pref.default)
+
+    def matches(self, words):
+        haystack = ' '.join((self.pref.section, self.pref.label,
+                             self.pref.description, self.pref.key)).lower()
+        return all(word in haystack for word in words)
+
+    def mark(self, words):
+        """Show the searched for words in the name and what it does."""
+        self.name.setText(marked(self.pref.label, words))
+        self.about.setText(marked(self.pref.description, words))
+
+
+def marked(text, words):
+    """text as rich text, with each of words in it highlighted."""
+    if not words:
+        return html.escape(text)
+    pattern = re.compile('|'.join(re.escape(word) for word in
+                                  sorted(words, key=len, reverse=True)),
+                         re.IGNORECASE)
+    parts, last = [], 0
+    for match in pattern.finditer(text):
+        parts.append(html.escape(text[last:match.start()]))
+        parts.append('<span style="background-color: {}; color: {};">{}'
+                     '</span>'.format(theme.ACCENT_STRONG, theme.TEXT,
+                                      html.escape(match.group(0))))
+        last = match.end()
+    parts.append(html.escape(text[last:]))
+    return ''.join(parts)
+
+
+def describe(pref, value):
+    """A value as Preferences shows it, for a tooltip."""
+    if pref.kind == BOOL:
+        return 'on' if value else 'off'
+    if pref.kind == CHOICE:
+        for choice, label in pref.choices:
+            if choice == value:
+                return label
+    if pref.kind == TEXT and not value:
+        return 'empty'
+    return str(value)
+
+
 class PreferenceEditor(QtWidgets.QDialog):
-    """Every preference a user can set, by section, set as it is changed."""
+    """Every preference a user can set, a section at a time, set as it is
+    changed.
+
+    The sections are listed on the left, and the chosen one's preferences
+    shown on the right. A search looks through every section at once, and
+    shows what it finds under each section's title with the words found
+    marked, until it is cleared and the section chosen before is back.
+    """
+    SECTION_LIST_WIDTH = 180
 
     def __init__(self, main_window=None, parent=None):
         super(PreferenceEditor, self).__init__(parent or main_window)
         self.main_window = main_window
         self.setWindowTitle('Preferences')
-        self.resize(980, 600)
+        self.resize(860, 600)
         self.editors = {}  # key: widget
+        self.rows = {}  # key: PreferenceRow
+        self.blocks = {}  # section: its title and rows
+        self.words = []  # what is searched for, empty when nothing is
         self._filling = False
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -236,33 +369,56 @@ class PreferenceEditor(QtWidgets.QDialog):
             'Changes are made straight away. Your preferences are kept in '
             '{}.'.format(user_dir.USER_PREFS_PATH))
         intro.setWordWrap(True)
+        intro.setFont(theme.font(theme.SMALL_PX))
         intro.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         intro.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
         layout.addWidget(intro)
 
         self.filter = QtWidgets.QLineEdit()
-        self.filter.setPlaceholderText('Filter preferences')
+        self.filter.setPlaceholderText('Search all preferences')
         self.filter.setClearButtonEnabled(True)
-        self.filter.textChanged.connect(self.apply_filter)
+        self.filter.setToolTip('Finds a preference in any section by its '
+                               'name or what it does. Searches once typing '
+                               'stops, or on Enter.')
+        self.search_timer = QtCore.QTimer(self)
+        self.search_timer.setSingleShot(True)
+        self.search_timer.setInterval(SEARCH_DELAY_MS)
+        self.search_timer.timeout.connect(self.search_now)
+        self.filter.textChanged.connect(self.on_search_edited)
+        self.filter.returnPressed.connect(self.search_now)
         layout.addWidget(self.filter)
 
-        self.tree = QtWidgets.QTreeWidget()
-        self.tree.setColumnCount(3)
-        self.tree.setHeaderLabels(['Preference', 'Value', 'What it does'])
-        self.tree.setRootIsDecorated(False)
-        header = self.tree.header()
-        header.setStretchLastSection(True)
-        header.setSectionResizeMode(PREF_COL,
-                                    QtWidgets.QHeaderView.ResizeToContents)
-        self.tree.setColumnWidth(VALUE_COL, 200)
-        layout.addWidget(self.tree)
+        body = QtWidgets.QHBoxLayout()
+        body.setSpacing(12)
+        self.section_list = QtWidgets.QListWidget()
+        self.section_list.setFixedWidth(self.SECTION_LIST_WIDTH)
+        self.section_list.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.section_list.setStyleSheet(theme.fill(
+            'QListWidget {background: transparent;}'
+            'QListWidget::item {padding: 7px 10px; '
+            'border-radius: {RADIUS}px;}'))
+        self.section_list.currentRowChanged.connect(self.show_section)
+        body.addWidget(self.section_list)
+
+        self.page = QtWidgets.QWidget()
+        self.page_layout = QtWidgets.QVBoxLayout(self.page)
+        self.page_layout.setContentsMargins(4, 0, 12, 8)
+        self.page_layout.setSpacing(0)
+        self.nothing_found = QtWidgets.QLabel()
+        self.nothing_found.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        self.nothing_found.setAlignment(QtCore.Qt.AlignCenter)
+        self.nothing_found.hide()
+        self.area = QtWidgets.QScrollArea()
+        self.area.setWidgetResizable(True)
+        self.area.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.area.setWidget(self.page)
+        self.area.verticalScrollBar().valueChanged.connect(
+            self.follow_scroll)
+        body.addWidget(self.area, 1)
+        layout.addLayout(body, 1)
 
         row = QtWidgets.QHBoxLayout()
-        self.reset_button = QtWidgets.QPushButton('Reset to Default')
-        self.reset_button.setToolTip('Set the selected preference back to '
-                                     'what it is before you change it.')
-        self.reset_button.clicked.connect(self.reset_selected)
-        row.addWidget(self.reset_button)
         row.addStretch(1)
         close = QtWidgets.QPushButton('Close')
         close.clicked.connect(self.accept)
@@ -270,41 +426,70 @@ class PreferenceEditor(QtWidgets.QDialog):
         layout.addLayout(row)
 
         self.fill()
+        self.section_list.setCurrentRow(0)
 
-    # Rows ----------------------------------------------------------------
+    # Pages ---------------------------------------------------------------
 
     def fill(self):
         self._filling = True
-        self.tree.clear()
-        self.editors = {}
-        sections = {}
-        bold = QtGui.QFont(self.font())
-        bold.setBold(True)
-        for pref in PREFERENCES:
-            section = sections.get(pref.section)
-            if section is None:
-                section = QtWidgets.QTreeWidgetItem(self.tree,
-                                                    [pref.section])
-                section.setFont(PREF_COL, bold)
-                section.setFlags(QtCore.Qt.ItemIsEnabled)
-                section.setFirstColumnSpanned(True)
-                sections[pref.section] = section
-            item = QtWidgets.QTreeWidgetItem(section, [pref.label, '',
-                                                       pref.description])
-            item.setData(PREF_COL, KEY_ROLE, pref.key)
-            tip = '{}\n\n{} in prefs.json'.format(pref.description, pref.key)
-            for col in (PREF_COL, ABOUT_COL):
-                item.setToolTip(col, tip)
-            item.setForeground(ABOUT_COL, theme.color(theme.TEXT_DIM))
-            editor = self.make_editor(pref)
-            self.editors[pref.key] = editor
-            # Tall enough for its box, which a row is not by itself.
-            hint = editor.sizeHint()
-            item.setSizeHint(VALUE_COL, QtCore.QSize(hint.width(),
-                                                     hint.height() + 4))
-            self.tree.setItemWidget(item, VALUE_COL, editor)
-        self.tree.expandAll()
+        self.section_list.clear()
+        while self.page_layout.count():
+            item = self.page_layout.takeAt(0)
+            if item.widget() and item.widget() is not self.nothing_found:
+                item.widget().deleteLater()
+        self.editors, self.rows, self.blocks = {}, {}, {}
+        self.page_layout.addWidget(self.nothing_found)
+        for name in sections():
+            self.section_list.addItem(name)
+            block = QtWidgets.QWidget()
+            block_layout = QtWidgets.QVBoxLayout(block)
+            block_layout.setContentsMargins(0, 0, 0, 18)
+            block_layout.setSpacing(0)
+            title = QtWidgets.QLabel(name)
+            title.setFont(theme.font(18, weight=QtGui.QFont.Medium))
+            title.setContentsMargins(4, 0, 0, 8)
+            block_layout.addWidget(title)
+            for pref in PREFERENCES:
+                if pref.section != name:
+                    continue
+                editor = self.make_editor(pref)
+                self.editors[pref.key] = editor
+                pref_row = PreferenceRow(pref, editor)
+                pref_row.reset_button.clicked.connect(
+                    lambda _=False, p=pref: self.reset(p))
+                self.rows[pref.key] = pref_row
+                block_layout.addWidget(pref_row)
+            self.page_layout.addWidget(block)
+            self.blocks[name] = block
+        self.page_layout.addStretch(1)
         self._filling = False
+
+    def show_section(self, row):
+        """The chosen section alone, or, while searching, what was found,
+        moved to that section's part of it."""
+        if row < 0:
+            return
+        name = sections()[row]
+        if self.words:
+            # Chosen, it stays chosen, even where the last results can
+            # not scroll to the top.
+            bar = self.area.verticalScrollBar()
+            bar.blockSignals(True)
+            bar.setValue(self.blocks[name].y())
+            bar.blockSignals(False)
+            return
+        for section, block in self.blocks.items():
+            block.setVisible(section == name)
+        self.area.verticalScrollBar().setValue(0)
+
+    def current_section(self):
+        item = self.section_list.currentItem()
+        return item.text() if item else None
+
+    def select_section(self, name):
+        names = sections()
+        if name in names:
+            self.section_list.setCurrentRow(names.index(name))
 
     def make_editor(self, pref):
         value = current(pref)
@@ -338,7 +523,29 @@ class PreferenceEditor(QtWidgets.QDialog):
             editor.editingFinished.connect(
                 lambda p=pref, e=editor: self.changed(p, e.text()))
         editor.setToolTip(pref.description)
+        if pref.key == PREF.LOOK:
+            self.limit_looks(editor)
         return editor
+
+    def limit_looks(self, editor):
+        """Host application only means something in a host, so outside
+        one it is greyed out, and a pipeline's NXT_EDITOR_LOOK has the
+        last word over the preference."""
+        index = editor.findData(theme.LOOK_HOST)
+        if index >= 0 and not theme.running_host():
+            item = editor.model().item(index)
+            item.setEnabled(False)
+            item.setToolTip('Only in Maya, Blender or Unreal. Chosen there, '
+                            'the editor is Modern when it runs on its own.')
+            editor.setItemText(index, 'Host application (in a host)')
+        asked = os.environ.get(theme.LOOK_ENV_VAR, '').strip().lower()
+        if asked in [look for look, _label in theme.LOOK_NAMES]:
+            self._filling = True
+            editor.setCurrentIndex(editor.findData(asked))
+            self._filling = False
+            editor.setEnabled(False)
+            editor.setToolTip('Set by {} for everyone here.'.format(
+                theme.LOOK_ENV_VAR))
 
     def changed(self, pref, value):
         if self._filling:
@@ -346,6 +553,9 @@ class PreferenceEditor(QtWidgets.QDialog):
         if pref.kind == TEXT and not value.strip():
             value = pref.default
         set_preference(self.main_window, pref, value)
+        row = self.rows.get(pref.key)
+        if row is not None:
+            row.update_reset()
 
     def show_value(self, pref):
         """Show a preference's value as it is now."""
@@ -363,37 +573,87 @@ class PreferenceEditor(QtWidgets.QDialog):
                 editor.setText(value)
         finally:
             self._filling = False
+        row = self.rows.get(pref.key)
+        if row is not None:
+            row.update_reset()
 
-    def selected_pref(self):
-        item = self.tree.currentItem()
-        key = item.data(PREF_COL, KEY_ROLE) if item else None
-        for pref in PREFERENCES:
-            if pref.key == key:
-                return pref
-        return None
-
-    def reset_selected(self):
-        pref = self.selected_pref()
-        if pref is None:
-            return
+    def reset(self, pref):
+        """Put a preference back to its default."""
         set_preference(self.main_window, pref, pref.default)
         self.show_value(pref)
 
-    # Filter --------------------------------------------------------------
+    # Search --------------------------------------------------------------
+
+    def on_search_edited(self, text):
+        if not text.strip():
+            # Cleared: the section chosen before comes back straight away.
+            self.search_timer.stop()
+            self.search_now()
+        else:
+            self.search_timer.start()
+
+    def search_now(self):
+        self.search_timer.stop()
+        self.apply_filter(self.filter.text())
 
     def apply_filter(self, text):
+        """Search every section for the words in text.
+
+        What is found is shown together, under each section's title, with
+        the words marked, and the sections it is in are left in the list
+        to move to. With nothing to search for, the chosen section is shown
+        alone again.
+        """
         words = text.lower().split()
-        for s in range(self.tree.topLevelItemCount()):
-            section = self.tree.topLevelItem(s)
+        if words and not self.words:
+            # Where to go back to when the search is cleared.
+            self.section_before = self.current_section()
+        self.words = words
+        found = []
+        for index, name in enumerate(sections()):
             shown = 0
-            for r in range(section.childCount()):
-                item = section.child(r)
-                haystack = ' '.join((section.text(PREF_COL),
-                                     item.text(PREF_COL),
-                                     item.text(ABOUT_COL),
-                                     str(item.data(PREF_COL, KEY_ROLE))
-                                     )).lower()
-                hide = not all(word in haystack for word in words)
-                item.setHidden(hide)
+            for row in self.rows.values():
+                if row.pref.section != name:
+                    continue
+                hide = not row.matches(words)
+                row.setHidden(hide)
+                row.mark(words)
                 shown += not hide
-            section.setHidden(not shown)
+            self.section_list.item(index).setHidden(not shown)
+            self.blocks[name].setVisible(bool(shown) and bool(words))
+            if shown:
+                found.append(name)
+        self.nothing_found.setVisible(bool(words) and not found)
+        self.nothing_found.setText('No preference has "{}" in it.'.format(
+            text.strip()))
+        if not words:
+            before = getattr(self, 'section_before', None)
+            if before and before != self.current_section():
+                self.select_section(before)
+            else:
+                self.show_section(self.section_list.currentRow())
+            return
+        self.area.verticalScrollBar().setValue(0)
+        if found:
+            self.mark_section(found[0])
+
+    def mark_section(self, name):
+        """Highlight a section in the list without moving to it."""
+        self.section_list.blockSignals(True)
+        self.select_section(name)
+        self.section_list.blockSignals(False)
+
+    def follow_scroll(self, value):
+        """While searching, the list highlights the section whose part of
+        what was found is at the top."""
+        if not self.words:
+            return
+        top = None
+        for name in sections():
+            block = self.blocks[name]
+            if block.isHidden():
+                continue
+            if top is None or block.y() <= value + 4:
+                top = name
+        if top and top != self.current_section():
+            self.mark_section(top)

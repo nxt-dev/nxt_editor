@@ -106,6 +106,11 @@ The plugin also adds an `nxt_ui` command, for shelf buttons and scripts.
 There is one editor at a time: when an editor is already open, `nxt_ui`
 uses it rather than opening a second one.
 
+The editor's title shows the name of the scene Maya has open, for example
+`nxt maya [rig_v012.ma]`, and follows it when you open, save or start
+another scene. With several Maya sessions running, that tells you which
+Maya each editor belongs to. Blender does the same with its `.blend` file.
+
 | Flag | What it does |
 | :--- | :----------- |
 | *(none)* | Opens the editor, or, when one is already open, brings it to the front, restoring it if it was minimised. |
@@ -220,6 +225,9 @@ be installed or put on a path.
 
 The **NXT** menu appears in Blender's top bar, next to **Help**. Enabling the
 add-on does not open anything on its own.
+
+The editor's title shows the name of the `.blend` file that is open, for
+example `nxt blender [shot_010.blend]`, as it does for a Maya scene.
 
 | Menu item | What it does |
 | :-------- | :----------- |
