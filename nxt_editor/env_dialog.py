@@ -94,6 +94,10 @@ def portable_path(path, env_file):
     return path
 
 
+# Room around a column title, on top of the width of its text.
+HEADER_PADDING = 36
+
+
 class EnvFilesDialog(QtWidgets.QDialog):
     """The env files nxt reads, one at a time, as a table of variables."""
     applied = QtCore.Signal()
@@ -124,6 +128,11 @@ class EnvFilesDialog(QtWidgets.QDialog):
         self.file_box = QtWidgets.QComboBox()
         self.file_box.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
                                     QtWidgets.QSizePolicy.Fixed)
+        # Sized by its longest path, one file deep in a project made the
+        # whole dialog as wide as that path.
+        self.file_box.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.file_box.setMinimumContentsLength(30)
         self.file_box.currentIndexChanged.connect(self.on_file_chosen)
         file_row.addWidget(self.file_box)
         self.add_file_button = QtWidgets.QPushButton('Add Project File...')
@@ -151,6 +160,12 @@ class EnvFilesDialog(QtWidgets.QDialog):
         header.setSectionResizeMode(LIST_COL,
                                     QtWidgets.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(VALUE_COL, QtWidgets.QHeaderView.Stretch)
+        # With no rows these two are as wide as their titles alone, and in
+        # a host whose style pads a header more than it says, the titles
+        # were cut short.
+        header.ensurePolished()
+        header.setMinimumSectionSize(
+            header.fontMetrics().horizontalAdvance('Name') + HEADER_PADDING)
         header.setSectionResizeMode(NOW_COL, QtWidgets.QHeaderView.Stretch)
         self.table.verticalHeader().hide()
         self.table.setSelectionBehavior(QtWidgets.QTableWidget.SelectRows)
