@@ -46,6 +46,19 @@ def wants_menu():
     return value.strip().lower() in _FALSE_STRINGS
 
 
+def scene_label(scene_path):
+    """The name the editor's title shows for the file a host has open, the
+    same in every host: its file name, or "untitled" before it is saved.
+
+    :param scene_path: path of the host's open file, empty for none
+    :type scene_path: str | None
+    :return: the label to give MainWindow.set_host_label
+    :rtype: str
+    """
+    name = (scene_path or '').replace('\\', '/').rpartition('/')[2]
+    return name or 'untitled'
+
+
 class NxtIntegration(object):
 
     def __init__(self, name):

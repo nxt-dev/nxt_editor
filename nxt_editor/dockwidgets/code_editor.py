@@ -540,16 +540,13 @@ class CodeEditor(DockWidgetBase):
         if not self.editing_active:
             return
 
-        # if nothing was changed do nothing
+        # if nothing was changed do nothing. Editing always starts from the
+        # raw code, so that is the only text that means nothing was typed.
         comp_layer = self.stage_model.comp_layer
         raw = self.stage_model.get_node_code_string(self.node_path,
                                                        DATA_STATE.RAW,
                                                        comp_layer)
-        resolved = self.stage_model.get_node_code_string(self.node_path,
-                                                            DATA_STATE.RESOLVED,
-                                                            comp_layer)
-        current_text = str(self.editor.toPlainText().encode())
-        if current_text in [raw, resolved]:
+        if self.editor.toPlainText() == raw:
             self.exit_editing()
             return
 

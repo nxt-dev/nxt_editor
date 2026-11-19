@@ -26,6 +26,9 @@ Each item links to the part of the docs that explains it in full.
   whose header says how it is set up, the provider asked first starts open,
   and the list scrolls so everything can be reached on a small screen. See
   [Signing in](reference.md#signing-in).
+- The editor's title shows the name of the Maya scene or `.blend` file its
+  host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
+  of the same host can be told apart in the taskbar.
 
 **Fixed**
 - The code editor's completion list opens under the line, with its names
@@ -37,6 +40,9 @@ Each item links to the part of the docs that explains it in full.
   taken for a double click and did nothing.
 - The Environment Variables dialog shows its Name and List column titles
   whole in an empty table, and a long file path no longer makes it wide.
+- Clicking into a node's code and away without typing no longer adds an
+  undo step, marks the layer as unsaved, or copies inherited code onto the
+  target layer.
 
 ## nxt_editor 4.13.0
 

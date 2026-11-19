@@ -35,6 +35,12 @@ Qt.py and PySide6 from an `nxt_dev_deps` folder beside them. Without
 * **Run Last Graph** — the same graph again.
 * **Reload Code** — forget the cached `core` modules.
 
+## Which Blender an editor belongs to
+
+The editor's title shows the name of the open `.blend` file, and follows it
+when a file is loaded or saved, so the editors of two Blender sessions can
+be told apart.
+
 ## No menu
 
 Set `NXT_NO_MENU=1` before Blender starts to leave the **NXT** menu out, as
