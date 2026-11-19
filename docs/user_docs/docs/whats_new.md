@@ -15,6 +15,10 @@ Each item links to the part of the docs that explains it in full.
   Paths on Parent** to turn them off. See
   [Renaming an attribute](reference.md#renaming-an-attribute) and
   [Parenting an instanced node](reference.md#parenting-an-instanced-node).
+- **Sub-graphs**: **Open Sub-graph** (`Ctrl+Shift+G`) opens the graph a
+  sub-graph node runs, and the Property Editor lists that graph's world
+  attributes the node does not set yet. See
+  [Sub-graph nodes](reference.md#sub-graph-nodes).
 
 ## nxt_editor 4.13.0
 

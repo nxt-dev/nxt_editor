@@ -22,6 +22,8 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Open Last Closed    |         Open previously closed file(s)          | Open Last Closed    | Ctrl+Shift+T |
 | Close Tab           |                Close active tab                 | Close Tab           |    Ctrl+W    |
 | Find and Open Graph |                                                 | Find and Open Graph |    Ctrl+P    |
+| Update Tokens on Attr Rename | When on, renaming an attribute also renames the tokens in its layer that use it, such as ${attr} and ${/node.attr}, so they keep working. Attributes of the same name on other nodes are left alone. | Update Tokens on Attr Rename |  |
+| Update Instance Paths on Parent | When on, parenting nodes also updates the instance paths in the layer that point at them, or at anything under them, so their instances follow. Relative paths stay relative. | Update Instance Paths on Parent |  |
 
 !!! note "New Graph from the tabs"
     The **+** after the open graphs' tabs, or a double click on the empty
@@ -127,6 +129,7 @@ is not in the Hotkey Editor; see [Moving around](reference.md#moving-around).
 | Remove Instance                | Removes instance path from node overloading weaker layer instance opinions. | Removes Instance               | Ctrl+Shift+I |
 | Localize Node                  |                                                                             | Localize Node                  |              |
 | Revert Node                    |                                                                             | Revert Node                    |              |
+| Open Sub-graph | Open the graph the selected sub-graph node runs, named in its _graph_path, in a new tab. | Open Sub-graph | Ctrl+Shift+G |
 | Push Positions to Target Layer | Write where the selected nodes are now onto the target layer, so it keeps this layout without the layers above it. | Push Positions to Target Layer | |
 | Enable/Disable Node            |                                                                             | Enable/Disable Node            |      D       |
 | Parent                         |                               Parent node(s).                               | Parent                         |      P       |

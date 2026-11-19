@@ -11,7 +11,7 @@ from Qt import QtCore, QtGui, QtWidgets
 from . import DIRECTIONS
 from nxt_editor.constants import NXT_WEBSITE
 from nxt_editor import (align, bookmarks, connection_graphics_item,
-                        layout_icons, user_dir, wires)
+                        layout_icons, sub_graphs, user_dir, wires)
 from nxt_editor.dockwidgets import code_completion
 from nxt import nxt_layer, DATA_STATE, nxt_path
 from nxt_editor import colors, exec_icons, finder, file_search, file_browser
@@ -1131,6 +1131,23 @@ class NodeActions(NxtActionContainer):
         self.rename_node_action.setShortcut('F2')
         self.rename_node_action.setWhatsThis('Rename the selected node.')
         self.rename_node_action.triggered.connect(rename_node)
+
+        # Open the graph a sub-graph node runs, see nxt_editor.sub_graphs
+        def open_sub_graph():
+            model = self.main_window.model
+            selected = model.get_selected_nodes() if model else []
+            path = (sub_graphs.graph_path(model, selected[0])
+                    if len(selected) == 1 else None)
+            if path:
+                self.main_window.load_file(path)
+        self.open_sub_graph_action = NxtAction(text='Open Sub-graph',
+                                               parent=self)
+        self.open_sub_graph_action.setShortcut('Ctrl+Shift+G')
+        self.open_sub_graph_action.setAutoRepeat(False)
+        self.open_sub_graph_action.setWhatsThis(
+            'Open the graph the selected sub-graph node runs, named in its '
+            '_graph_path, in a new tab.')
+        self.open_sub_graph_action.triggered.connect(open_sub_graph)
         # Disable node
 
         def toggle_disable():
@@ -1239,6 +1256,7 @@ class NodeActions(NxtActionContainer):
                                      self.remove_instance_action,
                                      self.localize_node_action,
                                      self.revert_node_action,
+                                     self.open_sub_graph_action,
                                      self.push_positions_action,
                                      self.disable_node_action,
                                      self.parent_nodes_action,
