@@ -207,7 +207,8 @@ class Looks(EnvDialogCase):
         header = dialog.table.horizontalHeader()
         for column in (env_dialog.NAME_COL, env_dialog.LIST_COL):
             title = dialog.table.horizontalHeaderItem(column).text()
-            room = header.sectionSize(column) -                 header.fontMetrics().horizontalAdvance(title)
+            room = (header.sectionSize(column)
+                    - header.fontMetrics().horizontalAdvance(title))
             self.assertGreaterEqual(room, 30, title)
 
     def test_a_long_path_does_not_widen_the_dialog(self):
