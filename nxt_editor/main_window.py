@@ -1316,6 +1316,13 @@ QCheckBox::indicator {
         if getattr(editor, 'stage_model', None):
             editor.set_represented_node()
 
+    def open_preferences(self):
+        """Options > Preferences."""
+        from nxt_editor.preference_editor import PreferenceEditor
+        dialog = PreferenceEditor(main_window=self)
+        dialog.exec_()
+        return dialog
+
     def open_env_files(self):
         """Options > Environment Variables."""
         from nxt_editor import env_dialog
@@ -1876,6 +1883,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addAction(self.exec_actions.startup_rpc_action)
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
         self.options_menu = self.addMenu("Options")
+        self.options_menu.addAction(self.app_actions.preferences_action)
+        self.options_menu.addSeparator()
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
         self.options_menu.addAction(self.app_actions.check_disk_action)
         self.options_menu.addAction(self.app_actions.refactor_rename_action)

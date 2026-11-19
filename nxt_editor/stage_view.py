@@ -23,7 +23,7 @@ from nxt_editor import align, auto_layout, backdrops, bookmarks, theme
 from nxt_editor.connection_graphics_item import (AttrConnectionGraphic,
                                                   WirePointGraphic)
 from nxt_editor import connection_graphics_item as lines
-from nxt_editor import user_dir, wires
+from nxt_editor import sub_graphs, user_dir, wires
 from nxt_editor.dialogs import NxtWarningDialog
 from nxt_editor.layer_color_dialog import LayerColorDialog
 from nxt_editor.mini_map import MiniMap, node_scene_rect
@@ -2613,6 +2613,8 @@ class StageView(QtWidgets.QGraphicsView):
             menu.addAction(self.alignment_actions.layout_action)
         if selected_nodes_count == 1:
             menu.addAction(self.authoring_actions.rename_node_action)
+            if sub_graphs.graph_path(self.model, selected_nodes[0]):
+                menu.addAction(self.authoring_actions.open_sub_graph_action)
         if selected_nodes_count > 0:
             menu.addAction(self.authoring_actions.delete_node_action)
         menu.addSeparator()

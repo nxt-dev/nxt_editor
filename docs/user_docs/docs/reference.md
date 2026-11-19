@@ -1058,6 +1058,16 @@ wheel moves every selected node by the same amount, so they keep their
 places relative to each other. Either is one undo. Child nodes in the
 selection are left where they are under their parents.
 
+## Preferences
+
+**Options > Preferences...** lists every preference you can set, by
+section (Graph, Running, Editing, Panels and Code Editor), with what each
+one does. Type in the filter to find one by its name, what it does, or its
+key in your `prefs.json`. Changes are made straight away: one that also
+has a toggle in a menu is set through that toggle, so the menu agrees.
+**Reset to Default** sets the selected one back. The AI Assistant, Layer
+Color View and Environment Variables have their own dialogs in Options.
+
 # Terms and Definitions
 
 ## Stage
@@ -1369,6 +1379,21 @@ the instance paths in the layer that point at it are changed to its new
 path, so its instances keep instancing it. A relative instance path stays
 relative. Undo puts them back. To leave instance paths as they are, turn
 off **Options > Update Instance Paths on Parent**.
+
+### Sub-graph nodes
+
+A sub-graph node runs another graph: it instances `/_sub_graph` from the
+builtin `sub_graphs.nxt` graph (**File > Reference Builtin Graph**) and
+names the graph in its `_graph_path` attribute. Each of its own
+attributes is given to that graph as an attribute of its world node.
+
+- **Open Sub-graph** (`Ctrl+Shift+G`), on the node's right click menu,
+  opens the graph it runs in a new tab. A path that is not absolute is
+  looked for beside the graph you have open.
+- The Property Editor lists the attributes on the sub-graph's world node
+  that the node does not set, as **4.Graph** rows, in italics with the
+  graph as their source. Set one's value to give the node its own, and
+  click its source to open the graph.
 
 # NXT file spec
 
