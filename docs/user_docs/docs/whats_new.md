@@ -19,9 +19,11 @@ Each item links to the part of the docs that explains it in full.
   sub-graph node runs, and the Property Editor lists that graph's world
   attributes the node does not set yet. See
   [Sub-graph nodes](reference.md#sub-graph-nodes).
-- **Options > Preferences...** lists every preference you can set, with
+- **Options > Preferences...** has every preference you can set, with
   what each does, including ones that had no menu, like drag zoom speed and
-  how the graph follows a run. See [Preferences](reference.md#preferences).
+  how the graph follows a run. Sections on the left, one page each, and a
+  search that looks through all of them. See
+  [Preferences](reference.md#preferences).
 - **AI Assistant settings** open one provider at a time: each is a section
   whose header says how it is set up, the provider asked first starts open,
   and the list scrolls so everything can be reached on a small screen. See

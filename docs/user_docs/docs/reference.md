@@ -1067,13 +1067,27 @@ selection are left where they are under their parents.
 
 ## Preferences
 
-**Options > Preferences...** lists every preference you can set, by
-section (Graph, Running, Editing, Panels and Code Editor), with what each
-one does. Type in the filter to find one by its name, what it does, or its
-key in your `prefs.json`. Changes are made straight away: one that also
-has a toggle in a menu is set through that toggle, so the menu agrees.
-**Reset to Default** sets the selected one back. The AI Assistant, Layer
-Color View and Environment Variables have their own dialogs in Options.
+**Options > Preferences...** has every preference you can set. Its
+sections (Graph, Running, Editing, Panels and Code Editor) are listed on
+the left, and the one you choose is shown on the right, each preference
+with what it does. Changes are made straight away: one that also has a
+toggle in a menu is set through that toggle, so the menu agrees. A
+preference that is not at its default has a **Reset** button beside it.
+
+![Preferences](images/preferences.png)
+
+**Search all preferences**, at the top, looks through every section at
+once, by name, what a preference does, or its key in your `prefs.json`.
+It searches when you stop typing, or straight away on `Enter`. What it
+finds is shown together under each section's title, with the words found
+marked, and the list on the left keeps only those sections: choosing one
+moves to its part of the results. Clear the search to go back to the
+section you had open.
+
+![Searching all preferences](images/preferences_search.png)
+
+The AI Assistant, Layer Color View and Environment Variables have their
+own dialogs in Options.
 
 # Terms and Definitions
 

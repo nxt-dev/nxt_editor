@@ -101,22 +101,121 @@ class Editing(unittest.TestCase):
 
     def test_reset_to_default(self):
         key = user_dir.USER_PREF.ZOOM_MULT
+        row = self.dialog.rows[key]
+        self.assertTrue(row.reset_button.isHidden())
         self.dialog.editors[key].setValue(3)
-        item = self.find_item(key)
-        self.dialog.tree.setCurrentItem(item)
-        self.dialog.reset_selected()
+        # Reset shows once the value is not the default.
+        self.assertFalse(row.reset_button.isHidden())
+        row.reset_button.click()
         self.assertEqual(1.0, self.prefs[key])
         self.assertEqual(1.0, self.dialog.editors[key].value())
+        self.assertTrue(row.reset_button.isHidden())
 
-    def test_filtering(self):
+    def shown_blocks(self):
+        return [name for name, block in self.dialog.blocks.items()
+                if not block.isHidden()]
+
+    def shown_rows(self):
+        return [row.pref.label for row in self.dialog.rows.values()
+                if not row.isHidden()]
+
+    def listed(self):
+        items = self.dialog.section_list
+        return [items.item(i).text() for i in range(items.count())
+                if not items.item(i).isHidden()]
+
+    def test_a_section_at_a_time(self):
+        self.assertEqual(preference_editor.sections(), self.listed())
+        self.assertEqual('Graph', self.dialog.current_section())
+        self.assertEqual(['Graph'], self.shown_blocks())
+        self.dialog.select_section('Code Editor')
+        self.assertEqual(['Code Editor'], self.shown_blocks())
+        editor = self.dialog.editors[user_dir.USER_PREF.CE_COMPLETE_JEDI]
+        self.assertTrue(
+            self.dialog.blocks['Code Editor'].isAncestorOf(editor))
+
+    def test_search_looks_through_every_section(self):
+        # Graph is chosen, and what is found is in other sections too.
+        self.dialog.apply_filter('node')
+        found = self.shown_blocks()
+        self.assertGreater(len(found), 1)
+        self.assertEqual(found, self.listed())
+        self.assertIn('Code Editor', found)
+        # The words found are marked.
+        row = self.dialog.rows[user_dir.USER_PREF.ANIMATION]
+        self.assertIn('<span', row.name.text() + row.about.text())
+
+    def test_the_list_follows_the_results(self):
+        self.dialog.select_section('Code Editor')
+        self.dialog.resize(860, 400)
+        self.dialog.show()
+        self.dialog.apply_filter('node')
+        app.processEvents()
+        # The first section with results, at the top.
+        self.assertEqual('Graph', self.dialog.current_section())
+        self.dialog.follow_scroll(self.dialog.blocks['Running'].y())
+        self.assertEqual('Running', self.dialog.current_section())
+        # Choosing one moves to its results, still searching.
+        self.dialog.select_section('Editing')
+        bar = self.dialog.area.verticalScrollBar()
+        # As far as it scrolls, near the end.
+        self.assertEqual(min(self.dialog.blocks['Editing'].y(),
+                             bar.maximum()), bar.value())
+        self.assertEqual('Editing', self.dialog.current_section())
+        self.assertTrue(self.dialog.words)
+        # Cleared, the section chosen before the search is back.
+        self.dialog.apply_filter('')
+        self.assertEqual('Code Editor', self.dialog.current_section())
+        self.assertEqual(['Code Editor'], self.shown_blocks())
+
+    def test_search_finds_one(self):
         self.dialog.apply_filter('zoom speed')
-        tree = self.dialog.tree
-        sections = [tree.topLevelItem(i)
-                    for i in range(tree.topLevelItemCount())]
-        shown = [section.child(r).text(0) for section in sections
-                 for r in range(section.childCount())
-                 if not section.child(r).isHidden()]
-        self.assertEqual(['Drag Zoom Speed'], shown)
+        self.assertEqual(['Drag Zoom Speed'], self.shown_rows())
+        section = pref(user_dir.USER_PREF.ZOOM_MULT).section
+        self.assertEqual([section], self.listed())
+        self.assertEqual([section], self.shown_blocks())
+        self.assertEqual(section, self.dialog.current_section())
+
+    def test_clearing_the_search_brings_the_section_back(self):
+        self.dialog.select_section('Running')
+        self.dialog.apply_filter('grid')
+        self.dialog.apply_filter('')
+        self.assertEqual(['Running'], self.shown_blocks())
+        self.assertEqual(preference_editor.sections(), self.listed())
+        self.assertFalse(any(row.isHidden()
+                             for row in self.dialog.rows.values()))
+        row = self.dialog.rows[user_dir.USER_PREF.SHOW_GRID]
+        self.assertNotIn('<span', row.name.text())
+
+    def test_nothing_found_says_so(self):
+        self.dialog.apply_filter('no preference is called this')
+        self.assertEqual([], self.shown_blocks())
+        self.assertFalse(self.dialog.nothing_found.isHidden())
+        self.dialog.apply_filter('')
+        self.assertTrue(self.dialog.nothing_found.isHidden())
+
+    def test_searches_once_typing_stops(self):
+        self.dialog.filter.setText('zoom')
+        # Not on every key.
+        self.assertTrue(self.dialog.search_timer.isActive())
+        self.assertEqual(['Graph'], self.shown_blocks())
+        self.assertEqual(preference_editor.SEARCH_DELAY_MS,
+                         self.dialog.search_timer.interval())
+        self.dialog.search_timer.timeout.emit()
+        self.assertIn('Drag Zoom Speed', self.shown_rows())
+
+    def test_enter_searches_at_once(self):
+        self.dialog.filter.setText('zoom speed')
+        self.dialog.filter.returnPressed.emit()
+        self.assertFalse(self.dialog.search_timer.isActive())
+        self.assertEqual(['Drag Zoom Speed'], self.shown_rows())
+
+    def test_clearing_does_not_wait(self):
+        self.dialog.filter.setText('zoom')
+        self.dialog.search_now()
+        self.dialog.filter.clear()
+        self.assertFalse(self.dialog.search_timer.isActive())
+        self.assertEqual(['Graph'], self.shown_blocks())
 
     def test_python_analysis_without_jedi_is_only_kept(self):
         from nxt_editor.dockwidgets import code_completion
@@ -138,15 +237,6 @@ class Editing(unittest.TestCase):
             self.win.app_actions.preferences_action.trigger()
         editor.assert_called_once_with(main_window=self.win)
         editor.return_value.exec_.assert_called_once()
-
-    def find_item(self, key):
-        tree = self.dialog.tree
-        for s in range(tree.topLevelItemCount()):
-            section = tree.topLevelItem(s)
-            for r in range(section.childCount()):
-                item = section.child(r)
-                if item.data(0, preference_editor.KEY_ROLE) == key:
-                    return item
 
 
 if __name__ == '__main__':
