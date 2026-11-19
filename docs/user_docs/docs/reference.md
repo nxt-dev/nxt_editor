@@ -1088,6 +1088,10 @@ Color View and Environment Variables have their own dialogs in Options.
   runs in, and leaves its widgets to be drawn the way the host draws its
   own, so in Maya the editor looks like a Maya window.
 
+![Modern](images/look_modern.png)
+![Classic](images/look_classic.png)
+![Host application, in Maya](images/look_host.png)
+
 **Stylesheet**, beside it, names a `.qss` file of your own that is laid
 over whichever look is chosen, to restyle what you like: a studio's own
 colors, or one host's look in another. It can use the look's colors by
