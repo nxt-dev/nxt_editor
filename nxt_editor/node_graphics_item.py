@@ -63,8 +63,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
 
         # draw settings
         self.title_font = theme.font(theme.NODE_TITLE_PX,
-                                     QtGui.QFont.Medium)
-        self.attr_font = theme.font(theme.NODE_ATTR_PX)
+                                     QtGui.QFont.Medium,
+                                     mono=theme.NODE_MONO)
+        self.attr_font = theme.font(theme.NODE_ATTR_PX, mono=theme.NODE_MONO)
         self.title_rect_height = 40
         self.attr_rect_height = 26
         self.attr_rect_opacity = 0.9
@@ -687,7 +688,8 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
                     self.dim_factor)
             draw_details['title_color'] = title_color
             # font
-            font = theme.font(theme.NODE_ATTR_PX, italic=attr_is_instance)
+            font = theme.font(theme.NODE_ATTR_PX, italic=attr_is_instance,
+                              mono=theme.NODE_MONO)
             draw_details['title_font'] = font
 
             self._attribute_draw_details[attr_name] = draw_details

@@ -14,6 +14,7 @@ scaling, so nothing here leans on them:
 """
 # Builtin
 import math
+import os
 import re
 
 # External
@@ -96,7 +97,7 @@ def font(px=TEXT_PX, weight=None, italic=False, mono=False):
     :rtype: QtGui.QFont
     """
     register_fonts()
-    result = QtGui.QFont(FONTS.MONOSPACE if mono else FONTS.DEFAULT_FAMILY)
+    result = QtGui.QFont(FONTS.MONOSPACE if mono else font_family())
     result.setPixelSize(int(px))
     if weight is not None:
         result.setWeight(weight)
@@ -367,6 +368,10 @@ def legacy_token(hex_color, before=''):
 
 def restyle(sheet):
     """A stylesheet written for the old colors, in the theme's."""
+    if LOOK == LOOK_CLASSIC:
+        # The classic look is those colors.
+        return sheet
+
     def swap(match):
         token = legacy_token(match.group(0), sheet[:match.start()])
         return globals()[token] if token else match.group(0)
@@ -389,6 +394,120 @@ def fill(sheet):
     """
     values = tokens()
     register_fonts()
-    values['FONT_FAMILY'] = FONTS.DEFAULT_FAMILY
+    values['FONT_FAMILY'] = font_family()
     return re.sub(r'\{([A-Z_]+)\}',
                   lambda m: str(values.get(m.group(1), m.group(0))), sheet)
+
+
+# Looks ----------------------------------------------------------------------
+# Everything above is the modern look. A look is a set of values for the
+# names above, put in place once as this module loads, because other
+# modules read these names as they load. So a change of look is seen the
+# next time the editor's host starts.
+LOOK_MODERN = 'modern'    # nxt's own look, the same in every host
+LOOK_CLASSIC = 'classic'  # nxt as it looked before the modern look
+LOOK_HOST = 'host'        # the colors, font and widgets of the host
+LOOK_NAMES = ((LOOK_MODERN, 'Modern'), (LOOK_CLASSIC, 'Classic'),
+              (LOOK_HOST, 'Host application'))
+LOOK_PREF = 'look'
+LOOK_ENV_VAR = 'NXT_EDITOR_LOOK'
+LOOK = LOOK_MODERN
+# Whether node titles and attributes are in the code font, 0 or 1.
+NODE_MONO = 0
+
+# The colors of the original dark stylesheet, which the classic look uses
+# as it was written, and the sizes nodes were drawn at.
+CLASSIC = {
+    'GRAPH': '#232323', 'BASE': '#232323', 'RAISED': '#3e3e3e',
+    'HOVER': '#4c4c4c', 'PRESSED': '#5a5a5a',
+    'BORDER': '#3e3e3e', 'BORDER_STRONG': '#4c4c4c',
+    'TEXT': '#f0f0f0', 'TEXT_DIM': '#a9a9a9', 'TEXT_FAINT': '#787878',
+    'ACCENT': '#148cd2', 'ACCENT_STRONG': '#1464a0', 'ACCENT_DIM': '#14506e',
+    'NODE_BODY': '#2b2b2b', 'NODE_TEXT': '#ffffff', 'SELECTED': '#e8e536',
+    'RADIUS': 2, 'NODE_RADIUS': 2, 'NODE_MONO': 1,
+    'NODE_TITLE_PX': 19, 'NODE_ATTR_PX': 12,
+}
+
+
+def host_colors():
+    """The host's own colors for the names above, from its palette.
+
+    :return: name: value, empty when there is no application to ask
+    :rtype: dict
+    """
+    app = QtGui.QGuiApplication.instance()
+    if app is None:
+        return {}
+    palette = app.palette()
+    role = QtGui.QPalette
+
+    def name(color_role, group=role.Active):
+        return palette.color(group, color_role).name()
+    window, text = name(role.Window), name(role.WindowText)
+    button, highlight = name(role.Button), name(role.Highlight)
+    return {
+        'GRAPH': name(role.Base), 'BASE': window, 'RAISED': button,
+        'HOVER': mix(button, text, 0.12).name(),
+        'PRESSED': mix(button, text, 0.22).name(),
+        'BORDER': mix(window, text, 0.14).name(),
+        'BORDER_STRONG': mix(window, text, 0.28).name(),
+        'TEXT': text, 'TEXT_DIM': mix(text, window, 0.3).name(),
+        'TEXT_FAINT': name(role.WindowText, role.Disabled),
+        'ACCENT': highlight,
+        'ACCENT_STRONG': mix(highlight, window, 0.35).name(),
+        'ACCENT_DIM': mix(highlight, window, 0.6).name(),
+        'NODE_BODY': mix(window, name(role.Base), 0.5).name(),
+        'RADIUS': 2, 'NODE_RADIUS': 3,
+    }
+
+
+def font_family():
+    """The family the interface is written in: the host's under the host
+    look, the editor's own otherwise.
+
+    :rtype: str
+    """
+    app = QtGui.QGuiApplication.instance()
+    if LOOK == LOOK_HOST and app is not None:
+        return app.font().family()
+    return FONTS.DEFAULT_FAMILY
+
+
+def stored_look():
+    """The look asked for: NXT_EDITOR_LOOK when it names one, which is how
+    a pipeline sets it for everyone, then the user's preference.
+
+    :rtype: str
+    """
+    known = [look for look, _label in LOOK_NAMES]
+    asked = os.environ.get(LOOK_ENV_VAR, '').strip().lower()
+    if asked in known:
+        return asked
+    try:
+        from nxt_editor import user_dir
+        asked = user_dir.user_prefs.get(LOOK_PREF, LOOK_MODERN)
+    except Exception:
+        # Read while the editor is still loading. Never the reason it
+        # does not open.
+        asked = LOOK_MODERN
+    return asked if asked in known else LOOK_MODERN
+
+
+def use_look(look):
+    """Put a look's values in place of the modern ones.
+
+    Meant to be called once, as this module loads: modules that have
+    loaded since have read the names already and do not see a change.
+    """
+    values = {}
+    if look == LOOK_CLASSIC:
+        values = dict(CLASSIC)
+    elif look == LOOK_HOST:
+        values = host_colors()
+        if not values:
+            look = LOOK_MODERN
+    globals().update(values)
+    globals()['LOOK'] = look
+
+
+use_look(stored_look())
