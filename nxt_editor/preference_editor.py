@@ -46,17 +46,6 @@ def preference(key, section, label, kind, default, description,
 
 PREFERENCES = (
     # Graph --------------------------------------------------------------
-    preference(PREF.LOOK, 'Panels', 'Look', CHOICE, theme.LOOK_MODERN,
-               'Modern is the editor\'s own look, the same everywhere. '
-               'Classic is how it looked before. Host application takes '
-               'the colors, font and widgets of the host it runs in. After '
-               'a restart of the editor\'s host.',
-               choices=theme.LOOK_NAMES),
-    preference(PREF.LOOK_STYLESHEET, 'Panels', 'Stylesheet', TEXT, '',
-               'A .qss file of your own, laid over the look, to restyle '
-               'what you like. It can use the look\'s colors by name, such '
-               'as {BASE} and {TEXT}. After a restart of the editor\'s '
-               'host.'),
     preference(PREF.SHOW_GRID, 'Graph', 'Show Grid', BOOL, True,
                'Draw the grid behind the graph, in every tab.'),
     preference(PREF.GRID_SNAP, 'Graph', 'Snap to Grid', BOOL, False,
@@ -122,6 +111,18 @@ PREFERENCES = (
                'Parenting nodes updates the instance paths in the layer '
                'that point at them.'),
     # Panels -------------------------------------------------------------
+    preference(PREF.LOOK, 'Panels', 'Look', CHOICE, theme.LOOK_MODERN,
+               'Modern is the editor\'s own look, the same everywhere. '
+               'Classic is how it looked before. Host application takes '
+               'the colors, font and widgets of a Qt host with a dark '
+               'interface, such as Maya, and is Modern anywhere else. '
+               'After a restart of the editor\'s host.',
+               choices=theme.LOOK_NAMES),
+    preference(PREF.LOOK_STYLESHEET, 'Panels', 'Stylesheet', TEXT, '',
+               'A .qss file of your own, laid over the look, to restyle '
+               'what you like. It can use the look\'s colors by name, such '
+               'as {BASE} and {TEXT}. After a restart of the editor\'s '
+               'host.'),
     preference(PREF.NEUTRAL_PROPERTY_TEXT, 'Panels',
                'Neutral Property Text', BOOL, False,
                'Property Editor rows in plain text with their layer\'s '
