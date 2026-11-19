@@ -49,6 +49,12 @@ def preference(key, section, label, kind, default, description,
 
 PREFERENCES = (
     # Graph --------------------------------------------------------------
+    preference(PREF.LOOK, 'Panels', 'Look', CHOICE, theme.LOOK_MODERN,
+               'Modern is the editor\'s own look, the same everywhere. '
+               'Classic is how it looked before. Host application takes '
+               'the colors, font and widgets of the host it runs in. After '
+               'a restart of the editor\'s host.',
+               choices=theme.LOOK_NAMES),
     preference(PREF.SHOW_GRID, 'Graph', 'Show Grid', BOOL, True,
                'Draw the grid behind the graph, in every tab.'),
     preference(PREF.GRID_SNAP, 'Graph', 'Snap to Grid', BOOL, False,

@@ -7,6 +7,10 @@ Each item links to the part of the docs that explains it in full.
 ## Unreleased
 
 **New**
+- **Three looks to choose from**, in **Options > Preferences... > Look**:
+  Modern, Classic (how the editor looked before) and Host application
+  (the host's own colors, font and widgets). See
+  [The editor's look](reference.md#the-editors-look).
 - **The graph has no edge.** Pan, frame and go to nodes as far out as you
   like; the canvas grows as you go.
 - **Renaming an attribute renames the tokens that use it**, and

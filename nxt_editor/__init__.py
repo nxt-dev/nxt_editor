@@ -73,6 +73,11 @@ def stylesheet():
     after it so the modern one wins where both style something.
     """
     from nxt_editor import theme
+    if theme.LOOK == theme.LOOK_HOST:
+        # The host's own widgets, as the host draws them.
+        return ''
+    if theme.LOOK == theme.LOOK_CLASSIC:
+        return _read_resource(STYLESHEET)
     return (theme.restyle(_read_resource(STYLESHEET)) + '\n' +
             theme.fill(_read_resource(MODERN_STYLESHEET)))
 

@@ -1089,6 +1089,24 @@ section you had open.
 The AI Assistant, Layer Color View and Environment Variables have their
 own dialogs in Options.
 
+### The editor's look
+
+**Look**, under Panels, chooses how the editor is drawn:
+
+- **Modern**, the default, is the editor's own look, the same standalone
+  and in every host.
+- **Classic** is how the editor looked before the modern look: the
+  original dark stylesheet and its blue highlights, and nodes with square
+  corners and their names in the code font.
+- **Host application** takes the colors and font of the host the editor
+  runs in, and leaves its widgets to be drawn the way the host draws its
+  own, so in Maya the editor looks like a Maya window.
+
+A look is put in place as the editor loads, so a change shows the next
+time the editor's host starts. A pipeline can set it for everyone with the
+environment variable `NXT_EDITOR_LOOK` (`modern`, `classic` or `host`),
+which has the last word over the preference.
+
 # Terms and Definitions
 
 ## Stage
