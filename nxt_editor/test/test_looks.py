@@ -201,7 +201,7 @@ class Host(LookCase):
         self.assertEqual(app.font().family(), theme.font().family())
 
     def test_without_an_application_it_is_modern(self):
-        with mock.patch.object(QtGui.QGuiApplication, 'instance',
+        with mock.patch.object(QtWidgets.QApplication, 'instance',
                                return_value=None):
             theme.use_look(theme.LOOK_HOST)
         self.assertEqual(theme.LOOK_MODERN, theme.LOOK)
@@ -229,6 +229,133 @@ class Host(LookCase):
         self.assertEqual(theme.LOOK_MODERN, theme.LOOK)
         self.assertEqual(self.modern['NODE_TEXT'], theme.NODE_TEXT)
         self.assertEqual(self.modern['BASE'], theme.BASE)
+
+
+
+def in_host(name):
+    """The editor as a host's integration opens it."""
+    from nxt.constants import NXT_DCC_ENV_VAR
+    return mock.patch.dict(os.environ, {NXT_DCC_ENV_VAR: name})
+
+
+class HostsThatAreNotQt(LookCase):
+    """Blender and Unreal are not Qt applications, so the editor draws its
+    widgets there itself, in that host's colors and font."""
+
+    def look_in(self, host):
+        with in_host(host):
+            theme.use_look(theme.LOOK_HOST)
+
+    def test_blender_has_its_own_colors_and_font(self):
+        self.look_in(theme.BLENDER)
+        self.assertEqual(theme.LOOK_HOST, theme.LOOK)
+        self.assertEqual(theme.BLENDER, theme.HOST)
+        self.assertEqual('#303030', theme.BASE)
+        self.assertEqual('#545454', theme.BUTTON)
+        self.assertEqual('#4772b3', theme.ACCENT)
+        self.assertEqual('Inter', theme.font_family())
+        self.assertEqual('Inter', theme.font().family())
+
+    def test_unreal_has_its_own_colors_and_font(self):
+        self.look_in(theme.UNREAL)
+        self.assertEqual(theme.UNREAL, theme.HOST)
+        self.assertEqual('#242424', theme.BASE)
+        self.assertEqual('#0f0f0f', theme.INPUT)
+        self.assertEqual('#0070e0', theme.ACCENT)
+        self.assertEqual('Roboto', theme.font().family())
+
+    def test_the_editor_draws_its_widgets_there(self):
+        self.look_in(theme.BLENDER)
+        self.assertFalse(theme.HOST_DRAWS)
+        sheet = nxt_editor.stylesheet()
+        self.assertIn('QPushButton', sheet)
+        self.assertIn('#545454', sheet)
+        self.assertIn('"Inter"', sheet)
+
+    def test_the_host_is_known_from_its_module(self):
+        # Before its integration says so.
+        with mock.patch.dict(sys.modules, {'bpy': mock.Mock()}):
+            self.assertEqual(theme.BLENDER, theme.running_host())
+        with mock.patch.dict(sys.modules, {'unreal': mock.Mock()}):
+            self.assertEqual(theme.UNREAL, theme.running_host())
+
+    def test_modern_and_classic_are_the_same_in_them(self):
+        for host in (theme.BLENDER, theme.UNREAL):
+            with in_host(host):
+                theme.use_look(theme.LOOK_MODERN)
+                self.assertEqual(self.modern['BASE'], theme.BASE)
+                self.assertEqual('', theme.HOST)
+
+
+class ModernTokens(LookCase):
+
+    def test_inputs_buttons_and_menus_are_as_before(self):
+        # New names, with the values modern had there.
+        self.assertEqual(theme.GRAPH, theme.INPUT)
+        self.assertEqual(theme.RAISED, theme.BUTTON)
+        self.assertEqual(theme.RAISED, theme.MENU)
+
+    def test_classic_and_a_qt_host_fill_them_in(self):
+        theme.use_look(theme.LOOK_CLASSIC)
+        self.assertEqual(theme.GRAPH, theme.INPUT)
+        self.assertEqual(theme.RAISED, theme.BUTTON)
+
+
+class WorkflowShapes(LookCase):
+    """In a host that draws the editor, a workflow's buttons keep the
+    modern shapes, in the host's colors."""
+
+    def test_modern_shapes_in_the_hosts_colors(self):
+        vars(theme).update({'LOOK': theme.LOOK_HOST, 'HOST_DRAWS': 1,
+                            'BUTTON': '#5d5d5d', 'RADIUS': 2})
+        sheet = nxt_editor.modern_shapes()
+        self.assertIn('border-radius: 2px', sheet)
+        self.assertIn('#5d5d5d', sheet)
+        from nxt_editor.dockwidgets.widget_builder import WidgetBuilder
+        builder = WidgetBuilder()
+        self.addCleanup(builder.deleteLater)
+        self.assertTrue(builder.styleSheet().startswith(sheet))
+        # The dock's own rules still come after, and win.
+        self.assertIn('QDockWidget', builder.styleSheet()[len(sheet):])
+
+    def test_not_in_modern(self):
+        from nxt_editor.dockwidgets.widget_builder import WidgetBuilder
+        builder = WidgetBuilder()
+        self.addCleanup(builder.deleteLater)
+        self.assertNotIn('QPushButton', builder.styleSheet())
+
+
+class LookPreference(LookCase):
+
+    def editor(self):
+        look = [p for p in preference_editor.PREFERENCES
+                if p.key == user_dir.USER_PREF.LOOK][0]
+        dialog = preference_editor.PreferenceEditor.__new__(
+            preference_editor.PreferenceEditor)
+        QtWidgets.QDialog.__init__(dialog)
+        dialog._filling = False
+        self.addCleanup(dialog.deleteLater)
+        return dialog.make_editor(look)
+
+    def host_item(self, editor):
+        return editor.model().item(editor.findData(theme.LOOK_HOST))
+
+    def test_host_is_greyed_out_on_its_own(self):
+        editor = self.editor()
+        self.assertFalse(self.host_item(editor).isEnabled())
+        self.assertTrue(editor.isEnabled())
+
+    def test_host_can_be_chosen_in_a_host(self):
+        with in_host(theme.MAYA):
+            editor = self.editor()
+        self.assertTrue(self.host_item(editor).isEnabled())
+
+    def test_the_environment_variable_is_shown_and_wins(self):
+        os.environ[theme.LOOK_ENV_VAR] = 'classic'
+        editor = self.editor()
+        self.assertEqual(theme.LOOK_CLASSIC, editor.currentData())
+        self.assertFalse(editor.isEnabled())
+        self.assertIn(theme.LOOK_ENV_VAR, editor.toolTip())
 
 
 if __name__ == '__main__':
