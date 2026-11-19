@@ -115,7 +115,12 @@ class SectionHeader(QtWidgets.QAbstractButton):
         self.problem = False
         self.is_default = False
         self.setCheckable(True)
-        self.setFocusPolicy(QtCore.Qt.StrongFocus)
+        # Reached with Tab, not taken by a click: the editor's style sheet
+        # draws a square border round whatever has focus, over the rounded
+        # header. Its own ring shows keyboard focus instead.
+        self.setFocusPolicy(QtCore.Qt.TabFocus)
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, False)
+        self.setStyleSheet('border: none; background: transparent;')
         self.setCursor(QtCore.Qt.PointingHandCursor)
         self.setFixedHeight(self.HEIGHT)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
@@ -228,8 +233,6 @@ class ProviderBox(QtWidgets.QWidget):
     changed = QtCore.Signal()
     # Something was saved in the secure store.
     stored = QtCore.Signal()
-    # Opened, with the section's body to bring into view.
-    expanded = QtCore.Signal(QtWidgets.QWidget)
 
     def __init__(self, provider, parent=None):
         super(ProviderBox, self).__init__(parent)
@@ -329,7 +332,11 @@ class ProviderBox(QtWidgets.QWidget):
         # Model
         layout.addWidget(QtWidgets.QLabel('Model'), 5, 0)
         self.model_combo = QtWidgets.QComboBox()
-        self.model_combo.setMinimumContentsLength(24)
+        # Short enough for the section to fit beside the scroll bar; it
+        # stretches to fill the row when there is room.
+        self.model_combo.setMinimumContentsLength(10)
+        self.model_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.models_thread = None
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
         layout.addWidget(self.model_combo, 5, 1)
@@ -370,9 +377,9 @@ class ProviderBox(QtWidgets.QWidget):
         if self.header.isChecked() != expanded:
             self.header.setChecked(expanded)
             return
+        # Opens downward where it is. Nothing scrolls, so the header stays
+        # under the mouse.
         self.body.setVisible(expanded)
-        if expanded:
-            self.expanded.emit(self.body)
 
     def is_expanded(self):
         return self.header.isChecked()
@@ -946,7 +953,6 @@ class AiSettingsDialog(QtWidgets.QDialog):
             box = ProviderBox(provider, self)
             box.changed.connect(self.settings_changed.emit)
             box.stored.connect(self.refresh_store_label)
-            box.expanded.connect(self.bring_into_view)
             body_layout.addWidget(box)
             self.boxes.append(box)
         body_layout.addStretch()
@@ -972,11 +978,6 @@ class AiSettingsDialog(QtWidgets.QDialog):
         current = self.provider_combo.currentData()
         for box in self.boxes:
             box.header.set_default(box.provider.id == current)
-
-    def bring_into_view(self, body):
-        # Once it has its height.
-        QtCore.QTimer.singleShot(
-            0, lambda: self.sections.ensureWidgetVisible(body, 0, 0))
 
     def set_controls_enabled(self, enabled):
         """With the assistant off its settings can be looked at, opening

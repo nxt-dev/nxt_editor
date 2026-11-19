@@ -1034,6 +1034,37 @@ class SettingsDialogTests(unittest.TestCase):
         self.assertLessEqual(self.dialog.minimumSizeHint().height(), 500)
         self.dialog.hide()
 
+    def test_a_clicked_header_stays_put_and_takes_no_focus(self):
+        # Focus brought the style sheet's square border over the rounded
+        # header, and opening scrolled the list away from the mouse.
+        from Qt import QtCore, QtTest
+        self.dialog.resize(600, 500)
+        self.dialog.show()
+        for box in self.dialog.boxes[:3]:
+            box.set_expanded(True)
+        app.processEvents()
+        header = self.dialog.boxes[3].header
+        before = header.mapTo(self.dialog, QtCore.QPoint(0, 0))
+        QtTest.QTest.mouseClick(header, QtCore.Qt.LeftButton,
+                                QtCore.Qt.NoModifier, QtCore.QPoint(80, 16))
+        app.processEvents()
+        self.assertTrue(self.dialog.boxes[3].is_expanded())
+        self.assertFalse(header.hasFocus())
+        self.assertEqual(before, header.mapTo(self.dialog,
+                                              QtCore.QPoint(0, 0)))
+        self.dialog.hide()
+
+    def test_open_sections_fit_beside_the_scroll_bar(self):
+        self.dialog.resize(600, 500)
+        self.dialog.show()
+        for box in self.dialog.boxes:
+            box.set_expanded(True)
+        app.processEvents()
+        content = self.dialog.sections.widget()
+        self.assertLessEqual(content.width(),
+                             self.dialog.sections.viewport().width())
+        self.dialog.hide()
+
     def test_a_local_server_is_found(self):
         box = self.box('local')
         self.assertTrue(box.web_button.isHidden())
