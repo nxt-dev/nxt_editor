@@ -33,6 +33,23 @@ Each item links to the part of the docs that explains it in full.
   whose header says how it is set up, the provider asked first starts open,
   and the list scrolls so everything can be reached on a small screen. See
   [Signing in](reference.md#signing-in).
+- The editor's title shows the name of the Maya scene or `.blend` file its
+  host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
+  of the same host can be told apart in the taskbar.
+
+**Fixed**
+- The code editor's completion list opens under the line, with its names
+  starting where the word being completed starts. It was drawn to the left
+  by the width of the line numbers, and over the bottom of the line.
+- The mini map leaves out the backdrops of a layer hidden in the graph, as
+  it does that layer's nodes.
+- Two quick clicks on a Layer Manager toggle count as two: the second was
+  taken for a double click and did nothing.
+- The Environment Variables dialog shows its Name and List column titles
+  whole in an empty table, and a long file path no longer makes it wide.
+- Clicking into a node's code and away without typing no longer adds an
+  undo step, marks the layer as unsaved, or copies inherited code onto the
+  target layer.
 
 ## nxt_editor 4.13.0
 
@@ -166,26 +183,6 @@ Each item links to the part of the docs that explains it in full.
   nodes that were parented elsewhere, env files are read as nxt starts, and
   a file saved by a newer nxt raises `NewerFileError` unless it is opened
   inside `nxt_io.allow_newer_files()`.
-
-**Fixed**
-- The code editor's completion list opens under the line, with its names
-  starting where the word being completed starts. It was drawn to the left
-  by the width of the line numbers, and over the bottom of the line.
-
-**Fixed**
-- The mini map leaves out the backdrops of a layer hidden in the graph, as
-  it does that layer's nodes.
-- Two quick clicks on a Layer Manager toggle count as two: the second was
-  taken for a double click and did nothing.
-
-**Fixed**
-- The Environment Variables dialog shows its Name and List column titles
-  whole in an empty table, and a long file path no longer makes it wide.
-
-**Fixed**
-- Clicking into a node's code and away without typing no longer adds an
-  undo step, marks the layer as unsaved, or copies inherited code onto the
-  target layer.
 
 ## nxt_editor 4.12.0
 
