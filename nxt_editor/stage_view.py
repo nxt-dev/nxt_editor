@@ -115,8 +115,8 @@ class StageView(QtWidgets.QGraphicsView):
         # scene
         self._scene = QtWidgets.QGraphicsScene()
         self.setScene(self._scene)
-        # TODO Currently setting scene rect and never changing it. We hope for expanding graphs in the future.
-        self.scene().setSceneRect(QtCore.QRect(-5000, -5000, 10000, 10000))
+        # The canvas has no edge: see make_room.
+        self.scene().setSceneRect(self.SCENE_START)
         # rubber band
         self.rubber_band = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, self)
 
@@ -689,7 +689,65 @@ class StageView(QtWidgets.QGraphicsView):
         rect_right = self.view_padding_factor
         rect_bottom = self.view_padding_factor
         padded_rect = rect.adjusted(rect_left, rect_top, rect_right, rect_bottom)
+        self.make_room(padded_rect)
         self.fitInView(padded_rect, QtCore.Qt.KeepAspectRatio)
+
+    # The scene rect bounds how far the view pans and where it can be
+    # centered. It starts here and grows ahead of the view, so the canvas
+    # has no edge. It grows by at least half again on a side each time, so
+    # only a few times however far the view goes, and only toward where the
+    # view has been: the item index divides it up, and a rect far bigger
+    # than the graph would slow finding items under the mouse.
+    SCENE_START = QtCore.QRectF(-5000, -5000, 10000, 10000)
+    # Least room kept round what is shown, in scene units.
+    MIN_ROOM = 1000
+
+    def make_room(self, rect):
+        """Grow the scene rect, if needed, to hold rect with room round it
+        as big as rect itself, so the view can be centered anywhere on it
+        and still pan on.
+
+        :return: True when it grew
+        """
+        room = max(rect.width(), rect.height(), self.MIN_ROOM)
+        needed = rect.adjusted(-room, -room, room, room)
+        scene_rect = self.scene().sceneRect()
+        if scene_rect.contains(needed):
+            return False
+        pad_x = scene_rect.width() / 2
+        pad_y = scene_rect.height() / 2
+        grown = QtCore.QRectF(scene_rect)
+        if needed.left() < grown.left():
+            grown.setLeft(needed.left() - pad_x)
+        if needed.right() > grown.right():
+            grown.setRight(needed.right() + pad_x)
+        if needed.top() < grown.top():
+            grown.setTop(needed.top() - pad_y)
+        if needed.bottom() > grown.bottom():
+            grown.setBottom(needed.bottom() + pad_y)
+        self.scene().setSceneRect(grown)
+        # The grid kept for the background stopped at the old edge.
+        self.resetCachedContent()
+        return True
+
+    def centerOn(self, *args):
+        """Center on a point, x and y, or an item, anywhere: the scene
+        grows first rather than the view stopping at its edge."""
+        if len(args) == 2:
+            point = QtCore.QPointF(*args)
+        elif isinstance(args[0], QtWidgets.QGraphicsItem):
+            point = args[0].sceneBoundingRect().center()
+        else:
+            point = QtCore.QPointF(args[0])
+        shown = self.view_rect()
+        shown.moveCenter(point)
+        self.make_room(shown)
+        super(StageView, self).centerOn(*args)
+
+    def resizeEvent(self, event):
+        super(StageView, self).resizeEvent(event)
+        if self.scene() is not None:
+            self.make_room(self.view_rect())
 
     def draw_graph(self, dirty):
         """Draws all nodes and connections.
@@ -2011,6 +2069,8 @@ class StageView(QtWidgets.QGraphicsView):
             if not self._previous_mouse_pos:
                 self._previous_mouse_pos = event.pos()
             offset = QtCore.QPointF(self._previous_mouse_pos - event.pos())
+            scale = self.scale_factor or 1.0
+            self.make_room(self.view_rect().translated(offset / scale))
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() + offset.y())
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() + offset.x())
             self._current_pan_distance += math.sqrt(abs(offset.x()) ** 2 + abs(offset.y()) ** 2)
