@@ -32,7 +32,19 @@ CHILD = {'version': '1.17', 'alias': 'child', 'nodes': {
     '/run': {'code': ['print(STAGE.rig_name)']}}}
 
 
+def same_file(a, b):
+    """Whether two paths are one file: a Windows temp folder can come
+    back under its short name (RUNNER~1) in one and its long name in the
+    other."""
+    return (a is not None and b is not None and
+            os.path.normcase(os.path.realpath(a)) ==
+            os.path.normcase(os.path.realpath(b)))
+
+
 class SubGraphTestCase(unittest.TestCase):
+
+    def assertSameFile(self, a, b):
+        self.assertTrue(same_file(a, b), (a, b))
 
     def setUp(self):
         self.folder = tempfile.mkdtemp(prefix='nxt_sub_graph_')
@@ -62,12 +74,12 @@ class SubGraphTestCase(unittest.TestCase):
 class GraphPath(SubGraphTestCase):
 
     def test_the_graph_a_node_runs(self):
-        self.assertEqual(os.path.normpath(self.child),
-                         sub_graphs.graph_path(self.model, '/runs_child'))
+        self.assertSameFile(self.child,
+                            sub_graphs.graph_path(self.model, '/runs_child'))
 
     def test_quoted_and_relative_to_the_graph(self):
-        self.assertEqual(os.path.normpath(self.child),
-                         sub_graphs.graph_path(self.model, '/relative'))
+        self.assertSameFile(self.child,
+                            sub_graphs.graph_path(self.model, '/relative'))
 
     def test_none_without_a_graph_there(self):
         self.assertIsNone(sub_graphs.graph_path(self.model, '/missing'))
@@ -95,8 +107,7 @@ class Parameters(SubGraphTestCase):
         self.assertEqual(LOCALITIES.sub_graph,
                          rows['rig_name'][COLUMNS.locality])
         self.assertEqual('bob', rows['rig_name'][COLUMNS.value])
-        self.assertEqual(os.path.normpath(self.child),
-                         rows['rig_name'][COLUMNS.source])
+        self.assertSameFile(self.child, rows['rig_name'][COLUMNS.source])
         # count the node sets itself, so it is its own row.
         self.assertEqual(LOCALITIES.local, rows['count'][COLUMNS.locality])
 
@@ -127,7 +138,8 @@ class Parameters(SubGraphTestCase):
         model.open_graph.connect(opened.append)
         index = model.index(row, COLUMNS.source)
         model.setData(index, index.data(), QtCore.Qt.CheckStateRole)
-        self.assertEqual([os.path.normpath(self.child)], opened)
+        self.assertEqual(1, len(opened))
+        self.assertSameFile(self.child, opened[0])
 
 
 class OpenSubGraph(SubGraphTestCase):
@@ -139,7 +151,8 @@ class OpenSubGraph(SubGraphTestCase):
             win.model.set_selection(['/runs_child'])
             with mock.patch.object(win, 'load_file') as load:
                 win.node_actions.open_sub_graph_action.trigger()
-            load.assert_called_once_with(os.path.normpath(self.child))
+            load.assert_called_once()
+            self.assertSameFile(self.child, load.call_args[0][0])
         finally:
             with mock.patch.object(stage_model.StageModel,
                                    'get_unsaved_changes', return_value=[]):
