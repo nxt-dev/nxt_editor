@@ -105,7 +105,9 @@ class Canvas(unittest.TestCase):
             self.view.wheelEvent(event)
         self.assertAlmostEqual(self.view._scale_minimum,
                                self.view.scale_factor, delta=0.05)
-        self.assertNear(under, self.view.mapToScene(corner))
+        # Scroll positions are whole pixels, so each of the 30 steps can
+        # round by one, here as at the origin.
+        self.assertNear(under, self.view.mapToScene(corner), pixels=12)
 
     def test_framing_a_node_far_away_shows_it(self):
         graphic = self.view.get_node_graphic('/far')
