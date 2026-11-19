@@ -1,7 +1,7 @@
 """What the assistant remembers between chats, and the folders it may read.
 
 Memory is a list of short notes, sent at the start of every chat. The user
-adds them in Options > AI Assistant > Memory, or asks the assistant to
+adds them in Edit > Preferences > AI Assistant > Memory, or asks the assistant to
 remember something and it adds the note itself.
 
 Folders work as they do in Claude Code: the assistant asks before it reads

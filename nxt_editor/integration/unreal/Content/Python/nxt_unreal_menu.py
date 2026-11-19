@@ -13,7 +13,7 @@ and needed internet access and write access to the engine.
 Unreal ships no Qt, so PySide6 is installed once, into a folder outside the
 engine; the menu offers to do it. See nxt_editor/integration/optional_deps.py.
 The other optional components, jedi say, are installed from the editor's
-Options > Optional Components.
+Edit > Preferences > Optional Components.
 
 NXT_NO_MENU=1 leaves the menu out, by the same rule as Maya and Blender.
 Everything the menu does is still here to call, for example

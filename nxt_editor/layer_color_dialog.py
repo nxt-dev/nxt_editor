@@ -206,7 +206,7 @@ class LayerColorDialog(QtWidgets.QDialog):
         self.view_preview.setFixedWidth(110)
         self.view_preview.label = 'In your view'
         self.view_preview.setToolTip(
-            'How this color looks in your Layer Color View, View > Options. '
+            'How this color looks in your Layer Color View, in the Window menu. '
             'The layer is given the color on the left.')
         bottom.addWidget(self.view_preview)
         self.hex_edit = QtWidgets.QLineEdit()

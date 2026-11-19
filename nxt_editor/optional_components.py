@@ -1,4 +1,4 @@
-"""Options > Optional Components: install the extras the editor can use.
+"""Edit > Preferences > Optional Components: install the extras the editor can use.
 
 One card per component, saying whether it is there and offering the one
 thing that makes sense to do next: Install, Update or Remove. pip runs in a
@@ -759,7 +759,7 @@ def html(text):
 
 
 class OptionalComponentsDialog(QtWidgets.QDialog):
-    """Options > Optional Components."""
+    """Edit > Preferences > Optional Components."""
     #: a component was installed, updated or removed, by its id
     changed = QtCore.Signal(str)
 

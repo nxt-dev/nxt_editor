@@ -11,7 +11,7 @@ python analyser:
   so cmds. completes before an import line is written. Only modules the
   host has already loaded are offered; nothing is imported for them,
   because importing pymel alone can take seconds.
-- jedi, when it is installed: from Options > Optional Components, or with
+- jedi, when it is installed: from Edit > Preferences > Optional Components, or with
   pip install nxt-editor[completion]. It knows what a name is, so it can
   complete what a call returns or what a local variable holds, which
   reading import lines cannot.

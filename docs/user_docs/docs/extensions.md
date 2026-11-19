@@ -70,9 +70,9 @@ variable an env file declares, as `$PROJECT_GRAPHS/rig.nxt`. This applies to
 everyone with `NXT_FILE_ROOTS` set, env files or not. See
 [How references are found](reference.md#how-references-are-found).
 
-![Options > Environment Variables](images/env_files_dialog.png)
+![Edit > Preferences > Environment Variables](images/env_files_dialog.png)
 
-**Options > Environment Variables...** edits these files as a table: your
+**Edit > Preferences > Environment Variables** edits these files as a table: your
 own file, the site's, any named in `NXT_ENV_FILES`, and project files.
 Tick **List** for a value of several paths, typed with `;` between them: it
 is saved as a list and joined with the separator of the platform nxt runs

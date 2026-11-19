@@ -2,7 +2,7 @@
 
 Modern is its own, the same in every host. Classic is how it looked
 before. Host application takes the host's colors, font and widgets. The
-look is asked for in Options > Preferences, or by NXT_EDITOR_LOOK, and put
+look is asked for in Edit > Preferences, or by NXT_EDITOR_LOOK, and put
 in place as the theme loads.
 """
 # Builtin

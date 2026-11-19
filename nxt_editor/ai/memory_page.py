@@ -1,4 +1,4 @@
-"""Options > AI Assistant > Memory: what the assistant remembers, and the
+"""Edit > Preferences > AI Assistant > Memory: what the assistant remembers, and the
 folders it may always read."""
 # External
 from Qt import QtCore, QtWidgets

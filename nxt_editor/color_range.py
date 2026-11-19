@@ -13,7 +13,7 @@ another; white text may read less well.
 Colors are never rewritten for the range. A layer's or backdrop's stored
 color is shown through it, so changing the range, or going back to the
 default, loses nothing, and a teammate on another range sees the same file
-in theirs. View > Options > Layer Color View sets it, see color_range_dialog.
+in theirs. Window > Layer Color View sets it, see color_range_dialog.
 """
 # External
 from Qt import QtGui

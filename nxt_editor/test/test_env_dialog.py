@@ -1,4 +1,4 @@
-"""Options > Environment Variables edits nxt's env files.
+"""Edit > Preferences > Environment Variables edits nxt's env files.
 
 nxt sets environment variables from env files as it starts. The dialog is
 those files as a table: nothing is written until Apply, a project file is

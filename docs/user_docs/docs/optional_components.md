@@ -14,9 +14,9 @@ whole studio.
 
 ## For artists
 
-![Options > Optional Components](images/optional_components.png)
+![Edit > Preferences > Optional Components](images/optional_components.png)
 
-Open **Options > Optional Components...** in the editor. Each component has
+Open **Edit > Preferences > Optional Components** in the editor. Each component has
 a card saying whether it is installed, and one button for what to do next:
 
 - **Install** downloads it and sets it up. The editor keeps working while it
@@ -26,7 +26,9 @@ a card saying whether it is installed, and one button for what to do next:
 - **Remove** takes it out again.
 
 jedi is used as soon as it is installed, with no restart. If you pick
-**Options > Autocomplete > Python Analysis (jedi)** before installing
+**Python Analysis (jedi)** (under **Autocomplete** in the code
+editor's right-click menu, or in **Edit > Preferences > Code Editor**)
+before installing
 it, nxt offers to install it for you.
 
 Qt can't be installed from the editor in Blender or Unreal, because the

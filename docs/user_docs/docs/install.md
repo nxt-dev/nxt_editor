@@ -28,7 +28,7 @@ To install the latest release from [PyPI](https://pypi.org/project/nxt-editor/):
     - `pip install nxt-editor`
     - Optionally, for richer code completion:
       `pip install nxt-editor[completion]`, or later from
-      **Options > Optional Components** in the editor. This adds
+      **Edit > Preferences > Optional Components** in the editor. This adds
       [jedi](https://github.com/davidhalter/jedi), which the
       [Python Analysis](reference.md#python-analysis-with-jedi) completion
       source uses. The editor works the same without it. See
@@ -195,7 +195,7 @@ from PyPI. It is experimental: save early, save often.
    so this downloads PySide6 with the engine's own pip. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
 5. Optionally, for smarter code completion, open the editor and install
-   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   **Python Analysis (jedi)** from **Edit > Preferences > Optional Components**. See
    [Optional Components](optional_components.md).
 
 After that, the **nxt** menu in the main menu bar has **Open Editor**. The
@@ -220,7 +220,7 @@ be installed or put on a path.
 3. The first time, choose **NXT > Install Qt (PySide6)**. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
 4. Optionally, for smarter code completion, open the editor and install
-   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   **Python Analysis (jedi)** from **Edit > Preferences > Optional Components**. See
    [Optional Components](optional_components.md).
 
 The **NXT** menu appears in Blender's top bar, next to **Help**. Enabling the
