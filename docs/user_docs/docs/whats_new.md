@@ -173,6 +173,10 @@ Each item links to the part of the docs that explains it in full.
 - Two quick clicks on a Layer Manager toggle count as two: the second was
   taken for a double click and did nothing.
 
+**Fixed**
+- The Environment Variables dialog shows its Name and List column titles
+  whole in an empty table, and a long file path no longer makes it wide.
+
 ## nxt_editor 4.12.0
 
 **New**
