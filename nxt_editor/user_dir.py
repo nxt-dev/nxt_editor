@@ -225,6 +225,8 @@ class USER_PREF():
     SHOW_MINI_MAP = 'show_mini_map'
     # The editor's look: modern, classic or host. See nxt_editor.theme.
     LOOK = 'look'
+    # A stylesheet file of the user's own, laid over the look.
+    LOOK_STYLESHEET = 'look_stylesheet'
     # Whether a graph is framed when it is first shown, rather than
     # centered on the origin.
     FRAME_ON_OPEN = 'frame_all_on_open'

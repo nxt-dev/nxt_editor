@@ -30,6 +30,7 @@ class LookCase(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         os.environ.pop(theme.LOOK_ENV_VAR, None)
+        os.environ.pop(theme.STYLESHEET_ENV_VAR, None)
 
 
 class Asked(LookCase):
@@ -69,6 +70,42 @@ class Asked(LookCase):
                          [value for value, _label in look.choices])
         self.assertEqual(theme.LOOK_MODERN, look.default)
         self.assertEqual(theme.LOOK_PREF, look.key)
+
+
+class OwnStylesheet(LookCase):
+
+    def sheet_file(self, text):
+        import tempfile
+        handle = tempfile.NamedTemporaryFile('w', suffix='.qss', delete=False)
+        handle.write(text)
+        handle.close()
+        self.addCleanup(os.remove, handle.name)
+        return handle.name
+
+    def test_it_is_laid_over_the_look_in_the_looks_colors(self):
+        path = self.sheet_file('QLabel { color: {TEXT}; }')
+        os.environ[theme.STYLESHEET_ENV_VAR] = path
+        sheet = nxt_editor.stylesheet()
+        self.assertTrue(sheet.endswith('QLabel { color: %s; }' % theme.TEXT))
+        self.assertIn(theme.BASE, sheet)
+
+    def test_the_preference_names_one_too(self):
+        path = self.sheet_file('QLabel { margin: 3px; }')
+        with mock.patch.object(user_dir.user_prefs, 'get',
+                               return_value=path):
+            self.assertEqual('QLabel { margin: 3px; }',
+                             theme.extra_stylesheet())
+
+    def test_one_that_is_not_there_is_passed_over(self):
+        os.environ[theme.STYLESHEET_ENV_VAR] = os.path.join(
+            os.path.dirname(__file__), 'no_such_sheet.qss')
+        with self.assertLogs('nxt_editor.theme', level='WARNING'):
+            self.assertEqual('', theme.extra_stylesheet())
+
+    def test_none_is_asked_for_to_begin_with(self):
+        with mock.patch.object(user_dir.user_prefs, 'get',
+                               side_effect=lambda key, default=None: default):
+            self.assertEqual('', theme.extra_stylesheet())
 
 
 class Modern(LookCase):
@@ -113,8 +150,21 @@ class Host(LookCase):
         app.setPalette(palette)
         theme.use_look(theme.LOOK_HOST)
 
-    def test_the_editor_sets_no_sheet_of_its_own(self):
-        self.assertEqual('', nxt_editor.stylesheet())
+    def test_the_editor_styles_next_to_nothing_itself(self):
+        sheet = nxt_editor.stylesheet()
+        self.assertEqual(theme.fill(theme.HOST_SHEET), sheet)
+        self.assertNotIn('QPushButton', sheet)
+        self.assertNotIn('{', sheet.replace('title {', ''))
+
+    def test_text_is_the_size_the_host_uses(self):
+        self.assertEqual(app.font().pointSizeF(), theme.font().pointSizeF())
+        self.assertEqual(20, theme.font(20).pixelSize())
+
+    def test_a_dimmed_layer_color_still_reads_on_the_hosts_panel(self):
+        dimmed = QtGui.QColor('#cc3333').darker(150)
+        self.assertLess(theme.contrast(dimmed, theme.BASE), 2.6)
+        shown = theme.readable_on(dimmed, theme.BASE, 2.6)
+        self.assertGreaterEqual(theme.contrast(shown, theme.BASE), 2.6)
 
     def test_colors_are_the_hosts(self):
         self.assertEqual('#444444', theme.BASE)

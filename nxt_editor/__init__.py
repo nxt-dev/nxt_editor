@@ -74,12 +74,16 @@ def stylesheet():
     """
     from nxt_editor import theme
     if theme.LOOK == theme.LOOK_HOST:
-        # The host's own widgets, as the host draws them.
-        return ''
-    if theme.LOOK == theme.LOOK_CLASSIC:
-        return _read_resource(STYLESHEET)
-    return (theme.restyle(_read_resource(STYLESHEET)) + '\n' +
-            theme.fill(_read_resource(MODERN_STYLESHEET)))
+        # The host's own widgets, as the host draws them, but for the
+        # few places that do not read.
+        sheet = theme.fill(theme.HOST_SHEET)
+    elif theme.LOOK == theme.LOOK_CLASSIC:
+        sheet = _read_resource(STYLESHEET)
+    else:
+        sheet = (theme.restyle(_read_resource(STYLESHEET)) + '\n' +
+                 theme.fill(_read_resource(MODERN_STYLESHEET)))
+    extra = theme.extra_stylesheet()
+    return sheet + '\n' + extra if extra else sheet
 
 
 def _read_resource(path):

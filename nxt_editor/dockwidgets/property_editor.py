@@ -1686,8 +1686,14 @@ class PropertyModel(QtCore.QAbstractTableModel):
                 attr_name = self._data[row][COLUMNS.name]
                 color = self.node_attr_draw_details[attr_name]['color']
                 if is_local:
-                    return QtGui.QColor(color).lighter(150)
-                return QtGui.QColor(color).darker(150)
+                    shade = QtGui.QColor(color).lighter(150)
+                else:
+                    shade = QtGui.QColor(color).darker(150)
+                if theme.LOOK == theme.LOOK_HOST:
+                    # Dimmed for the editor's own panels, not the host's.
+                    least = 4.0 if is_local else 2.6
+                    return theme.readable_on(shade, theme.BASE, least)
+                return shade
             # Bright where this node sets the value, softer where it comes
             # from elsewhere, and both read on the dark panel whatever the
             # layer's color. The type's word is always the softer one.
