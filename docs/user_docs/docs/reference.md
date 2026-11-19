@@ -1098,16 +1098,23 @@ own dialogs in Options.
 - **Classic** is how the editor looked before the modern look: the
   original dark stylesheet and its blue highlights, and nodes with square
   corners and their names in the code font.
-- **Host application** takes the colors and font of the host the editor
-  runs in, and leaves its widgets to be drawn the way the host draws its
-  own, so in Maya the editor looks like a Maya window. It needs a host
-  that is a Qt application with a dark interface. Standalone, and in
-  Blender and Unreal, where the editor's windows are the only Qt ones,
-  there is no such look to take and the editor stays Modern.
+- **Host application** looks like the host the editor runs in:
+    - In **Maya**, the editor takes Maya's colors and font, and Maya draws
+      its widgets, so it looks like a Maya window. Workflow Tools keep
+      their round buttons, in Maya's colors.
+    - In **Blender** and **Unreal**, which draw their own interface
+      without Qt, the editor draws its widgets itself in that host's
+      colors and font: Blender's default theme and its Inter font, and
+      Unreal's editor colors and Roboto.
+    - On its own, the editor is Modern, and Host application is greyed
+      out in Preferences. Chosen in a host, it is kept for the next time
+      the editor runs there.
 
 ![Modern](images/look_modern.png)
 ![Classic](images/look_classic.png)
 ![Host application, in Maya](images/look_host.png)
+![Host application, in Blender](images/look_host_blender.png)
+![Host application, in Unreal](images/look_host_unreal.png)
 
 **Stylesheet**, beside it, names a `.qss` file of your own that is laid
 over whichever look is chosen, to restyle what you like: a studio's own
@@ -1133,7 +1140,8 @@ A look is put in place as the editor loads, so a change shows the next
 time the editor's host starts. A pipeline can set both for everyone with
 the environment variables `NXT_EDITOR_LOOK` (`modern`, `classic` or
 `host`) and `NXT_EDITOR_STYLESHEET` (a file), which have the last word
-over the preferences.
+over the preferences. When `NXT_EDITOR_LOOK` is set, Preferences shows
+the look it sets and can not change it.
 
 # Terms and Definitions
 

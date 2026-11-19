@@ -8,9 +8,9 @@ Each item links to the part of the docs that explains it in full.
 
 **New**
 - **Three looks to choose from**, in **Options > Preferences... > Look**:
-  Modern, Classic (how the editor looked before) and Host application
-  (the host's own colors, font and widgets), and a **Stylesheet** of your
-  own to lay over it. See
+  Modern, Classic (how the editor looked before) and Host application,
+  which looks like Maya, Blender or Unreal when the editor runs in them,
+  and a **Stylesheet** of your own to lay over it. See
   [The editor's look](reference.md#the-editors-look).
 - **The graph has no edge.** Pan, frame and go to nodes as far out as you
   like; the canvas grows as you go.
