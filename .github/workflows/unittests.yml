@@ -30,9 +30,21 @@ jobs:
 
       - name: Install Qt's system libraries (Linux)
         if: runner.os == 'Linux'
+        # Ubuntu's mirrors fail now and then, so each part is tried a few
+        # times before the job gives up.
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libxkbcommon-x11-0 libxcb-cursor0             libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0             libxcb-shape0 libxcb-xfixes0 libxcb-randr0 libxcb-xinerama0             libxcb-util1 libegl1 libgl1 xvfb
+          packages="libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4
+            libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-shape0
+            libxcb-xfixes0 libxcb-randr0 libxcb-xinerama0 libxcb-util1
+            libegl1 libgl1 xvfb"
+          for try in 1 2 3 4 5; do
+            sudo apt-get -o Acquire::Retries=3 update &&
+              sudo apt-get -o Acquire::Retries=3 install -y $packages &&
+              exit 0
+            echo "apt failed, trying again in $((try * 20))s"
+            sleep $((try * 20))
+          done
+          exit 1
 
       - name: Install nxt-core from the matching branch
         shell: bash

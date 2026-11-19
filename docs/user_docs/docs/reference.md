@@ -914,7 +914,14 @@ you ask it something.
 
 ### Signing in
 
-**Options > AI Assistant > Sign In** has a box for each provider:
+**Options > AI Assistant > Providers** has a section for each provider.
+Its header says how it is set up, such as *Signed in · opus* or *Not set
+up*, and *Problem* in red when something went wrong (rest the mouse on it
+for what). Click a header, or press Space or Enter on it, to open or close
+it; the provider asked first is marked *Default* and starts open. With
+several open the list scrolls, and the window is never taller than the
+screen.
+
 
 - **Claude** uses the Claude Code app's sign in, so any Claude plan works
   and the editor never sees the account's token. **Sign in with Claude
@@ -1058,6 +1065,16 @@ wheel moves every selected node by the same amount, so they keep their
 places relative to each other. Either is one undo. Child nodes in the
 selection are left where they are under their parents.
 
+## Preferences
+
+**Options > Preferences...** lists every preference you can set, by
+section (Graph, Running, Editing, Panels and Code Editor), with what each
+one does. Type in the filter to find one by its name, what it does, or its
+key in your `prefs.json`. Changes are made straight away: one that also
+has a toggle in a menu is set through that toggle, so the menu agrees.
+**Reset to Default** sets the selected one back. The AI Assistant, Layer
+Color View and Environment Variables have their own dialogs in Options.
+
 # Terms and Definitions
 
 ## Stage
@@ -1108,6 +1125,15 @@ While executing, the [Stage](#stage) can have arbitrary attributes add/set/retri
 
 !!! note "Attribute connections"
     It is best practice to display inter-node dependencies via hierarchy or connections of attributes, rather than hide that dependency in the code. This will make your layers more portable and friendly to other users. Despite this best practice, other nodes and their attributes can be accessed inside a code `block using STAGE.lookup('path/to/node')` and `STAGE.lookup('path/to/node.otherattr')`.
+
+### Renaming an attribute
+
+Renaming an attribute also renames the [tokens](#tokens) in its layer
+that use it, `${attr}` on its own node and `${/path/to/node.attr}`
+anywhere, in attribute values and code, so they keep working. An
+attribute of the same name on another node is left alone. Undo puts the
+tokens back with the name. To rename only the attribute, turn off
+**Options > Update Tokens on Attr Rename**.
 
 ## Tokens
 
@@ -1352,6 +1378,29 @@ Data comes from the hierarchical parent as well as the instance source, with hie
 
 !!! danger
     If a node instances itself, or any ancestor or descendants, it will crash. It's best (because that's all thats possible) to only instance from other hierarchies or sibling nodes
+
+### Parenting an instanced node
+
+When you parent a node that other nodes instance, or a node under it,
+the instance paths in the layer that point at it are changed to its new
+path, so its instances keep instancing it. A relative instance path stays
+relative. Undo puts them back. To leave instance paths as they are, turn
+off **Options > Update Instance Paths on Parent**.
+
+### Sub-graph nodes
+
+A sub-graph node runs another graph: it instances `/_sub_graph` from the
+builtin `sub_graphs.nxt` graph (**File > Reference Builtin Graph**) and
+names the graph in its `_graph_path` attribute. Each of its own
+attributes is given to that graph as an attribute of its world node.
+
+- **Open Sub-graph** (`Ctrl+Shift+G`), on the node's right click menu,
+  opens the graph it runs in a new tab. A path that is not absolute is
+  looked for beside the graph you have open.
+- The Property Editor lists the attributes on the sub-graph's world node
+  that the node does not set, as **4.Graph** rows, in italics with the
+  graph as their source. Set one's value to give the node its own, and
+  click its source to open the graph.
 
 # NXT file spec
 
