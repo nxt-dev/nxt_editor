@@ -1143,6 +1143,23 @@ class RevertNode(DeleteNode):
         self.setText('Revert {}'.format(self.node_path))
 
 
+def refactor_attr_rename(stage):
+    """Whether renaming an attr updates the tokens that point at it: on
+    unless turned off in Options, and with an nxt_core that can."""
+    return (hasattr(stage, 'get_attr_ref_changes') and
+            user_dir.user_prefs.get(user_dir.USER_PREF.REFACTOR_ATTR_RENAME,
+                                    True))
+
+
+def refactor_instance_paths(stage):
+    """Whether parenting nodes updates the instance paths that point at
+    them: on unless turned off in Options, and with an nxt_core that
+    can."""
+    return (hasattr(stage, 'retarget_instance_paths') and
+            user_dir.user_prefs.get(
+                user_dir.USER_PREF.REFACTOR_INSTANCE_PATHS, True))
+
+
 class ParentNodes(NxtCommand):
 
     """Parent Nodes"""
@@ -1162,11 +1179,20 @@ class ParentNodes(NxtCommand):
         self.prev_selection = self.model.selection
         # get previous node data for all child nodes for undo
         self.prev_node_data = {}
+        # Instance paths changed to follow the nodes, see
+        # refactor_instance_paths
+        self.instance_path_changes = []
 
     @processing
     def undo(self):
         layer = self.model.target_layer
         self.undo_effected_layer(layer.real_path)
+        # Put the instance paths back while the nodes are still where they
+        # were changed.
+        if self.instance_path_changes:
+            self.stage.apply_attr_ref_changes(self.instance_path_changes,
+                                              layer, revert=True)
+        self.instance_path_changes = []
         # undo parent
         common_parent_nodes = {}
         for old_path, node_data in self.prev_node_data.items():
@@ -1279,6 +1305,9 @@ class ParentNodes(NxtCommand):
                                                       self.parent_node_path,
                                                       layer)
         self.new_node_paths = list(self.node_path_data.values())
+        if refactor_instance_paths(self.stage):
+            self.instance_path_changes = self.stage.retarget_instance_paths(
+                self.node_path_data, layer)
         idx = 0
         for new_node_path in self.new_node_paths:
             old_node_path = self.node_paths[idx]
@@ -1377,27 +1406,46 @@ class RenameAttribute(NxtCommand):
         self.model = model
         self.stage = model.stage
         self.layer_path = layer_path
+        # Tokens changed to the new name, see refactor_attr_rename
+        self.token_changes = []
 
     @processing
     def undo(self):
         layer = self.model.lookup_layer(self.layer_path)
-        self.rename_attribute(layer, self.new_attr_name, self.attr_name)
+        if self.token_changes:
+            self.stage.apply_attr_ref_changes(self.token_changes, layer,
+                                              revert=True)
+        self.rename_attribute(layer, self.new_attr_name, self.attr_name,
+                              rebuild=bool(self.token_changes))
+        self.token_changes = []
         self.undo_effected_layer(layer.real_path)
 
     @processing
     def redo(self):
         layer = self.model.lookup_layer(self.layer_path)
-        self.rename_attribute(layer, self.attr_name, self.new_attr_name)
+        self.token_changes = self.rename_attribute(
+            layer, self.attr_name, self.new_attr_name,
+            refactor=refactor_attr_rename(self.stage))
         self.redo_effected_layer(layer.real_path)
 
-    def rename_attribute(self, layer, attr_name, new_attr_name):
-
+    def rename_attribute(self, layer, attr_name, new_attr_name,
+                         refactor=False, rebuild=False):
+        """:return: the token changes made, when refactoring"""
         node = layer.lookup(self.node_path)
-        self.stage.rename_node_attr(node, attr_name, new_attr_name, layer)
-        self.model.update_comp_layer()
+        changes = []
+        if refactor:
+            changes = self.stage.rename_node_attr(
+                node, attr_name, new_attr_name, layer, refactor=True,
+                comp_layer=self.model.comp_layer) or []
+        else:
+            self.stage.rename_node_attr(node, attr_name, new_attr_name,
+                                        layer)
+        # Tokens on other nodes changed what they resolve to.
+        self.model.update_comp_layer(rebuild=rebuild or bool(changes))
         old_name = nxt_path.make_attr_path(self.node_path, attr_name)
         new_name = nxt_path.make_attr_path(self.node_path, new_attr_name)
         self.setText("Rename {} to {}".format(old_name, new_name))
+        return changes
 
 
 class SetAttributeComment(SetNodeAttributeData):

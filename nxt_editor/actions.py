@@ -520,6 +520,30 @@ class AppActions(NxtActionContainer):
         self.check_disk_action.setShortcutContext(context)
         self.available_without_model.append(self.check_disk_action)
 
+        # Keep what points at an attr or a node pointing at it when it
+        # changes, see commands.refactor_attr_rename
+        self.refactor_rename_action = BoolUserPrefAction(
+            'Update Tokens on Attr Rename',
+            user_dir.USER_PREF.REFACTOR_ATTR_RENAME, default=True,
+            parent=self)
+        self.refactor_rename_action.setWhatsThis(
+            'When on, renaming an attribute also renames the tokens in its '
+            'layer that use it, such as ${attr} and ${/node.attr}, so they '
+            'keep working. Attributes of the same name on other nodes are '
+            'left alone.')
+        self.refactor_rename_action.setShortcutContext(context)
+        self.available_without_model.append(self.refactor_rename_action)
+        self.refactor_parent_action = BoolUserPrefAction(
+            'Update Instance Paths on Parent',
+            user_dir.USER_PREF.REFACTOR_INSTANCE_PATHS, default=True,
+            parent=self)
+        self.refactor_parent_action.setWhatsThis(
+            'When on, parenting nodes also updates the instance paths in the '
+            'layer that point at them, or at anything under them, so their '
+            'instances follow. Relative paths stay relative.')
+        self.refactor_parent_action.setShortcutContext(context)
+        self.available_without_model.append(self.refactor_parent_action)
+
         # Font size actions
         self.increase_font_size_action = NxtAction(text='Increase Font '
                                                         'Size', parent=self)
@@ -561,6 +585,8 @@ class AppActions(NxtActionContainer):
                                      self.ai_settings_action,
                                      self.toggle_ding_action,
                                      self.check_disk_action,
+                                     self.refactor_rename_action,
+                                     self.refactor_parent_action,
                                      self.clear_logs_action,
                                      self.close_action]
 
