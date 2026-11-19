@@ -73,8 +73,24 @@ def stylesheet():
     after it so the modern one wins where both style something.
     """
     from nxt_editor import theme
-    return (theme.restyle(_read_resource(STYLESHEET)) + '\n' +
-            theme.fill(_read_resource(MODERN_STYLESHEET)))
+    if theme.LOOK == theme.LOOK_HOST and theme.HOST_DRAWS:
+        # The host's own widgets, as the host draws them, but for the
+        # few places that do not read.
+        sheet = theme.fill(theme.HOST_SHEET)
+    elif theme.LOOK == theme.LOOK_CLASSIC:
+        sheet = _read_resource(STYLESHEET)
+    else:
+        sheet = (theme.restyle(_read_resource(STYLESHEET)) + '\n' +
+                 theme.fill(_read_resource(MODERN_STYLESHEET)))
+    extra = theme.extra_stylesheet()
+    return sheet + '\n' + extra if extra else sheet
+
+
+def modern_shapes():
+    """The modern stylesheet in the look's colors, for widgets that keep
+    their modern shapes in a host that draws the rest of the editor."""
+    from nxt_editor import theme
+    return theme.fill(_read_resource(MODERN_STYLESHEET))
 
 
 def _read_resource(path):

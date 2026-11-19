@@ -111,6 +111,19 @@ PREFERENCES = (
                'Parenting nodes updates the instance paths in the layer '
                'that point at them.'),
     # Panels -------------------------------------------------------------
+    preference(PREF.LOOK, 'Panels', 'Look', CHOICE, theme.LOOK_MODERN,
+               'Modern is the editor\'s own look, the same everywhere. '
+               'Classic is how it looked before. Host application looks '
+               "like the host the editor is in: Maya's own widgets, or "
+               "Blender's or Unreal's colors and font. On its own, the "
+               'editor is Modern. '
+               'After a restart of the editor\'s host.',
+               choices=theme.LOOK_NAMES),
+    preference(PREF.LOOK_STYLESHEET, 'Panels', 'Stylesheet', TEXT, '',
+               'A .qss file of your own, laid over the look, to restyle '
+               'what you like. It can use the look\'s colors by name, such '
+               'as {BASE} and {TEXT}. After a restart of the editor\'s '
+               'host.'),
     preference(PREF.NEUTRAL_PROPERTY_TEXT, 'Panels',
                'Neutral Property Text', BOOL, False,
                'Property Editor rows in plain text with their layer\'s '
@@ -338,7 +351,29 @@ class PreferenceEditor(QtWidgets.QDialog):
             editor.editingFinished.connect(
                 lambda p=pref, e=editor: self.changed(p, e.text()))
         editor.setToolTip(pref.description)
+        if pref.key == PREF.LOOK:
+            self.limit_looks(editor)
         return editor
+
+    def limit_looks(self, editor):
+        """Host application only means something in a host, so outside
+        one it is greyed out, and a pipeline's NXT_EDITOR_LOOK has the
+        last word over the preference."""
+        index = editor.findData(theme.LOOK_HOST)
+        if index >= 0 and not theme.running_host():
+            item = editor.model().item(index)
+            item.setEnabled(False)
+            item.setToolTip('Only in Maya, Blender or Unreal. Chosen there, '
+                            'the editor is Modern when it runs on its own.')
+            editor.setItemText(index, 'Host application (in a host)')
+        asked = os.environ.get(theme.LOOK_ENV_VAR, '').strip().lower()
+        if asked in [look for look, _label in theme.LOOK_NAMES]:
+            self._filling = True
+            editor.setCurrentIndex(editor.findData(asked))
+            self._filling = False
+            editor.setEnabled(False)
+            editor.setToolTip('Set by {} for everyone here.'.format(
+                theme.LOOK_ENV_VAR))
 
     def changed(self, pref, value):
         if self._filling:

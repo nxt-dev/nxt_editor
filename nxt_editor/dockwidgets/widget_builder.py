@@ -66,6 +66,11 @@ class WidgetBuilder(DockWidgetBase):
                                             minimum_height=minimum_height)
 
         self.updating = False
+        if theme.LOOK == theme.LOOK_HOST and theme.HOST_DRAWS:
+            # The host draws the rest of the editor, but a workflow's
+            # buttons and boxes keep the modern shapes, in its colors.
+            self.setStyleSheet(nxt_editor.modern_shapes() + '\n' +
+                               self.styleSheet())
         # {graph uid: (comp generation, [window nodes])}, see
         # find_window_nodes.
         self._window_scans = {}
