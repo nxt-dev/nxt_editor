@@ -1,4 +1,4 @@
-"""View > Options > Layer Color View: how layer colors are shown to you.
+"""Window > Layer Color View: how layer colors are shown to you.
 
 A view preference only. It changes how layer and backdrop colors look to
 the user who sets it, never the colors layers are given; Change Color does

@@ -28,7 +28,7 @@ To install the latest release from [PyPI](https://pypi.org/project/nxt-editor/):
     - `pip install nxt-editor`
     - Optionally, for richer code completion:
       `pip install nxt-editor[completion]`, or later from
-      **Options > Optional Components** in the editor. This adds
+      **Edit > Preferences > Optional Components** in the editor. This adds
       [jedi](https://github.com/davidhalter/jedi), which the
       [Python Analysis](reference.md#python-analysis-with-jedi) completion
       source uses. The editor works the same without it. See
@@ -146,40 +146,14 @@ nxt_ui -close;
 
 ### Running a graph in Maya standalone
 
-nxt_editor ships a small command line script, `run_maya_graph.py`, that runs
-a graph inside a headless Maya session (`maya.standalone`). It lives at
-`nxt_editor/integration/maya/run_maya_graph.py`, both in the Maya module
-and in a pip install of nxt-editor. Run it with Maya's own python,
-`mayapy`, which is in Maya's `bin` folder:
+`run_maya_graph.py` runs a graph in a headless Maya session, with `mayapy`:
 
 ```
 mayapy run_maya_graph.py -g path/to/graph.nxt
-mayapy run_maya_graph.py -g path/to/graph.nxt -s /start_node
-mayapy run_maya_graph.py -g path/to/graph.nxt -p "{\"/.name\": \"test\"}"
-mayapy run_maya_graph.py -g path/to/graph.nxt -p path/to/parameters.json
 ```
 
-| Argument | Meaning |
-| :------- | :------ |
-| `-g`, `--graph_path` | The graph to run. Required. |
-| `-s`, `--start_node` | The node to start from. Without it the graph's start point is used. |
-| `-p`, `--parameters` | Values to set before the graph runs, as a JSON dictionary or the path to a JSON file. Keys are attribute paths such as `/node.attr`. A `/node._enabled` key set to `true` or `false` enables or disables that node for this run. |
-
-The script needs nxt importable from `mayapy`, which it is when the nxt
-Maya module is installed.
-
-To launch it from inside another graph, reference the builtin
-`sub_graphs.nxt` graph (**File > Reference Builtin Graph**) and instance its
-`/_maya_standalone_graph` node. Set `_graph_path` to the graph to run,
-`_maya_version` (or `_MAYA_LOCATION` / `_mayapy_exe` if Maya is not installed
-in the default Windows location) and, if needed, `_parameters` and
-`_start_node`. Turn on `_wait` to make the build wait for Maya to finish
-before it continues.
-
-`_start_node` is passed to `run_maya_graph.py` as `-s`. Its value is used as
-python, so write the node path as a string, for example `'/build_rig'`
-(`_graph_path` is written the same way). Leave it as `None` to run from the
-graph's own start point.
+See [Running Graphs Headless](headless.md#maya) for its arguments, and for
+starting it from inside another graph.
 
 ## Unreal
 
@@ -195,13 +169,16 @@ from PyPI. It is experimental: save early, save often.
    so this downloads PySide6 with the engine's own pip. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
 5. Optionally, for smarter code completion, open the editor and install
-   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   **Python Analysis (jedi)** from **Edit > Preferences > Optional Components**. See
    [Optional Components](optional_components.md).
 
 After that, the **nxt** menu in the main menu bar has **Open Editor**. The
 editor window is parented to the Unreal editor and stays responsive while
 Unreal runs. If a menu command fails, the error is logged and shown rather
 than taking the Unreal editor down.
+
+To run a graph in Unreal without the editor, from a shell or a farm, see
+[Running Graphs Headless](headless.md#unreal).
 
 To update, replace the plugin folder with the one from a newer release. If
 an older version of the plugin pip installed `nxt-editor` into the engine,
@@ -220,7 +197,7 @@ be installed or put on a path.
 3. The first time, choose **NXT > Install Qt (PySide6)**. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
 4. Optionally, for smarter code completion, open the editor and install
-   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   **Python Analysis (jedi)** from **Edit > Preferences > Optional Components**. See
    [Optional Components](optional_components.md).
 
 The **NXT** menu appears in Blender's top bar, next to **Help**. Enabling the
@@ -251,6 +228,9 @@ from a graph is printed rather than shown in a dialog.
 
 Graphs whose nodes use `bpy` can only be *run* in Blender, but they can be
 *edited* anywhere, including the standalone editor.
+
+To run a graph in Blender from a shell or a farm, without its UI, see
+[Running Graphs Headless](headless.md#blender).
 
 ## Qt for Blender and Unreal
 

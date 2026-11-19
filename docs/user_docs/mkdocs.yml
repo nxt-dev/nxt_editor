@@ -8,6 +8,7 @@ nav:
     - Concepts: concepts.md
     - Tutorials: tutorials.md
     - Installation: install.md
+    - Running Headless: headless.md
     - Optional Components: optional_components.md
     - Reference: reference.md
     - Extensions: extensions.md

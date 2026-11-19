@@ -28,7 +28,6 @@ from nxt_editor.dockwidgets import (
     DockWidgetBase,
     CodeEditor,
     PropertyEditor,
-    HotkeyEditor,
     LayerManager,
     OutputLog,
     HistoryView,
@@ -100,6 +99,15 @@ FONT_FOLLOWS_WINDOW = 'nxt_font_follows_window'
 
 # Longest host label the window title shows before it is shortened.
 HOST_LABEL_MAX = 40
+
+# How long after the editor shows Preferences is built, while it is idle,
+# so it opens at once: below 0 never. NXT_PREPARE_PREFERENCES_MS overrides
+# it; the tests turn it off, and build Preferences where they need it.
+try:
+    PREPARE_PREFERENCES_MS = int(
+        os.environ.get('NXT_PREPARE_PREFERENCES_MS', 1500))
+except ValueError:
+    PREPARE_PREFERENCES_MS = 1500
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -250,9 +258,6 @@ class MainWindow(QtWidgets.QMainWindow):
             "Setting up dockwidgets...", QtCore.Qt.AlignCenter, QtCore.Qt.white
         )
         # Dock Widgets
-        # hotkey editor
-        self.hotkey_editor = HotkeyEditor(parent=self)
-        self.hotkey_editor.hide()
 
         # property editor
         self.property_editor = PropertyEditor(parent=self)
@@ -304,8 +309,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ai_assistant.open_settings.connect(self.open_ai_settings)
         self.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.ai_assistant)
         self.ai_assistant.hide()
+        # Pages of Preferences, made the first time they are shown.
         self.ai_settings_dialog = None
         self.optional_components_dialog = None
+        self.env_files_page = None
+        self.preference_editor = None
         self.jedi_offered = False
 
         self.setCorner(QtCore.Qt.BottomRightCorner, QtCore.Qt.RightDockWidgetArea)
@@ -1290,6 +1298,21 @@ QCheckBox::indicator {
         """Framing after the window is shown because the frame is based on the window's size."""
         super(MainWindow, self).show()
         self.center_view()
+        if self.preference_editor is None and PREPARE_PREFERENCES_MS >= 0:
+            QtCore.QTimer.singleShot(PREPARE_PREFERENCES_MS,
+                                     self.prepare_preferences)
+
+    def prepare_preferences(self):
+        """Build Preferences while the editor is idle, so it opens the moment
+        it is asked for."""
+        if self.preference_editor is not None:
+            return
+        from nxt_editor.preference_editor import PreferenceEditor
+        dialog = PreferenceEditor(main_window=self)
+        # Its window is made now too, which Qt otherwise does as it first
+        # shows.
+        dialog.winId()
+        self.preference_editor = dialog
 
     def reset_layout(self):
         """Restore all dock widgets and toolbars to the default layout."""
@@ -1302,7 +1325,7 @@ QCheckBox::indicator {
         user_dir.user_prefs[user_dir.USER_PREF.SHOW_STAGE_VIEW] = visible
 
     def open_color_range(self):
-        """View > Options > Layer Color View."""
+        """Window > Layer Color View."""
         from nxt_editor.color_range_dialog import ColorRangeDialog
         dialog = ColorRangeDialog(parent=self,
                                   apply=self.refresh_layer_colors)
@@ -1321,51 +1344,89 @@ QCheckBox::indicator {
         if getattr(editor, 'stage_model', None):
             editor.set_represented_node()
 
-    def open_preferences(self):
-        """Options > Preferences."""
-        from nxt_editor.preference_editor import PreferenceEditor
-        dialog = PreferenceEditor(main_window=self)
-        dialog.exec_()
-        return dialog
+    def open_preferences(self, section=None):
+        """Edit > Preferences, at a section when one is named. One window,
+        kept open beside the editor while you work.
 
-    def open_env_files(self):
-        """Options > Environment Variables."""
-        from nxt_editor import env_dialog
-        if not env_dialog.available():
-            # The menu item is hidden, see AppActions.
-            return None
-        dialog = env_dialog.EnvFilesDialog(parent=self)
-        dialog.exec_()
-        return dialog
-
-    def open_ai_settings(self):
-        """Options > AI Assistant."""
-        from nxt_editor.ai.settings_dialog import AiSettingsDialog
-        if self.ai_settings_dialog is None:
-            self.ai_settings_dialog = AiSettingsDialog(parent=self)
-            self.ai_settings_dialog.enabled_changed.connect(
-                self.on_ai_enabled_changed)
-            self.ai_settings_dialog.settings_changed.connect(
-                self.ai_assistant.refresh_providers)
-        self.ai_settings_dialog.show()
-        self.ai_settings_dialog.raise_()
-
-    def open_optional_components(self, focus=None):
-        """Options > Optional Components.
-
-        :param focus: the id of a component to point at
+        :param section: the name of a section or page to show
+        :return: the Preferences window
         """
-        from nxt_editor.optional_components import OptionalComponentsDialog
-        if self.optional_components_dialog is None:
-            dialog = OptionalComponentsDialog(parent=self)
-            dialog.changed.connect(self.on_optional_component_changed)
-            self.optional_components_dialog = dialog
-        dialog = self.optional_components_dialog
-        if not dialog.busy():
-            dialog.refresh()
+        from nxt_editor.preference_editor import PreferenceEditor
+        dialog = self.preference_editor
+        if dialog is None:
+            dialog = PreferenceEditor(main_window=self)
+            self.preference_editor = dialog
+        if section:
+            dialog.go_to_page(section)
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
+        return dialog
+
+    def settings_page(self, name, parent):
+        """A page of Preferences that is a window of its own elsewhere,
+        made the first time Preferences shows it.
+
+        :param name: one of preference_editor.PAGES
+        :param parent: the Preferences window
+        :rtype: QtWidgets.QWidget
+        """
+        from nxt_editor import preference_editor as prefs
+        if name == prefs.AI_ASSISTANT:
+            from nxt_editor.ai.settings_dialog import AiSettingsDialog
+            page = AiSettingsDialog(parent=parent)
+            page.enabled_changed.connect(self.on_ai_enabled_changed)
+            page.settings_changed.connect(
+                self.ai_assistant.refresh_providers)
+            self.ai_settings_dialog = page
+        elif name == prefs.ENV_VARIABLES:
+            from nxt_editor import env_dialog
+            page = env_dialog.EnvFilesDialog(parent=parent)
+            self.env_files_page = page
+            # Edits are applied with Apply, and asked about on closing.
+            return prefs.embedded(page,
+                                  keep=(QtWidgets.QDialogButtonBox.Apply,))
+        elif name == prefs.OPTIONAL_COMPONENTS:
+            from nxt_editor.optional_components import \
+                OptionalComponentsDialog
+            # One given to the window already is used, as tests do.
+            page = self.optional_components_dialog
+            if page is None:
+                page = OptionalComponentsDialog(parent=parent)
+            else:
+                page.setParent(parent)
+            page.changed.connect(self.on_optional_component_changed)
+            page.close_button.hide()
+            # It has a title of its own.
+            page.has_title = True
+            self.optional_components_dialog = page
+        else:
+            raise ValueError('No settings page {}'.format(name))
+        return prefs.embedded(page)
+
+    def open_env_files(self):
+        """Edit > Preferences > Environment Variables."""
+        from nxt_editor import env_dialog
+        if not env_dialog.available():
+            # There is no page for it, see PreferenceEditor.
+            return None
+        self.open_preferences('Environment Variables')
+        return self.env_files_page
+
+    def open_ai_settings(self):
+        """Edit > Preferences > AI Assistant."""
+        self.open_preferences('AI Assistant')
+        return self.ai_settings_dialog
+
+    def open_optional_components(self, focus=None):
+        """Edit > Preferences > Optional Components.
+
+        :param focus: the id of a component to point at
+        """
+        self.open_preferences('Optional Components')
+        dialog = self.optional_components_dialog
+        if not dialog.busy():
+            dialog.refresh()
         if focus:
             dialog.focus(focus)
         return dialog
@@ -1799,6 +1860,9 @@ class MenuBar(QtWidgets.QMenuBar):
         self.edit_menu.addAction(self.node_actions.delete_node_action)
         self.edit_menu.addSeparator()
         self.edit_menu.addAction(self.node_actions.select_all_action)
+        # Every setting, in one window.
+        self.edit_menu.addSeparator()
+        self.edit_menu.addAction(self.app_actions.preferences_action)
 
         # view menu
         self.view_menu = self.addMenu("View")
@@ -1825,7 +1889,6 @@ class MenuBar(QtWidgets.QMenuBar):
         self.view_opt_menu = self.view_menu.addMenu("Options")
         self.view_opt_menu.setTearOffEnabled(True)
         self.view_opt_menu.addAction(self.view_actions.tooltip_action)
-        self.view_opt_menu.addAction(self.app_actions.color_range_action)
         self.view_opt_menu.addAction(
             self.view_actions.neutral_property_text_action)
         self.view_opt_menu.addAction(self.layer_actions.lay_manger_table_action)
@@ -1874,7 +1937,6 @@ class MenuBar(QtWidgets.QMenuBar):
             parent.open_files_tab_widget)
         self.app_actions.outliner_action.setData(parent.outliner)
         self.app_actions.instance_view_action.setData(parent.instance_view)
-        self.app_actions.hotkey_editor_action.setData(parent.hotkey_editor)
         self.app_actions.workflow_tools_action.setData(parent.workflow_tools)
         self.app_actions.ai_assistant_action.setData(parent.ai_assistant)
 
@@ -1892,9 +1954,13 @@ class MenuBar(QtWidgets.QMenuBar):
             self.app_actions.history_view_action,
             self.app_actions.build_view_action,
             self.app_actions.output_log_action,
-            self.app_actions.hotkey_editor_action,
             self.app_actions.workflow_tools_action,
             self.app_actions.ai_assistant_action,
+        ]
+        # Windows that are not panels: shown, not toggled.
+        self.window_tool_actions = [
+            self.app_actions.color_range_action,
+            self.app_actions.hotkey_editor_action,
         ]
         self.populate_window_menu()
         # Remote Menu
@@ -1909,31 +1975,6 @@ class MenuBar(QtWidgets.QMenuBar):
         self.remote_menu.addSeparator()
         self.remote_menu.addAction(self.exec_actions.startup_rpc_action)
         self.remote_menu.addAction(self.exec_actions.shutdown_rpc_action)
-        self.options_menu = self.addMenu("Options")
-        self.options_menu.addAction(self.app_actions.preferences_action)
-        self.options_menu.addSeparator()
-        self.options_menu.addAction(self.app_actions.toggle_ding_action)
-        self.options_menu.addAction(self.app_actions.check_disk_action)
-        self.options_menu.addAction(self.app_actions.refactor_rename_action)
-        self.options_menu.addAction(self.app_actions.refactor_parent_action)
-        self.options_menu.addAction(self.app_actions.ai_settings_action)
-        self.options_menu.addAction(
-            self.app_actions.optional_components_action)
-        self.options_menu.addAction(self.app_actions.env_files_action)
-        self.options_view_sub = self.options_menu.addMenu("View")
-        self.options_view_sub.setTearOffEnabled(True)
-        self.options_view_sub.addActions(self.view_opt_menu.actions())
-        # Code editor completion: whether it offers anything unasked, and
-        # what it is allowed to look at.
-        ce_actions = self.main_window.code_editor_actions
-        self.options_complete_sub = self.options_menu.addMenu("Autocomplete")
-        self.options_complete_sub.setTearOffEnabled(True)
-        # Python Analysis says how to get jedi when it is missing.
-        self.options_complete_sub.setToolTipsVisible(True)
-        self.options_complete_sub.addAction(ce_actions.autocomplete_action)
-        self.options_complete_sub.addSeparator()
-        for source_action, _pref, _default in                 ce_actions.completion_source_actions:
-            self.options_complete_sub.addAction(source_action)
         # Help Menu
         self.help_menu = self.addMenu("Help")
         self.help_menu.setTearOffEnabled(True)
@@ -1998,6 +2039,9 @@ class MenuBar(QtWidgets.QMenuBar):
             action.setChecked(widget.isVisible())
             self.window_menu.addAction(action)
         self.window_menu.addSeparator()
+        for action in self.window_tool_actions:
+            self.window_menu.addAction(action)
+        self.window_menu.addSeparator()
         current = self.main_window.get_current_view()
         for file_dict in self.main_window.open_files.values():
             widget = file_dict["view"]
@@ -2018,6 +2062,9 @@ class MenuBar(QtWidgets.QMenuBar):
             return
         if action is self.app_actions.stage_view_action:
             self.main_window.set_stage_view_visible(action.isChecked())
+            return
+        if action in self.window_tool_actions:
+            # They open their window when triggered.
             return
         widget = action.data()
         tab_index = self.main_window.open_files_tab_widget.indexOf(widget)

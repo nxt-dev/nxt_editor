@@ -20,6 +20,11 @@ if not os.environ.get('NXT_USER_DIR'):
     _USER_DIR = tempfile.mkdtemp(prefix='nxt_test_user_')
     os.environ['NXT_USER_DIR'] = _USER_DIR
 
+# The editor builds Preferences while it is idle after it shows. Tests
+# build it where they need it, rather than have it appear part way through
+# an unrelated one.
+os.environ.setdefault('NXT_PREPARE_PREFERENCES_MS', '-1')
+
 
 def pytest_sessionfinish(session, exitstatus):
     if _USER_DIR:

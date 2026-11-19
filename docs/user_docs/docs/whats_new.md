@@ -7,7 +7,20 @@ Each item links to the part of the docs that explains it in full.
 ## Unreleased
 
 **New**
-- **Three looks to choose from**, in **Options > Preferences... > Look**:
+- **Preferences moved to Edit > Preferences...** (`Ctrl+,`), and the
+  Options menu is gone. Everything it held is in Preferences: the error
+  sound and the other toggles in their sections, and the AI Assistant,
+  Environment Variables and Optional Components as pages of their own.
+  Preferences stays open beside the editor while you work. See
+  [Preferences](reference.md#preferences).
+- **Hotkeys are a page of Preferences**, in the same style: each action
+  with what it does, its hotkey, Clear and Reset, and **Global** on the
+  ones that work anywhere in the window. The search finds hotkeys by name
+  or by their keys. **Window > Hotkey Editor** opens it. See
+  [Hotkeys](hotkeys.md).
+- **Layer Color View** is in the **Window** menu, and **Autocomplete** in
+  the code editor's right-click menu.
+- **Three looks to choose from**, in **Edit > Preferences... > Panels > Look**:
   Modern, Classic (how the editor looked before) and Host application,
   which looks like Maya, Blender or Unreal when the editor runs in them,
   and a **Stylesheet** of your own to lay over it. See
@@ -16,15 +29,15 @@ Each item links to the part of the docs that explains it in full.
   like; the canvas grows as you go.
 - **Renaming an attribute renames the tokens that use it**, and
   **parenting a node keeps its instances pointed at it**, both undoable,
-  with **Options > Update Tokens on Attr Rename** and **Update Instance
-  Paths on Parent** to turn them off. See
+  with **Update Tokens on Attr Rename** and **Update Instance Paths on
+  Parent**, in **Edit > Preferences > Editing**, to turn them off. See
   [Renaming an attribute](reference.md#renaming-an-attribute) and
   [Parenting an instanced node](reference.md#parenting-an-instanced-node).
 - **Sub-graphs**: **Open Sub-graph** (`Ctrl+Shift+G`) opens the graph a
   sub-graph node runs, and the Property Editor lists that graph's world
   attributes the node does not set yet. See
   [Sub-graph nodes](reference.md#sub-graph-nodes).
-- **Options > Preferences...** has every preference you can set, with
+- **Edit > Preferences...** has every preference you can set, with
   what each does, including ones that had no menu, like drag zoom speed and
   how the graph follows a run. Sections on the left, one page each, and a
   search that looks through all of them. See

@@ -1145,7 +1145,7 @@ class RevertNode(DeleteNode):
 
 def refactor_attr_rename(stage):
     """Whether renaming an attr updates the tokens that point at it: on
-    unless turned off in Options, and with an nxt_core that can."""
+    unless turned off in Preferences, and with an nxt_core that can."""
     return (hasattr(stage, 'get_attr_ref_changes') and
             user_dir.user_prefs.get(user_dir.USER_PREF.REFACTOR_ATTR_RENAME,
                                     True))
@@ -1153,7 +1153,7 @@ def refactor_attr_rename(stage):
 
 def refactor_instance_paths(stage):
     """Whether parenting nodes updates the instance paths that point at
-    them: on unless turned off in Options, and with an nxt_core that
+    them: on unless turned off in Preferences, and with an nxt_core that
     can."""
     return (hasattr(stage, 'retarget_instance_paths') and
             user_dir.user_prefs.get(

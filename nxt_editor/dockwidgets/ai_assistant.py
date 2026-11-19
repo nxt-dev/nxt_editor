@@ -1,7 +1,7 @@
 """The AI Assistant panel: chat with Claude, OpenAI or Grok about the graph.
 
 Only in the Window menu once the assistant is turned on in
-Options > AI Assistant. Every chat is kept, so New Chat does not lose the
+Edit > Preferences > AI Assistant. Every chat is kept, so New Chat does not lose the
 last one. The list of chats goes back to any of them, and right clicking
 one pins it to the top or deletes it.
 
@@ -254,7 +254,7 @@ class AiAssistant(DockWidgetBase):
         self.always_button = _button('Always allow', 'aiGhost')
         self.always_button.setToolTip(
             'Let it read this folder in every chat. It is remembered in '
-            'Options > AI Assistant > Memory, where you can take it back.')
+            'Edit > Preferences > AI Assistant > Memory, where you can take it back.')
         self.always_button.clicked.connect(
             lambda: self.answer_access(tools.ALWAYS))
         self.deny_button = _button('Deny', 'aiGhost')

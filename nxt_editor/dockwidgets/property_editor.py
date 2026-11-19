@@ -2425,7 +2425,7 @@ def neutral_text():
 
     Layer colors are dark enough to carry white text, so as text on the
     dark panel the inherited rows, darkened further, are hard to read.
-    Off by default, see View > Options > Neutral Property Text.
+    Off by default, see View > Options > Neutral Property Text, or Preferences > Panels.
     """
     if not _neutral_text:
         _neutral_text.append(bool(user_dir.user_prefs.get(

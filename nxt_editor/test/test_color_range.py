@@ -4,7 +4,7 @@ Raw, the default, shows every color as it is. White-text safe shows a color
 too light for white text darker. Even shows every color at one OKLCH
 lightness and chroma, keeping its hue. Stored colors are never rewritten
 for it, so changing the range loses nothing, and choosing a layer's color
-in Change Color is the same whatever the view. View > Options > Layer Color
+in Change Color is the same whatever the view. Window > Layer Color
 View sets it, with a live preview, and remembers it on OK; Cancel puts the
 range back and Reset to Default goes back to what nxt ships with.
 """

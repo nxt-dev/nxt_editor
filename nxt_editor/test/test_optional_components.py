@@ -1,4 +1,4 @@
-"""Options > Optional Components: a card per component, pip in a QProcess.
+"""Edit > Preferences > Optional Components: a card per component, pip in a QProcess.
 
 pip is never run. A stand in for QProcess takes its place, says what pip
 would, and writes what pip would have installed into the folder it was
@@ -373,22 +373,23 @@ class TestEditor(DialogTest):
 
     def setUp(self):
         super(TestEditor, self).setUp()
-        if self.win.optional_components_dialog is not None:
-            put_away(self.win.optional_components_dialog)
+        # A page of Preferences, made again with it.
+        if self.win.preference_editor is not None:
+            put_away(self.win.preference_editor)
+        self.win.preference_editor = None
         self.win.optional_components_dialog = None
         self.win.jedi_offered = False
         if code_completion.Jedi.installed():
             self.skipTest('this python has jedi of its own')
 
-    def test_it_is_in_the_options_menu(self):
-        menu = self.win.menu_bar.options_menu
-        self.assertIn(self.win.app_actions.optional_components_action,
-                      menu.actions())
+    def test_it_is_a_page_of_preferences(self):
         self.win.app_actions.optional_components_action.trigger()
         dialog = self.win.optional_components_dialog
         self.assertIsInstance(dialog, oc.OptionalComponentsDialog)
         self.assertTrue(dialog.isVisible())
-        dialog.hide()
+        self.assertEqual('Optional Components',
+                         self.win.preference_editor.current_section())
+        self.win.preference_editor.hide()
 
     def test_jedi_installed_from_the_dialog_is_used_at_once(self):
         actions = self.win.code_editor_actions
