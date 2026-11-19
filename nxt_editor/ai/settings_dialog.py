@@ -6,11 +6,11 @@ import sys
 import webbrowser
 
 # External
-from Qt import QtCore, QtWidgets
+from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 import nxt_editor
-from nxt_editor import user_dir
+from nxt_editor import theme, user_dir
 from nxt_editor.constants import FONTS
 from nxt_editor.ai import claude_code, codex, providers, secret_store
 from nxt_editor.ai.memory_page import MemoryPage
@@ -90,21 +90,170 @@ class WaitDialog(QtWidgets.QDialog):
         self.browser_button.setVisible(bool(url))
 
 
-class ProviderBox(QtWidgets.QGroupBox):
-    """Sign in, API key and model for one provider."""
+#: One width for the buttons beside the fields, so they line up in every
+#: provider's section.
+BUTTON_WIDTH = 88
+
+
+def link_html(url, text):
+    """A link a QLabel shows in the link color: labels ignore style
+    sheets for links."""
+    return '<a href="{}" style="color: {}; text-decoration: none">{}</a>'\
+        .format(url, theme.LINK, text)
+
+
+class SectionHeader(QtWidgets.QAbstractButton):
+    """The row a provider's section opens and closes from: a chevron, its
+    name, Default when it is asked first, and how it is set up. Drawn here
+    rather than by the style, so it looks the same in every host."""
+    HEIGHT = 32
+
+    def __init__(self, name, parent=None):
+        super(SectionHeader, self).__init__(parent)
+        self.name = name
+        self.summary = ''
+        self.problem = False
+        self.is_default = False
+        self.setCheckable(True)
+        # Reached with Tab, not taken by a click: the editor's style sheet
+        # draws a square border round whatever has focus, over the rounded
+        # header. Its own ring shows keyboard focus instead.
+        self.setFocusPolicy(QtCore.Qt.TabFocus)
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, False)
+        self.setStyleSheet('border: none; background: transparent;')
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setFixedHeight(self.HEIGHT)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                           QtWidgets.QSizePolicy.Fixed)
+        self.toggled.connect(self.update_name)
+        self.update_name()
+
+    def set_summary(self, text, problem=False, tip=''):
+        self.summary = text
+        self.problem = problem
+        self.setToolTip(tip)
+        self.update_name()
+
+    def set_default(self, is_default):
+        self.is_default = is_default
+        self.update_name()
+
+    def update_name(self, *_args):
+        self.setAccessibleName('{}, {}, {}'.format(
+            self.name, self.summary or 'Not set up',
+            'expanded' if self.isChecked() else 'collapsed'))
+        self.update()
+
+    def sizeHint(self):
+        return QtCore.QSize(200, self.HEIGHT)
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if key in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+            self.click()
+        elif key == QtCore.Qt.Key_Left and self.isChecked():
+            self.click()
+        elif key == QtCore.Qt.Key_Right and not self.isChecked():
+            self.click()
+        else:
+            super(SectionHeader, self).keyPressEvent(event)
+
+    def paintEvent(self, _event):
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        rect = QtCore.QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        fill = theme.HOVER if self.underMouse() else theme.RAISED
+        painter.setPen(QtGui.QPen(theme.color(theme.ACCENT), 1)
+                       if self.hasFocus() else QtCore.Qt.NoPen)
+        painter.setBrush(theme.color(fill))
+        painter.drawRoundedRect(rect, theme.RADIUS, theme.RADIUS)
+        x = 10
+        # Chevron
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(theme.color(theme.TEXT_DIM))
+        mid = self.height() / 2.0
+        if self.isChecked():
+            points = [QtCore.QPointF(x, mid - 2),
+                      QtCore.QPointF(x + 8, mid - 2),
+                      QtCore.QPointF(x + 4, mid + 3)]
+        else:
+            points = [QtCore.QPointF(x + 2, mid - 4),
+                      QtCore.QPointF(x + 7, mid),
+                      QtCore.QPointF(x + 2, mid + 4)]
+        painter.drawPolygon(QtGui.QPolygonF(points))
+        x += 18
+        # Name
+        name_font = theme.font(theme.TEXT_PX,
+                               weight=QtGui.QFont.Medium)
+        painter.setFont(name_font)
+        painter.setPen(theme.color(theme.TEXT))
+        name_width = QtGui.QFontMetrics(name_font).horizontalAdvance(
+            self.name)
+        painter.drawText(QtCore.QRectF(x, 0, name_width + 2, self.height()),
+                         QtCore.Qt.AlignVCenter, self.name)
+        x += name_width + 10
+        small = theme.font(theme.SMALL_PX)
+        metrics = QtGui.QFontMetrics(small)
+        painter.setFont(small)
+        # Default
+        if self.is_default:
+            text = 'Default'
+            pill = QtCore.QRectF(x, mid - 9,
+                                 metrics.horizontalAdvance(text) + 12, 18)
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(theme.color(theme.ACCENT_DIM))
+            painter.drawRoundedRect(pill, 9, 9)
+            painter.setPen(theme.color(theme.TEXT))
+            painter.drawText(pill, QtCore.Qt.AlignCenter, text)
+            x = pill.right() + 10
+        # How it is set up
+        room = self.width() - 12 - x
+        if self.summary and room > 20:
+            painter.setPen(theme.color(theme.ERROR if self.problem
+                                       else theme.TEXT_DIM))
+            text = metrics.elidedText(self.summary, QtCore.Qt.ElideRight,
+                                      int(room))
+            painter.drawText(QtCore.QRectF(x, 0, room, self.height()),
+                             QtCore.Qt.AlignVCenter | QtCore.Qt.AlignRight,
+                             text)
+        painter.end()
+
+    def enterEvent(self, event):
+        super(SectionHeader, self).enterEvent(event)
+        self.update()
+
+    def leaveEvent(self, event):
+        super(SectionHeader, self).leaveEvent(event)
+        self.update()
+
+
+class ProviderBox(QtWidgets.QWidget):
+    """Sign in, API key and model for one provider, under a header that
+    opens and closes it."""
     changed = QtCore.Signal()
     # Something was saved in the secure store.
     stored = QtCore.Signal()
 
     def __init__(self, provider, parent=None):
-        super(ProviderBox, self).__init__(provider.label, parent)
+        super(ProviderBox, self).__init__(parent)
         self.provider = provider
         self.thread = None
         self.wait_dialog = None
-        layout = QtWidgets.QGridLayout(self)
+        self.problem = ''
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+        self.header = SectionHeader(provider.label)
+        self.header.toggled.connect(self.set_expanded)
+        outer.addWidget(self.header)
+        self.body = QtWidgets.QWidget()
+        outer.addWidget(self.body)
+        layout = QtWidgets.QGridLayout(self.body)
+        # Set in under the chevron, so it reads as this section's.
+        layout.setContentsMargins(12, 2, 6, 8)
         self.status_label = QtWidgets.QLabel()
         self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label, 0, 0, 1, 4)
+        layout.addWidget(self.status_label, 0, 0, 1, 5)
 
         # Web
         self.web_button = QtWidgets.QPushButton()
@@ -154,10 +303,12 @@ class ProviderBox(QtWidgets.QGroupBox):
         self.remove_key_button.clicked.connect(self.remove_key)
         layout.addWidget(self.remove_key_button, 2, 3)
         if provider.keys_url:
-            keys_link = QtWidgets.QLabel(
-                '<a href="{}">Get an API key</a>'.format(provider.keys_url))
-            keys_link.setOpenExternalLinks(True)
-            layout.addWidget(keys_link, 3, 1, 1, 3)
+            self.keys_link = QtWidgets.QLabel(
+                link_html(provider.keys_url, 'Get a key'))
+            self.keys_link.setFont(theme.font(theme.SMALL_PX))
+            self.keys_link.setOpenExternalLinks(True)
+            self.keys_link.setVisible(provider.takes_api_key)
+            layout.addWidget(self.keys_link, 2, 4)
         for widget in (key_label, self.key_edit, self.save_key_button,
                        self.remove_key_button):
             widget.setVisible(provider.takes_api_key)
@@ -181,7 +332,11 @@ class ProviderBox(QtWidgets.QGroupBox):
         # Model
         layout.addWidget(QtWidgets.QLabel('Model'), 5, 0)
         self.model_combo = QtWidgets.QComboBox()
-        self.model_combo.setMinimumContentsLength(24)
+        # Short enough for the section to fit beside the scroll bar; it
+        # stretches to fill the row when there is room.
+        self.model_combo.setMinimumContentsLength(10)
+        self.model_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.models_thread = None
         self.model_combo.currentTextChanged.connect(self.on_model_changed)
         layout.addWidget(self.model_combo, 5, 1)
@@ -191,13 +346,93 @@ class ProviderBox(QtWidgets.QGroupBox):
         self.check_button.clicked.connect(self.check)
         layout.addWidget(self.check_button, 5, 2)
         layout.setColumnStretch(1, 1)
+        for button in (self.sign_out_button, self.locate_button,
+                       self.save_key_button, self.remove_key_button,
+                       self.check_button,
+                       getattr(self, 'find_button', None)):
+            if button is not None:
+                button.setFixedWidth(BUTTON_WIDTH)
+        # The same columns in every section, used or not, so they line up.
+        for column in (2, 3):
+            layout.setColumnMinimumWidth(column, BUTTON_WIDTH)
+        probe = QtWidgets.QLabel(link_html('', 'Get a key'))
+        probe.setFont(theme.font(theme.SMALL_PX))
+        link_width = probe.sizeHint().width() + 2
+        if provider.keys_url:
+            self.keys_link.setFixedWidth(link_width)
+        layout.setColumnMinimumWidth(4, link_width)
+        label_width = max(self.fontMetrics().horizontalAdvance(text)
+                          for text in ('API key', 'Server', 'Model')) + 8
+        layout.setColumnMinimumWidth(0, label_width)
+        # A grid leaves out the spacing of a column with nothing in it, and
+        # which are empty differs by provider, so these keep them filled.
+        for column, width in ((3, BUTTON_WIDTH), (4, link_width)):
+            spacer = QtWidgets.QWidget()
+            spacer.setFixedSize(width, 0)
+            layout.addWidget(spacer, 5, column)
+        self.body.setVisible(False)
         self.refresh()
 
+    def set_expanded(self, expanded):
+        if self.header.isChecked() != expanded:
+            self.header.setChecked(expanded)
+            return
+        # Opens downward where it is. Nothing scrolls, so the header stays
+        # under the mouse.
+        self.body.setVisible(expanded)
+
+    def is_expanded(self):
+        return self.header.isChecked()
+
     def set_status(self, text, error=False):
-        color = '#e07070' if error else ''
-        style = 'color: {}'.format(color) if color else ''
+        style = 'color: {}'.format(theme.ERROR) if error else ''
         self.status_label.setStyleSheet(style)
         self.status_label.setText(text)
+        self.problem = text if error else ''
+        self.update_header()
+
+    def summary(self):
+        """A few words on how the provider is set up, for its header."""
+        provider = self.provider
+        status = provider.status()
+        if status == 'Not set up.':
+            return 'Not set up'
+        if self.is_local:
+            text = 'Local server'
+        elif provider.method == providers.KEY or not provider.web_record():
+            if provider.saved_api_key():
+                text = 'API key'
+            elif provider.env_api_key():
+                text = 'Environment key'
+            else:
+                text = 'Signed in'
+        else:
+            text = 'Signed in'
+        model = provider.model
+        if model:
+            text += ' \u00b7 ' + model
+        return text
+
+    def update_header(self, busy=''):
+        if busy:
+            self.header.set_summary(busy)
+        elif self.problem:
+            self.header.set_summary('Problem', problem=True,
+                                    tip=self.problem)
+        else:
+            try:
+                summary = self.summary()
+            except Exception:
+                logger.debug('No summary for %s', self.provider.label,
+                             exc_info=True)
+                summary = ''
+            self.header.set_summary(summary,
+                                    tip=self.status_label.text())
+
+    def set_controls_enabled(self, enabled):
+        """Everything but the header, which still opens and closes so the
+        settings can be read with the assistant off."""
+        self.body.setEnabled(enabled)
 
     @property
     def uses_app(self):
@@ -370,6 +605,7 @@ class ProviderBox(QtWidgets.QGroupBox):
     def on_model_changed(self, text):
         if text:
             self.provider.model = text
+            self.update_header()
             self.changed.emit()
 
     def save_key(self):
@@ -628,10 +864,31 @@ class ProviderBox(QtWidgets.QGroupBox):
                 thread.wait(2000)
 
 
+def scrolling(page):
+    """page in a scroll area of its own, so a tab can be taller than the
+    window and still be got to the bottom of."""
+    area = QtWidgets.QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QtWidgets.QFrame.NoFrame)
+    area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+    area.setWidget(page)
+    area.viewport().setAutoFillBackground(False)
+    page.setAutoFillBackground(False)
+    return area
+
+
 class AiSettingsDialog(QtWidgets.QDialog):
-    """Options > AI Assistant."""
+    """Options > AI Assistant.
+
+    What turns it on and says what it does stays at the top, and Close at
+    the bottom. Between them each tab scrolls, and each provider is a
+    section that opens from its header, which says how it is set up. The
+    provider asked first starts open.
+    """
     enabled_changed = QtCore.Signal(bool)
     settings_changed = QtCore.Signal()
+    # The part of the screen it may take, so Close is always on it.
+    SCREEN_SHARE = 0.9
 
     def __init__(self, parent=None, store=None, prefs=None):
         super(AiSettingsDialog, self).__init__(parent)
@@ -644,6 +901,9 @@ class AiSettingsDialog(QtWidgets.QDialog):
         self.enable_check.setChecked(providers.is_enabled(self.prefs))
         self.enable_check.toggled.connect(self.on_enable_toggled)
         layout.addWidget(self.enable_check)
+        self.off_hint = QtWidgets.QLabel('Turn this on to set up sign ins.')
+        self.off_hint.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        layout.addWidget(self.off_hint)
         about = QtWidgets.QLabel(
             'Adds an AI Assistant panel to the Window menu. Nothing is '
             'sent to a provider until you ask it something, and then only '
@@ -658,12 +918,19 @@ class AiSettingsDialog(QtWidgets.QDialog):
 
         self.body = QtWidgets.QTabWidget()
         layout.addWidget(self.body, 1)
-        sign_ins = QtWidgets.QWidget()
-        body_layout = QtWidgets.QVBoxLayout(sign_ins)
-        self.body.addTab(sign_ins, 'Sign In')
+        providers_tab = QtWidgets.QWidget()
+        tab_layout = QtWidgets.QVBoxLayout(providers_tab)
+        sections = QtWidgets.QWidget()
+        body_layout = QtWidgets.QVBoxLayout(sections)
+        body_layout.setContentsMargins(0, 4, 4, 0)
+        body_layout.setSpacing(6)
+        self.sections = scrolling(sections)
+        self.body.addTab(providers_tab, 'Providers')
         self.memory_page = MemoryPage(prefs=self.prefs)
         self.memory_page.changed.connect(self.settings_changed.emit)
-        self.body.addTab(self.memory_page, 'Memory')
+        self.body.addTab(scrolling(self.memory_page), 'Memory')
+        # Which one is asked first is for all of them, so it stays put
+        # above them.
         default_row = QtWidgets.QHBoxLayout()
         default_row.addWidget(QtWidgets.QLabel('Ask'))
         self.provider_combo = QtWidgets.QComboBox()
@@ -679,7 +946,8 @@ class AiSettingsDialog(QtWidgets.QDialog):
         default_row.addWidget(self.provider_combo)
         default_row.addWidget(QtWidgets.QLabel('first'))
         default_row.addStretch()
-        body_layout.addLayout(default_row)
+        tab_layout.addLayout(default_row)
+        tab_layout.addWidget(self.sections, 1)
         self.boxes = []
         for provider in self.providers:
             box = ProviderBox(provider, self)
@@ -688,21 +956,61 @@ class AiSettingsDialog(QtWidgets.QDialog):
             body_layout.addWidget(box)
             self.boxes.append(box)
         body_layout.addStretch()
+        self.mark_default()
+        default_box = self.box(self.provider_combo.currentData())
+        if default_box is not None:
+            default_box.set_expanded(True)
 
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close)
         buttons.rejected.connect(self.close)
         layout.addWidget(buttons)
-        self.body.setEnabled(self.enable_check.isChecked())
-        self.setMinimumWidth(560)
+        self.set_controls_enabled(self.enable_check.isChecked())
+        self.setMinimumSize(560, 420)
+        self.resize(600, 720)
+
+    def box(self, provider_id):
+        for box in self.boxes:
+            if box.provider.id == provider_id:
+                return box
+        return None
+
+    def mark_default(self):
+        current = self.provider_combo.currentData()
+        for box in self.boxes:
+            box.header.set_default(box.provider.id == current)
+
+    def set_controls_enabled(self, enabled):
+        """With the assistant off its settings can be looked at, opening
+        and closing sections, but not changed."""
+        self.off_hint.setVisible(not enabled)
+        self.provider_combo.setEnabled(enabled)
+        self.memory_page.setEnabled(enabled)
+        for box in self.boxes:
+            box.set_controls_enabled(enabled)
+
+    def fit_screen(self):
+        """No taller than most of the screen it is on, so Close stays on
+        it."""
+        screen = self.screen() if hasattr(self, 'screen') else None
+        if screen is None:
+            return
+        room = int(screen.availableGeometry().height() * self.SCREEN_SHARE)
+        if self.height() > room:
+            self.resize(self.width(), max(room, self.minimumHeight()))
 
     def refresh_store_label(self):
         if self.store.available:
             where = self.store.describe()
+            self.store_label.setFont(theme.font(theme.SMALL_PX))
+            self.store_label.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
         else:
             where = ('There is no secure storage on this computer, so keys '
                      'and sign ins can not be saved. Set ANTHROPIC_API_KEY, '
                      'OPENAI_API_KEY or XAI_API_KEY before starting nxt '
                      'instead.')
+            self.store_label.setFont(theme.font(theme.TEXT_PX))
+            self.store_label.setStyleSheet(
+                'color: {};'.format(theme.ERROR))
         self.store_label.setText(where)
 
     def refresh_sign_ins(self, older_than=0):
@@ -715,6 +1023,7 @@ class AiSettingsDialog(QtWidgets.QDialog):
 
     def showEvent(self, event):
         super(AiSettingsDialog, self).showEvent(event)
+        self.fit_screen()
         self.refresh_sign_ins()
 
     def changeEvent(self, event):
@@ -725,12 +1034,13 @@ class AiSettingsDialog(QtWidgets.QDialog):
 
     def on_enable_toggled(self, state):
         self.prefs[user_dir.USER_PREF.AI_ENABLED] = bool(state)
-        self.body.setEnabled(state)
+        self.set_controls_enabled(state)
         self.enabled_changed.emit(bool(state))
 
     def on_provider_changed(self, _index):
         self.prefs[user_dir.USER_PREF.AI_PROVIDER] = \
             self.provider_combo.currentData()
+        self.mark_default()
         self.settings_changed.emit()
 
     def closeEvent(self, event):

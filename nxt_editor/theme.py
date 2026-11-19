@@ -41,6 +41,8 @@ TEXT_FAINT = '#6e6e6e'
 ACCENT = '#909090'
 ACCENT_STRONG = '#525252'
 ACCENT_DIM = '#3c3c3c'
+LINK = '#6fb3ff'          # links in text
+ERROR = '#e07070'         # text saying something went wrong
 
 # -- the graph ---------------------------------------------------------------
 NODE_BODY = '#2a2a2a'        # a node's attribute rows
