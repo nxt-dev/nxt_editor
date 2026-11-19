@@ -27,6 +27,11 @@ Each item links to the part of the docs that explains it in full.
   and the list scrolls so everything can be reached on a small screen. See
   [Signing in](reference.md#signing-in).
 
+**Fixed**
+- The code editor's completion list opens under the line, with its names
+  starting where the word being completed starts. It was drawn to the left
+  by the width of the line numbers, and over the bottom of the line.
+
 ## nxt_editor 4.13.0
 
 ### The graph
