@@ -362,13 +362,15 @@ class AppActions(NxtActionContainer):
             'instances from and those that instance it.')
         self.available_without_model.append(self.instance_view_action)
 
-        # Hotkey editor
+        # Hotkeys, a section of Preferences.
         self.hotkey_editor_action = NxtAction(text='Hotkey Editor',
                                               parent=self)
-        self.hotkey_editor_action.setCheckable(True)
         self.hotkey_editor_action.setShortcutContext(context)
-        self.hotkey_editor_action.setWhatsThis('Toggle the hotkey editor '
-                                               'widget.')
+        self.hotkey_editor_action.setWhatsThis(
+            'Open Preferences at Hotkeys, every action\'s keyboard '
+            'shortcut.')
+        self.hotkey_editor_action.triggered.connect(
+            lambda _=False: self.main_window.open_preferences('Hotkeys'))
         self.available_without_model.append(self.hotkey_editor_action)
 
         # Build View
@@ -403,7 +405,7 @@ class AppActions(NxtActionContainer):
             'Turn the AI assistant on or off, sign in to providers and '
             'save API keys.')
         self.ai_settings_action.triggered.connect(
-            self.main_window.open_ai_settings)
+            lambda _=False: self.main_window.open_ai_settings())
         self.ai_settings_action.setShortcutContext(context)
         self.available_without_model.append(self.ai_settings_action)
 
@@ -423,7 +425,8 @@ class AppActions(NxtActionContainer):
             'Every preference you can set, by section, with what each '
             'does. Changes are made straight away.')
         self.preferences_action.triggered.connect(
-            self.main_window.open_preferences)
+            lambda _=False: self.main_window.open_preferences())
+        self.preferences_action.setShortcut('Ctrl+,')
         self.preferences_action.setShortcutContext(context)
         self.available_without_model.append(self.preferences_action)
 
@@ -434,7 +437,7 @@ class AppActions(NxtActionContainer):
             'it starts: your own, the site\'s, and project files kept '
             'under version control.')
         self.env_files_action.triggered.connect(
-            self.main_window.open_env_files)
+            lambda _=False: self.main_window.open_env_files())
         self.env_files_action.setShortcutContext(context)
         self.available_without_model.append(self.env_files_action)
         # Hidden with an nxt core from before env files, which has nothing
@@ -2739,7 +2742,7 @@ class CodeEditorActions(NxtActionContainer):
         jedi is there, and off when it is not, where turning it on offers to
         install it.
 
-        Asked again after Options > Optional Components installs or removes
+        Asked again after Edit > Preferences > Optional Components installs or removes
         jedi, so it is picked up without a restart. Its text stays the same,
         because an NxtAction's hotkey is saved under its text.
         """
@@ -2759,7 +2762,7 @@ class CodeEditorActions(NxtActionContainer):
                 action.setChecked(False)
                 action.setWhatsThis(
                     'Needs jedi, a free add on that is not installed yet. '
-                    'Turn this on to install it, or use Options > Optional '
+                    'Turn this on to install it, or use Edit > Preferences > Optional '
                     'Components.')
             action.setToolTip(action.whatsThis())
             action.setEnabled(True)

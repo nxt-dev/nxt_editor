@@ -2,7 +2,6 @@ from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.dockwidgets.build_view import BuildView
 from nxt_editor.dockwidgets.code_editor import CodeEditor
 from nxt_editor.dockwidgets.history_view import HistoryView
-from nxt_editor.dockwidgets.hotkey_editor import HotkeyEditor
 from nxt_editor.dockwidgets.layer_manager import LayerManager
 from nxt_editor.dockwidgets.output_log import OutputLog
 from nxt_editor.dockwidgets.outliner import Outliner

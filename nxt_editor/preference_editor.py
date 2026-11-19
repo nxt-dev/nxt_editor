@@ -1,4 +1,4 @@
-"""Options > Preferences: every preference a user can set, by section.
+"""Edit > Preferences: every setting a user can set, by section.
 
 Preferences are kept in the user's prefs.json, and many are only set from
 a menu toggle somewhere, or not at all, so the only way to find them was
@@ -9,8 +9,9 @@ straight away.
 A preference with a toggle in a menu is set by triggering that toggle, so
 the menu shows it and the editor does whatever the toggle does when it
 changes. Others are written to the file, and read from there the next
-time they are needed. The AI Assistant, Layer Color View and Environment
-Variables have their own dialogs in Options and are not repeated here.
+time they are needed. Hotkeys are a section of their own, and the AI
+Assistant, Environment Variables and Optional Components are pages, the
+windows they were before shown in place, see MainWindow.settings_page.
 """
 # Builtin
 import html
@@ -248,67 +249,113 @@ def sections():
     return names
 
 
-class PreferenceRow(QtWidgets.QFrame):
-    """One preference: its name and what it does, its value, and a button
-    that puts it back to its default when it is not there already."""
+class SettingRow(QtWidgets.QFrame):
+    """One setting: its name and what it does, its value, and a button
+    that puts it back to its default when it is not there already.
 
-    def __init__(self, pref, editor, parent=None):
-        super(PreferenceRow, self).__init__(parent)
-        self.pref = pref
+    :param title: its name
+    :param about: what it does
+    :param search_text: everything a search may find it by
+    :param editor: the widget that shows and changes the value
+    :param tag: a word shown beside the name, such as Global
+    """
+    RESET_TEXT = 'Reset'
+
+    def __init__(self, title, about, search_text, editor, tag='',
+                 tip='', wide_editor=True, parent=None):
+        super(SettingRow, self).__init__(parent)
+        self.title = title
+        self.about_text = about
+        self.search_text = search_text.lower()
         self.editor = editor
-        self.setObjectName('PreferenceRow')
+        self.setObjectName('SettingRow')
         self.setStyleSheet(theme.fill(
-            '#PreferenceRow {border: none; '
+            '#SettingRow {border: none; '
             'border-bottom: 1px solid {BORDER};}'))
         layout = QtWidgets.QHBoxLayout(self)
         layout.setContentsMargins(4, 10, 4, 10)
         layout.setSpacing(16)
         words = QtWidgets.QVBoxLayout()
         words.setSpacing(3)
+        name_row = QtWidgets.QHBoxLayout()
+        name_row.setSpacing(8)
         # Rich text, so a search can mark the words it found.
-        self.name = QtWidgets.QLabel(marked(pref.label, []))
+        self.name = QtWidgets.QLabel(marked(title, []))
         self.name.setTextFormat(QtCore.Qt.RichText)
-        self.name.setFont(theme.font(theme.TEXT_PX, weight=QtGui.QFont.Medium))
-        words.addWidget(self.name)
-        self.about = QtWidgets.QLabel(marked(pref.description, []))
+        self.name.setFont(theme.font(theme.TEXT_PX,
+                                     weight=QtGui.QFont.Medium))
+        name_row.addWidget(self.name)
+        self.tag = None
+        if tag:
+            self.tag = QtWidgets.QLabel(tag)
+            self.tag.setFont(theme.font(theme.SMALL_PX))
+            self.tag.setStyleSheet(theme.fill(
+                'color: {TEXT}; background: {ACCENT_DIM}; '
+                'border-radius: 4px; padding: 1px 6px;'))
+            name_row.addWidget(self.tag)
+        name_row.addStretch(1)
+        words.addLayout(name_row)
+        self.about = QtWidgets.QLabel(marked(about, []))
         self.about.setTextFormat(QtCore.Qt.RichText)
         self.about.setWordWrap(True)
         self.about.setFont(theme.font(theme.SMALL_PX))
         self.about.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        self.about.setVisible(bool(about))
         words.addWidget(self.about)
         layout.addLayout(words, 1)
-        tip = '{}\n\n{} in prefs.json'.format(pref.description, pref.key)
-        self.name.setToolTip(tip)
-        self.about.setToolTip(tip)
-        if pref.kind == BOOL:
-            layout.addWidget(editor, 0, QtCore.Qt.AlignRight |
-                             QtCore.Qt.AlignVCenter)
-        else:
+        if tip:
+            self.name.setToolTip(tip)
+            self.about.setToolTip(tip)
+        if wide_editor:
             editor.setFixedWidth(EDITOR_WIDTH)
             layout.addWidget(editor, 0, QtCore.Qt.AlignVCenter)
+        else:
+            layout.addWidget(editor, 0, QtCore.Qt.AlignRight |
+                             QtCore.Qt.AlignVCenter)
+        self.extra = QtWidgets.QHBoxLayout()
+        self.extra.setSpacing(4)
+        layout.addLayout(self.extra)
         self.reset_button = QtWidgets.QToolButton()
-        self.reset_button.setText('Reset')
-        self.reset_button.setToolTip('Back to the default, {}.'.format(
-            describe(pref, pref.default)))
+        self.reset_button.setText(self.RESET_TEXT)
         # Keeps its room when hidden, so values do not move as it shows.
         policy = self.reset_button.sizePolicy()
         policy.setRetainSizeWhenHidden(True)
         self.reset_button.setSizePolicy(policy)
         layout.addWidget(self.reset_button, 0, QtCore.Qt.AlignVCenter)
-        self.update_reset()
+
+    def is_default(self):
+        return True
 
     def update_reset(self):
-        self.reset_button.setVisible(current(self.pref) != self.pref.default)
+        self.reset_button.setVisible(not self.is_default())
 
     def matches(self, words):
-        haystack = ' '.join((self.pref.section, self.pref.label,
-                             self.pref.description, self.pref.key)).lower()
-        return all(word in haystack for word in words)
+        return all(word in self.search_text for word in words)
 
     def mark(self, words):
         """Show the searched for words in the name and what it does."""
-        self.name.setText(marked(self.pref.label, words))
-        self.about.setText(marked(self.pref.description, words))
+        self.name.setText(marked(self.title, words))
+        self.about.setText(marked(self.about_text, words))
+
+
+class PreferenceRow(SettingRow):
+    """A preference from PREFERENCES."""
+
+    def __init__(self, pref, editor, parent=None):
+        self.pref = pref
+        tip = '{}\n\n{} in prefs.json'.format(pref.description, pref.key)
+        search = ' '.join((pref.section, pref.label, pref.description,
+                           pref.key))
+        super(PreferenceRow, self).__init__(
+            pref.label, pref.description, search, editor, tip=tip,
+            wide_editor=pref.kind != BOOL, parent=parent)
+        self.section = pref.section
+        self.reset_button.setToolTip('Back to the default, {}.'.format(
+            describe(pref, pref.default)))
+        self.update_reset()
+
+    def is_default(self):
+        return current(self.pref) == self.pref.default
 
 
 def marked(text, words):
@@ -342,26 +389,115 @@ def describe(pref, value):
     return str(value)
 
 
+def heading(text, px=18):
+    label = QtWidgets.QLabel(text)
+    label.setFont(theme.font(px, weight=QtGui.QFont.Medium))
+    return label
+
+
+def embedded(dialog, keep=()):
+    """A dialog shown as a page of Preferences: a widget in place of a
+    window, without the buttons that close it, which Close does there.
+
+    :param keep: the standard buttons of its button box to leave, such as
+        Apply
+    :return: the dialog
+    """
+    dialog.setWindowFlags(QtCore.Qt.Widget)
+    dialog.setSizeGripEnabled(False)
+    dialog.setMinimumSize(0, 0)
+    for box in dialog.findChildren(QtWidgets.QDialogButtonBox):
+        shown = 0
+        for button in box.buttons():
+            if box.standardButton(button) in keep:
+                shown += 1
+            else:
+                button.hide()
+        box.setVisible(bool(shown))
+    return dialog
+
+
+#: Hotkeys, and the pages of settings that have windows of their own
+#: elsewhere, after the sections of PREFERENCES. Each: (name, what it is
+#: for, words a search finds it by).
+HOTKEYS = 'Hotkeys'
+AI_ASSISTANT = 'AI Assistant'
+ENV_VARIABLES = 'Environment Variables'
+OPTIONAL_COMPONENTS = 'Optional Components'
+PAGES = (
+    (AI_ASSISTANT, 'Turn the AI Assistant on, sign in to providers, save '
+     'API keys and choose what it remembers.',
+     'ai assistant claude openai chatgpt codex grok api key sign in login '
+     'provider model memory'),
+    (ENV_VARIABLES, 'Edit the env files nxt sets environment variables from '
+     'when it starts: your own, the site\'s, and project files.',
+     'environment variables env file path project site roots'),
+    (OPTIONAL_COMPONENTS, 'Install extras the editor can use, such as jedi '
+     'for smarter code completion.',
+     'optional components install jedi package extras'),
+)
+
+
+class PageLink(QtWidgets.QFrame):
+    """In search results, a page whose name or purpose was found, with a
+    button that goes there."""
+    chosen = QtCore.Signal(str)
+
+    def __init__(self, name, about, keywords, parent=None):
+        super(PageLink, self).__init__(parent)
+        self.page = name
+        self.title = name
+        self.about_text = about
+        self.search_text = ' '.join((name, about, keywords)).lower()
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 18)
+        layout.setSpacing(4)
+        layout.addWidget(heading(name))
+        row = QtWidgets.QHBoxLayout()
+        self.about = QtWidgets.QLabel(marked(about, []))
+        self.about.setTextFormat(QtCore.Qt.RichText)
+        self.about.setWordWrap(True)
+        self.about.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        row.addWidget(self.about, 1)
+        self.button = QtWidgets.QPushButton('Show {}'.format(name))
+        self.button.clicked.connect(lambda _=False: self.chosen.emit(name))
+        row.addWidget(self.button)
+        layout.addLayout(row)
+
+    def matches(self, words):
+        return all(word in self.search_text for word in words)
+
+    def mark(self, words):
+        self.about.setText(marked(self.about_text, words))
+
+
 class PreferenceEditor(QtWidgets.QDialog):
     """Every preference a user can set, a section at a time, set as it is
     changed.
 
-    The sections are listed on the left, and the chosen one's preferences
-    shown on the right. A search looks through every section at once, and
-    shows what it finds under each section's title with the words found
-    marked, until it is cleared and the section chosen before is back.
+    The sections are listed on the left, and the chosen one shown on the
+    right: the preferences by section, every action's hotkey, and the
+    pages for the AI Assistant, environment variables and optional
+    components. A search looks through all of them at once, and shows what
+    it finds under each section's title with the words found marked, until
+    it is cleared and the section chosen before is back.
     """
-    SECTION_LIST_WIDTH = 180
+    SECTION_LIST_WIDTH = 190
 
     def __init__(self, main_window=None, parent=None):
         super(PreferenceEditor, self).__init__(parent or main_window)
         self.main_window = main_window
         self.setWindowTitle('Preferences')
-        self.resize(860, 600)
+        self.resize(900, 640)
         self.editors = {}  # key: widget
-        self.rows = {}  # key: PreferenceRow
+        self.rows = {}  # key: SettingRow, preferences and hotkeys
         self.blocks = {}  # section: its title and rows
+        self.hotkey_groups = []  # (title label, [HotkeyRow])
+        self.links = {}  # page: PageLink, for search results
+        self.pages = {}  # page: its widget, made when first shown
+        self.holders = {}  # page: what the stack shows it in
         self.words = []  # what is searched for, empty when nothing is
+        self.section_before = None
         self._filling = False
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -375,11 +511,11 @@ class PreferenceEditor(QtWidgets.QDialog):
         layout.addWidget(intro)
 
         self.filter = QtWidgets.QLineEdit()
-        self.filter.setPlaceholderText('Search all preferences')
+        self.filter.setPlaceholderText('Search all preferences and hotkeys')
         self.filter.setClearButtonEnabled(True)
-        self.filter.setToolTip('Finds a preference in any section by its '
-                               'name or what it does. Searches once typing '
-                               'stops, or on Enter.')
+        self.filter.setToolTip('Finds a preference, a hotkey or a page by '
+                               'its name or what it does. Searches once '
+                               'typing stops, or on Enter.')
         self.search_timer = QtCore.QTimer(self)
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(SEARCH_DELAY_MS)
@@ -415,40 +551,47 @@ class PreferenceEditor(QtWidgets.QDialog):
         self.area.setWidget(self.page)
         self.area.verticalScrollBar().valueChanged.connect(
             self.follow_scroll)
-        body.addWidget(self.area, 1)
+        self.stack = QtWidgets.QStackedWidget()
+        self.stack.addWidget(self.area)
+        body.addWidget(self.stack, 1)
         layout.addLayout(body, 1)
 
         row = QtWidgets.QHBoxLayout()
         row.addStretch(1)
         close = QtWidgets.QPushButton('Close')
-        close.clicked.connect(self.accept)
+        close.clicked.connect(self.close)
         row.addWidget(close)
         layout.addLayout(row)
 
         self.fill()
         self.section_list.setCurrentRow(0)
 
-    # Pages ---------------------------------------------------------------
+    # Sections ------------------------------------------------------------
+
+    def section_names(self):
+        """Every section in the list, in order."""
+        names = sections()
+        if self.main_window is not None:
+            names.append(HOTKEYS)
+            for name, _about, _keywords in PAGES:
+                if self.has_page(name):
+                    names.append(name)
+        return names
+
+    def has_page(self, name):
+        if name == ENV_VARIABLES:
+            from nxt_editor import env_dialog
+            return env_dialog.available()
+        return True
 
     def fill(self):
         self._filling = True
         self.section_list.clear()
-        while self.page_layout.count():
-            item = self.page_layout.takeAt(0)
-            if item.widget() and item.widget() is not self.nothing_found:
-                item.widget().deleteLater()
         self.editors, self.rows, self.blocks = {}, {}, {}
+        self.hotkey_groups, self.links = [], {}
         self.page_layout.addWidget(self.nothing_found)
         for name in sections():
-            self.section_list.addItem(name)
-            block = QtWidgets.QWidget()
-            block_layout = QtWidgets.QVBoxLayout(block)
-            block_layout.setContentsMargins(0, 0, 0, 18)
-            block_layout.setSpacing(0)
-            title = QtWidgets.QLabel(name)
-            title.setFont(theme.font(18, weight=QtGui.QFont.Medium))
-            title.setContentsMargins(4, 0, 0, 8)
-            block_layout.addWidget(title)
+            block, block_layout = self.new_block(name)
             for pref in PREFERENCES:
                 if pref.section != name:
                     continue
@@ -459,37 +602,116 @@ class PreferenceEditor(QtWidgets.QDialog):
                     lambda _=False, p=pref: self.reset(p))
                 self.rows[pref.key] = pref_row
                 block_layout.addWidget(pref_row)
-            self.page_layout.addWidget(block)
-            self.blocks[name] = block
+        if self.main_window is not None:
+            self.fill_hotkeys()
+            for name, about, keywords in PAGES:
+                if not self.has_page(name):
+                    continue
+                link = PageLink(name, about, keywords)
+                link.chosen.connect(self.go_to_page)
+                link.hide()
+                self.links[name] = link
+                self.page_layout.addWidget(link)
         self.page_layout.addStretch(1)
+        for name in self.section_names():
+            self.section_list.addItem(name)
         self._filling = False
+
+    def new_block(self, name):
+        block = QtWidgets.QWidget()
+        block_layout = QtWidgets.QVBoxLayout(block)
+        block_layout.setContentsMargins(0, 0, 0, 18)
+        block_layout.setSpacing(0)
+        title = heading(name)
+        title.setContentsMargins(4, 0, 0, 8)
+        block_layout.addWidget(title)
+        self.page_layout.addWidget(block)
+        self.blocks[name] = block
+        return block, block_layout
+
+    def fill_hotkeys(self):
+        """Every action with a hotkey, by the part of the editor it works
+        in, under one Hotkeys section."""
+        from nxt_editor import hotkey_settings
+        block, block_layout = self.new_block(HOTKEYS)
+        note = QtWidgets.QLabel(hotkey_settings.HOW_TO)
+        note.setWordWrap(True)
+        note.setFont(theme.font(theme.SMALL_PX))
+        note.setStyleSheet(theme.fill('color: {TEXT_DIM};'))
+        note.setContentsMargins(4, 0, 0, 8)
+        block_layout.addWidget(note)
+        self.hotkeys = hotkey_settings.Hotkeys(self.main_window)
+        for group, rows in self.hotkeys.rows_by_group(self):
+            title = heading(group, px=theme.TEXT_PX + 2)
+            title.setContentsMargins(4, 14, 0, 4)
+            block_layout.addWidget(title)
+            for hotkey_row in rows:
+                self.rows[hotkey_row.key] = hotkey_row
+                block_layout.addWidget(hotkey_row)
+            self.hotkey_groups.append((title, rows))
 
     def show_section(self, row):
         """The chosen section alone, or, while searching, what was found,
         moved to that section's part of it."""
         if row < 0:
             return
-        name = sections()[row]
+        name = self.section_names()[row]
+        if name in self.links:
+            if self.words:
+                self.scroll_to(self.links[name])
+                return
+            self.stack.setCurrentWidget(self.page_widget(name))
+            return
+        self.stack.setCurrentWidget(self.area)
         if self.words:
-            # Chosen, it stays chosen, even where the last results can
-            # not scroll to the top.
-            bar = self.area.verticalScrollBar()
-            bar.blockSignals(True)
-            bar.setValue(self.blocks[name].y())
-            bar.blockSignals(False)
+            self.scroll_to(self.blocks[name])
             return
         for section, block in self.blocks.items():
             block.setVisible(section == name)
         self.area.verticalScrollBar().setValue(0)
+
+    def scroll_to(self, widget):
+        # Chosen, it stays chosen, even where the last results can not
+        # scroll to the top.
+        bar = self.area.verticalScrollBar()
+        bar.blockSignals(True)
+        bar.setValue(widget.y())
+        bar.blockSignals(False)
 
     def current_section(self):
         item = self.section_list.currentItem()
         return item.text() if item else None
 
     def select_section(self, name):
-        names = sections()
+        names = self.section_names()
         if name in names:
             self.section_list.setCurrentRow(names.index(name))
+
+    def page_widget(self, name):
+        """A page of its own, made the first time it is shown."""
+        widget = self.pages.get(name)
+        if widget is None:
+            widget = self.main_window.settings_page(name, self)
+            self.pages[name] = widget
+            holder = widget
+            if not getattr(widget, 'has_title', False):
+                # Titled as the sections are.
+                holder = QtWidgets.QWidget()
+                holder_layout = QtWidgets.QVBoxLayout(holder)
+                holder_layout.setContentsMargins(4, 0, 0, 0)
+                title = heading(name)
+                title.setContentsMargins(4, 0, 0, 4)
+                holder_layout.addWidget(title)
+                holder_layout.addWidget(widget, 1)
+            self.holders[name] = holder
+            self.stack.addWidget(holder)
+        return self.holders[name]
+
+    def go_to_page(self, name):
+        self.filter.clear()
+        self.select_section(name)
+
+    # Preferences ---------------------------------------------------------
 
     def make_editor(self, pref):
         value = current(pref)
@@ -582,6 +804,29 @@ class PreferenceEditor(QtWidgets.QDialog):
         set_preference(self.main_window, pref, pref.default)
         self.show_value(pref)
 
+    # Closing -------------------------------------------------------------
+
+    def reject(self):
+        """Close, Escape and the window's own close button all come here.
+        Environment variables are edited and then applied, so edits not
+        applied yet are asked about before they are lost."""
+        env_page = self.pages.get(ENV_VARIABLES)
+        if env_page is not None and env_page.dirty:
+            answer = QtWidgets.QMessageBox.question(
+                self, 'Environment Variables',
+                'Apply your changes to the environment variables?',
+                QtWidgets.QMessageBox.Apply | QtWidgets.QMessageBox.Discard |
+                QtWidgets.QMessageBox.Cancel,
+                QtWidgets.QMessageBox.Apply)
+            if answer == QtWidgets.QMessageBox.Cancel:
+                return
+            if answer == QtWidgets.QMessageBox.Apply:
+                if not env_page.apply():
+                    return
+            else:
+                env_page.load_files()
+        super(PreferenceEditor, self).reject()
+
     # Search --------------------------------------------------------------
 
     def on_search_edited(self, text):
@@ -610,29 +855,40 @@ class PreferenceEditor(QtWidgets.QDialog):
             self.section_before = self.current_section()
         self.words = words
         found = []
-        for index, name in enumerate(sections()):
-            shown = 0
-            for row in self.rows.values():
-                if row.pref.section != name:
-                    continue
-                hide = not row.matches(words)
-                row.setHidden(hide)
-                row.mark(words)
-                shown += not hide
-            self.section_list.item(index).setHidden(not shown)
-            self.blocks[name].setVisible(bool(shown) and bool(words))
+        for row in self.rows.values():
+            hide = not row.matches(words)
+            row.setHidden(hide)
+            row.mark(words)
+        for title, rows in self.hotkey_groups:
+            title.setHidden(all(row.isHidden() for row in rows))
+        names = self.section_names()
+        for index, name in enumerate(names):
+            if name in self.links:
+                link = self.links[name]
+                shown = bool(words) and link.matches(words)
+                link.mark(words)
+                link.setVisible(shown)
+            else:
+                shown = any(not row.isHidden() for row in self.rows.values()
+                            if row.section == name)
+                self.blocks[name].setVisible(shown and bool(words))
+            self.section_list.item(index).setHidden(
+                bool(words) and not shown)
             if shown:
                 found.append(name)
         self.nothing_found.setVisible(bool(words) and not found)
-        self.nothing_found.setText('No preference has "{}" in it.'.format(
+        self.nothing_found.setText('Nothing has "{}" in it.'.format(
             text.strip()))
         if not words:
-            before = getattr(self, 'section_before', None)
+            for link in self.links.values():
+                link.hide()
+            before = self.section_before
             if before and before != self.current_section():
                 self.select_section(before)
             else:
                 self.show_section(self.section_list.currentRow())
             return
+        self.stack.setCurrentWidget(self.area)
         self.area.verticalScrollBar().setValue(0)
         if found:
             self.mark_section(found[0])
@@ -649,11 +905,11 @@ class PreferenceEditor(QtWidgets.QDialog):
         if not self.words:
             return
         top = None
-        for name in sections():
-            block = self.blocks[name]
-            if block.isHidden():
+        for name in self.section_names():
+            widget = self.links.get(name) or self.blocks.get(name)
+            if widget is None or widget.isHidden():
                 continue
-            if top is None or block.y() <= value + 4:
+            if top is None or widget.y() <= value + 4:
                 top = name
         if top and top != self.current_section():
             self.mark_section(top)

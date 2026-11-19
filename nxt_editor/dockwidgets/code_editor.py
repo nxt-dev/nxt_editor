@@ -2295,6 +2295,17 @@ class NxtCodeEditor(QtWidgets.QPlainTextEdit):
         fold_menu.addAction(self.ce_actions.unfold_block_action)
         fold_menu.addAction(self.ce_actions.fold_all_action)
         fold_menu.addAction(self.ce_actions.unfold_all_action)
+        # Whether completion offers anything unasked, and what it may look
+        # at. They are in Preferences > Code Editor too.
+        self.standard_menu.addSeparator()
+        complete_menu = self.standard_menu.addMenu('Autocomplete')
+        # Python Analysis says how to get jedi when it is missing.
+        complete_menu.setToolTipsVisible(True)
+        complete_menu.addAction(self.ce_actions.autocomplete_action)
+        complete_menu.addSeparator()
+        for source_action, _pref, _default in \
+                self.ce_actions.completion_source_actions:
+            complete_menu.addAction(source_action)
 
         self.standard_menu.exec_(event.globalPos())
 
