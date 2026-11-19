@@ -446,11 +446,20 @@ CLASSIC = {
 def host_colors():
     """The host's own colors for the names above, from its palette.
 
-    :return: name: value, empty when there is no application to ask
+    There is a look to take only from a host that is a Qt application
+    with a dark interface, such as Maya. Where nxt makes the application
+    itself, standalone and in Blender and Unreal, the palette is Qt's
+    default and nobody's look. And the graph, the nodes and the log are
+    drawn for a dark interface, so they would not read on a light one.
+
+    :return: name: value, empty when there is no host look to take
     :rtype: dict
     """
     app = QtGui.QGuiApplication.instance()
     if app is None:
+        return {}
+    import nxt_editor
+    if nxt_editor.owns_qapp():
         return {}
     palette = app.palette()
     role = QtGui.QPalette
@@ -458,6 +467,8 @@ def host_colors():
     def name(color_role, group=role.Active):
         return palette.color(group, color_role).name()
     window, text = name(role.Window), name(role.WindowText)
+    if luminance(window) >= luminance(text):
+        return {}
     button, highlight = name(role.Button), name(role.Highlight)
     return {
         'GRAPH': name(role.Base), 'BASE': window, 'RAISED': button,
@@ -518,6 +529,9 @@ def readable_on(value, background, least=4.0):
     return result
 
 
+_unread_sheets = []
+
+
 def extra_stylesheet():
     """A stylesheet of the user's or the studio's own, laid over the
     look: the file NXT_EDITOR_STYLESHEET names, or the one in the
@@ -540,9 +554,12 @@ def extra_stylesheet():
         with open(path, 'r', encoding='utf-8') as handle:
             return fill(handle.read())
     except (IOError, OSError, UnicodeDecodeError) as error:
-        import logging
-        logging.getLogger(__name__).warning(
-            'The stylesheet {} was not used: {}'.format(path, error))
+        if path not in _unread_sheets:
+            # Once: the sheet is asked for by every window and dialog.
+            _unread_sheets.append(path)
+            import logging
+            logging.getLogger(__name__).warning(
+                'The stylesheet {} was not used: {}'.format(path, error))
         return ''
 
 
@@ -563,6 +580,8 @@ def stored_look():
         # Read while the editor is still loading. Never the reason it
         # does not open.
         asked = LOOK_MODERN
+    if isinstance(asked, str):
+        asked = asked.strip().lower()
     return asked if asked in known else LOOK_MODERN
 
 
@@ -578,6 +597,11 @@ def use_look(look):
     elif look == LOOK_HOST:
         values = host_colors()
         if not values:
+            # Said once, so the preference is not a riddle.
+            import logging
+            logging.getLogger(__name__).info(
+                'The Host application look needs a Qt host with a dark '
+                'interface. Using Modern.')
             look = LOOK_MODERN
     globals().update(values)
     globals()['LOOK'] = look

@@ -25,12 +25,14 @@ class LookCase(unittest.TestCase):
 
     def setUp(self):
         before = dict(theme.tokens())
+        self.modern = before
         self.addCleanup(vars(theme).update, before)
         env = mock.patch.dict(os.environ)
         env.start()
         self.addCleanup(env.stop)
         os.environ.pop(theme.LOOK_ENV_VAR, None)
         os.environ.pop(theme.STYLESHEET_ENV_VAR, None)
+        del theme._unread_sheets[:]
 
 
 class Asked(LookCase):
@@ -51,6 +53,17 @@ class Asked(LookCase):
                                return_value=theme.LOOK_CLASSIC):
             self.assertEqual(theme.LOOK_HOST, theme.stored_look())
 
+    def test_a_look_written_by_hand_is_read_whatever_its_case(self):
+        with mock.patch.object(user_dir.user_prefs, 'get',
+                               return_value=' Classic '):
+            self.assertEqual(theme.LOOK_CLASSIC, theme.stored_look())
+
+    def test_a_value_that_is_no_look_is_modern(self):
+        for value in (5, None, ['classic'], {'look': 'classic'}):
+            with mock.patch.object(user_dir.user_prefs, 'get',
+                                   return_value=value):
+                self.assertEqual(theme.LOOK_MODERN, theme.stored_look())
+
     def test_a_look_nobody_knows_is_modern(self):
         os.environ[theme.LOOK_ENV_VAR] = 'neon'
         with mock.patch.object(user_dir.user_prefs, 'get',
@@ -70,6 +83,14 @@ class Asked(LookCase):
                          [value for value, _label in look.choices])
         self.assertEqual(theme.LOOK_MODERN, look.default)
         self.assertEqual(theme.LOOK_PREF, look.key)
+
+    def test_the_sections_of_preferences_keep_their_order(self):
+        sections = []
+        for pref in preference_editor.PREFERENCES:
+            if pref.section not in sections:
+                sections.append(pref.section)
+        self.assertEqual('Graph', sections[0])
+        self.assertIn('Panels', sections)
 
 
 class OwnStylesheet(LookCase):
@@ -99,8 +120,11 @@ class OwnStylesheet(LookCase):
     def test_one_that_is_not_there_is_passed_over(self):
         os.environ[theme.STYLESHEET_ENV_VAR] = os.path.join(
             os.path.dirname(__file__), 'no_such_sheet.qss')
-        with self.assertLogs('nxt_editor.theme', level='WARNING'):
+        with self.assertLogs('nxt_editor.theme', level='WARNING') as logs:
             self.assertEqual('', theme.extra_stylesheet())
+            # Said once, however many windows ask for the sheet.
+            self.assertEqual('', theme.extra_stylesheet())
+        self.assertEqual(1, len(logs.records))
 
     def test_none_is_asked_for_to_begin_with(self):
         with mock.patch.object(user_dir.user_prefs, 'get',
@@ -181,6 +205,30 @@ class Host(LookCase):
                                return_value=None):
             theme.use_look(theme.LOOK_HOST)
         self.assertEqual(theme.LOOK_MODERN, theme.LOOK)
+
+    def test_an_application_nxt_made_has_no_look_to_take(self):
+        # Standalone, and in Blender and Unreal, which are not Qt.
+        app.setProperty(nxt_editor.OWN_APP_PROPERTY, True)
+        self.addCleanup(app.setProperty, nxt_editor.OWN_APP_PROPERTY, None)
+        hosts = theme.BASE
+        vars(theme).update(self.modern)
+        theme.use_look(theme.LOOK_HOST)
+        self.assertEqual(theme.LOOK_MODERN, theme.LOOK)
+        self.assertNotEqual(hosts, theme.BASE)
+        self.assertIn('QPushButton', nxt_editor.stylesheet())
+
+    def test_a_light_host_keeps_the_modern_look(self):
+        # The graph, the nodes and the log are drawn for a dark interface.
+        palette = QtGui.QPalette()
+        palette.setColor(QtGui.QPalette.Window, QtGui.QColor('#f0f0f0'))
+        palette.setColor(QtGui.QPalette.WindowText, QtGui.QColor('#000000'))
+        palette.setColor(QtGui.QPalette.Base, QtGui.QColor('#ffffff'))
+        app.setPalette(palette)
+        vars(theme).update(self.modern)
+        theme.use_look(theme.LOOK_HOST)
+        self.assertEqual(theme.LOOK_MODERN, theme.LOOK)
+        self.assertEqual(self.modern['NODE_TEXT'], theme.NODE_TEXT)
+        self.assertEqual(self.modern['BASE'], theme.BASE)
 
 
 if __name__ == '__main__':
