@@ -16,7 +16,7 @@ except AttributeError:
     from PySide6 import QtCore
 
 # Internal
-from nxt_editor import user_dir
+from nxt_editor import sub_graphs, user_dir
 from nxt_editor.constants import FONTS
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 from nxt_editor.dockwidgets import code_completion
@@ -27,6 +27,7 @@ from nxt_editor.decorator_widgets import OpinionDots
 from nxt import DATA_STATE, NODE_ERRORS, nxt_path
 from nxt.nxt_node import INTERNAL_ATTRS, META_ATTRS
 from nxt import tokens
+from nxt.stage import determine_nxt_type
 
 # Fixme: Should this be a pref?
 HISTORICAL_MAX_CHARS = 50
@@ -465,6 +466,8 @@ class PropertyEditor(DockWidgetBase):
                                    view=self.table_view,
                                    headers=self.header_names,
                                    parent=self)
+        self.model.open_graph.connect(
+            lambda path: self.main_window.load_file(path))
 
         self.proxy_model = AttrFilterProxyModel()
         self.proxy_model.setSourceModel(self.model)
@@ -1201,7 +1204,8 @@ class PropertyEditor(DockWidgetBase):
                 locality = None
             menu = QtWidgets.QMenu(self)
             menu.addAction(self.add_attr_action)
-            if index.row() != -1:
+            # A sub-graph's parameter is not on the node to remove.
+            if index.row() != -1 and locality != LOCALITIES.sub_graph:
                 menu.addAction(self.remove_attr_action)
                 menu.addSeparator()
                 menu.addAction(self.localize_attr_action)
@@ -1284,6 +1288,8 @@ def refresh_neutral_text(editor):
 
 class PropertyModel(QtCore.QAbstractTableModel):
     """Property Editor model"""
+    # A sub-graph's parameter's source was clicked: the graph to open.
+    open_graph = QtCore.Signal(str)
 
     def __init__(self, parent=None, graph_model=None, node_path=None, view=None, headers=None):
         """Initialize the data structure and get header labels.
@@ -1441,6 +1447,7 @@ class PropertyModel(QtCore.QAbstractTableModel):
             color = stage_model.get_node_attr_color(node_path, attr_name,
                                                     comp_layer)
             self.node_attr_draw_details[attr_name] = {'color': color}
+        self.add_sub_graph_rows()
 
         # set model data
         self.horizontal_header.sortIndicatorChanged.disconnect(self.save_state)
@@ -1498,12 +1505,56 @@ class PropertyModel(QtCore.QAbstractTableModel):
         user_dir.user_prefs[self.parent.PREF_KEY] = state
         self.parent.user_sort_pref = state
 
+    def add_sub_graph_rows(self):
+        """Rows for the parameters of the graph this node runs, if it is
+        a sub-graph node, that it does not set itself: its world node's
+        attrs. Setting one's value sets it on the node, to give the graph.
+        """
+        stage_model = self.stage_model
+        graph = sub_graphs.graph_path(stage_model, self.node_path)
+        if not graph:
+            return
+        # Drawn in the color of what names the graph.
+        color = stage_model.get_node_attr_color(
+            self.node_path, sub_graphs.GRAPH_PATH_ATTR,
+            stage_model.comp_layer)
+        for name, (value, comment) in sorted(
+                sub_graphs.world_attrs(graph).items()):
+            if name in self.node_attr_names:
+                continue
+            self.node_attr_names += [name]
+            text = '' if value is None else str(value)
+            self.attr_data_cached += ['']
+            self.attr_data_resolved += [value]
+            row_dict = {COLUMNS.name: name,
+                        COLUMNS.value: text,
+                        COLUMNS.nxt_type: determine_nxt_type(value),
+                        COLUMNS.source: graph,
+                        COLUMNS.locality: LOCALITIES.sub_graph,
+                        COLUMNS.comment: comment}
+            self.attr_data += [COLUMNS.column_dict_to_list(row_dict)]
+            self.node_attr_draw_details[name] = {'color': color}
+
+    def is_sub_graph_row(self, row):
+        try:
+            return (self._data[row][COLUMNS.locality] ==
+                    LOCALITIES.sub_graph)
+        except IndexError:
+            return False
+
     def setData(self, index, value, role=None):
         if not index.isValid:
             return False
 
         row = index.row()
         column = index.column()
+        if self.is_sub_graph_row(row):
+            if role == QtCore.Qt.CheckStateRole and column == COLUMNS.source:
+                self.open_graph.emit(self._data[row][COLUMNS.source])
+                return True
+            # Only its value can be given, as the node's own attr.
+            if column != COLUMNS.value:
+                return False
         if value == self.attr_data[row][column] and column != COLUMNS.source:
             return False
 
@@ -1624,6 +1675,11 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
         locality_idx = self._data[row][COLUMNS.locality]
         is_local = locality_idx in (LOCALITIES.local, LOCALITIES.code)
+        if (role == QtCore.Qt.ToolTipRole and column == COLUMNS.source and
+                locality_idx == LOCALITIES.sub_graph):
+            return ('A parameter of the sub-graph {}, which this node does '
+                    'not set. Set its value to give it one. Click to open '
+                    'the graph.'.format(self._data[row][COLUMNS.source]))
         neutral = neutral_text()
         if role == QtCore.Qt.ForegroundRole:
             if not neutral:
@@ -1640,7 +1696,8 @@ class PropertyModel(QtCore.QAbstractTableModel):
             return theme.color(theme.TEXT_DIM)
 
         if role == QtCore.Qt.FontRole:
-            instanced = locality_idx == LOCALITIES.instanced
+            instanced = locality_idx in (LOCALITIES.instanced,
+                                         LOCALITIES.sub_graph)
             # A value the node sets itself is bold across its row.
             bold_name = neutral and is_local
             if instanced or bold_name:
@@ -1682,6 +1739,9 @@ class PropertyModel(QtCore.QAbstractTableModel):
 
     def flags(self, index):
         column = index.column()
+        if (column in (COLUMNS.name, COLUMNS.comment) and
+                self.is_sub_graph_row(index.row())):
+            return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
         if column in (COLUMNS.name, COLUMNS.value, COLUMNS.comment):
             return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable | \
                    QtCore.Qt.ItemIsEditable
@@ -2380,6 +2440,9 @@ class LOCALITIES:
     local = '1.Local'
     inherited = '2.Parent'
     instanced = '3.Inst'
+    # A parameter of the graph a sub-graph node runs that the node does
+    # not set, see nxt_editor.sub_graphs
+    sub_graph = '4.Graph'
 
 
 class COLUMNS:
