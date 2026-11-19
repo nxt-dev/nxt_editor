@@ -1153,8 +1153,14 @@ QMenuBar, QMenu, QLabel {
 
 ![Modern, with the stylesheet above](images/look_stylesheet.png)
 
-A look is put in place as the editor loads, so a change shows the next
-time the editor's host starts. A pipeline can set both for everyone with
+The editor's widgets take the look as they are made, so a new look or
+stylesheet shows when the editor reopens. Preferences offers to do that
+straight away: **Reopen Now** closes the editor, asking about unsaved
+changes first, and opens it again with the same graphs, in Maya, Blender,
+Unreal or on its own, without a restart of the host. **Later** keeps the
+editor as it is, and the next editor you open has the new look.
+
+A pipeline can set both for everyone with
 the environment variables `NXT_EDITOR_LOOK` (`modern`, `classic` or
 `host`) and `NXT_EDITOR_STYLESHEET` (a file), which have the last word
 over the preferences. When `NXT_EDITOR_LOOK` is set, Preferences shows

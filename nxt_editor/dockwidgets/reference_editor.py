@@ -41,7 +41,13 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 # resembling it: faint text for what a path resolved to, and the warning
 # red.
 MISSING_COLOR = QtGui.QColor('#B14A4A')
-RESOLVED_COLOR = QtGui.QColor(theme.TEXT_FAINT)
+RESOLVED_COLOR = None
+
+
+@theme.follow_look
+def _take_look():
+    global RESOLVED_COLOR
+    RESOLVED_COLOR = QtGui.QColor(theme.TEXT_FAINT)
 
 # The stored path lives on the item, because what the item says is the
 # resolved path half the time and the two must not be confused.

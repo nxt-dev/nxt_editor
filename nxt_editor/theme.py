@@ -417,9 +417,9 @@ def fill(sheet):
 
 # Looks ----------------------------------------------------------------------
 # Everything above is the modern look. A look is a set of values for the
-# names above, put in place once as this module loads, because other
-# modules read these names as they load. So a change of look is seen the
-# next time the editor's host starts.
+# names above, put in place as this module loads and again, if it was
+# changed, as each editor window opens (take_stored_look). Widgets take
+# the look as they are made, so a change shows in the next editor.
 LOOK_MODERN = 'modern'    # nxt's own look, the same in every host
 LOOK_CLASSIC = 'classic'  # nxt as it looked before the modern look
 LOOK_HOST = 'host'        # the colors, font and widgets of the host
@@ -660,10 +660,11 @@ def stored_look():
 
 
 def use_look(look):
-    """Put a look's values in place of the modern ones.
+    """Lay a look's values over the names above.
 
-    Meant to be called once, as this module loads: modules that have
-    loaded since have read the names already and do not see a change.
+    Over the modern values: take_stored_look puts those back first. A
+    module that keeps values made from these names keeps them up to date
+    with follow_look.
     """
     values = {}
     host = ''
@@ -697,4 +698,51 @@ def use_look(look):
     globals()['HOST'] = host
 
 
+# Functions that rebuild values kept from the names above, by modules that
+# keep any: run once as they are registered, and again on a change of look.
+_look_followers = []
+
+
+def follow_look(rebuild):
+    """Keep a module's values made from the look up to date.
+
+    :param rebuild: a function of no arguments that makes them again
+    :return: the function, so this can be used as a decorator
+    """
+    _look_followers.append(rebuild)
+    rebuild()
+    return rebuild
+
+
+def take_stored_look():
+    """Put the look the preferences ask for in place, if it is not there.
+
+    Each new editor window calls this before it builds anything, so a look
+    chosen in Preferences shows in the next editor without a restart of its
+    host. The window that is already open keeps the look it was built in.
+
+    :return: True when the look changed
+    :rtype: bool
+    """
+    look = stored_look()
+    host = running_host() if look == LOOK_HOST else ''
+    if (look, host) == (LOOK, HOST) or (look, host) == _last_asked[0]:
+        return False
+    _last_asked[0] = (look, host)
+    before = (LOOK, HOST, BASE, NODE_MONO)
+    # Every look is laid over the modern one, so start from it again.
+    globals().update(_MODERN)
+    use_look(look)
+    for rebuild in _look_followers:
+        rebuild()
+    return (LOOK, HOST, BASE, NODE_MONO) != before
+
+
+# The modern look's values, put back before another look is laid over them.
+_MODERN = dict((name, value) for name, value in globals().items()
+               if name.isupper() and isinstance(value, (str, int, float)))
 use_look(stored_look())
+# What was last asked for. The host look falls back to modern where there
+# is no host, and asking again would only find the same.
+_last_asked = [(stored_look(), running_host() if stored_look() == LOOK_HOST
+                else '')]

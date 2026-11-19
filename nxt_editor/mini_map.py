@@ -393,3 +393,10 @@ class MiniMap(object):
         map_pos = QtCore.QPointF(viewport_pos.x() - origin.x(),
                                  viewport_pos.y() - origin.y())
         self.view.centerOn(self._map_to_scene(map_pos))
+
+
+@theme.follow_look
+def _take_look():
+    """The map's colors, from the look, kept to its changes."""
+    MiniMap.BG_COLOR = theme.color(theme.BASE, 0.92)
+    MiniMap.BORDER_COLOR = theme.color(theme.BORDER_STRONG)

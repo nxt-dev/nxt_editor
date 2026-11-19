@@ -125,6 +125,13 @@ class MainWindow(QtWidgets.QMainWindow):
         :type parent: QtWidgets.QtWidgets.QWidget
         """
         self.in_startup = True
+        # A look chosen in Preferences since the last editor opened.
+        theme.take_stored_look()
+        app = QtWidgets.QApplication.instance()
+        if nxt_editor.owns_qapp():
+            sheet = nxt_editor.stylesheet()
+            if app.styleSheet() != sheet:
+                app.setStyleSheet(sheet)
         pixmap = QtGui.QPixmap(":icons/icons/nxt.svg")
         self.splash_screen = QtWidgets.QSplashScreen(pixmap)
         self.splash_screen.show()
@@ -1556,6 +1563,40 @@ QCheckBox::indicator {
         self._closing = True
         self.close_signal.emit()
         super(MainWindow, self).closeEvent(event)
+
+    def open_paths(self):
+        """The files of the open graphs, in the order they were opened,
+        that are saved somewhere and so could be opened again.
+
+        :rtype: list
+        """
+        paths = []
+        for file_dict in self.open_files.values():
+            real_path = file_dict['model'].top_layer.real_path
+            if real_path and str(real_path) not in paths:
+                paths.append(str(real_path))
+        return paths
+
+    def reopen(self):
+        """Close this editor and open a new one with the same graphs, in
+        the look Preferences asks for now. Unsaved changes are asked about
+        as they are when the editor closes.
+
+        :return: the new editor, or None when the close was cancelled
+        """
+        paths = self.open_paths()
+        app = QtWidgets.QApplication.instance()
+        # Standalone, closing the last window would end the application
+        # before the new editor opens.
+        quits = app.quitOnLastWindowClosed()
+        app.setQuitOnLastWindowClosed(False)
+        try:
+            if not self.close():
+                return None
+            opener = nxt_editor.host_opener or nxt_editor.show_new_editor
+            return opener(paths or None)
+        finally:
+            app.setQuitOnLastWindowClosed(quits)
 
     def set_host_label(self, text):
         """Say in the title which session of the host this editor belongs

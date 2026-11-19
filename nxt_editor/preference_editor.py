@@ -121,13 +121,13 @@ PREFERENCES = (
                "like the host the editor is in: Maya's own widgets, or "
                "Blender's or Unreal's colors and font. On its own, the "
                'editor is Modern. '
-               'After a restart of the editor\'s host.',
+               'Shown when the editor reopens, which it offers to do.',
                choices=theme.LOOK_NAMES),
     preference(PREF.LOOK_STYLESHEET, 'Panels', 'Stylesheet', TEXT, '',
                'A .qss file of your own, laid over the look, to restyle '
                'what you like. It can use the look\'s colors by name, such '
-               'as {BASE} and {TEXT}. After a restart of the editor\'s '
-               'host.'),
+               'as {BASE} and {TEXT}. Shown when the editor reopens, '
+               'which it offers to do.'),
     preference(PREF.NEUTRAL_PROPERTY_TEXT, 'Panels',
                'Neutral Property Text', BOOL, False,
                'Property Editor rows in plain text with their layer\'s '
@@ -789,10 +789,39 @@ class PreferenceEditor(QtWidgets.QDialog):
             return
         if pref.kind == TEXT and not value.strip():
             value = pref.default
+        before = current(pref)
         set_preference(self.main_window, pref, value)
         row = self.rows.get(pref.key)
         if row is not None:
             row.update_reset()
+        if (pref.key in (PREF.LOOK, PREF.LOOK_STYLESHEET) and
+                value != before and self.main_window is not None):
+            # After the box the change came from has finished with it.
+            QtCore.QTimer.singleShot(0, self.offer_reopen)
+
+    def offer_reopen(self):
+        """Offer to reopen the editor in the look just chosen.
+
+        A look is built into the editor's widgets as they are made, so it
+        shows in a new editor. Reopening is that, with the same graphs, and
+        no restart of the host the editor runs in.
+
+        :return: the new editor, or None when it was not reopened
+        """
+        box = QtWidgets.QMessageBox(self)
+        box.setWindowTitle('Look')
+        box.setIcon(QtWidgets.QMessageBox.Question)
+        box.setText('The editor shows its new look when it reopens.')
+        box.setInformativeText(
+            'Reopen it now, with the graphs you have open? Any unsaved '
+            'changes are asked about first.')
+        reopen = box.addButton('Reopen Now', QtWidgets.QMessageBox.AcceptRole)
+        box.addButton('Later', QtWidgets.QMessageBox.RejectRole)
+        box.setDefaultButton(reopen)
+        box.exec_()
+        if box.clickedButton() is not reopen:
+            return None
+        return self.main_window.reopen()
 
     def show_value(self, pref):
         """Show a preference's value as it is now."""

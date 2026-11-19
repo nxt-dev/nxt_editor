@@ -343,9 +343,24 @@ def launch_nxt(graph=None):
     window = nxt_editor.show_new_editor([graph] if graph else None)
     window.show()
     __NXT_WINDOWS__.append(window)
+    nxt_editor.host_opener = _open_again
     _track_file()
     _label_windows()
     _start_pump()
+    return window
+
+
+def _open_again(paths=None):
+    """Open a new editor with Blender's wiring, as the editor does when it
+    reopens in a new look.
+
+    :param paths: the files to open, or None
+    :return: the new editor
+    """
+    paths = list(paths or [])
+    window = launch_nxt(paths.pop(0) if paths else None)
+    for path in paths:
+        window.load_file(path)
     return window
 
 

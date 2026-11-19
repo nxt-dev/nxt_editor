@@ -191,6 +191,14 @@ class LaunchNodes(GraphCase):
     """The builtin nodes that start a host from inside another graph."""
 
     def launch(self, node, attrs):
+        # The nodes ship with nxt core, which can be a release behind the
+        # editor while both are being updated.
+        import nxt
+        builtins = os.path.join(os.path.dirname(nxt.__file__), 'builtin',
+                                'sub_graphs.nxt')
+        with open(builtins, encoding='utf-8') as handle:
+            if '"{}"'.format(node) not in handle.read():
+                self.skipTest('this nxt core has no {} node'.format(node))
         graph = write(os.path.join(self.tmp, 'launch.nxt'), {
             'version': '1.17', 'alias': 'launch',
             'references': ['$NXT_BUILTINS/sub_graphs.nxt'],
