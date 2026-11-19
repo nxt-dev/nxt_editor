@@ -894,13 +894,19 @@ class IconCheckboxDelegate(QtWidgets.QStyledItemDelegate):
         return QtCore.QSize(self.height, self.height)
 
     def editorEvent(self, event, model, option, index):
-        if event.type() != QtCore.QEvent.Type.MouseButtonRelease:
+        double = event.type() == QtCore.QEvent.Type.MouseButtonDblClick
+        if (event.type() != QtCore.QEvent.Type.MouseButtonRelease
+                and not double):
             return False
         if event.button() != QtCore.Qt.MouseButton.LeftButton:
             return False
         prev_checked = option.checkState == QtCore.Qt.CheckState.Checked
         model.setData(index, not prev_checked, role=QtCore.Qt.CheckStateRole)
-        return True
+        # The second click of two quick ones comes as a double click, and
+        # the view keeps the release after it to itself, so that click is
+        # taken here. Saying it was not handled is what makes the view
+        # keep that release: handled, the release would toggle once more.
+        return not double
 
 
 def is_hovered(option, index):

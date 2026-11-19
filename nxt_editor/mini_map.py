@@ -171,7 +171,7 @@ class MiniMap(object):
         backdrop_graphics = getattr(self.view, '_backdrop_graphics', {})
         for graphic in sorted(backdrop_graphics.values(),
                               key=lambda g: g.zValue()):
-            if graphic.scene() is None:
+            if graphic.scene() is None or not graphic.isVisible():
                 continue
             color = graphic.color()
             color.setAlpha(110)

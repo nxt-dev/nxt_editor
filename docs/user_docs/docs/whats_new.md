@@ -31,6 +31,10 @@ Each item links to the part of the docs that explains it in full.
 - The code editor's completion list opens under the line, with its names
   starting where the word being completed starts. It was drawn to the left
   by the width of the line numbers, and over the bottom of the line.
+- The mini map leaves out the backdrops of a layer hidden in the graph, as
+  it does that layer's nodes.
+- Two quick clicks on a Layer Manager toggle count as two: the second was
+  taken for a double click and did nothing.
 
 ## nxt_editor 4.13.0
 
