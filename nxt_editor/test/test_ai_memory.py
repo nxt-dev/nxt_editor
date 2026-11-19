@@ -431,7 +431,7 @@ class MemoryPageTests(unittest.TestCase):
             dialog = AiSettingsDialog(store=memory_store(),
                                       prefs={PREF.AI_ENABLED: True})
         tabs = [dialog.body.tabText(i) for i in range(dialog.body.count())]
-        self.assertEqual(['Sign In', 'Memory'], tabs)
+        self.assertEqual(['Providers', 'Memory'], tabs)
         dialog.deleteLater()
 
 

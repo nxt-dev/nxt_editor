@@ -6,8 +6,9 @@ name: Package test
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+    # Only a release needs a new version. A pull request into dev is bumped
+    # with the next release.
     branches:
-      - 'dev'
       - 'release'
 
 jobs:
