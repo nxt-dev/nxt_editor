@@ -914,7 +914,14 @@ you ask it something.
 
 ### Signing in
 
-**Options > AI Assistant > Sign In** has a box for each provider:
+**Options > AI Assistant > Providers** has a section for each provider.
+Its header says how it is set up, such as *Signed in · opus* or *Not set
+up*, and *Problem* in red when something went wrong (rest the mouse on it
+for what). Click a header, or press Space or Enter on it, to open or close
+it; the provider asked first is marked *Default* and starts open. With
+several open the list scrolls, and the window is never taller than the
+screen.
+
 
 - **Claude** uses the Claude Code app's sign in, so any Claude plan works
   and the editor never sees the account's token. **Sign in with Claude
