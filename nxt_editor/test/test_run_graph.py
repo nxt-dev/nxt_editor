@@ -187,6 +187,12 @@ class Hosts(GraphCase):
                 module._run_graph().make_parser(name.title()).description)
 
 
+def same_path(path):
+    """A path to compare by: the temp folder can be named in its short
+    form, RUNNER~1, and a path nxt resolves in its long one."""
+    return os.path.normcase(os.path.realpath(path))
+
+
 class LaunchNodes(GraphCase):
     """The builtin nodes that start a host from inside another graph."""
 
@@ -228,8 +234,8 @@ class LaunchNodes(GraphCase):
             '_start_node': repr('/second'),
             '_parameters': repr({'/.word': 'x'})})
         command = call.args[0]
-        self.assertEqual(install + '/blender.exe',
-                         command[0].replace(os.sep, '/'))
+        self.assertEqual(same_path(install + '/blender.exe'),
+                         same_path(command[0]))
         self.assertEqual(['--background', 'C:/scenes/shot.blend',
                           '--python'], command[1:4])
         self.assertTrue(command[4].replace(os.sep, '/').endswith(
@@ -247,8 +253,8 @@ class LaunchNodes(GraphCase):
             '_unreal_version': '5.4'})
         command = call.args[0]
         self.assertEqual(
-            install + '/Engine/Binaries/Win64/UnrealEditor-Cmd.exe',
-            command[0].replace(os.sep, '/'))
+            same_path(install + '/Engine/Binaries/Win64/UnrealEditor-Cmd.exe'),
+            same_path(command[0]))
         self.assertEqual(['C:/proj/Game.uproject', '-run=pythonscript',
                           '-script=run_unreal_graph.py', '-unattended',
                           '-nosplash', '-nullrhi'], command[1:])

@@ -30,6 +30,10 @@ from nxt_editor.node_graphics_item import NodeGraphicsItem  # noqa: E402
 PREF = user_dir.USER_PREF
 
 
+def same_path(path):
+    return os.path.normcase(os.path.realpath(path))
+
+
 class LookChange(unittest.TestCase):
 
     def setUp(self):
@@ -143,9 +147,10 @@ class Reopen(LookChange):
         self.assertIsNot(new, self.win)
         self.assertFalse(self.win.isVisible())
         self.assertEqual(theme.LOOK_CLASSIC, theme.LOOK)
-        self.assertEqual([self.graph.replace(os.sep, '/')],
-                         [path.replace(os.sep, '/')
-                          for path in new.open_paths()])
+        # Compared as real paths: a temp folder can be named in its short
+        # form, RUNNER~1, and the graph's path in its long one.
+        self.assertEqual([same_path(self.graph)],
+                         [same_path(path) for path in new.open_paths()])
 
     def test_later_leaves_the_editor_open(self):
         dialog = self.win.open_preferences()
