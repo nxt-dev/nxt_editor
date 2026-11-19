@@ -4,6 +4,18 @@ This page summarises what is new in recent releases of **nxt_editor**, and
 in **nxt_core 0.22**.
 Each item links to the part of the docs that explains it in full.
 
+## Unreleased
+
+**New**
+- **The graph has no edge.** Pan, frame and go to nodes as far out as you
+  like; the canvas grows as you go.
+- **Renaming an attribute renames the tokens that use it**, and
+  **parenting a node keeps its instances pointed at it**, both undoable,
+  with **Options > Update Tokens on Attr Rename** and **Update Instance
+  Paths on Parent** to turn them off. See
+  [Renaming an attribute](reference.md#renaming-an-attribute) and
+  [Parenting an instanced node](reference.md#parenting-an-instanced-node).
+
 ## nxt_editor 4.13.0
 
 ### The graph

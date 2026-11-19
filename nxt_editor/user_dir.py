@@ -197,6 +197,11 @@ class USER_PREF():
     # Offer to reload layer files changed on disk when the editor comes
     # back to the front.
     CHECK_DISK_CHANGES = 'check_files_changed_on_disk'
+    # Renaming an attr updates the tokens in its layer that point at it.
+    REFACTOR_ATTR_RENAME = 'update_tokens_on_attr_rename'
+    # Parenting nodes updates the instance paths in the layer that point
+    # at them.
+    REFACTOR_INSTANCE_PATHS = 'update_instance_paths_on_parent'
     SHOW_GRID = 'show_grid'
     # Property Editor rows in neutral text, the layer as a color beside
     # them, rather than in their layer's color.

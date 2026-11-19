@@ -1109,6 +1109,15 @@ While executing, the [Stage](#stage) can have arbitrary attributes add/set/retri
 !!! note "Attribute connections"
     It is best practice to display inter-node dependencies via hierarchy or connections of attributes, rather than hide that dependency in the code. This will make your layers more portable and friendly to other users. Despite this best practice, other nodes and their attributes can be accessed inside a code `block using STAGE.lookup('path/to/node')` and `STAGE.lookup('path/to/node.otherattr')`.
 
+### Renaming an attribute
+
+Renaming an attribute also renames the [tokens](#tokens) in its layer
+that use it, `${attr}` on its own node and `${/path/to/node.attr}`
+anywhere, in attribute values and code, so they keep working. An
+attribute of the same name on another node is left alone. Undo puts the
+tokens back with the name. To rename only the attribute, turn off
+**Options > Update Tokens on Attr Rename**.
+
 ## Tokens
 
 A token is like a [reference or pointer](workflows.md#transition-map) to another token or value. [OS ](workflows.md#transition-map)style pathing is used to resolve attribute and file tokens.
@@ -1352,6 +1361,14 @@ Data comes from the hierarchical parent as well as the instance source, with hie
 
 !!! danger
     If a node instances itself, or any ancestor or descendants, it will crash. It's best (because that's all thats possible) to only instance from other hierarchies or sibling nodes
+
+### Parenting an instanced node
+
+When you parent a node that other nodes instance, or a node under it,
+the instance paths in the layer that point at it are changed to its new
+path, so its instances keep instancing it. A relative instance path stays
+relative. Undo puts them back. To leave instance paths as they are, turn
+off **Options > Update Instance Paths on Parent**.
 
 # NXT file spec
 

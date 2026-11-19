@@ -1878,6 +1878,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.options_menu = self.addMenu("Options")
         self.options_menu.addAction(self.app_actions.toggle_ding_action)
         self.options_menu.addAction(self.app_actions.check_disk_action)
+        self.options_menu.addAction(self.app_actions.refactor_rename_action)
+        self.options_menu.addAction(self.app_actions.refactor_parent_action)
         self.options_menu.addAction(self.app_actions.ai_settings_action)
         self.options_menu.addAction(
             self.app_actions.optional_components_action)
