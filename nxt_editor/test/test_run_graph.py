@@ -209,8 +209,10 @@ class LaunchNodes(GraphCase):
             '_start_node': repr('/second'),
             '_parameters': repr({'/.word': 'x'})})
         command = call.args[0]
-        self.assertTrue(command[0].endswith('Blender 5.1/blender.exe'),
-                        command[0])
+        # The default install path is a Windows one.
+        expected = ('Blender 5.1/blender.exe' if sys.platform == 'win32'
+                    else '/blender.exe')
+        self.assertTrue(command[0].endswith(expected), command[0])
         self.assertEqual(['--background', 'C:/scenes/shot.blend',
                           '--python'], command[1:4])
         self.assertTrue(command[4].replace(os.sep, '/').endswith(
@@ -224,8 +226,10 @@ class LaunchNodes(GraphCase):
             '_project': repr('C:/proj/Game.uproject'),
             '_unreal_version': '5.4'})
         command = call.args[0]
-        self.assertTrue(command[0].endswith(
-            'UE_5.4/Engine/Binaries/Win64/UnrealEditor-Cmd.exe'), command[0])
+        expected = '/Engine/Binaries/Win64/UnrealEditor-Cmd.exe'
+        if sys.platform == 'win32':
+            expected = 'UE_5.4' + expected
+        self.assertTrue(command[0].endswith(expected), command[0])
         self.assertEqual(['C:/proj/Game.uproject', '-run=pythonscript',
                           '-script=run_unreal_graph.py', '-unattended',
                           '-nosplash', '-nullrhi'], command[1:])

@@ -98,7 +98,7 @@ The full list, release by release, is in
 
 Requirements:
 
-- Python 3.11 to 3.13.
+- Python [3.11](https://www.python.org/downloads/release/python-3110/) to [3.13](https://www.python.org/downloads/release/python-3130/).
 - Qt through [Qt.py](https://github.com/mottosso/Qt.py) (below 3) on
   [PySide6](https://doc.qt.io/qtforpython-6/) (6.x, below 6.12). pip
   installs both.
