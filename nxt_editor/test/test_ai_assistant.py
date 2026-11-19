@@ -1842,9 +1842,13 @@ class MainWindowTests(unittest.TestCase):
         self.win.menu_bar.populate_window_menu()
         return [a.text() for a in self.win.menu_bar.window_menu.actions()]
 
-    def test_the_options_menu_has_the_settings(self):
-        action = self.win.app_actions.ai_settings_action
-        self.assertIn(action, self.win.menu_bar.options_menu.actions())
+    def test_the_settings_are_a_page_of_preferences(self):
+        from nxt_editor.ai.settings_dialog import AiSettingsDialog
+        page = self.win.open_ai_settings()
+        self.addCleanup(self.win.preference_editor.hide)
+        self.assertIsInstance(page, AiSettingsDialog)
+        self.assertEqual('AI Assistant',
+                         self.win.preference_editor.current_section())
 
     def test_the_panel_is_only_in_the_window_menu_when_turned_on(self):
         target = 'nxt_editor.main_window.ai_providers.is_enabled'

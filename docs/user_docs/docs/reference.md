@@ -10,7 +10,7 @@ Checkout our example graphs [here](https://github.com/nxt-dev/nxt_editor/tree/re
 The editor is made of a graph (the stage view) in the middle, surrounded by
 dock widgets that can be moved, tabbed and closed: the Layer Manager,
 Property Editor, Code Editor, History View, Build View, Workflow Tools,
-Output Log, [Outliner](#outliner), [Instance View](#instance-view) and [Hotkey Editor](hotkeys.md). Closed
+Output Log, [Outliner](#outliner), [Instance View](#instance-view) and [Hotkeys](hotkeys.md). Closed
 docks come back from the **Window** menu.
 
 ## Docks and layout
@@ -92,7 +92,7 @@ and Blender.
 
 ### Layer Color View
 
-**View > Options > Layer Color View...** sets how layer and backdrop colors
+**Window > Layer Color View...** sets how layer and backdrop colors
 are shown to you. It is a view preference, yours alone and remembered with
 your preferences. It never changes the color a layer or backdrop is given:
 that is chosen with **Change Color**, and is the same whatever anyone's
@@ -139,7 +139,7 @@ between sessions.
 
 When a node fails and stops the build, the editor plays its error sound
 and, if another window is in front, flashes in the taskbar (or bounces in
-the Dock) until you look at it. **Options > Error sound** turns the sound
+the Dock) until you look at it. **Error Sound** in **Edit > Preferences > Running** turns the sound
 off.
 
 ### Find Node
@@ -279,7 +279,7 @@ Only top level nodes move: a child stays stacked under its parent.
 **Align** is greyed out until there are two things selected, and the
 distributes need three. The shortcuts only work while the graph has focus,
 so typing in the code editor never moves anything, and they can be changed
-in the [Hotkey Editor](hotkeys.md#alignment).
+in [Hotkeys](hotkeys.md#alignment).
 
 Aligning a line's point with the nodes either side of it straightens the
 line. For example, **Align Middle** on three nodes and the point between
@@ -319,7 +319,7 @@ are left where they are.
 Nodes no longer slide open when a parent is expanded. Every child is
 animated separately, so a node with hundreds of children opens noticeably
 slower that way. The **Animate Nodes** action turns the animation back on.
-It is listed under **Graph** in the [Hotkey Editor](hotkeys.md#graph),
+It is listed under **Graph** in [Hotkeys](hotkeys.md#graph),
 where you can give it a shortcut, and the choice is remembered between
 sessions.
 
@@ -365,7 +365,7 @@ example `Ctrl+D` expands the selection in the code editor but duplicates the
 selected node in the graph. While the code editor, or one of its find
 fields, has focus the main window's shortcuts are suspended so typing cannot
 trigger them. All of these can be rebound in the
-[Hotkey Editor](hotkeys.md#code-editor), and most are also on the code
+[Hotkeys](hotkeys.md#code-editor), and most are also on the code
 editor's right click menu, with the line commands under **Line**.
 
 | Action | Shortcut | Notes |
@@ -557,7 +557,7 @@ is imported, but not what `os.path.join(...)` returns. jedi analyses the
 code, so after `path = os.path.join(out_dir, name)` it knows `path` is a
 string and offers `path.split` and `path.splitlines`.
 
-- It is optional. Install it from **Options > Optional Components**, in
+- It is optional. Install it from **Edit > Preferences > Optional Components**, in
   any host, or with `pip install nxt-editor[completion]` (see
   [Optional Components](optional_components.md)). Without it, **Python
   Analysis (jedi)** in the menu offers to install it. Once installed it
@@ -591,9 +591,11 @@ offered while a node is running.
 
 #### Autocomplete options
 
-![Options > Autocomplete](images/options_autocomplete.png)
+![Autocomplete, in the code editor's right-click menu](images/options_autocomplete.png)
 
-**Options > Autocomplete** holds the completion switches. They are all on by
+**Autocomplete**, in the code editor's right-click menu, holds the
+completion switches, which are in **Edit > Preferences > Code Editor**
+too. They are all on by
 default and remembered between sessions, and a change applies straight away,
 even to a list that is already open.
 
@@ -765,8 +767,8 @@ the changes on disk, **Reload...** opens Reload Source instead, and
 
 When you come back to the editor from another window, it also offers to
 reload the current graph's files that have changed. **Keep Mine** is
-remembered until the file changes again. Turn this off with **Options >
-Notice Files Changed on Disk**; saving over a changed file still asks.
+remembered until the file changes again. Turn this off with **Notice Files Changed on Disk** in **Edit > Preferences >
+Editing**; saving over a changed file still asks.
 
 ## Build View
 
@@ -877,7 +879,7 @@ The AI Assistant is a panel for chatting with Claude, OpenAI, Grok or a local
 model about the open graph. It can look over the graph, explain it, change it
 and test its changes, and it shows each step it takes as it works.
 
-It is off until it is turned on in **Options > AI Assistant**. Once it is on,
+It is off until it is turned on in **Edit > Preferences > AI Assistant**. Once it is on,
 **Window > AI Assistant** opens the panel. Nothing is sent to a provider until
 you ask it something.
 
@@ -885,7 +887,7 @@ you ask it something.
 
 1. **Provider and model.** Who answers, and which of their models. The line
    under them says which sign in or key is being used. **Settings** opens
-   **Options > AI Assistant**.
+   **Edit > Preferences > AI Assistant**.
 2. **Chats.** Every chat is kept, so **New Chat** does not lose the last
    one. Click a chat to go back to it and carry on. Right click a chat to
    **Pin** it to the top or **Delete** it. Pinned chats are listed first,
@@ -914,7 +916,7 @@ you ask it something.
 
 ### Signing in
 
-**Options > AI Assistant > Providers** has a section for each provider.
+**Edit > Preferences > AI Assistant > Providers** has a section for each provider.
 Its header says how it is set up, such as *Signed in · opus* or *Not set
 up*, and *Problem* in red when something went wrong (rest the mouse on it
 for what). Click a header, or press Space or Enter on it, to open or close
@@ -973,7 +975,7 @@ looked at as it is.
 
 Ask the assistant to remember something, such as how you name controls, and
 it saves a short note. Notes are sent at the start of every chat.
-**Options > AI Assistant > Memory** lists them, and the folders it can
+**Edit > Preferences > AI Assistant > Memory** lists them, and the folders it can
 always read with what each one holds. Double click a note, or what a folder
 holds, to change it; **Remove** takes it away, and **Add Note** and **Add
 Folder...** add your own.
@@ -1000,7 +1002,8 @@ layer its value comes from, lighter where the selected node sets the value
 itself and darker where it inherits it. Instanced values are in italics.
 
 Darker layer colors can be hard to read as text, so **View > Options >
-Neutral Property Text** shows the rows in neutral text instead: bright,
+Neutral Property Text** (or **Neutral Property Text** in **Edit >
+Preferences > Panels**) shows the rows in neutral text instead: bright,
 in bold across the row, where the node sets the value, and a softer grey where it
 inherits it. The row header on the left is filled with the layer's color,
 and stays in view however far you scroll the table. The source looks like a
@@ -1067,27 +1070,95 @@ selection are left where they are under their parents.
 
 ## Preferences
 
-**Options > Preferences...** has every preference you can set. Its
-sections (Graph, Running, Editing, Panels and Code Editor) are listed on
-the left, and the one you choose is shown on the right, each preference
-with what it does. Changes are made straight away: one that also has a
-toggle in a menu is set through that toggle, so the menu agrees. A
-preference that is not at its default has a **Reset** button beside it.
+**Edit > Preferences...** (`Ctrl+,`) has every setting in one window, which
+stays open beside the editor while you work. Its sections are listed on the
+left, and the one you choose is shown on the right:
+
+- **Graph**, **Running**, **Editing**, **Panels** and **Code Editor**: each
+  preference with what it does. Changes are made straight away: one that
+  also has a toggle in a menu is set through that toggle, so the menu
+  agrees. A preference that is not at its default has a **Reset** button
+  beside it.
+- **Hotkeys**: every action's keyboard shortcut. See [Hotkeys](hotkeys.md).
+- **AI Assistant**: turning the assistant on, signing in, and what it
+  remembers. See [AI Assistant](#ai-assistant).
+- **Environment Variables**: the env files nxt reads as it starts. Edits
+  here are applied with **Apply**, and closing Preferences asks about any
+  that are not. See [Environment variables from files](extensions.md).
+- **Optional Components**: extras the editor can install, such as jedi.
+  See [Optional Components](optional_components.md).
 
 ![Preferences](images/preferences.png)
 
-**Search all preferences**, at the top, looks through every section at
-once, by name, what a preference does, or its key in your `prefs.json`.
-It searches when you stop typing, or straight away on `Enter`. What it
-finds is shown together under each section's title, with the words found
-marked, and the list on the left keeps only those sections: choosing one
-moves to its part of the results. Clear the search to go back to the
-section you had open.
+**Search all preferences and hotkeys**, at the top, looks through every
+section at once: a preference by its name, what it does or its key in your
+`prefs.json`, a hotkey by its name or its keys, and the other pages by what
+they are for. It searches when you stop typing, or straight away on
+`Enter`. What it finds is shown together under each section's title, with
+the words found marked, and the list on the left keeps only those
+sections: choosing one moves to its part of the results. A page found by
+the search has a button that goes to it. Clear the search to go back to
+the section you had open.
 
-![Searching all preferences](images/preferences_search.png)
+![Searching all preferences and hotkeys](images/preferences_search.png)
 
-The AI Assistant, Layer Color View and Environment Variables have their
-own dialogs in Options.
+**Layer Color View** is in the **Window** menu, and the code editor's
+**Autocomplete** switches in its right-click menu as well as in
+Preferences.
+
+### The editor's look
+
+**Look**, under Panels, chooses how the editor is drawn:
+
+- **Modern**, the default, is the editor's own look, the same standalone
+  and in every host.
+- **Classic** is how the editor looked before the modern look: the
+  original dark stylesheet and its blue highlights, and nodes with square
+  corners and their names in the code font.
+- **Host application** looks like the host the editor runs in:
+    - In **Maya**, the editor takes Maya's colors and font, and Maya draws
+      its widgets, so it looks like a Maya window. Workflow Tools keep
+      their round buttons, in Maya's colors.
+    - In **Blender** and **Unreal**, which draw their own interface
+      without Qt, the editor draws its widgets itself in that host's
+      colors and font: Blender's default theme and its Inter font, and
+      Unreal's editor colors and Roboto.
+    - On its own, the editor is Modern, and Host application is greyed
+      out in Preferences. Chosen in a host, it is kept for the next time
+      the editor runs there.
+
+![Modern](images/look_modern.png)
+![Classic](images/look_classic.png)
+![Host application, in Maya](images/look_host.png)
+![Host application, in Blender](images/look_host_blender.png)
+![Host application, in Unreal](images/look_host_unreal.png)
+
+**Stylesheet**, beside it, names a `.qss` file of your own that is laid
+over whichever look is chosen, to restyle what you like: a studio's own
+colors, or one host's look in another. It can use the look's colors by
+name, in braces, such as `{BASE}`, `{RAISED}`, `{TEXT}` and `{ACCENT}`.
+A file that cannot be read is passed over, with a line in the log.
+
+```css
+/* studio.qss: a line under each panel's title, and larger text */
+QDockWidget::title {
+    background: {ACCENT_DIM};
+    color: {TEXT};
+    border-bottom: 2px solid #2bb3a3;
+}
+QMenuBar, QMenu, QLabel {
+    font-size: 14px;
+}
+```
+
+![Modern, with the stylesheet above](images/look_stylesheet.png)
+
+A look is put in place as the editor loads, so a change shows the next
+time the editor's host starts. A pipeline can set both for everyone with
+the environment variables `NXT_EDITOR_LOOK` (`modern`, `classic` or
+`host`) and `NXT_EDITOR_STYLESHEET` (a file), which have the last word
+over the preferences. When `NXT_EDITOR_LOOK` is set, Preferences shows
+the look it sets and can not change it.
 
 # Terms and Definitions
 
@@ -1147,7 +1218,7 @@ that use it, `${attr}` on its own node and `${/path/to/node.attr}`
 anywhere, in attribute values and code, so they keep working. An
 attribute of the same name on another node is left alone. Undo puts the
 tokens back with the name. To rename only the attribute, turn off
-**Options > Update Tokens on Attr Rename**.
+**Update Tokens on Attr Rename** in **Edit > Preferences > Editing**.
 
 ## Tokens
 
@@ -1399,7 +1470,8 @@ When you parent a node that other nodes instance, or a node under it,
 the instance paths in the layer that point at it are changed to its new
 path, so its instances keep instancing it. A relative instance path stays
 relative. Undo puts them back. To leave instance paths as they are, turn
-off **Options > Update Instance Paths on Parent**.
+off **Update Instance Paths on Parent** in **Edit > Preferences >
+Editing**.
 
 ### Sub-graph nodes
 

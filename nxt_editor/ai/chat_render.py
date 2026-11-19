@@ -424,7 +424,7 @@ def activity_html(steps):
     html_rows = []
     for mark, color, label, detail in rows:
         if detail:
-            label = '{} <span style="color:{}">— {}</span>'.format(
+            label = '{}: <span style="color:{}">{}</span>'.format(
                 html.escape(label), COLORS['failed_name'],
                 html.escape(detail[:200]))
         else:

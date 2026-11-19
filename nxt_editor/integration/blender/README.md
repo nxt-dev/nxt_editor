@@ -29,11 +29,17 @@ Qt.py and PySide6 from an `nxt_dev_deps` folder beside them. Without
 
 # Usage
 
-* **Open Editor** — an nxt editor window inside Blender.
-* **Close Editor** — closes the windows this session opened.
-* **Run Graph...** — pick a `.nxt` and execute it in the current scene.
-* **Run Last Graph** — the same graph again.
-* **Reload Code** — forget the cached `core` modules.
+* **Open Editor**: an nxt editor window inside Blender.
+* **Close Editor**: closes the windows this session opened.
+* **Run Graph...**: pick a `.nxt` and execute it in the current scene.
+* **Run Last Graph**: the same graph again.
+* **Reload Code**: forget the cached `core` modules.
+
+## Which Blender an editor belongs to
+
+The editor's title shows the name of the open `.blend` file, and follows it
+when a file is loaded or saved, so the editors of two Blender sessions can
+be told apart.
 
 ## No menu
 
@@ -78,5 +84,5 @@ Graph** reloads first by default, and the menu marks the loaded code
 
 The editor edits; it does not have to be open to run anything. Editing can
 also be done outside Blender entirely, with the standalone editor under a
-Python that has PySide6 — see `templates/templates/blender/launch_nxt.py`.
+Python that has PySide6; see `templates/templates/blender/launch_nxt.py`.
 Graphs whose nodes call `bpy` can only be *executed* in Blender.

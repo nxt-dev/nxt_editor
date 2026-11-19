@@ -75,8 +75,8 @@ PLAN_ERRORS = {
         'ChatGPT could not check your plan just now. Try again in a '
         'minute.',
     'subscription_sharing_invalid_user':
-        'ChatGPT did not accept your sign in. Sign in again in Options > '
-        'AI Assistant.',
+        'ChatGPT did not accept your sign in. Sign in again in Edit > '
+        'Preferences > AI Assistant.',
     'subscription_sharing_unsupported_capability':
         'A ChatGPT plan can not do part of this request.',
     'subscription_sharing_route_not_supported':
@@ -100,11 +100,11 @@ def explain(err, label, auth=None):
     if err.status in (401, 403):
         if kind == WEB:
             return ('{} did not accept your sign in. Sign in again in '
-                    'Options > AI Assistant. ({})'.format(label, err))
+                    'Edit > Preferences > AI Assistant. ({})'.format(label, err))
         if kind in (KEY, ENV):
             where = auth.label if kind == ENV else 'the saved API key'
             return ('{} did not accept {}. Check the key, or paste a new '
-                    'one in Options > AI Assistant. ({})'.format(
+                    'one in Edit > Preferences > AI Assistant. ({})'.format(
                         label, where, err))
     if err.status == 429:
         return ('{} says too many requests or the plan is used up. Wait a '
@@ -295,13 +295,13 @@ class Provider(object):
             return record
         if not record.get('refresh_token'):
             raise AuthError('Your {} sign in ran out. Sign in again in '
-                            'Options > AI Assistant.'.format(self.label))
+                            'Edit > Preferences > AI Assistant.'.format(self.label))
         try:
             record = self._refresh(record)
         except web.WebError as err:
             if err.status in (400, 401, 403):
                 raise AuthError('Your {} sign in ran out. Sign in again in '
-                                'Options > AI Assistant.'.format(self.label))
+                                'Edit > Preferences > AI Assistant.'.format(self.label))
             raise
         self.store.set(self._web_name, record)
         return record
@@ -326,7 +326,7 @@ class Provider(object):
         auth = auth or self.auth()
         if not auth:
             raise AuthError('{} is not set up. Sign in or add an API key in '
-                            'Options > AI Assistant.'.format(self.label))
+                            'Edit > Preferences > AI Assistant.'.format(self.label))
         return auth
 
     def list_models(self, auth=None):
@@ -776,10 +776,10 @@ class Codex(Provider):
         if not auth:
             if not self.cli:
                 raise AuthError('Codex is not installed. Install it, then '
-                                'sign in with Codex in Options > AI '
+                                'sign in with Codex in Edit > Preferences > AI '
                                 'Assistant.')
             raise AuthError('Codex is not signed in. Sign in with Codex in '
-                            'Options > AI Assistant.')
+                            'Edit > Preferences > AI Assistant.')
         return auth
 
     def start_sign_in(self):
@@ -978,7 +978,7 @@ class Local(Provider):
     def _require_auth(self, auth):
         auth = auth or self.auth()
         if not auth:
-            raise AuthError('Choose a local server in Options > AI '
+            raise AuthError('Choose a local server in Edit > Preferences > AI '
                             'Assistant.')
         return auth
 

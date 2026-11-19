@@ -4,6 +4,14 @@
         <file>styles/dark/modern.qss</file>
     </qresource>
     <qresource prefix="fonts">
+        <file>fonts/Inter/Inter-Bold.ttf</file>
+        <file>fonts/Inter/Inter-BoldItalic.ttf</file>
+        <file>fonts/Inter/Inter-Italic.ttf</file>
+        <file>fonts/Inter/Inter-Light.ttf</file>
+        <file>fonts/Inter/Inter-LightItalic.ttf</file>
+        <file>fonts/Inter/Inter-Medium.ttf</file>
+        <file>fonts/Inter/Inter-MediumItalic.ttf</file>
+        <file>fonts/Inter/Inter-Regular.ttf</file>
         <file>fonts/RobotoMono/RobotoMono-Bold.ttf</file>
         <file>fonts/RobotoMono/RobotoMono-BoldItalic.ttf</file>
         <file>fonts/RobotoMono/RobotoMono-Italic.ttf</file>

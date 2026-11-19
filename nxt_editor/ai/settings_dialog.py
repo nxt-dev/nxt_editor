@@ -1,4 +1,4 @@
-"""Options > AI Assistant: turn the assistant on and sign in to providers."""
+"""Edit > Preferences > AI Assistant: turn the assistant on and sign in to providers."""
 # Builtin
 import logging
 import os
@@ -878,7 +878,7 @@ def scrolling(page):
 
 
 class AiSettingsDialog(QtWidgets.QDialog):
-    """Options > AI Assistant.
+    """Edit > Preferences > AI Assistant.
 
     What turns it on and says what it does stays at the top, and Close at
     the bottom. Between them each tab scrolls, and each provider is a

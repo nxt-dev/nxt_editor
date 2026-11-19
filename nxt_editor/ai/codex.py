@@ -307,7 +307,7 @@ def _explain(message):
     lower = message.lower()
     if '401' in lower or 'unauthorized' in lower or 'not logged in' in lower:
         return ('Codex is not signed in, or its sign in ran out. Sign in '
-                'with Codex in Options > AI Assistant. ({})'.format(message))
+                'with Codex in Edit > Preferences > AI Assistant. ({})'.format(message))
     if 'address already in use' in lower or 'port' in lower and \
             'in use' in lower:
         return ('Another Codex sign in is already waiting. Finish or close '

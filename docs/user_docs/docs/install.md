@@ -28,7 +28,7 @@ To install the latest release from [PyPI](https://pypi.org/project/nxt-editor/):
     - `pip install nxt-editor`
     - Optionally, for richer code completion:
       `pip install nxt-editor[completion]`, or later from
-      **Options > Optional Components** in the editor. This adds
+      **Edit > Preferences > Optional Components** in the editor. This adds
       [jedi](https://github.com/davidhalter/jedi), which the
       [Python Analysis](reference.md#python-analysis-with-jedi) completion
       source uses. The editor works the same without it. See
@@ -106,6 +106,11 @@ The plugin also adds an `nxt_ui` command, for shelf buttons and scripts.
 There is one editor at a time: when an editor is already open, `nxt_ui`
 uses it rather than opening a second one.
 
+The editor's title shows the name of the scene Maya has open, for example
+`nxt maya [rig_v012.ma]`, and follows it when you open, save or start
+another scene. With several Maya sessions running, that tells you which
+Maya each editor belongs to. Blender does the same with its `.blend` file.
+
 | Flag | What it does |
 | :--- | :----------- |
 | *(none)* | Opens the editor, or, when one is already open, brings it to the front, restoring it if it was minimised. |
@@ -164,7 +169,7 @@ from PyPI. It is experimental: save early, save often.
    so this downloads PySide6 with the engine's own pip. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
 5. Optionally, for smarter code completion, open the editor and install
-   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   **Python Analysis (jedi)** from **Edit > Preferences > Optional Components**. See
    [Optional Components](optional_components.md).
 
 After that, the **nxt** menu in the main menu bar has **Open Editor**. The
@@ -192,11 +197,14 @@ be installed or put on a path.
 3. The first time, choose **NXT > Install Qt (PySide6)**. See
    [Qt for Blender and Unreal](#qt-for-blender-and-unreal).
 4. Optionally, for smarter code completion, open the editor and install
-   **Python Analysis (jedi)** from **Options > Optional Components**. See
+   **Python Analysis (jedi)** from **Edit > Preferences > Optional Components**. See
    [Optional Components](optional_components.md).
 
 The **NXT** menu appears in Blender's top bar, next to **Help**. Enabling the
 add-on does not open anything on its own.
+
+The editor's title shows the name of the `.blend` file that is open, for
+example `nxt blender [shot_010.blend]`, as it does for a Maya scene.
 
 | Menu item | What it does |
 | :-------- | :----------- |

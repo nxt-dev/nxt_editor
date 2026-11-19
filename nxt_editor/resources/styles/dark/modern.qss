@@ -62,7 +62,7 @@ QStatusBar {
 }
 
 QToolTip {
-    background-color: {RAISED};
+    background-color: {MENU};
     color: {TEXT};
     border: 1px solid {BORDER_STRONG};
     padding: 4px 6px;
@@ -92,7 +92,7 @@ QMenuBar::item:pressed {
 /* Square: a menu is a window, and round corners on an opaque window leave
    black corners behind them on some platforms. */
 QMenu {
-    background-color: {RAISED};
+    background-color: {MENU};
     border: 1px solid {BORDER_STRONG};
     padding: 4px;
 }
@@ -177,7 +177,7 @@ QToolButton:checked:hover {
 /* -- buttons and inputs ---------------------------------------------------- */
 
 QPushButton {
-    background-color: {RAISED};
+    background-color: {BUTTON};
     border: 1px solid {BORDER_STRONG};
     border-radius: {RADIUS}px;
     padding: 5px 12px;
@@ -210,7 +210,7 @@ QPushButton:disabled {
 QLineEdit,
 QAbstractSpinBox,
 QComboBox {
-    background-color: {GRAPH};
+    background-color: {INPUT};
     border: 1px solid {BORDER_STRONG};
     border-radius: {RADIUS}px;
     padding: 4px 6px;
@@ -236,7 +236,7 @@ QComboBox::drop-down {
 }
 
 QComboBox QAbstractItemView {
-    background-color: {RAISED};
+    background-color: {MENU};
     border: 1px solid {BORDER_STRONG};
     padding: 2px;
     outline: none;
@@ -244,7 +244,7 @@ QComboBox QAbstractItemView {
 
 QTextEdit,
 QPlainTextEdit {
-    background-color: {GRAPH};
+    background-color: {INPUT};
     border: 1px solid {BORDER};
     border-radius: {RADIUS}px;
 }

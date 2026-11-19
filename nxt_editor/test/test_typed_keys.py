@@ -23,7 +23,6 @@ from Qt.QtTest import QTest
 # Internal
 from nxt import DATA_STATE
 from nxt_editor import stage_model, typed_keys
-from nxt_editor.dockwidgets.hotkey_editor import HotkeyEditor
 from nxt_editor.dockwidgets.property_editor import COLUMNS, PropertyEditor
 
 app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
@@ -147,16 +146,20 @@ class TypingInTables(unittest.TestCase):
         self.assertNotIn(name, self.model.get_node_local_attr_names(
             '/node', self.model.comp_layer))
 
-    def test_typing_in_the_hotkey_editor_does_not_switch_views(self):
-        hotkeys = self.win.findChild(HotkeyEditor)
-        hotkeys.show()
+    def test_typing_a_hotkey_does_not_switch_views(self):
+        prefs = self.win.open_preferences('Hotkeys')
+        self.addCleanup(prefs.hide)
         app.processEvents()
-        view = hotkeys.hotkey_table_view
-        view.setFocus()
-        view.setCurrentIndex(view.model().index(1, 0))
-        app.processEvents()
-        QTest.keyClick(view, QtCore.Qt.Key_W)
-        app.processEvents()
+        row = next(row for row in prefs.rows.values()
+                   if getattr(row, 'action', None) is not None)
+        recorded = []
+        with mock.patch.object(row, 'set', side_effect=recorded.append):
+            row.field.setFocus()
+            app.processEvents()
+            QTest.keyClick(row.field, QtCore.Qt.Key_W)
+            app.processEvents()
+        # The key was taken for the hotkey, not as the shortcut for raw.
+        self.assertEqual(['W'], recorded)
         self.assertEqual(self.model.data_state, DATA_STATE.RAW)
 
 

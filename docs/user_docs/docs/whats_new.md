@@ -7,19 +7,37 @@ Each item links to the part of the docs that explains it in full.
 ## Unreleased
 
 **New**
+- **Preferences moved to Edit > Preferences...** (`Ctrl+,`), and the
+  Options menu is gone. Everything it held is in Preferences: the error
+  sound and the other toggles in their sections, and the AI Assistant,
+  Environment Variables and Optional Components as pages of their own.
+  Preferences stays open beside the editor while you work. See
+  [Preferences](reference.md#preferences).
+- **Hotkeys are a page of Preferences**, in the same style: each action
+  with what it does, its hotkey, Clear and Reset, and **Global** on the
+  ones that work anywhere in the window. The search finds hotkeys by name
+  or by their keys. **Window > Hotkey Editor** opens it. See
+  [Hotkeys](hotkeys.md).
+- **Layer Color View** is in the **Window** menu, and **Autocomplete** in
+  the code editor's right-click menu.
+- **Three looks to choose from**, in **Edit > Preferences... > Panels > Look**:
+  Modern, Classic (how the editor looked before) and Host application,
+  which looks like Maya, Blender or Unreal when the editor runs in them,
+  and a **Stylesheet** of your own to lay over it. See
+  [The editor's look](reference.md#the-editors-look).
 - **The graph has no edge.** Pan, frame and go to nodes as far out as you
   like; the canvas grows as you go.
 - **Renaming an attribute renames the tokens that use it**, and
   **parenting a node keeps its instances pointed at it**, both undoable,
-  with **Options > Update Tokens on Attr Rename** and **Update Instance
-  Paths on Parent** to turn them off. See
+  with **Update Tokens on Attr Rename** and **Update Instance Paths on
+  Parent**, in **Edit > Preferences > Editing**, to turn them off. See
   [Renaming an attribute](reference.md#renaming-an-attribute) and
   [Parenting an instanced node](reference.md#parenting-an-instanced-node).
 - **Sub-graphs**: **Open Sub-graph** (`Ctrl+Shift+G`) opens the graph a
   sub-graph node runs, and the Property Editor lists that graph's world
   attributes the node does not set yet. See
   [Sub-graph nodes](reference.md#sub-graph-nodes).
-- **Options > Preferences...** has every preference you can set, with
+- **Edit > Preferences...** has every preference you can set, with
   what each does, including ones that had no menu, like drag zoom speed and
   how the graph follows a run. Sections on the left, one page each, and a
   search that looks through all of them. See
@@ -28,6 +46,23 @@ Each item links to the part of the docs that explains it in full.
   whose header says how it is set up, the provider asked first starts open,
   and the list scrolls so everything can be reached on a small screen. See
   [Signing in](reference.md#signing-in).
+- The editor's title shows the name of the Maya scene or `.blend` file its
+  host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
+  of the same host can be told apart in the taskbar.
+
+**Fixed**
+- The code editor's completion list opens under the line, with its names
+  starting where the word being completed starts. It was drawn to the left
+  by the width of the line numbers, and over the bottom of the line.
+- The mini map leaves out the backdrops of a layer hidden in the graph, as
+  it does that layer's nodes.
+- Two quick clicks on a Layer Manager toggle count as two: the second was
+  taken for a double click and did nothing.
+- The Environment Variables dialog shows its Name and List column titles
+  whole in an empty table, and a long file path no longer makes it wide.
+- Clicking into a node's code and away without typing no longer adds an
+  undo step, marks the layer as unsaved, or copies inherited code onto the
+  target layer.
 
 ## nxt_editor 4.13.0
 
