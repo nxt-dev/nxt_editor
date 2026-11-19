@@ -77,8 +77,9 @@ nxt comes in two parts:
   graph. It can search, explain, change and run the graph, and all its
   changes in one reply undo together. Nothing is sent until you ask. See
   [AI Assistant](docs/user_docs/docs/reference.md#ai-assistant).
-- **Preferences.** Every preference in one dialog, a section at a time,
-  with a search across all of them. See
+- **Preferences.** Every setting in Edit > Preferences, a section at a
+  time: preferences, hotkeys, the AI Assistant, environment variables and
+  optional components, with a search across all of them. See
   [Preferences](docs/user_docs/docs/reference.md#preferences).
 - **Looks.** Modern (the default), Classic, or Host application, which
   takes on the look of Maya, Blender or Unreal when the editor runs in
