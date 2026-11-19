@@ -16,9 +16,10 @@ scaling, so nothing here leans on them:
 import math
 import os
 import re
+import sys
 
 # External
-from Qt import QtCore, QtGui
+from Qt import QtCore, QtGui, QtWidgets
 
 # Internal
 from nxt_editor.constants import FONTS, points_to_px  # noqa: F401
@@ -27,6 +28,9 @@ from nxt_editor.constants import FONTS, points_to_px  # noqa: F401
 GRAPH = '#1d1d1d'        # behind the nodes
 BASE = '#242424'         # panels and windows
 RAISED = '#2c2c2c'       # title bars, inputs, buttons
+INPUT = '#1d1d1d'        # inside a text field, list of choices or editor
+BUTTON = '#2c2c2c'       # a push button
+MENU = '#2c2c2c'         # menus, tooltips and the list a choice opens
 HOVER = '#353535'        # anything under the mouse
 PRESSED = '#3e3e3e'
 BORDER = '#333333'
@@ -80,7 +84,7 @@ def register_fonts():
     if not FONTS._initialized:
         # No application yet, so there is nothing to add them to.
         return
-    for family in ('Roboto', 'RobotoMono'):
+    for family in ('Roboto', 'RobotoMono', 'Inter'):
         for face in FACES:
             path = ':/fonts/fonts/{0}/{0}-{1}.ttf'.format(family, face)
             QtGui.QFontDatabase.addApplicationFont(path)
@@ -97,8 +101,8 @@ def font(px=TEXT_PX, weight=None, italic=False, mono=False):
     :rtype: QtGui.QFont
     """
     register_fonts()
-    app = QtGui.QGuiApplication.instance()
-    if LOOK == LOOK_HOST and app is not None and not mono:
+    app = QtWidgets.QApplication.instance()
+    if LOOK == LOOK_HOST and HOST_DRAWS and app is not None and not mono:
         # The host's font, and at the host's size where the editor would
         # use its own standard size: the host's style measures titles and
         # tabs with it, and text of another size no longer fits them.
@@ -428,6 +432,73 @@ STYLESHEET_ENV_VAR = 'NXT_EDITOR_STYLESHEET'
 LOOK = LOOK_MODERN
 # Whether node titles and attributes are in the code font, 0 or 1.
 NODE_MONO = 0
+# Under the host look: which host, and whether it draws the editor's
+# widgets itself (a Qt host, such as Maya) or the editor draws them in
+# the host's colors (Blender and Unreal, which are not Qt applications).
+HOST = ''
+HOST_DRAWS = 0
+# The family the interface is written in under the host look, when it is
+# not the host application's own.
+HOST_FAMILY = ''
+
+MAYA, BLENDER, UNREAL = 'maya', 'blender', 'unreal'
+HOSTS = (MAYA, BLENDER, UNREAL)
+
+# The colors of hosts that are not Qt applications, from their default
+# themes, for the names above. Blender's are its default theme's, and
+# Unreal's its editor's style colors.
+HOST_LOOKS = {
+    BLENDER: {
+        'GRAPH': '#1d1d1d', 'BASE': '#303030', 'RAISED': '#3d3d3d',
+        'INPUT': '#1d1d1d', 'BUTTON': '#545454', 'MENU': '#181818',
+        'HOVER': '#474747', 'PRESSED': '#656565',
+        'BORDER': '#242424', 'BORDER_STRONG': '#3d3d3d',
+        'TEXT': '#e6e6e6', 'TEXT_DIM': '#a6a6a6', 'TEXT_FAINT': '#737373',
+        'ACCENT': '#4772b3', 'ACCENT_STRONG': '#4772b3',
+        'ACCENT_DIM': '#334a6c',
+        'NODE_BODY': '#303030', 'SELECTED': '#ed5700',
+        'RADIUS': 4, 'NODE_RADIUS': 5,
+        'HOST_FAMILY': 'Inter',
+    },
+    UNREAL: {
+        'GRAPH': '#262626', 'BASE': '#242424', 'RAISED': '#2f2f2f',
+        'INPUT': '#0f0f0f', 'BUTTON': '#383838', 'MENU': '#242424',
+        'HOVER': '#3c3c3c', 'PRESSED': '#575757',
+        'BORDER': '#0f0f0f', 'BORDER_STRONG': '#383838',
+        'TEXT': '#c0c0c0', 'TEXT_DIM': '#969696', 'TEXT_FAINT': '#606060',
+        'ACCENT': '#0070e0', 'ACCENT_STRONG': '#0070e0',
+        'ACCENT_DIM': '#40576f',
+        'NODE_BODY': '#1a1a1a',
+        'RADIUS': 4, 'NODE_RADIUS': 6,
+        'HOST_FAMILY': 'Roboto',
+    },
+}
+
+
+def running_host():
+    """The host the editor is running in, or '' standalone.
+
+    The host's integration names it in an environment variable as it
+    opens the editor, which can be after this module loads, so a host's
+    own Python module being loaded counts too.
+
+    :return: one of HOSTS, or ''
+    :rtype: str
+    """
+    try:
+        from nxt.constants import NXT_DCC_ENV_VAR
+        named = os.environ.get(NXT_DCC_ENV_VAR, '').strip().lower()
+    except ImportError:
+        named = ''
+    if named in HOSTS:
+        return named
+    if 'bpy' in sys.modules:
+        return BLENDER
+    if 'unreal' in sys.modules:
+        return UNREAL
+    if 'maya.cmds' in sys.modules:
+        return MAYA
+    return ''
 
 # The colors of the original dark stylesheet, which the classic look uses
 # as it was written, and the sizes nodes were drawn at.
@@ -455,7 +526,7 @@ def host_colors():
     :return: name: value, empty when there is no host look to take
     :rtype: dict
     """
-    app = QtGui.QGuiApplication.instance()
+    app = QtWidgets.QApplication.instance()
     if app is None:
         return {}
     import nxt_editor
@@ -492,8 +563,11 @@ def font_family():
 
     :rtype: str
     """
-    app = QtGui.QGuiApplication.instance()
-    if LOOK == LOOK_HOST and app is not None:
+    if LOOK == LOOK_HOST and HOST_FAMILY:
+        register_fonts()
+        return HOST_FAMILY
+    app = QtWidgets.QApplication.instance()
+    if LOOK == LOOK_HOST and HOST_DRAWS and app is not None:
         return app.font().family()
     return FONTS.DEFAULT_FAMILY
 
@@ -592,19 +666,35 @@ def use_look(look):
     loaded since have read the names already and do not see a change.
     """
     values = {}
+    host = ''
     if look == LOOK_CLASSIC:
         values = dict(CLASSIC)
     elif look == LOOK_HOST:
-        values = host_colors()
+        host = running_host()
+        values = dict(HOST_LOOKS.get(host, {}))
+        if not values:
+            values = host_colors()
+            if values:
+                values['HOST_DRAWS'] = 1
         if not values:
             # Said once, so the preference is not a riddle.
             import logging
             logging.getLogger(__name__).info(
-                'The Host application look needs a Qt host with a dark '
-                'interface. Using Modern.')
-            look = LOOK_MODERN
+                'The Host application look is for the editor in Maya, '
+                'Blender or Unreal. Using Modern.')
+            look, host = LOOK_MODERN, ''
+    # Inputs, buttons and menus are what they are in modern, the field and
+    # the raised colors, unless the look says otherwise.
+    if 'GRAPH' in values:
+        values.setdefault('INPUT', values['GRAPH'])
+    if 'RAISED' in values:
+        values.setdefault('BUTTON', values['RAISED'])
+        values.setdefault('MENU', values['RAISED'])
+    values.setdefault('HOST_DRAWS', 0)
+    values.setdefault('HOST_FAMILY', '')
     globals().update(values)
     globals()['LOOK'] = look
+    globals()['HOST'] = host
 
 
 use_look(stored_look())
