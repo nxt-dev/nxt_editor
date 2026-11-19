@@ -263,6 +263,20 @@ class NxtUiCmd(om.MPxCommand):
 
 
 # PLUGIN BOILERPLATE #
+def open_again(paths=None):
+    """Open a new editor through nxt_ui, which wires it to Maya, as the
+    editor does when it reopens in a new look.
+
+    :param paths: the files to open, or None
+    :return: the new editor
+    """
+    if paths:
+        cmds.nxt_ui(path=paths)
+    else:
+        cmds.nxt_ui()
+    return __NXT_INSTANCE__
+
+
 def maya_useNewAPI(): pass
 
 
@@ -277,6 +291,7 @@ def initializePlugin(plugin):
     except Exception:
         logger.exception("Failed to register: {}".format(NxtUiCmd.cmd_name))
         raise
+    nxt_editor.host_opener = open_again
     # UI
     if not wants_menu():
         # The command above is all a pipeline's own menu needs.

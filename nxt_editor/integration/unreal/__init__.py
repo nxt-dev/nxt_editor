@@ -86,7 +86,22 @@ def launch_nxt_in_ue(graph=None):
     except Exception:
         pass
     __NXT_WINDOWS__.append(window)
+    nxt_editor.host_opener = _open_again
     _start_pump()
+    return window
+
+
+def _open_again(paths=None):
+    """Open a new editor with Unreal's wiring, as the editor does when it
+    reopens in a new look.
+
+    :param paths: the files to open, or None
+    :return: the new editor
+    """
+    paths = list(paths or [])
+    window = launch_nxt_in_ue(paths.pop(0) if paths else None)
+    for path in paths:
+        window.load_file(path)
     return window
 
 

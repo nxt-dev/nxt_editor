@@ -18,7 +18,6 @@ ATTR_COLORS = {
     'dict': QColor('#984dab'),
 }
 
-GRAPH_BG_COLOR = QColor(theme.GRAPH)
 START_COLOR = QColor("#1bd40b")
 SKIP_COLOR = QColor("#f0880a")
 BREAK_COLOR = QColor(255, 0, 0)
@@ -39,7 +38,16 @@ LAYER_COLORS = [
 ] + [theme.white_text_safe(theme.from_oklch(theme.PALETTE_LIGHTNESS, 0.0,
                                             0.0))]
 
-SELECTED = QColor(theme.SELECTED)
+GRAPH_BG_COLOR = SELECTED = None
+
+
+@theme.follow_look
+def _take_look():
+    """The colors that come from the look, made again when it changes."""
+    global GRAPH_BG_COLOR, SELECTED
+    GRAPH_BG_COLOR = QColor(theme.GRAPH)
+    SELECTED = QColor(theme.SELECTED)
+
 
 UNCACHED_RED = QColor(255, 0, 0, 200)
 

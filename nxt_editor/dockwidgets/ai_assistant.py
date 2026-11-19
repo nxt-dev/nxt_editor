@@ -28,7 +28,7 @@ from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 ACCENT = '#4f86d6'
-STYLE = theme.fill('''
+STYLE_TEMPLATE = '''
 #aiPanel QLabel#aiMuted { color: #8a8a8a; }
 #aiPanel QLabel#aiHeading { color: #8a8a8a; font-weight: bold;
     letter-spacing: 1px; font-size: 11px; }
@@ -79,7 +79,14 @@ STYLE = theme.fill('''
 #aiPanel QLabel#aiAskTitle { color: #f0d9a8; font-weight: bold; }
 #aiPanel QLabel#aiAskPath { color: #ffffff; font-family: Consolas,
     'DejaVu Sans Mono', Menlo, monospace; }
-''').replace('ACCENT', ACCENT)
+'''
+STYLE = ''
+
+
+@theme.follow_look
+def _take_look():
+    global STYLE
+    STYLE = theme.fill(STYLE_TEMPLATE).replace('ACCENT', ACCENT)
 
 
 def _button(text, name):

@@ -62,6 +62,11 @@ class StringSignaler(QtCore.QObject):
 from nxt_editor import qt_resources
 qt_resources.register()
 
+# How the host this editor runs in opens a new editor, given a list of
+# files or None, when it has wiring of its own to do. Set by the host's
+# integration; the editor's own show_new_editor is used without it.
+host_opener = None
+
 STYLESHEET = ':styles/styles/dark/dark.qss'
 MODERN_STYLESHEET = ':styles/styles/dark/modern.qss'
 
@@ -147,9 +152,13 @@ def launch_editor(paths=None, start_rpc=False):
     app.setActiveWindow(instance)
     if not existing:
         app.exec_()
-        # Delete the window while Qt is still running. Left to Python's
-        # exit, Qt's objects can go in the wrong order and crash.
-        QtCompat.delete(instance)
+        # Delete the windows while Qt is still running. Left to Python's
+        # exit, Qt's objects can go in the wrong order and crash. There can
+        # be more than the first, when the editor reopened in a new look.
+        from nxt_editor.main_window import MainWindow
+        for window in app.topLevelWidgets():
+            if isinstance(window, MainWindow):
+                QtCompat.delete(window)
     return instance
 
 

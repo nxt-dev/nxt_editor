@@ -1330,3 +1330,9 @@ class ErrorItem(QtWidgets.QGraphicsTextItem):
         painter.setFont(self.font())
         painter.drawText(QtCore.QRectF(0.6, 0.1, 20, 20), QtCore.Qt.AlignCenter,
                          self.text)
+
+
+@theme.follow_look
+def _take_look():
+    """The corners of nodes, from the look, kept to its changes."""
+    NodeGraphicsItem.ROUND_X = NodeGraphicsItem.ROUND_Y = theme.NODE_RADIUS

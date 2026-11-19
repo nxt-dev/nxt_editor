@@ -39,7 +39,7 @@ PARAGRAPH_SEP = u'\u2029'
 WORD_BOUNDARY = '\\b'
 
 MARGIN = 10
-PANEL_QSS = theme.fill('''
+PANEL_QSS_TEMPLATE = '''
 QFrame#editorOverlay {
     background-color: #313131;
     border: 1px solid {BORDER_STRONG};
@@ -84,7 +84,14 @@ QFrame#editorOverlay QToolButton#overlayChevron:checked {
 QFrame#editorOverlay QToolButton:disabled {
     color: #6A6A6A;
 }
-''')
+'''
+PANEL_QSS = ''
+
+
+@theme.follow_look
+def _take_look():
+    global PANEL_QSS
+    PANEL_QSS = theme.fill(PANEL_QSS_TEMPLATE)
 
 
 class OverlayLineEdit(QtWidgets.QLineEdit):
