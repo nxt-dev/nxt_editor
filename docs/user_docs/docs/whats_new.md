@@ -25,6 +25,11 @@ Each item links to the part of the docs that explains it in full.
   layer of nodes that are only there to be instanced. See
   [Hiding a layer in the graph](reference.md#hiding-a-layer-in-the-graph).
 
+**Fixed**
+- The code editor's completion list opens under the line, with its names
+  starting where the word being completed starts. It was drawn to the left
+  by the width of the line numbers, and over the bottom of the line.
+
 ## nxt_editor 4.12.0
 
 **New**
