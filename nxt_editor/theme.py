@@ -97,6 +97,18 @@ def font(px=TEXT_PX, weight=None, italic=False, mono=False):
     :rtype: QtGui.QFont
     """
     register_fonts()
+    app = QtGui.QGuiApplication.instance()
+    if LOOK == LOOK_HOST and app is not None and not mono:
+        # The host's font, and at the host's size where the editor would
+        # use its own standard size: the host's style measures titles and
+        # tabs with it, and text of another size no longer fits them.
+        result = QtGui.QFont(app.font())
+        if int(px) != TEXT_PX:
+            result.setPixelSize(int(px))
+        if weight is not None:
+            result.setWeight(weight)
+        result.setItalic(italic)
+        return result
     result = QtGui.QFont(FONTS.MONOSPACE if mono else font_family())
     result.setPixelSize(int(px))
     if weight is not None:
@@ -411,6 +423,8 @@ LOOK_NAMES = ((LOOK_MODERN, 'Modern'), (LOOK_CLASSIC, 'Classic'),
               (LOOK_HOST, 'Host application'))
 LOOK_PREF = 'look'
 LOOK_ENV_VAR = 'NXT_EDITOR_LOOK'
+STYLESHEET_PREF = 'look_stylesheet'
+STYLESHEET_ENV_VAR = 'NXT_EDITOR_STYLESHEET'
 LOOK = LOOK_MODERN
 # Whether node titles and attributes are in the code font, 0 or 1.
 NODE_MONO = 0
@@ -471,6 +485,65 @@ def font_family():
     if LOOK == LOOK_HOST and app is not None:
         return app.font().family()
     return FONTS.DEFAULT_FAMILY
+
+
+# The little the host look does style, where a host's own drawing of a
+# plain Qt widget does not read: Maya draws a dock's title through its row
+# of grip dots.
+HOST_SHEET = '''
+QDockWidget::title {
+    background: {RAISED};
+    padding: 3px 6px;
+}
+'''
+
+
+def readable_on(value, background, least=4.0):
+    """A color moved toward the text color until it reads on a background.
+
+    Layer colors are dimmed for values that come from elsewhere, which is
+    made for the editor's own dark panels. On a host's panel the dimmed
+    color can all but vanish.
+
+    :param value: the color to keep as much of as can be
+    :param background: what it is drawn on
+    :param least: the contrast ratio to reach
+    :rtype: QtGui.QColor
+    """
+    result = QtGui.QColor(value)
+    for step in range(1, 11):
+        if contrast(result, background) >= least:
+            break
+        result = mix(value, TEXT, step / 10.0)
+    return result
+
+
+def extra_stylesheet():
+    """A stylesheet of the user's or the studio's own, laid over the
+    look: the file NXT_EDITOR_STYLESHEET names, or the one in the
+    preferences. It can use the theme's names, as {BASE} or {TEXT}.
+
+    :return: the sheet, or an empty string when there is none to read
+    :rtype: str
+    """
+    path = os.environ.get(STYLESHEET_ENV_VAR, '').strip()
+    if not path:
+        try:
+            from nxt_editor import user_dir
+            path = (user_dir.user_prefs.get(STYLESHEET_PREF, '') or '')
+        except Exception:
+            path = ''
+    path = os.path.expandvars(os.path.expanduser(path.strip()))
+    if not path:
+        return ''
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            return fill(handle.read())
+    except (IOError, OSError, UnicodeDecodeError) as error:
+        import logging
+        logging.getLogger(__name__).warning(
+            'The stylesheet {} was not used: {}'.format(path, error))
+        return ''
 
 
 def stored_look():

@@ -1088,10 +1088,16 @@ Color View and Environment Variables have their own dialogs in Options.
   runs in, and leaves its widgets to be drawn the way the host draws its
   own, so in Maya the editor looks like a Maya window.
 
+**Stylesheet**, beside it, names a `.qss` file of your own that is laid
+over whichever look is chosen, to restyle what you like: a studio's own
+colors, or one host's look in another. It can use the look's colors by
+name, in braces, such as `{BASE}`, `{RAISED}`, `{TEXT}` and `{ACCENT}`.
+
 A look is put in place as the editor loads, so a change shows the next
-time the editor's host starts. A pipeline can set it for everyone with the
-environment variable `NXT_EDITOR_LOOK` (`modern`, `classic` or `host`),
-which has the last word over the preference.
+time the editor's host starts. A pipeline can set both for everyone with
+the environment variables `NXT_EDITOR_LOOK` (`modern`, `classic` or
+`host`) and `NXT_EDITOR_STYLESHEET` (a file), which have the last word
+over the preferences.
 
 # Terms and Definitions
 
