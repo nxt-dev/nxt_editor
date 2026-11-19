@@ -210,17 +210,26 @@ class LaunchNodes(GraphCase):
         self.assertEqual(1, popen.call_count)
         return popen.call_args
 
+    def installed(self, folder):
+        """An install folder that is there, as ${file::} only gives a path
+        that is. The default ones are where the host installs on Windows,
+        and on a machine without it they come out empty."""
+        path = os.path.join(self.tmp, folder).replace(os.sep, '/')
+        os.makedirs(path)
+        return path
+
     def test_blender_runs_the_graph_in_the_background(self):
+        install = self.installed('Blender 5.1')
         call = self.launch('/_blender_background_graph', {
+            '_BLENDER_LOCATION': '${file::%s/Blender ${_blender_version}}'
+                                 % self.tmp.replace(os.sep, '/'),
             '_graph_path': repr(self.ok), '_blender_version': '5.1',
             '_blend_file': repr('C:/scenes/shot.blend'),
             '_start_node': repr('/second'),
             '_parameters': repr({'/.word': 'x'})})
         command = call.args[0]
-        # The default install path is a Windows one.
-        expected = ('Blender 5.1/blender.exe' if sys.platform == 'win32'
-                    else '/blender.exe')
-        self.assertTrue(command[0].endswith(expected), command[0])
+        self.assertEqual(install + '/blender.exe',
+                         command[0].replace(os.sep, '/'))
         self.assertEqual(['--background', 'C:/scenes/shot.blend',
                           '--python'], command[1:4])
         self.assertTrue(command[4].replace(os.sep, '/').endswith(
@@ -229,15 +238,17 @@ class LaunchNodes(GraphCase):
                           '-s', '/second'], command[5:])
 
     def test_unreal_passes_the_arguments_in_the_environment(self):
+        install = self.installed('UE_5.4')
         call = self.launch('/_unreal_headless_graph', {
+            '_UNREAL_LOCATION': '${file::%s/UE_${_unreal_version}}'
+                                % self.tmp.replace(os.sep, '/'),
             '_graph_path': repr('C:/my graphs/build.nxt'),
             '_project': repr('C:/proj/Game.uproject'),
             '_unreal_version': '5.4'})
         command = call.args[0]
-        expected = '/Engine/Binaries/Win64/UnrealEditor-Cmd.exe'
-        if sys.platform == 'win32':
-            expected = 'UE_5.4' + expected
-        self.assertTrue(command[0].endswith(expected), command[0])
+        self.assertEqual(
+            install + '/Engine/Binaries/Win64/UnrealEditor-Cmd.exe',
+            command[0].replace(os.sep, '/'))
         self.assertEqual(['C:/proj/Game.uproject', '-run=pythonscript',
                           '-script=run_unreal_graph.py', '-unattended',
                           '-nosplash', '-nullrhi'], command[1:])
