@@ -22,6 +22,10 @@ Each item links to the part of the docs that explains it in full.
 - **Options > Preferences...** lists every preference you can set, with
   what each does, including ones that had no menu, like drag zoom speed and
   how the graph follows a run. See [Preferences](reference.md#preferences).
+- **AI Assistant settings** open one provider at a time: each is a section
+  whose header says how it is set up, the provider asked first starts open,
+  and the list scrolls so everything can be reached on a small screen. See
+  [Signing in](reference.md#signing-in).
 
 ## nxt_editor 4.13.0
 

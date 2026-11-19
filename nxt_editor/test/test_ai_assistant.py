@@ -918,12 +918,17 @@ class SettingsDialogTests(unittest.TestCase):
         self.prefs.clear()
         self.dialog = self.make_dialog()
         self.assertFalse(self.dialog.enable_check.isChecked())
-        self.assertFalse(self.dialog.body.isEnabled())
+        box = self.box('anthropic')
+        # Its sections still open, to look at, but nothing can be changed.
+        self.assertFalse(box.body.isEnabled())
+        self.assertTrue(box.header.isEnabled())
+        self.assertFalse(self.dialog.provider_combo.isEnabled())
         seen = []
         self.dialog.enabled_changed.connect(seen.append)
         self.dialog.enable_check.setChecked(True)
         self.assertTrue(self.prefs[PREF.AI_ENABLED])
-        self.assertTrue(self.dialog.body.isEnabled())
+        self.assertTrue(box.body.isEnabled())
+        self.assertTrue(self.dialog.provider_combo.isEnabled())
         self.assertEqual([True], seen)
 
     def test_every_provider_has_a_web_button_and_a_key(self):
@@ -984,6 +989,49 @@ class SettingsDialogTests(unittest.TestCase):
             self.dialog.show()
             app.processEvents()
         self.assertIn('me@example.com', box.status_label.text())
+        self.dialog.hide()
+
+    def test_only_the_provider_asked_first_starts_open(self):
+        self.dialog.done(0)
+        self.prefs[PREF.AI_PROVIDER] = 'xai'
+        self.dialog = self.make_dialog()
+        opened = [b.provider.id for b in self.dialog.boxes
+                  if b.is_expanded()]
+        self.assertEqual(['xai'], opened)
+        self.assertTrue(self.box('xai').header.is_default)
+        self.assertFalse(self.box('anthropic').header.is_default)
+
+    def test_a_header_opens_and_closes_its_section(self):
+        box = self.box('openai')
+        self.assertTrue(box.body.isHidden())
+        box.header.click()
+        self.assertFalse(box.body.isHidden())
+        box.header.click()
+        self.assertTrue(box.body.isHidden())
+
+    def test_choosing_who_is_asked_first_moves_default(self):
+        combo = self.dialog.provider_combo
+        combo.setCurrentIndex(combo.findData('local'))
+        self.assertTrue(self.box('local').header.is_default)
+        self.assertFalse(self.box('local').is_expanded())
+
+    def test_the_header_says_how_it_is_set_up(self):
+        box = self.box('openai')
+        self.assertEqual('Not set up', box.header.summary)
+        box.set_status('Could not reach OpenAI.', error=True)
+        self.assertEqual('Problem', box.header.summary)
+        self.assertTrue(box.header.problem)
+        self.assertIn('Could not reach', box.header.toolTip())
+
+    def test_everything_open_still_scrolls_to_the_bottom(self):
+        self.dialog.resize(600, 500)
+        self.dialog.show()
+        for box in self.dialog.boxes:
+            box.set_expanded(True)
+        app.processEvents()
+        bar = self.dialog.sections.verticalScrollBar()
+        self.assertGreater(bar.maximum(), 0)
+        self.assertLessEqual(self.dialog.minimumSizeHint().height(), 500)
         self.dialog.hide()
 
     def test_a_local_server_is_found(self):

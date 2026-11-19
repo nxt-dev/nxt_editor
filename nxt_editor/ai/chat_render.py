@@ -31,7 +31,7 @@ COLORS = {
     'code_label': '#7a7a7a',
     'inline_code_bg': theme.HOVER,
     'inline_code': '#e6c07b',
-    'link': '#6fb3ff',
+    'link': theme.LINK,
     'quote': '#a0a0a0',
     'heading': theme.TEXT,
     'done_bg': '#1f3324',
