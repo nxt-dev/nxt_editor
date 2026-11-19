@@ -122,7 +122,8 @@ class Editing(unittest.TestCase):
         from nxt_editor.dockwidgets import code_completion
         key = user_dir.USER_PREF.CE_COMPLETE_JEDI
         with mock.patch.object(code_completion.JEDI, 'installed',
-                               return_value=False),                 mock.patch.object(self.win, 'offer_jedi',
+                               return_value=False), \
+                mock.patch.object(self.win, 'offer_jedi',
                                   create=True) as offer:
             self.dialog.editors[key].setChecked(False)
             self.dialog.editors[key].setChecked(True)
@@ -130,9 +131,13 @@ class Editing(unittest.TestCase):
         self.assertTrue(self.prefs[key])
 
     def test_options_menu_opens_it(self):
-        with mock.patch.object(PreferenceEditor, 'exec_') as shown:
+        # A stand in, so the test does not build a second dialog: doing
+        # that crashed Qt on the mac runner.
+        with mock.patch.object(preference_editor,
+                               'PreferenceEditor') as editor:
             self.win.app_actions.preferences_action.trigger()
-        shown.assert_called_once()
+        editor.assert_called_once_with(main_window=self.win)
+        editor.return_value.exec_.assert_called_once()
 
     def find_item(self, key):
         tree = self.dialog.tree
