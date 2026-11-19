@@ -1086,7 +1086,10 @@ Color View and Environment Variables have their own dialogs in Options.
   corners and their names in the code font.
 - **Host application** takes the colors and font of the host the editor
   runs in, and leaves its widgets to be drawn the way the host draws its
-  own, so in Maya the editor looks like a Maya window.
+  own, so in Maya the editor looks like a Maya window. It needs a host
+  that is a Qt application with a dark interface. Standalone, and in
+  Blender and Unreal, where the editor's windows are the only Qt ones,
+  there is no such look to take and the editor stays Modern.
 
 ![Modern](images/look_modern.png)
 ![Classic](images/look_classic.png)
@@ -1096,6 +1099,21 @@ Color View and Environment Variables have their own dialogs in Options.
 over whichever look is chosen, to restyle what you like: a studio's own
 colors, or one host's look in another. It can use the look's colors by
 name, in braces, such as `{BASE}`, `{RAISED}`, `{TEXT}` and `{ACCENT}`.
+A file that cannot be read is passed over, with a line in the log.
+
+```css
+/* studio.qss: a line under each panel's title, and larger text */
+QDockWidget::title {
+    background: {ACCENT_DIM};
+    color: {TEXT};
+    border-bottom: 2px solid #2bb3a3;
+}
+QMenuBar, QMenu, QLabel {
+    font-size: 14px;
+}
+```
+
+![Modern, with the stylesheet above](images/look_stylesheet.png)
 
 A look is put in place as the editor loads, so a change shows the next
 time the editor's host starts. A pipeline can set both for everyone with
