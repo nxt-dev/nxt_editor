@@ -216,6 +216,24 @@ class LayerVisibility(unittest.TestCase):
         self.assertFalse(self.model.get_layer_hidden(path))
         self.assertTrue(self.shown('/template'))
 
+    def test_two_quick_clicks_on_the_eye_hide_and_show(self):
+        tree = self.win.layer_manager.layer_tree
+        layer_model = tree.model()
+        index = layer_model.get_index_of_layer(self.library_layer)
+        eye = layer_model.index(index.row(), LayerModel.VISIBLE_COLUMN,
+                                index.parent())
+        spot = tree.visualRect(eye).center()
+        path = self.library_layer.real_path
+        # What two quick clicks send: the second press is a double click.
+        port, left = tree.viewport(), QtCore.Qt.LeftButton
+        QtTest.QTest.mousePress(port, left, pos=spot)
+        QtTest.QTest.mouseRelease(port, left, pos=spot)
+        self.assertTrue(self.model.get_layer_hidden(path))
+        QtTest.QTest.mouseDClick(port, left, pos=spot)
+        QtTest.QTest.mouseRelease(port, left, pos=spot)
+        self.assertFalse(self.model.get_layer_hidden(path))
+        self.assertTrue(self.shown('/template'))
+
     def test_the_mini_map_leaves_its_backdrops_out(self):
         def backdrop_rects():
             rects = [self.view.get_backdrop_graphic(name).scene_rect()

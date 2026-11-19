@@ -28,6 +28,8 @@ Each item links to the part of the docs that explains it in full.
 **Fixed**
 - The mini map leaves out the backdrops of a layer hidden in the graph, as
   it does that layer's nodes.
+- Two quick clicks on a Layer Manager toggle count as two: the second was
+  taken for a double click and did nothing.
 
 ## nxt_editor 4.12.0
 
