@@ -167,6 +167,10 @@ Each item links to the part of the docs that explains it in full.
   starting where the word being completed starts. It was drawn to the left
   by the width of the line numbers, and over the bottom of the line.
 
+**Fixed**
+- The mini map leaves out the backdrops of a layer hidden in the graph, as
+  it does that layer's nodes.
+
 ## nxt_editor 4.12.0
 
 **New**

@@ -216,6 +216,16 @@ class LayerVisibility(unittest.TestCase):
         self.assertFalse(self.model.get_layer_hidden(path))
         self.assertTrue(self.shown('/template'))
 
+    def test_the_mini_map_leaves_its_backdrops_out(self):
+        def backdrop_rects():
+            rects = [self.view.get_backdrop_graphic(name).scene_rect()
+                     for name in ('bd_lib', 'bd_top')]
+            drawn = [rect for rect, _color in self.view.mini_map._node_blocks()]
+            return [rect in drawn for rect in rects]
+        self.assertEqual(backdrop_rects(), [True, True])
+        self.hide()
+        self.assertEqual(backdrop_rects(), [False, True])
+
 
 class _SameGraph(unittest.TestCase):
     """The graph LayerVisibility opens, in a window of its own, for tests
