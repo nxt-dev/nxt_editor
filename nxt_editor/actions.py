@@ -417,6 +417,16 @@ class AppActions(NxtActionContainer):
         self.optional_components_action.setShortcutContext(context)
         self.available_without_model.append(self.optional_components_action)
 
+        self.preferences_action = NxtAction(text='Preferences...',
+                                            parent=self)
+        self.preferences_action.setWhatsThis(
+            'Every preference you can set, by section, with what each '
+            'does. Changes are made straight away.')
+        self.preferences_action.triggered.connect(
+            self.main_window.open_preferences)
+        self.preferences_action.setShortcutContext(context)
+        self.available_without_model.append(self.preferences_action)
+
         self.env_files_action = NxtAction(text='Environment Variables...',
                                           parent=self)
         self.env_files_action.setWhatsThis(
@@ -585,6 +595,7 @@ class AppActions(NxtActionContainer):
                                      self.ai_settings_action,
                                      self.toggle_ding_action,
                                      self.check_disk_action,
+                                     self.preferences_action,
                                      self.refactor_rename_action,
                                      self.refactor_parent_action,
                                      self.clear_logs_action,

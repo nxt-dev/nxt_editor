@@ -1058,6 +1058,16 @@ wheel moves every selected node by the same amount, so they keep their
 places relative to each other. Either is one undo. Child nodes in the
 selection are left where they are under their parents.
 
+## Preferences
+
+**Options > Preferences...** lists every preference you can set, by
+section (Graph, Running, Editing, Panels and Code Editor), with what each
+one does. Type in the filter to find one by its name, what it does, or its
+key in your `prefs.json`. Changes are made straight away: one that also
+has a toggle in a menu is set through that toggle, so the menu agrees.
+**Reset to Default** sets the selected one back. The AI Assistant, Layer
+Color View and Environment Variables have their own dialogs in Options.
+
 # Terms and Definitions
 
 ## Stage

@@ -22,6 +22,7 @@ Every action below can be given a new shortcut in the Hotkey Editor (**Window > 
 | Open Last Closed    |         Open previously closed file(s)          | Open Last Closed    | Ctrl+Shift+T |
 | Close Tab           |                Close active tab                 | Close Tab           |    Ctrl+W    |
 | Find and Open Graph |                                                 | Find and Open Graph |    Ctrl+P    |
+| Preferences... | Every preference you can set, by section, with what each does. Changes are made straight away. | Preferences... |  |
 | Update Tokens on Attr Rename | When on, renaming an attribute also renames the tokens in its layer that use it, such as ${attr} and ${/node.attr}, so they keep working. Attributes of the same name on other nodes are left alone. | Update Tokens on Attr Rename |  |
 | Update Instance Paths on Parent | When on, parenting nodes also updates the instance paths in the layer that point at them, or at anything under them, so their instances follow. Relative paths stay relative. | Update Instance Paths on Parent |  |
 

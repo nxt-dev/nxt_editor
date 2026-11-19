@@ -19,6 +19,9 @@ Each item links to the part of the docs that explains it in full.
   sub-graph node runs, and the Property Editor lists that graph's world
   attributes the node does not set yet. See
   [Sub-graph nodes](reference.md#sub-graph-nodes).
+- **Options > Preferences...** lists every preference you can set, with
+  what each does, including ones that had no menu, like drag zoom speed and
+  how the graph follows a run. See [Preferences](reference.md#preferences).
 
 ## nxt_editor 4.13.0
 
