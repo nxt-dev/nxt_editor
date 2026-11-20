@@ -1685,6 +1685,7 @@ class NodeAuthoringToolBar(ToolBar):
             parent=parent, resize_signal=resize_signal
         )
         self.setObjectName("Node Authoring")
+        self.setWindowTitle("Node Authoring Toolbar")
         self.main_window = parent
         self.node_actions = self.main_window.node_actions
         self.main = QtWidgets.QWidget()
@@ -1742,6 +1743,7 @@ class AlignDistributeToolBar(ToolBar):
             parent=parent, resize_signal=resize_signal
         )
         self.setObjectName("Alignment Tools")
+        self.setWindowTitle("Grid Snap Toolbar")
         self.main_window = parent
         self.addAction(self.main_window.alignment_actions.snap_action)
 
@@ -1751,6 +1753,7 @@ class ExecuteToolBar(ToolBar):
     def __init__(self, parent=None, resize_signal=None):
         super(ExecuteToolBar, self).__init__(parent=parent, resize_signal=resize_signal)
         self.setObjectName("Execute Tools")
+        self.setWindowTitle("Execute Toolbar")
         self.main_window = parent
         self.exec_actions = self.main_window.execute_actions
         self.addActions(
@@ -1786,6 +1789,7 @@ class DisplayToolBar(ToolBar):
     def __init__(self, parent=None, resize_signal=None):
         super(DisplayToolBar, self).__init__(parent=parent, resize_signal=resize_signal)
         self.setObjectName("Display Tools")
+        self.setWindowTitle("Display Toolbar")
         self.main_window = parent
         self.view_actions = self.main_window.view_actions
         self.display_actions = self.main_window.display_actions
