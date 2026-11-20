@@ -58,6 +58,9 @@ Each item links to the part of the docs that explains it in full.
 - **Panning and zooming a big graph stays smooth.** The graph keeps a
   picture of each node and reuses it, where it used to draw every node
   again on every repaint once a graph passed a few thousand nodes.
+- **Adding, deleting and renaming nodes in a big graph is quicker.** The
+  graph keeps the nodes and lines it has drawn and only makes the ones that
+  changed: about 6 seconds an edit at 5,000 nodes, from about 20.
 - **A long chain of roots works out its run order at once**, instead of
   taking seconds, and a build redraws only the node it runs.
 

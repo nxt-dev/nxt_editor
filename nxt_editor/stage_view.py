@@ -514,8 +514,7 @@ class StageView(QtWidgets.QGraphicsView):
         if not isinstance(dirty, (tuple, list)):
             dirty = ()
         if not dirty:
-            self.clear()
-            self.potential_connection = None
+            self.forget_drawing_state()
         else:
             # TODO: Remove this when update_hierarchy is fixed
             extra_roots = []
@@ -547,6 +546,25 @@ class StageView(QtWidgets.QGraphicsView):
                 }
                 ''' % (FONTS.DEFAULT_FAMILY, light_color.name(), layer_color)
         self.setStyleSheet(style)
+
+    def forget_drawing_state(self):
+        """Get ready to draw the whole graph again over what is drawn.
+
+        Redrawing the whole graph after an edit used to clear the scene and
+        make every node again, which for a graph of thousands of nodes took
+        longer than the edit. The nodes are kept now and brought up to date,
+        see draw_graph. What only lasts for one drawing is forgotten, as
+        clear() does.
+        """
+        self._attr_concerns = {}
+        self._backdrop_drag = None
+        self._selected_points = set()
+        self._point_drag = None
+        self.snap_plug = None
+        if self.potential_connection is not None:
+            if self.potential_connection.scene():
+                self.scene().removeItem(self.potential_connection)
+            self.potential_connection = None
 
     def clear(self):
         """Remove all graphics items and clear all object dictionaries."""
@@ -855,12 +873,49 @@ class StageView(QtWidgets.QGraphicsView):
         else:
             node_paths = self.model.get_descendants(nxt_path.WORLD,
                                                     include_implied=True)
+        # Drawn nodes the graph no longer has go, and so do ones now under a
+        # collapsed node: a whole graph redraw keeps the nodes it can.
+        gone = []
+        if not dirty:
+            current = set(node_paths)
+            gone = [path for path in self._node_graphics
+                    if path not in current or
+                    self.model.get_collapsed_ancestor(path)]
+        kept = set(self._node_graphics)
         og_do_anims = self.do_animations
         self.do_animations = False
+        for path in gone:
+            self.remove_node_graphic(path)
         self.handle_nodes_changed(node_paths)
         self.do_animations = og_do_anims
         if not dirty:
+            self._stack_in_graph_order(node_paths, kept)
             self.draw_backdrops()
+
+    def _stack_in_graph_order(self, node_paths, kept):
+        """Put the nodes a whole graph redraw made under the ones after them
+        in the graph, where drawing the graph from nothing puts them, so of
+        two nodes in the same place the same one is on top either way.
+
+        :param node_paths: the graph's node paths, in drawing order
+        :param kept: paths whose nodes were drawn before this redraw
+        """
+        if len(kept) == len(self._node_graphics) and                 kept.issuperset(self._node_graphics):
+            return
+        drawn = []
+        for path in node_paths:
+            graphic = self._node_graphics.get(path)
+            if graphic is not None:
+                drawn += [(path, graphic)]
+        # Only siblings stack against each other: the next kept node under
+        # the same parent, or at the top for roots.
+        later = {}
+        for path, graphic in reversed(drawn):
+            parent = graphic.parentItem()
+            if path in kept:
+                later[parent] = graphic
+            elif parent in later:
+                graphic.stackBefore(later[parent])
 
     def draw_node(self, node_path):
         graphic = self.get_node_graphic(node_path)
@@ -898,26 +953,24 @@ class StageView(QtWidgets.QGraphicsView):
 
     def _draw_exec_connections(self, node_path):
         exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
-        self.remove_attr_connection_graphics(node_path, exec_attr,
-                                             side=CONNECTION_SIDES.IN)
+        self._sync_lines_into(node_path, exec_attr,
+                              self._exec_line_sources(node_path))
+
+    def _exec_line_sources(self, node_path):
+        exec_attr = nxt_node.INTERNAL_ATTRS.EXECUTE_IN
         src_path = self.model.get_node_exec_in(node_path=node_path,
                                                layer=self.model.comp_layer)
         if not src_path:
-            return
+            return []
         exec_root_path = nxt_path.get_root_path(src_path)
         if src_path != exec_root_path:
             # An exec path that is not a root?
-            return
+            return []
         self.register_attr_concern(src_path, None,
                                    node_path, exec_attr)
-        src_node_graphic = self.get_node_graphic(src_path)
-        if not src_node_graphic:
-            return
-        tgt_path = nxt_path.make_attr_path(node_path, exec_attr)
-        new_connection = AttrConnectionGraphic(self.model, self,
-                                               source_path=src_path,
-                                               target_path=tgt_path)
-        self.add_connection_graphic(new_connection)
+        if not self.get_node_graphic(src_path):
+            return []
+        return [src_path]
 
     def _draw_attr_connections(self, node_path, attr_names):
         # draw attr connections
@@ -925,13 +978,12 @@ class StageView(QtWidgets.QGraphicsView):
         comp_layer = self.model.comp_layer
         # Target node item attr names respects 0,1,2,3 hiding of attrs.
         for attr_name in attr_names:
-            self.remove_attr_connection_graphics(node_path, attr_name,
-                                                 side=CONNECTION_SIDES.IN)
             # Inherited properties get lines too, dotted, see
             # AttrConnectionGraphic.inherited.
             sources = self.model.get_node_attr_external_sources(node_path,
                                                                 attr_name,
                                                                 comp_layer)
+            wanted = []
             for src in sources:
                 split = nxt_path.path_attr_partition(src)
                 src_node_path, src_attr_name = split
@@ -941,48 +993,39 @@ class StageView(QtWidgets.QGraphicsView):
                     continue
                 self.register_attr_concern(src_node_path, src_attr_name,
                                            node_path, attr_name)
-                tgt = nxt_path.make_attr_path(node_path, attr_name)
-                new_connection = AttrConnectionGraphic(self.model, self,
-                                                       source_path=src,
-                                                       target_path=tgt)
-                source_node_item = self.get_node_graphic(src_node_path)
-                if not source_node_item:
+                if not self.get_node_graphic(src_node_path):
                     continue
-                self.add_connection_graphic(new_connection)
+                wanted += [src]
+            self._sync_lines_into(node_path, attr_name, wanted)
 
     def _draw_inst_connections(self, node_path):
         inst_attr = nxt_node.INTERNAL_ATTRS.INSTANCE_PATH
-        self.remove_attr_connection_graphics(node_path, inst_attr,
-                                             side=CONNECTION_SIDES.IN)
-        # draw instance connections
+        self._sync_lines_into(node_path, inst_attr,
+                              self._inst_line_sources(node_path))
+
+    def _inst_line_sources(self, node_path):
+        inst_attr = nxt_node.INTERNAL_ATTRS.INSTANCE_PATH
         comp = self.model.comp_layer
         if self.model.get_node_is_proxy(node_path):
-            return
+            return []
         inst_path = self.model.get_node_instance_path(node_path=node_path,
                                                       layer=comp)
         if not inst_path:
-            return
+            return []
         self.register_attr_concern(inst_path, None,
                                    node_path, inst_attr)
         if not self.get_node_graphic(inst_path):
-            return
-        attr_path = nxt_path.make_attr_path(node_path, inst_attr)
-        new_connection = AttrConnectionGraphic(self.model, self,
-                                               source_path=inst_path,
-                                               target_path=attr_path)
-        self.add_connection_graphic(new_connection)
+            return []
+        return [inst_path]
 
     def _draw_code_connections(self, node_path):
         code_attr = nxt_node.INTERNAL_ATTRS.COMPUTE
-        self.remove_attr_connection_graphics(node_path, code_attr,
-                                             side=CONNECTION_SIDES.IN)
         comp = self.model.comp_layer
         my_root_path = nxt_path.get_root_path(node_path)
         # draw compute connections
         sources = self.model.get_node_code_external_sources(node_path, comp)
-        if not sources:
-            return
-        for src_attr_path in sources:
+        wanted = []
+        for src_attr_path in sources or ():
             split = nxt_path.path_attr_partition(src_attr_path)
             src_node_path, src_attr_name = split
             self.register_attr_concern(src_node_path, None,
@@ -992,11 +1035,46 @@ class StageView(QtWidgets.QGraphicsView):
             src_root_path = nxt_path.get_root_path(src_node_path)
             if src_root_path == my_root_path:
                 continue
-            inst_attr_path = nxt_path.make_attr_path(node_path, code_attr)
-            new_connection = AttrConnectionGraphic(self.model, self,
-                                                   source_path=src_attr_path,
-                                                   target_path=inst_attr_path)
-            self.add_connection_graphic(new_connection)
+            wanted += [src_attr_path]
+        self._sync_lines_into(node_path, code_attr, wanted)
+
+    def _sync_lines_into(self, node_path, attr_name, sources):
+        """Draw the lines into one attr from sources, in that order.
+
+        A line already drawn from a source is kept and brought up to date
+        rather than made again, so redrawing a graph after an edit only
+        makes and removes the lines that changed.
+
+        :param node_path: the node the lines go into
+        :param attr_name: the attr on it they go into
+        :param sources: source node or attr paths, one line each
+        """
+        target = nxt_path.make_attr_path(node_path, attr_name)
+        drawn = self._connection_graphics.at_attr(node_path, attr_name,
+                                                  [CONNECTION_SIDES.IN])
+        keep = {}
+        for source in sources:
+            for graphic in drawn:
+                if graphic.src_path == source and graphic not in keep:
+                    keep[graphic] = source
+                    break
+        for graphic in drawn:
+            if graphic not in keep:
+                self.scene().removeItem(graphic)
+                self._connection_graphics.remove(graphic)
+        kept = {}
+        for graphic, source in keep.items():
+            kept.setdefault(source, []).append(graphic)
+        for source in sources:
+            graphic = kept[source].pop(0) if kept.get(source) else None
+            if graphic is not None:
+                # Its type, or whether it is inherited, may have changed.
+                graphic.calculate_draw_details()
+                graphic.setVisible(self.line_shown(graphic))
+                continue
+            self.add_connection_graphic(
+                AttrConnectionGraphic(self.model, self, source_path=source,
+                                      target_path=target))
 
     def remove_attr_connection_graphics(self, node_path, attr_name,
                                         side=CONNECTION_SIDES.BOTH):
@@ -2848,6 +2926,9 @@ class StageView(QtWidgets.QGraphicsView):
                 if graphic:
                     pre_update_bb = graphic.boundingRect()
                     graphic.update_from_model()
+                    # The node keeps a picture of itself, see its cache
+                    # mode, which a change of color or text leaves stale.
+                    graphic.update()
                     post_update_bb = graphic.boundingRect()
                     # If size changed re-draw the updated bounding box
                     if pre_update_bb != post_update_bb:
@@ -2875,9 +2956,13 @@ class StageView(QtWidgets.QGraphicsView):
             self.draw_connections(node_path)
         # Lines start and end at a node's attribute plugs, which move or
         # come and go as its attributes are shown and hidden.
+        # Each once: a line between two updated nodes is found from both.
+        to_rebuild = {}
         for node_path in updated_paths:
             for line in self.get_node_connection_graphics(node_path):
-                line.rebuild_line()
+                to_rebuild[line] = None
+        for line in to_rebuild:
+            line.rebuild_line()
         self.apply_layer_visibility()
 
     def handle_attrs_changed(self, attr_paths):
