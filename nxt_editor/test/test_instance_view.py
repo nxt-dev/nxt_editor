@@ -368,6 +368,14 @@ class Framing(InstanceViewCase):
         self.assertLessEqual(abs(middle.x() - centre.x()), 2)
         self.assertLessEqual(abs(middle.y() - centre.y()), 2)
 
+    def assert_framed(self):
+        """As it would be framed now, at the view's size."""
+        graph = self.view.view
+        shown = graph.transform().m11()
+        self.assert_centered()
+        graph.frame_all()
+        self.assertAlmostEqual(graph.transform().m11(), shown, places=4)
+
     def test_a_long_lineage_is_centered(self):
         self.open_view()
         self.select(['/arm_L'])
@@ -381,6 +389,43 @@ class Framing(InstanceViewCase):
         self.select(['/arm_L_twist'])
         self.select(['/loose'])
         self.assert_centered()
+
+    def test_selected_while_hidden_is_centered_when_shown(self):
+        self.view.hide()
+        app.processEvents()
+        self.select(['/arm_L'])
+        # Shown, the dock settles to its size after the view is drawn.
+        self.view.show()
+        self.win.resize(self.win.width() + 300, self.win.height() + 200)
+        app.processEvents()
+        self.assertIn('/arm_L_twist', self.view.items)
+        self.assert_framed()
+
+    def test_selected_behind_a_tab_is_centered_when_raised(self):
+        self.open_view()
+        self.select(['/loose'])
+        self.win.tabifyDockWidget(self.win.outliner, self.view)
+        self.win.outliner.raise_()
+        app.processEvents()
+        self.select(['/arm_L'])
+        self.view.raise_()
+        app.processEvents()
+        self.assertIn('/arm_L_twist', self.view.items)
+        self.assert_framed()
+
+    def test_it_stays_put_once_moved(self):
+        # Zoomed by hand, a new size does not frame it again.
+        self.open_view()
+        self.select(['/arm_L'])
+        graph = self.view.view
+        graph.wheelEvent(QtGui.QWheelEvent(
+            QtCore.QPointF(5, 5), QtCore.QPointF(5, 5), QtCore.QPoint(),
+            QtCore.QPoint(0, 120), QtCore.Qt.NoButton,
+            QtCore.Qt.NoModifier, QtCore.Qt.NoScrollPhase, False))
+        zoom = graph.transform().m11()
+        self.win.resize(self.win.width() + 300, self.win.height() + 200)
+        app.processEvents()
+        self.assertEqual(zoom, graph.transform().m11())
 
 
 if __name__ == '__main__':
