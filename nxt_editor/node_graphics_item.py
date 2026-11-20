@@ -25,6 +25,10 @@ logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 MIN_LOD = user_prefs.get(USER_PREF.LOD, .4)
 
 
+#: NodeGraphicsPlug.boundingRect, by its radius and hover width.
+_PLUG_BOUNDS = {}
+
+
 class NodeGraphicsItem(QtWidgets.QGraphicsObject):
     """The graphics item used to represent nodes in the graph. Contains
     instances of NodeGraphicsPlug for each attribute on the associated node.
@@ -35,6 +39,12 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
     EXEC_PLUG_RADIUS = 6
     # A chip of a weaker layer's color at the title bar's right end.
     LAYER_CHIP = 8
+    #: boundingRect, by what it depends on.
+    _BOUNDS = {}
+    #: The size of a root node before it is made, for framing a graph not
+    #: all drawn yet: a node's width and title height, see __init__.
+    MAX_WIDTH_GUESS = 260
+    TITLE_HEIGHT_GUESS = 40
     ROUND_X = theme.NODE_RADIUS
     ROUND_Y = theme.NODE_RADIUS
     # Room around a root node for its shadow: left, top, right, bottom.
@@ -310,7 +320,16 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         """
         # The same whether or not the node is stacked under another and
         # has a shadow, so it does not change size when it is reparented.
-        return self.get_selection_rect().adjusted(*self.SHADOW_MARGIN)
+        # Qt asks for this many times a repaint, for every node in view, and
+        # it only depends on these, so it is worked out once for each.
+        key = (self.SHADOW_MARGIN, self.max_width, self.title_rect_height,
+               self.attr_rect_height,
+               len(self.user_attr_names))
+        rect = self._BOUNDS.get(key)
+        if rect is None:
+            rect = self.get_selection_rect().adjusted(*self.SHADOW_MARGIN)
+            self._BOUNDS[key] = rect
+        return QtCore.QRectF(rect)
 
     def shape(self):
         """Only the node itself takes clicks, not the shadow around it."""
@@ -1048,11 +1067,17 @@ class NodeGraphicsPlug(QtWidgets.QGraphicsItem):
         """Override of QtWidgets.QGraphicsItem boundingRect. If this rectangle does not encompass the entire
         drawn item, artifacting will happen.
         """
-        offset = max(self.hover_width * 8, 3)
-        return QtCore.QRect((self.radius + offset) * -1,
-                            (self.radius + offset) * -1,
-                            (self.radius + offset) * 2,
-                            (self.radius + offset) * 2)
+        # Asked for many times a repaint; see NodeGraphicsItem.boundingRect.
+        key = (self.radius, self.hover_width)
+        rect = _PLUG_BOUNDS.get(key)
+        if rect is None:
+            offset = max(self.hover_width * 8, 3)
+            rect = QtCore.QRect((self.radius + offset) * -1,
+                                (self.radius + offset) * -1,
+                                (self.radius + offset) * 2,
+                                (self.radius + offset) * 2)
+            _PLUG_BOUNDS[key] = rect
+        return QtCore.QRect(rect)
 
     def _apply_lod_to_painter(self, painter):
         lod = QtWidgets.QStyleOptionGraphicsItem.levelOfDetailFromTransform(
