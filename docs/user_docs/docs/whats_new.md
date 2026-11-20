@@ -64,6 +64,11 @@ Each item links to the part of the docs that explains it in full.
 - Clicking into a node's code and away without typing no longer adds an
   undo step, marks the layer as unsaved, or copies inherited code onto the
   target layer.
+- A node selected while the Instance View is hidden, or behind another
+  tab, is framed in the middle of the view when it is shown. It was drawn
+  small in the upper left corner.
+- Right clicking a toolbar names each toolbar in its menu: Node Authoring,
+  Execute, Display and Grid Snap. They were four checked rows with no text.
 
 ## nxt_editor 4.13.0
 

@@ -312,13 +312,19 @@ class InstanceGraphicsView(QtWidgets.QGraphicsView):
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self._pan_from = None
+        # Framed and not moved by hand since, so a new size frames it
+        # again. Drawn while hidden, or before the dock has settled to its
+        # size, the frame is for a size the view no longer has.
+        self._framed = False
 
     def frame_all(self):
         """Fit the nodes in the view, centered, and never larger than
         life."""
         rect = self.scene().itemsBoundingRect()
         if rect.isEmpty():
+            self._framed = False
             return
+        self._framed = True
         # The scene only ever grows to fit what has been drawn in it, and
         # a scene smaller than the view, or one the nodes sit at one end
         # of, is pinned to a side rather than centered. Room all round
@@ -331,13 +337,20 @@ class InstanceGraphicsView(QtWidgets.QGraphicsView):
             self.resetTransform()
         self.centerOn(rect.center())
 
+    def resizeEvent(self, event):
+        super(InstanceGraphicsView, self).resizeEvent(event)
+        if self._framed:
+            self.frame_all()
+
     def wheelEvent(self, event):
+        self._framed = False
         factor = 1.15 if event.angleDelta().y() > 0 else 1 / 1.15
         self.scale(factor, factor)
 
     def mousePressEvent(self, event):
         if event.button() == QtCore.Qt.MiddleButton:
             self._pan_from = event.pos()
+            self._framed = False
             self.setCursor(QtCore.Qt.ClosedHandCursor)
             return
         super(InstanceGraphicsView, self).mousePressEvent(event)
