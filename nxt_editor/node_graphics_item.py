@@ -97,8 +97,6 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.node_enabled = None
         self.node_instance = None
 
-        self.model.build_idx_changed.connect(self.update_build_focus)
-        self.model.executing_changed.connect(self.update_build_focus)
         self.xChanged.connect(self._moved)
         self.yChanged.connect(self._moved)
         # draw node
@@ -752,10 +750,10 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
     def update_build_focus(self, *signal_args, force=False):
         """Draw this node as the one running, or not.
 
-        Every node hears about every step of a build, so only the ones
-        whose look changes are redrawn. Redrawing them all made a build
-        cost the square of its length in drawing, which a host, running
-        nodes on the thread that draws, spent stalled.
+        The view calls this on the node a build step leaves and the one it
+        runs, see StageView._build_focus_changed. Redrawing every node at
+        each step made a build cost the square of its length in drawing,
+        which a host, running nodes on the thread that draws, spent stalled.
 
         :param signal_args: what the signal calling this carried, unused
         :param force: redraw even if nothing changed here

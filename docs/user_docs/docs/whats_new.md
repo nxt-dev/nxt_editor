@@ -51,6 +51,16 @@ Each item links to the part of the docs that explains it in full.
   host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
   of the same host can be told apart in the taskbar.
 
+**Faster**
+- **Big graphs open much faster.** A graph of 5,000 nodes opened in about
+  a minute and now opens in about 10 seconds; one of 22,000 nodes took
+  over a quarter of an hour and now opens in under a minute.
+- **Panning and zooming a big graph stays smooth.** The graph keeps a
+  picture of each node and reuses it, where it used to draw every node
+  again on every repaint once a graph passed a few thousand nodes.
+- **A long chain of roots works out its run order at once**, instead of
+  taking seconds, and a build redraws only the node it runs.
+
 **Fixed**
 - The code editor's completion list opens under the line, with its names
   starting where the word being completed starts. It was drawn to the left

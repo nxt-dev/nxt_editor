@@ -109,6 +109,17 @@ try:
 except ValueError:
     PREPARE_PREFERENCES_MS = 1500
 
+# Room for the pictures the graph keeps of its nodes, in KB. Qt keeps 10MB
+# by default, which a graph of a few thousand nodes outgrows, and then every
+# repaint draws every node again: 2s a frame at 5,000 nodes. Only ever
+# raised, so a host that asked for more keeps it.
+NODE_PICTURE_CACHE_KB = 256 * 1024
+
+
+def make_room_for_node_pictures():
+    if QtGui.QPixmapCache.cacheLimit() < NODE_PICTURE_CACHE_KB:
+        QtGui.QPixmapCache.setCacheLimit(NODE_PICTURE_CACHE_KB)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     """The main window of the nxt UI. Includes the menu bar, tool bar, and dock widgets."""
@@ -127,6 +138,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.in_startup = True
         # A look chosen in Preferences since the last editor opened.
         theme.take_stored_look()
+        make_room_for_node_pictures()
         app = QtWidgets.QApplication.instance()
         if nxt_editor.owns_qapp():
             sheet = nxt_editor.stylesheet()
