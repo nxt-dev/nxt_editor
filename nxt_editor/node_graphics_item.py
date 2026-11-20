@@ -784,6 +784,9 @@ class NodeGraphicsItem(QtWidgets.QGraphicsObject):
         self.node_enabled = self.model.get_node_enabled(self.node_path)
         self.update_color()
         self.update_build_focus(force=True)
+        # The plugs show start, break and skip points, in layer colors.
+        self.exec_in_plug._refresh_from_model()
+        self.exec_out_plug._refresh_from_model()
         self._update_collapse()
         self.error_list = self.model.get_node_error(node_path, comp)
         self.update_fonts()
