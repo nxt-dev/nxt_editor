@@ -46,6 +46,96 @@ class CONNECTION_SIDES:
     BOTH = (IN, OUT)
 
 
+class ConnectionGraphics(object):
+    """The view's connection graphics, in the order they were added, with
+    lookups by the node and attr at either end.
+
+    Iterates like the list it replaces. Finding the lines at a node used to
+    walk every line in the graph, which made drawing a graph quadratic in
+    its line count.
+    """
+    def __init__(self):
+        self._order = {}  # graphic: the order it was added in
+        self._next = 0
+        # (node path, attr name) or node path: {graphic: None}, in order.
+        self._by_tgt = {}
+        self._by_src = {}
+        self._by_tgt_node = {}
+        self._by_src_node = {}
+
+    def __iter__(self):
+        return iter(list(self._order))
+
+    def __len__(self):
+        return len(self._order)
+
+    def __bool__(self):
+        return bool(self._order)
+
+    def __contains__(self, graphic):
+        return graphic in self._order
+
+    def _indexes(self, graphic):
+        return ((self._by_tgt, (graphic.tgt_node_path,
+                                graphic.tgt_attr_name)),
+                (self._by_src, (graphic.src_node_path,
+                                graphic.src_attr_name)),
+                (self._by_tgt_node, graphic.tgt_node_path),
+                (self._by_src_node, graphic.src_node_path))
+
+    def add(self, graphic):
+        if graphic in self._order:
+            return
+        self._order[graphic] = self._next
+        self._next += 1
+        for index, key in self._indexes(graphic):
+            index.setdefault(key, {})[graphic] = None
+
+    def remove(self, graphic):
+        """Remove a graphic, raising ValueError if it isn't here, like
+        list.remove."""
+        if graphic not in self._order:
+            raise ValueError('Connection graphic is not tracked.')
+        del self._order[graphic]
+        for index, key in self._indexes(graphic):
+            bucket = index.get(key)
+            if bucket is not None:
+                bucket.pop(graphic, None)
+                if not bucket:
+                    del index[key]
+
+    def _in_order(self, graphics):
+        return sorted(graphics, key=self._order.__getitem__)
+
+    def at_attr(self, node_path, attr_name, sides):
+        """Lines into (or out of) one attr, in the order added."""
+        key = (node_path, attr_name)
+        found = {}
+        if CONNECTION_SIDES.IN in sides:
+            found.update(self._by_tgt.get(key, {}))
+        if CONNECTION_SIDES.OUT in sides:
+            found.update(self._by_src.get(key, {}))
+        return self._in_order(found)
+
+    def at_node(self, node_path, sides):
+        """Lines at a node, in the order added. A line with both ends at
+        the node is listed once per side asked for, as before."""
+        found = {}
+        if CONNECTION_SIDES.IN in sides:
+            found.update(self._by_tgt_node.get(node_path, {}))
+        if CONNECTION_SIDES.OUT in sides:
+            found.update(self._by_src_node.get(node_path, {}))
+        out = []
+        for graphic in self._in_order(found):
+            if (CONNECTION_SIDES.IN in sides and
+                    graphic.tgt_node_path == node_path):
+                out += [graphic]
+            if (CONNECTION_SIDES.OUT in sides and
+                    graphic.src_node_path == node_path):
+                out += [graphic]
+        return out
+
+
 class StageView(QtWidgets.QGraphicsView):
     """Primary display/edit widget for node hierarchies of an nxt graph.
     Displays nodes in visual hierarchies and allows selection, parenting, and
@@ -152,7 +242,7 @@ class StageView(QtWidgets.QGraphicsView):
 
         # graphics items collections
         self._node_graphics = {}
-        self._connection_graphics = []
+        self._connection_graphics = ConnectionGraphics()
         self._attr_concerns = {}
         self._backdrop_graphics = {}
         # Whether a layer was hidden the last time visibility was applied,
@@ -212,6 +302,11 @@ class StageView(QtWidgets.QGraphicsView):
             self.on_layer_visibility_changed)
         self.model.status_message.connect(self.show_status)
         self.model.wires_changed.connect(self.draw_wires)
+        # The node a build is running, so each step redraws only it and the
+        # one before it, rather than every node hearing every step.
+        self._build_focus_path = ''
+        self.model.build_idx_changed.connect(self._build_focus_changed)
+        self.model.executing_changed.connect(self._build_focus_changed)
         # A reloaded or muted layer can bring or take away points.
         self.model.comp_layer_changed.connect(self.draw_wires)
 
@@ -456,7 +551,7 @@ class StageView(QtWidgets.QGraphicsView):
     def clear(self):
         """Remove all graphics items and clear all object dictionaries."""
         self._node_graphics = {}
-        self._connection_graphics = []
+        self._connection_graphics = ConnectionGraphics()
         self._attr_concerns = {}
         self._backdrop_graphics = {}
         self._backdrop_drag = None
@@ -917,15 +1012,8 @@ class StageView(QtWidgets.QGraphicsView):
             sides = side
         else:
             sides = [side]
-        path = (node_path, attr_name)
-        to_remove = []
-        for graphic in self._connection_graphics:
-            if (CONNECTION_SIDES.IN in sides and
-                path == (graphic.tgt_node_path, graphic.tgt_attr_name)):
-                to_remove += [graphic]
-            elif (CONNECTION_SIDES.OUT in sides and
-                  path == (graphic.src_node_path, graphic.src_attr_name)):
-                to_remove += [graphic]
+        to_remove = self._connection_graphics.at_attr(node_path, attr_name,
+                                                      sides)
         for graphic in to_remove:
             self.scene().removeItem(graphic)
             self._connection_graphics.remove(graphic)
@@ -962,15 +1050,7 @@ class StageView(QtWidgets.QGraphicsView):
             sides = side
         else:
             sides = [side]
-        connections = []
-        for graphic in self._connection_graphics:
-            if (CONNECTION_SIDES.IN in sides and
-                node_path == graphic.tgt_node_path):
-                connections += [graphic]
-            if (CONNECTION_SIDES.OUT in sides and
-                node_path == graphic.src_node_path):
-                connections += [graphic]
-        return connections
+        return self._connection_graphics.at_node(node_path, sides)
 
     def register_attr_concern(self, src_node_path, src_attr_name,
                               tgt_node_path, tgt_attr_name):
@@ -996,11 +1076,11 @@ class StageView(QtWidgets.QGraphicsView):
         :type tgt_attr_name: str
         """
         self._attr_concerns.setdefault(src_node_path, {})
-        self._attr_concerns[src_node_path].setdefault(src_attr_name, [])
+        # Concerns in the order registered, as dict keys so a repeat is
+        # found without walking them all.
+        self._attr_concerns[src_node_path].setdefault(src_attr_name, {})
         concern = (tgt_node_path, tgt_attr_name)
-        src_attr_concerns = self._attr_concerns[src_node_path][src_attr_name]
-        if concern not in src_attr_concerns:
-            src_attr_concerns += [concern]
+        self._attr_concerns[src_node_path][src_attr_name][concern] = None
 
     def add_connection_graphic(self, graphic):
         """Add given connection graphic to the scene and track.
@@ -1010,7 +1090,7 @@ class StageView(QtWidgets.QGraphicsView):
         """
         self.scene().addItem(graphic)
         graphic.setZValue(self.CONNECTION_DEPTH)
-        self._connection_graphics += [graphic]
+        self._connection_graphics.add(graphic)
         graphic.drawn = True
         graphic.setVisible(self.line_shown(graphic))
         points = self._line_points.get(graphic.key)
@@ -2927,6 +3007,15 @@ class StageView(QtWidgets.QGraphicsView):
 
     def get_node_graphic(self, name):
         return self._node_graphics.get(name, None)
+
+    def _build_focus_changed(self, *signal_args):
+        """Redraw the node a build left and the one it is now running."""
+        focus = self.model.get_build_focus() if self.model.executing else ''
+        previous, self._build_focus_path = self._build_focus_path, focus
+        for path in {previous, focus}:
+            item = self._node_graphics.get(path) if path else None
+            if item is not None:
+                item.update_build_focus()
 
 
 class HUDItem(QtWidgets.QLabel):

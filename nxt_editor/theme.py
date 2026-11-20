@@ -302,10 +302,12 @@ def paint_stripes(painter, rect, base):
     step = STRIPE_WIDTH + STRIPE_GAP
     height = rect.height()
     x = rect.left() - height
+    lines = []
     while x < rect.right() + step:
-        painter.drawLine(QtCore.QPointF(x, rect.bottom()),
-                         QtCore.QPointF(x + height, rect.top()))
+        lines += [QtCore.QLineF(x, rect.bottom(), x + height, rect.top())]
         x += step
+    # In one call: a graph full of instances has thousands of these.
+    painter.drawLines(lines)
     painter.restore()
 
 
