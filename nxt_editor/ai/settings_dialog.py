@@ -14,7 +14,7 @@ from nxt_editor import theme, user_dir
 from nxt_editor.constants import FONTS
 from nxt_editor.ai import claude_code, codex, providers, secret_store
 from nxt_editor.ai.memory_page import MemoryPage
-from nxt_editor.ai.workers import TaskThread
+from nxt_editor.ai.workers import SignInCheck, TaskThread
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
@@ -307,8 +307,9 @@ class ProviderBox(QtWidgets.QWidget):
                 link_html(provider.keys_url, 'Get a key'))
             self.keys_link.setFont(theme.font(theme.SMALL_PX))
             self.keys_link.setOpenExternalLinks(True)
-            self.keys_link.setVisible(provider.takes_api_key)
+            # In its row before it is shown, or it shows as a window.
             layout.addWidget(self.keys_link, 2, 4)
+            self.keys_link.setVisible(provider.takes_api_key)
         for widget in (key_label, self.key_edit, self.save_key_button,
                        self.remove_key_button):
             widget.setVisible(provider.takes_api_key)
@@ -555,6 +556,10 @@ class ProviderBox(QtWidgets.QWidget):
 
     def refresh(self):
         provider = self.provider
+        if self.uses_app and not provider.app.answers_now():
+            # The settings ask the app off the UI thread, then refresh.
+            self.show_checking()
+            return
         store_ok = provider.store.available
         if self.uses_app:
             has_web = bool(provider.web_record())
@@ -595,6 +600,17 @@ class ProviderBox(QtWidgets.QWidget):
                 self.load_models()
             else:
                 self.set_models(models)
+
+    def show_checking(self):
+        """Waiting for the app to say who is signed in."""
+        self.problem = ''
+        self.status_label.setStyleSheet('')
+        self.status_label.setText('Asking {} who is signed in...'.format(
+            self.provider.app_name))
+        self.web_button.setEnabled(False)
+        self.sign_out_button.setEnabled(False)
+        self.set_models([], 'Checking the sign in...')
+        self.update_header(busy='Checking...')
 
     def on_use_toggled(self, _checked):
         self.provider.method = (providers.WEB if self.use_web.isChecked()
@@ -948,6 +964,8 @@ class AiSettingsDialog(QtWidgets.QDialog):
         default_row.addStretch()
         tab_layout.addLayout(default_row)
         tab_layout.addWidget(self.sections, 1)
+        self.sign_in_check = SignInCheck(self)
+        self.sign_in_check.known.connect(self.on_sign_ins_known)
         self.boxes = []
         for provider in self.providers:
             box = ProviderBox(provider, self)
@@ -965,6 +983,7 @@ class AiSettingsDialog(QtWidgets.QDialog):
         buttons.rejected.connect(self.close)
         layout.addWidget(buttons)
         self.set_controls_enabled(self.enable_check.isChecked())
+        self.sign_in_check.start()
         self.setMinimumSize(560, 420)
         self.resize(600, 720)
 
@@ -1014,11 +1033,23 @@ class AiSettingsDialog(QtWidgets.QDialog):
         self.store_label.setText(where)
 
     def refresh_sign_ins(self, older_than=0):
+        """Ask again who is signed in, if what was said is older than
+        older_than seconds. The apps are asked off the UI thread, and the
+        sections they sign in for say so until they answer."""
         claude_code.forget_status(older_than)
         codex.forget_status(older_than)
+        known = self.sign_in_check.start()
+        self.refresh_boxes()
+        if known:
+            self.settings_changed.emit()
+
+    def refresh_boxes(self):
         for box in self.boxes:
             if not (box.thread and box.thread.isRunning()):
                 box.refresh()
+
+    def on_sign_ins_known(self):
+        self.refresh_boxes()
         self.settings_changed.emit()
 
     def showEvent(self, event):

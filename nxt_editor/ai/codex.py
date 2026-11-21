@@ -112,9 +112,23 @@ def _unwrap(found):
     return found
 
 
+_found = {'at': 0, 'chosen': None, 'value': None}
+
+
 def find_cli():
-    """The codex command, or None when Codex is not installed."""
+    """The codex command, or None when Codex is not installed. Looking
+    through a host's long PATH takes a while, so what was found is kept as
+    long as a status is."""
     chosen = user_dir.user_prefs.get(user_dir.USER_PREF.AI_CODEX_PATH)
+    if (_found['chosen'] == chosen and
+            time.time() - _found['at'] < STATUS_LIFE):
+        return _found['value']
+    value = _find_cli(chosen)
+    _found.update(at=time.time(), chosen=chosen, value=value)
+    return value
+
+
+def _find_cli(chosen):
     if chosen and os.path.isfile(chosen):
         return _unwrap(chosen)
     found = shutil.which('codex')
@@ -205,6 +219,16 @@ def forget_status(older_than=0):
     with _status_lock:
         if time.time() - _status['at'] >= older_than:
             _status['at'] = 0
+            _found['at'] = 0
+
+
+def answers_now():
+    """True when status() answers without running Codex: what it said is
+    still fresh, or it is not installed."""
+    with _status_lock:
+        if time.time() - _status['at'] < STATUS_LIFE:
+            return True
+    return find_cli() is None
 
 
 def signed_in(cli=None, cached=True):

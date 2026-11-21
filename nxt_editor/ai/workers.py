@@ -33,6 +33,62 @@ class TaskThread(QtCore.QThread):
             self.done.emit(result)
 
 
+#: The one check running, shared by everything waiting on it. Kept here so
+#: it lives until it is done, whoever asked for it.
+_sign_in_check = {'thread': None}
+
+
+def _wait_for_sign_in_check():
+    thread = _sign_in_check['thread']
+    if thread is not None:
+        thread.wait(3000)
+
+
+class SignInCheck(QtCore.QObject):
+    """Asks Claude Code and Codex who is signed in off the UI thread, as
+    running them takes a moment, longer in a host. known is emitted once
+    they have said, when a provider's status() answers at once."""
+    known = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        super(SignInCheck, self).__init__(parent)
+        self.waiting_on = None
+
+    def start(self):
+        """Ask, unless what they said is known already.
+
+        :return: True when it is known now, and known will not be emitted
+        """
+        from nxt_editor.ai import providers
+        if providers.sign_ins_known():
+            return True
+        thread = _sign_in_check['thread']
+        start = thread is None or thread.isFinished()
+        if start:
+            if thread is None:
+                app = QtCore.QCoreApplication.instance()
+                if app is not None:
+                    app.aboutToQuit.connect(_wait_for_sign_in_check)
+            thread = TaskThread(providers.check_sign_ins)
+            _sign_in_check['thread'] = thread
+        if self.waiting_on is not thread:
+            self.waiting_on = thread
+            thread.done.connect(self.on_done)
+            thread.failed.connect(self.on_done)
+        if start:
+            thread.start()
+        elif thread.isFinished() and self.waiting_on is thread:
+            # It finished as this started waiting on it.
+            QtCore.QTimer.singleShot(0, self.on_done)
+        return False
+
+    def on_done(self, *_args):
+        if self.waiting_on is None:
+            return
+        self.waiting_on = None
+        self.known.emit()
+
+
 class ChatThread(QtCore.QThread):
     """Streams one reply, a piece at a time.
 

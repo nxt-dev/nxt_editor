@@ -1540,6 +1540,9 @@ QCheckBox::indicator {
             if resp == QtWidgets.QDialog.Rejected:
                 event.ignore()
                 return
+        if not self.close_windows():
+            event.ignore()
+            return
         event.accept()
         self.shutdown_rpc_server()
         # Window state
@@ -1575,6 +1578,24 @@ QCheckBox::indicator {
         self._closing = True
         self.close_signal.emit()
         super(MainWindow, self).closeEvent(event)
+
+    def close_windows(self):
+        """Close the windows the editor opened, Preferences and the like,
+        as it closes. In a host the editor's window is kept after it
+        closes, and its windows with it, so they would stay up. Floating
+        panels are left to the layout, which keeps where they are.
+
+        :return: False when one would not close, Preferences asking about
+            unapplied environment variables for example
+        """
+        for child in self.findChildren(QtWidgets.QWidget):
+            if (not child.isWindow() or not child.isVisible() or
+                    isinstance(child, QtWidgets.QDockWidget)):
+                continue
+            child.close()
+            if child.isVisible():
+                return False
+        return True
 
     def open_paths(self):
         """The files of the open graphs, in the order they were opened,
