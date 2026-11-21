@@ -52,9 +52,12 @@ Each item links to the part of the docs that explains it in full.
   of the same host can be told apart in the taskbar.
 
 **Faster**
-- **Big graphs open much faster.** A graph of 5,000 nodes opened in about
-  a minute and now opens in about 10 seconds; one of 22,000 nodes took
-  over a quarter of an hour and now opens in under a minute.
+- **Big graphs show in seconds.** A graph of 5,000 nodes took about a
+  minute to show and now shows in about 2 seconds; one of 22,000 nodes took
+  over a quarter of an hour and now shows in about 8. The nodes in view are
+  drawn first and the rest while the editor is idle, and anything that
+  needs a node not drawn yet, like selecting it or Select All, draws it
+  there and then.
 - **Panning and zooming a big graph stays smooth.** The graph keeps a
   picture of each node and reuses it, where it used to draw every node
   again on every repaint once a graph passed a few thousand nodes.

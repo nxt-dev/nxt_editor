@@ -243,6 +243,21 @@ class StageView(QtWidgets.QGraphicsView):
         # graphics items collections
         self._node_graphics = {}
         self._connection_graphics = ConnectionGraphics()
+        # Nodes of a big graph not drawn yet, drawn while the editor is idle,
+        # see draw_graph: {root path: [its node paths, in drawing order]},
+        # and each of those paths' root.
+        self._pending_draw = {}
+        self._pending_root_of = {}
+        self._pending_timer = QtCore.QTimer(self)
+        self._pending_timer.setSingleShot(True)
+        self._pending_timer.setInterval(0)
+        self._pending_timer.timeout.connect(self._draw_some_pending)
+        # How the view was framed when the graph was opened, while it still
+        # is, so it can be framed again once every node is drawn and its
+        # size known. See frame_opened.
+        self._open_frame = None
+        self._mini_map_marked = 0.0
+        self._pending_slice_end = 0.0
         self._attr_concerns = {}
         self._backdrop_graphics = {}
         # Whether a layer was hidden the last time visibility was applied,
@@ -460,6 +475,8 @@ class StageView(QtWidgets.QGraphicsView):
         super(StageView, self).showEvent(event)
         if not self.ensure_drawn() and self._stale:
             self.redraw()
+        if self._pending_draw:
+            self._pending_timer.start()
 
     def redraw(self):
         """Draw the whole graph, shown or not."""
@@ -568,6 +585,7 @@ class StageView(QtWidgets.QGraphicsView):
 
     def clear(self):
         """Remove all graphics items and clear all object dictionaries."""
+        self._forget_pending()
         self._node_graphics = {}
         self._connection_graphics = ConnectionGraphics()
         self._attr_concerns = {}
@@ -608,6 +626,11 @@ class StageView(QtWidgets.QGraphicsView):
     def shown_items_rect(self):
         """The scene rect around everything showing: what is hidden with
         its layers is left out."""
+        self.finish_drawing()
+        return self._drawn_items_rect()
+
+    def _drawn_items_rect(self):
+        """shown_items_rect, of the nodes drawn so far."""
         if not self._layers_were_hidden:
             return self.scene().itemsBoundingRect()
         # itemsBoundingRect counts items that are not showing.
@@ -656,8 +679,24 @@ class StageView(QtWidgets.QGraphicsView):
         """Show a graph the way it is first shown: framed around all of it
         with Frame All on Open on, never zoomed in past 100% so a small
         graph is not blown up, and otherwise, or with nothing in it, at the
-        origin. Nodes hidden with their layers are left out."""
-        rect = self.shown_items_rect()
+        origin. Nodes hidden with their layers are left out.
+
+        While a big graph is still being drawn, see _draw_later, it is
+        framed on where the nodes waiting start, and framed again once
+        they are drawn unless the view was moved in between.
+        """
+        self._open_frame = None
+        if self._pending_draw:
+            rect = self._drawn_items_rect()
+            for root in self._pending_draw:
+                if root == nxt_path.WORLD:
+                    continue
+                x, y = self.model.get_node_pos(root)
+                rect = rect.united(QtCore.QRectF(
+                    x, y, NodeGraphicsItem.MAX_WIDTH_GUESS,
+                    NodeGraphicsItem.TITLE_HEIGHT_GUESS))
+        else:
+            rect = self.shown_items_rect()
         if rect.isEmpty() or not user_prefs.get(USER_PREF.FRAME_ON_OPEN,
                                                 True):
             self.centerOn(0, 0)
@@ -666,6 +705,8 @@ class StageView(QtWidgets.QGraphicsView):
         if self.scale_factor > 1.0:
             self.resetTransform()
             self.centerOn(rect.center())
+        if self._pending_draw:
+            self._open_frame = self._frame_state()
 
     # Camera bookmarks, see nxt_editor.bookmarks ----------------------------
 
@@ -882,6 +923,10 @@ class StageView(QtWidgets.QGraphicsView):
                     if path not in current or
                     self.model.get_collapsed_ancestor(path)]
         kept = set(self._node_graphics)
+        if not dirty:
+            # A whole graph redraw works out again what is left to draw.
+            self._forget_pending()
+            node_paths = self._draw_later(node_paths)
         og_do_anims = self.do_animations
         self.do_animations = False
         for path in gone:
@@ -917,8 +962,151 @@ class StageView(QtWidgets.QGraphicsView):
             elif parent in later:
                 graphic.stackBefore(later[parent])
 
+    # Drawing a big graph a part at a time ---------------------------------
+
+    #: A whole graph redraw making more nodes than this draws the ones in
+    #: view, up to FIRST_DRAW of them, at once and the rest while the editor
+    #: is idle, so a big graph shows, and can be worked on, in seconds.
+    #: Anything that asks for a node not drawn yet has it drawn there and
+    #: then, see get_node_graphic, and anything that needs every node, like
+    #: Select All, finishes the drawing first, see finish_drawing.
+    LAZY_DRAW_OVER = 2000
+    FIRST_DRAW = 1000
+    #: Seconds of drawing each time the editor is idle. Each stretch is
+    #: followed by a repaint of what is in view, so not too short.
+    IDLE_DRAW_SECONDS = 0.15
+    #: Seconds between bringing the mini map up to date while drawing: it
+    #: goes over every node drawn, so not after every stretch.
+    MINI_MAP_EVERY = 1.0
+
+    def _draw_later(self, node_paths):
+        """Of a whole graph redraw's node paths, the ones to draw now. The
+        nodes of roots left out wait in _pending_draw.
+
+        :param node_paths: every node path, in drawing order
+        :rtype: list
+        """
+        new_count = 0
+        for path in node_paths:
+            if path not in self._node_graphics:
+                new_count += 1
+        if new_count <= self.LAZY_DRAW_OVER:
+            return node_paths
+        groups = {}
+        order = []
+        for path in node_paths:
+            root = nxt_path.get_root_path(path)
+            if root not in groups:
+                groups[root] = []
+                order += [root]
+            groups[root] += [path]
+        view = self.view_rect()
+        margin = max(view.width(), view.height()) * 0.5
+        near = view.adjusted(-margin, -margin, margin, margin)
+        center = view.center()
+
+        def place(root):
+            pos = self.model.get_node_pos(root) if root != nxt_path.WORLD \
+                else (0.0, 0.0)
+            point = QtCore.QPointF(pos[0], pos[1])
+            offset = point - center
+            return (not near.contains(point),
+                    offset.x() * offset.x() + offset.y() * offset.y())
+
+        new_roots = [r for r in order
+                     if any(p not in self._node_graphics for p in groups[r])]
+        by_place = sorted(new_roots, key=place)
+        now = set(r for r in order if r not in set(new_roots))
+        budget = self.FIRST_DRAW
+        for root in by_place:
+            if budget <= 0:
+                break
+            now.add(root)
+            budget -= len(groups[root])
+        for root in by_place:
+            if root in now:
+                continue
+            self._pending_draw[root] = groups[root]
+            for path in groups[root]:
+                self._pending_root_of[path] = root
+        if self._pending_draw:
+            self._pending_timer.start()
+        return [p for p in node_paths if nxt_path.get_root_path(p) in now]
+
+    def _forget_pending(self):
+        self._pending_draw = {}
+        self._pending_root_of = {}
+        if getattr(self, '_pending_timer', None) is not None:
+            self._pending_timer.stop()
+
+    @property
+    def drawing(self):
+        """Whether nodes of the graph are still waiting to be drawn."""
+        return bool(self._pending_draw)
+
+    def _draw_pending_roots(self, roots):
+        paths = []
+        for root in roots:
+            for path in self._pending_draw.pop(root, ()):
+                self._pending_root_of.pop(path, None)
+                paths += [path]
+        if not paths:
+            return
+        og_do_anims = self.do_animations
+        self.do_animations = False
+        try:
+            self.handle_nodes_changed(paths)
+        finally:
+            self.do_animations = og_do_anims
+        now = time.time()
+        if not self._pending_draw or                 now - self._mini_map_marked > self.MINI_MAP_EVERY:
+            self._mini_map_marked = now
+            self.mini_map.mark_dirty()
+        if not self._pending_draw:
+            self._finished_drawing()
+
+    def _draw_some_pending(self):
+        """Draw waiting nodes for a moment, and come back for more."""
+        if not self._pending_draw:
+            return
+        if not self.isVisible():
+            # Picked up again when the view is shown, see showEvent.
+            return
+        start = time.time()
+        # What came in between, mostly repainting what is in view, which
+        # with a whole big graph in view takes long: draw for twice that,
+        # so repainting stays a third of the time at most.
+        between = start - self._pending_slice_end             if self._pending_slice_end else 0.0
+        end = start + max(self.IDLE_DRAW_SECONDS, min(between * 2, 1.0))
+        while self._pending_draw and time.time() < end:
+            root = next(iter(self._pending_draw))
+            self._draw_pending_roots([root])
+        self._pending_slice_end = time.time()
+        if self._pending_draw:
+            self._pending_timer.start()
+        else:
+            self._pending_slice_end = 0.0
+
+    def finish_drawing(self):
+        """Draw every node still waiting, for what needs all of them."""
+        if self._pending_draw:
+            self._draw_pending_roots(list(self._pending_draw))
+
+    def _finished_drawing(self):
+        # Framed when it was opened on where the nodes waiting to be drawn
+        # start; now their sizes are known, frame it again unless it was
+        # moved since.
+        opened, self._open_frame = self._open_frame, None
+        if opened and opened == self._frame_state():
+            self.frame_opened()
+
+    def _frame_state(self):
+        center = self.mapToScene(self.viewport().rect().center())
+        return (self.transform(), round(center.x(), 3),
+                round(center.y(), 3))
+
     def draw_node(self, node_path):
-        graphic = self.get_node_graphic(node_path)
+        graphic = self._node_graphics.get(node_path)
         if not graphic:
             graphic = NodeGraphicsItem(node_path=node_path,
                                        model=self.model,
@@ -968,7 +1156,7 @@ class StageView(QtWidgets.QGraphicsView):
             return []
         self.register_attr_concern(src_path, None,
                                    node_path, exec_attr)
-        if not self.get_node_graphic(src_path):
+        if not self._node_graphics.get(src_path):
             return []
         return [src_path]
 
@@ -993,7 +1181,7 @@ class StageView(QtWidgets.QGraphicsView):
                     continue
                 self.register_attr_concern(src_node_path, src_attr_name,
                                            node_path, attr_name)
-                if not self.get_node_graphic(src_node_path):
+                if not self._node_graphics.get(src_node_path):
                     continue
                 wanted += [src]
             self._sync_lines_into(node_path, attr_name, wanted)
@@ -1014,7 +1202,7 @@ class StageView(QtWidgets.QGraphicsView):
             return []
         self.register_attr_concern(inst_path, None,
                                    node_path, inst_attr)
-        if not self.get_node_graphic(inst_path):
+        if not self._node_graphics.get(inst_path):
             return []
         return [inst_path]
 
@@ -1030,7 +1218,7 @@ class StageView(QtWidgets.QGraphicsView):
             src_node_path, src_attr_name = split
             self.register_attr_concern(src_node_path, None,
                                        node_path, code_attr)
-            if not self.get_node_graphic(src_node_path):
+            if not self._node_graphics.get(src_node_path):
                 continue
             src_root_path = nxt_path.get_root_path(src_node_path)
             if src_root_path == my_root_path:
@@ -1600,6 +1788,7 @@ class StageView(QtWidgets.QGraphicsView):
         """
         area = graphic.scene_rect()
         nodes = []
+        self.finish_drawing()
         for path, node_graphic in self._node_graphics.items():
             if nxt_path.get_root_path(path) != path:
                 # Children are stacked under their root and go with it.
@@ -1859,6 +2048,7 @@ class StageView(QtWidgets.QGraphicsView):
     def select_all(self):
         """Select every node in sight. Nodes hidden with their layers are
         not."""
+        self.finish_drawing()
         node_paths = [path for path in self._node_graphics
                       if not self.node_hidden(path)]
         self.model.set_selection(paths=node_paths)
@@ -2286,6 +2476,7 @@ class StageView(QtWidgets.QGraphicsView):
             self._rubber_band_origin = None
             rubber_band_geo = self.mapToScene(self.rubber_band.geometry())
             selection_area_rect = rubber_band_geo.boundingRect()
+            self.finish_drawing()
             # end rubber band action
             self.rubber_band.hide()
             # get items under selection area
@@ -2864,7 +3055,8 @@ class StageView(QtWidgets.QGraphicsView):
                 new_selection.remove(path)
 
         for path in new_selection:
-            graphic = self._node_graphics.get(path)
+            # Draws a node still waiting to be, see _draw_later.
+            graphic = self.get_node_graphic(path)
             if graphic:
                 graphic.setSelected(True)
                 continue
@@ -3076,6 +3268,13 @@ class StageView(QtWidgets.QGraphicsView):
         self.do_animations = og_do_anims
 
     def remove_node_graphic(self, node_path):
+        root = self._pending_root_of.pop(node_path, None)
+        if root is not None:
+            waiting = self._pending_draw.get(root, [])
+            if node_path in waiting:
+                waiting.remove(node_path)
+            if not waiting:
+                self._pending_draw.pop(root, None)
         if node_path not in self._node_graphics:
             return
         graphic = self._node_graphics.pop(node_path)
@@ -3091,7 +3290,13 @@ class StageView(QtWidgets.QGraphicsView):
         graphic.anim_out()
 
     def get_node_graphic(self, name):
-        return self._node_graphics.get(name, None)
+        """The node's graphic, drawing it now if it is still waiting to be,
+        see _draw_later."""
+        graphic = self._node_graphics.get(name, None)
+        if graphic is None and name in self._pending_root_of:
+            self._draw_pending_roots([self._pending_root_of[name]])
+            graphic = self._node_graphics.get(name, None)
+        return graphic
 
     def _build_focus_changed(self, *signal_args):
         """Redraw the node a build left and the one it is now running."""
