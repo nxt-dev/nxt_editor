@@ -34,7 +34,57 @@ def processing(func):
     return wrapper
 
 
+def _kept_in(run_step):
+    """redo or undo, with an error it raises logged rather than raised.
+
+    Qt's undo stack calls them, and an error raised back into it took the
+    whole application down, and the host the editor runs in with it. The
+    graph is composited again after one, so what the editor shows is what
+    the layers say, whatever the edit got through before it failed. Only
+    the outermost call catches, so a command calling its base's step still
+    stops where the error is.
+    """
+    def run(self):
+        depth = self.__dict__.get('_step_depth', 0)
+        self._step_depth = depth + 1
+        model = getattr(self, 'model', None)
+        builds = getattr(model, '_comp_builds', None)
+        try:
+            result = run_step(self)
+            if (not depth and builds is not None and self.changes_comp and
+                    model._comp_builds == builds):
+                # Changed in place, not built again.
+                model.mark_comp_patched()
+            return result
+        except Exception:
+            if depth:
+                raise
+            logger.exception('"{}" failed'.format(self.text() or
+                                                  type(self).__name__))
+            try:
+                self.model.update_comp_layer(rebuild=True)
+            except Exception:
+                self.model.mark_comp_patched()
+                logger.exception('Compositing the graph again failed')
+        finally:
+            self._step_depth = depth
+    run.__name__ = run_step.__name__
+    run.__doc__ = run_step.__doc__
+    run.kept_in = True
+    return run
+
+
 class NxtCommand(QUndoCommand):
+    #: Whether it can change the comp, see StageModel.comp_is_exact.
+    changes_comp = True
+
+    def __init_subclass__(cls, **kwargs):
+        super(NxtCommand, cls).__init_subclass__(**kwargs)
+        for name in ('redo', 'undo'):
+            step = cls.__dict__.get(name)
+            if step is not None and not getattr(step, 'kept_in', False):
+                setattr(cls, name, _kept_in(step))
+
     def __init__(self, model):
         super(NxtCommand, self).__init__()
         self.model = model
@@ -699,6 +749,7 @@ class InstanceNode(SetNodeAttributeValue):
 class SetNodesPosition(NxtCommand):
 
     """Move nodes"""
+    changes_comp = False
 
     def __init__(self, node_positions, model, layer_path):
         super(SetNodesPosition, self).__init__(model)
@@ -742,6 +793,7 @@ class SetNodesPosition(NxtCommand):
 class PushNodePositions(NxtCommand):
 
     """Write where nodes are shown onto one layer's own positions."""
+    changes_comp = False
 
     def __init__(self, node_positions, model, layer_path, text):
         """
@@ -782,6 +834,7 @@ class PushNodePositions(NxtCommand):
 class SetBackdrops(NxtCommand):
 
     """Add, change or remove backdrops on one layer."""
+    changes_comp = False
 
     def __init__(self, changes, model, layer_path, text='Edit backdrop'):
         """
@@ -817,6 +870,7 @@ class SetBackdrops(NxtCommand):
 class SetBookmarks(NxtCommand):
 
     """Add, rename or remove camera bookmarks on one layer."""
+    changes_comp = False
 
     def __init__(self, records, model, layer_path, text='Edit bookmarks'):
         """
@@ -850,6 +904,7 @@ class SetWires(NxtCommand):
 
     """Change how lines are drawn on one layer: the graph's style, and the
     points lines are routed through."""
+    changes_comp = False
 
     def __init__(self, model, layer_path, points=None, style=None,
                  text='Edit connection points', preference=None):
@@ -1301,9 +1356,9 @@ class ParentNodes(NxtCommand):
             if not node_hierarchy_data:
                 return
         # parent
-        self.node_path_data = self.stage.parent_nodes(nodes,
-                                                      self.parent_node_path,
-                                                      layer)
+        self.node_path_data = self.stage.parent_nodes(
+            nodes, self.parent_node_path, layer,
+            **self.model.comp_of_every_layer())
         self.new_node_paths = list(self.node_path_data.values())
         if refactor_instance_paths(self.stage):
             self.instance_path_changes = self.stage.retarget_instance_paths(
@@ -1528,6 +1583,7 @@ class SetNodeEnabledState(SetNodeAttributeValue):
 class SetNodeCollapse(NxtCommand):
 
     """Set the node collapse state"""
+    changes_comp = False
 
     def __init__(self, node_paths, value,
                  model, layer_path):
@@ -2292,6 +2348,7 @@ class SoloToggleLayer(NxtCommand):
 
 
 class SetLayerColor(NxtCommand):
+    changes_comp = False
     def __init__(self, color, layer_path, model):
         """Sets the color for a given layer, if the layer is not a top layer
         the top layer store an overrides.
@@ -2331,6 +2388,7 @@ class SetLayerColor(NxtCommand):
 
 
 class SetLayerLock(NxtCommand):
+    changes_comp = False
     def __init__(self, lock, layer_path, model):
         """Sets the color for a given layer, if the layer is not a top layer
         the top layer store an overrides.
