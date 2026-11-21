@@ -164,5 +164,54 @@ class TestLongLogs(OutputLogTestCase):
         self.assertEqual(tall, bar.maximum())
 
 
+class TestPrintedOutput(OutputLogTestCase):
+    """Printed output is gathered and written to the logs together. Written
+    a piece at a time, a node that printed a line at a time ran hundreds of
+    times slower in the editor than on its own."""
+
+    def setUp(self):
+        self.log.flush_output()
+        super(TestPrintedOutput, self).setUp()
+
+    def lines(self):
+        return self.log.raw_output_textedit.toPlainText().splitlines()
+
+    def wait_for_flush(self):
+        timer = QtCore.QElapsedTimer()
+        timer.start()
+        while timer.elapsed() < self.log.FLUSH_MS * 4:
+            app.processEvents()
+
+    def test_output_is_written_together(self):
+        writes = []
+        write = self.log._write_raw_output
+        self.log._write_raw_output = lambda val: (writes.append(val),
+                                                  write(val))
+        try:
+            for i in range(500):
+                self.log.write_raw_output('line')
+                self.log.write_raw_output(' %d\n' % i)
+            self.wait_for_flush()
+        finally:
+            del self.log._write_raw_output
+        self.assertEqual(1, len(writes))
+        self.assertEqual(['line %d' % i for i in range(500)], self.lines())
+
+    def test_output_shows_without_a_log_record(self):
+        self.log.write_raw_output('on its own\n')
+        self.wait_for_flush()
+        self.assertEqual(['on its own'], self.lines())
+        self.assertEqual([], self.log.pending_output)
+
+    def test_a_log_record_comes_after_the_output_before_it(self):
+        self.log.write_raw_output('before\n', 1.0)
+        self.log.write_raw_output('after\n', 3.0)
+        self.log.flush_output(until=2.0)
+        self.assertEqual(['before'], self.lines())
+        self.assertEqual([('after\n', 3.0)], self.log.pending_output)
+        self.log.flush_output()
+        self.assertEqual(['before', 'after'], self.lines())
+
+
 if __name__ == '__main__':
     unittest.main()
