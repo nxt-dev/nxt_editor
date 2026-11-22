@@ -133,6 +133,32 @@ class ExpandBig(unittest.TestCase):
         self.assertTrue(partway, shown)
 
 
+class SelectedUnderACollapse(ExpandBig):
+    """Nodes selected when a node above them is collapsed stay selected,
+    hidden, and changing the selection no longer reports them as lost.
+    Expanding shows them selected again."""
+
+    # Only the test below, not those of ExpandBig again.
+    test_a_shift_expand_draws_everything_once = None
+    test_the_outliner_expands_the_same_way = None
+    test_a_big_expand_is_shown_as_it_goes = None
+
+    SELECTED = ['/rig/c0/c0', '/rig/c0/c0/c1', '/rig/c1/c2']
+
+    def test_hidden_selected_nodes_are_not_errors(self):
+        self.model.set_selection(self.SELECTED)
+        app.processEvents()
+        self.collapse_all()
+        with self.assertNoLogs('nxt', level='ERROR'):
+            self.model.add_to_selection(['/rig'])
+            app.processEvents()
+        self.view.get_node_graphic('/rig').collapse_node(recursive=True)
+        app.processEvents()
+        for path in self.SELECTED:
+            self.assertTrue(self.view.get_node_graphic(path).isSelected(),
+                            path)
+
+
 class HoldingPrefs(unittest.TestCase):
 
     def test_a_pref_file_is_looked_at_once_while_held(self):

@@ -1115,6 +1115,9 @@ class StageView(QtWidgets.QGraphicsView):
         if graphic.scene() != self.scene():
             self.scene().addItem(graphic)
             graphic.setZValue(self.NODE_DEPTH)
+            # Selected while a node above it was collapsed.
+            if self.model.is_selected(node_path):
+                graphic.setSelected(True)
         for attr_concerns in self._attr_concerns.get(node_path, {}).values():
             for desire in attr_concerns:
                 des_node, des_attr = desire
@@ -3062,8 +3065,13 @@ class StageView(QtWidgets.QGraphicsView):
                 continue
             # TODO Track connections by target path to allow attr connections
             #  to be added here.
-            if path != nxt_path.WORLD:
-                logger.error("Cannot find item to select: " + str(path))
+            if path == nxt_path.WORLD:
+                continue
+            if self.model.get_collapsed_ancestor(path):
+                # Stays selected while a node above it is collapsed, and
+                # is shown selected again when it is expanded.
+                continue
+            logger.error("Cannot find item to select: " + str(path))
 
     #: An expand drawing more nodes than this shows them as it goes, see
     #: handle_nodes_changed.
