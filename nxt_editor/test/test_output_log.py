@@ -1,5 +1,6 @@
 """The Output Log following new text, and how it lays out long lines."""
 # Builtin
+import logging
 import os
 import sys
 import unittest
@@ -211,6 +212,61 @@ class TestPrintedOutput(OutputLogTestCase):
         self.assertEqual([('after\n', 3.0)], self.log.pending_output)
         self.log.flush_output()
         self.assertEqual(['before', 'after'], self.lines())
+
+
+class TestAFailedWrite(unittest.TestCase):
+    """A record the log fails to show is reported once, outside the log.
+
+    Reported by logging it, it came back to the log, failed again and so
+    on, until the stack ran out and took the host down with it.
+    """
+
+    class FailingLog(object):
+        def __init__(self, gone=False):
+            self.gone = gone
+            self.writes = 0
+
+        def objectName(self):
+            if self.gone:
+                raise RuntimeError('Internal C++ object already deleted.')
+            return 'log'
+
+        def flush_output(self, until=None):
+            pass
+
+        def write_rich_output(self, text, level=None):
+            self.writes += 1
+            raise RuntimeError('could not write')
+
+    def setUp(self):
+        from unittest import mock
+        from nxt_editor.dockwidgets.output_log import VisualLogHandler
+        self.nxt_logger = logging.getLogger('nxt')
+        self.handler_type = VisualLogHandler
+        patch = mock.patch.object(VisualLogHandler, 'handleError')
+        self.handle_error = patch.start()
+        self.addCleanup(patch.stop)
+
+    def attach(self, output_log):
+        handler = self.handler_type(output_log)
+        self.nxt_logger.addHandler(handler)
+        self.addCleanup(self.nxt_logger.removeHandler, handler)
+        return handler
+
+    def test_is_reported_once(self):
+        output_log = self.FailingLog()
+        handler = self.attach(output_log)
+        self.nxt_logger.error('shown')
+        self.assertEqual(1, output_log.writes)
+        self.assertEqual(1, self.handle_error.call_count)
+        self.assertIn(handler, self.nxt_logger.handlers)
+
+    def test_a_log_that_is_gone_is_let_go(self):
+        output_log = self.FailingLog(gone=True)
+        handler = self.attach(output_log)
+        self.nxt_logger.error('shown')
+        self.assertEqual(0, self.handle_error.call_count)
+        self.assertNotIn(handler, self.nxt_logger.handlers)
 
 
 if __name__ == '__main__':
