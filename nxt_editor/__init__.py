@@ -13,7 +13,12 @@ except Exception as _error:
         'Could not add the optional components to the path: %s', _error)
 
 # External
+import Qt as _Qt
 from Qt import QtCompat, QtCore, QtWidgets, QtGui
+
+# Before anything Qt calls back into Python, see pyside_refcount.
+from nxt_editor import pyside_refcount as _pyside_refcount
+_pyside_refcount.protect_if_needed(_Qt.__binding__)
 
 # Internal
 import nxt
