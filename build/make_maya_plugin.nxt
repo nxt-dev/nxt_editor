@@ -146,7 +146,11 @@
                 "    if os.path.isdir('${src_clone}'):",
                 "        shutil.rmtree('${src_clone}')",
                 "    execute(start='${clone_node}')",
-                "    shutil.copytree('${path::${src_clone}/nxt}', '${core_script_src}')"
+                "    shutil.copytree('${path::${src_clone}/nxt}', '${core_script_src}')",
+                "",
+                "# The native modules for the faster comp engine, see native_builds.",
+                "import runpy",
+                "runpy.run_path('${path::native_builds.py}')['add_missing']('${core_script_src}')"
             ]
         },
         "/make_module_folder/populate_mod_template": {

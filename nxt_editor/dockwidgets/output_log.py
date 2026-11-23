@@ -22,6 +22,15 @@ from nxt_editor import LoggingSignaler, colors
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
+def _alive(qobject):
+    """Whether the Qt object behind a wrapper still exists."""
+    try:
+        qobject.objectName()
+    except RuntimeError:
+        return False
+    return True
+
+
 class VisualLogHandler(logging.Handler):
     def __init__(self, output_log):
         logging.Handler.__init__(self)
@@ -116,11 +125,22 @@ class VisualLogHandler(logging.Handler):
         self.signaller.signal.emit(record)
 
     def update(self, record):
-        # Printed output from before the record goes above it.
-        self.target_output_log.flush_output(until=record.created)
-        text = self.format(record)
-        text += '\n'
-        self.target_output_log.write_rich_output(text, level=record.levelno)
+        # A failure here was handed to the editor's excepthook, which logs
+        # it, back to here, until the stack ran out and took the host down.
+        # It is reported the way logging reports a failed handler, outside
+        # the log, and a log whose window is gone stops being written to.
+        try:
+            # Printed output from before the record goes above it.
+            self.target_output_log.flush_output(until=record.created)
+            text = self.format(record)
+            text += '\n'
+            self.target_output_log.write_rich_output(text,
+                                                     level=record.levelno)
+        except Exception:
+            if not _alive(self.target_output_log):
+                logging.getLogger('nxt').removeHandler(self)
+                return
+            self.handleError(record)
 
 
 class WriteDuper(QtCore.QObject):

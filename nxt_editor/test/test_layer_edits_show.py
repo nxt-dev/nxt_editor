@@ -120,6 +120,9 @@ class LayerEditsShow(unittest.TestCase):
         self.check_edit(lambda: self.model.revert_nodes(
             ['/b'], layer=self.model.top_layer))
 
+    def test_reverting_a_node_on_the_target_layer(self):
+        self.check_edit(lambda: self.model.revert_nodes(['/b']))
+
     def test_deleting_a_node(self):
         self.check_edit(lambda: self.model.delete_nodes(['/b']))
 

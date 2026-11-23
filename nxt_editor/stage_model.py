@@ -1797,6 +1797,7 @@ class StageModel(QtCore.QObject):
             layer_path = layer.real_path
         else:
             layer_path = LAYERS.TARGET
+            layer = self.target_layer
         safe_node_paths = []
         for node_path in node_paths:
             node = layer.lookup(node_path)
