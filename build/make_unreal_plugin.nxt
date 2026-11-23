@@ -67,6 +67,9 @@
                 "python_dir = os.path.join('${result_dir}', 'Content', 'Python')",
                 "shutil.copytree('${editor_dir}', os.path.join(python_dir, 'nxt_editor'), ignore=junk)",
                 "shutil.copytree('${core_dir}', os.path.join(python_dir, 'nxt'), ignore=junk)",
+                "# The native modules for the faster comp engine, see native_builds.",
+                "import runpy",
+                "runpy.run_path('${path::native_builds.py}')['add_missing'](os.path.join(python_dir, 'nxt'))",
                 "os.makedirs(os.path.join(python_dir, 'Qt'))",
                 "shutil.copyfile('${qt_py}', os.path.join(python_dir, 'Qt', '__init__.py'))"
             ]

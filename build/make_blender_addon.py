@@ -18,6 +18,10 @@ import zipfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD = os.path.join(REPO, 'build')
+sys.path.insert(0, BUILD)
+
+import native_builds  # noqa: E402
+
 ADDON = os.path.join(BUILD, 'nxt_blender')
 ZIP_PATH = os.path.join(BUILD, 'nxt_blender.zip')
 INTEGRATION = os.path.join(REPO, 'nxt_editor', 'integration', 'blender')
@@ -44,6 +48,7 @@ def build(core_dir):
     shutil.copytree(os.path.join(REPO, 'nxt_editor'),
                     os.path.join(lib, 'nxt_editor'), ignore=JUNK)
     shutil.copytree(core_dir, os.path.join(lib, 'nxt'), ignore=JUNK)
+    native_builds.add_missing(os.path.join(lib, 'nxt'))
     qt_py = os.path.join(lib, 'Qt', '__init__.py')
     os.makedirs(os.path.dirname(qt_py))
     shutil.copyfile(os.path.join(BUILD, 'vendor', 'Qt.py'), qt_py)

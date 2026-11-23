@@ -7,6 +7,11 @@ Each item links to the part of the docs that explains it in full.
 ## Unreleased
 
 **New**
+- **A faster comp engine.** Graphs are composited by a compiled module, two
+  to three times faster on big graphs, with exactly the same result. It is
+  on by default in every release, for Windows, macOS and Linux and in
+  Maya, Unreal and Blender, and `nxt --version` says whether it is in use.
+  See [The faster comp engine](install.md#the-faster-comp-engine).
 - **Preferences moved to Edit > Preferences...** (`Ctrl+,`), and the
   Options menu is gone. Everything it held is in Preferences: the error
   sound and the other toggles in their sections, and the AI Assistant,

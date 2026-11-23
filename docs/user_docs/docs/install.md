@@ -9,7 +9,8 @@ nxt comes in two packages:
 
 The editor uses [Qt.py](https://github.com/mottosso/Qt.py) on top of
 PySide6, both of which pip installs for you. The same release runs on
-Windows, macOS and Linux; nothing is compiled per platform.
+Windows, macOS and Linux, and carries nxt's
+[faster comp engine](#the-faster-comp-engine) built for each of them.
 
 !!! note "PySide6 6.12"
     nxt-editor asks pip for a PySide6 below 6.12, because the editor has not
@@ -50,6 +51,42 @@ pip install git+https://github.com/nxt-dev/nxt_editor.git@{ tag name }
 ```
 
 Omit `@{ tag name }` to get the latest from the `release` branch.
+
+## The faster comp engine
+
+nxt composites graphs, working out what every node ends up with from its
+layers, parents and instances, with a compiled module written in Rust. On a
+big graph that is two to three times faster, so graphs open, save and run
+sooner. It gives exactly what nxt's Python code gives, so nothing about a
+graph changes, only how long it takes.
+
+It is on by default, and there is nothing to install or set:
+
+- `pip install nxt-core` or `pip install nxt-editor` carries it for
+  Windows (x86_64), macOS (Intel and Apple silicon) and Linux (x86_64 and
+  ARM64), for Python 3.10 to 3.13.
+- The [Maya](#maya), [Unreal](#unreal) and [Blender](#blender) zips carry
+  it too, so it runs inside the host.
+- An install from GitHub builds it for your machine during the install
+  when [Rust](https://rustup.rs) is installed. Without Rust the install
+  still works, and nxt runs on its Python code. In a checkout of nxt,
+  build it with `python native/build.py`.
+
+To see which engine you have, run `nxt --version`. It ends with
+`Comp native` when the faster engine is in use, or `Comp python` and the
+reason when it isn't.
+
+nxt uses its Python code instead, with the same result, whenever the
+faster engine can't help:
+
+- There is no build for your platform, or it doesn't load, or it is from
+  another version of nxt.
+- It fails while working. nxt logs one warning and uses the Python code
+  for the rest of the session.
+- A graph it doesn't composite yet, such as one that has never been saved.
+
+To turn it off, set the environment variable `NXT_COMP_ENGINE=python`.
+`NXT_NO_NATIVE=1` turns off everything the compiled module does.
 
 ---
 
