@@ -33,6 +33,12 @@ PREF = user_dir.USER_PREF
 REAL_FIND_CLI = claude_code.find_cli
 
 
+def find_cli_now():
+    """Claude Code looked for again, not what was found before."""
+    claude_code._found['at'] = 0
+    return REAL_FIND_CLI()
+
+
 def setUpModule():
     providers._models.clear()
     # Whether this computer has Claude Code or Codex is not up to the
@@ -636,10 +642,10 @@ class ClaudeCodeTests(unittest.TestCase):
                                return_value=None),                 mock.patch.object(claude_code, '_install_places',
                                   return_value=['/nope/claude', cli]),                 mock.patch.object(user_dir.user_prefs, 'get',
                                   return_value=None):
-            self.assertEqual(cli, REAL_FIND_CLI())
+            self.assertEqual(cli, find_cli_now())
             with mock.patch.object(claude_code, '_install_places',
                                    return_value=[]):
-                self.assertIsNone(REAL_FIND_CLI())
+                self.assertIsNone(find_cli_now())
 
     def test_a_chosen_claude_code_comes_first(self):
         folder = tempfile.mkdtemp()
@@ -648,7 +654,7 @@ class ClaudeCodeTests(unittest.TestCase):
         open(cli, 'w').close()
         with mock.patch.object(user_dir.user_prefs, 'get',
                                return_value=cli):
-            self.assertEqual(cli, REAL_FIND_CLI())
+            self.assertEqual(cli, find_cli_now())
 
     def test_the_api_gets_a_real_model_for_an_alias(self):
         claude = providers.Anthropic(store=memory_store(), prefs={})
@@ -913,6 +919,53 @@ class SettingsDialogTests(unittest.TestCase):
             if box.provider.id == provider_id:
                 return box
 
+    def test_no_part_of_it_shows_as_a_window_of_its_own(self):
+        self.dialog.done(0)
+        windows = []
+
+        class Watch(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                if (event.type() == QtCore.QEvent.Show and
+                        isinstance(obj, QtWidgets.QWidget) and
+                        obj.isWindow()):
+                    windows.append(obj.metaObject().className())
+                return False
+
+        watch = Watch()
+        app.installEventFilter(watch)
+        self.addCleanup(app.removeEventFilter, watch)
+        self.dialog = self.make_dialog()
+        self.dialog.show()
+        app.processEvents()
+        self.assertEqual(['AiSettingsDialog'], windows)
+
+    def test_claude_code_is_asked_who_is_signed_in_off_the_ui_thread(self):
+        asked = []
+        answer = threading.Event()
+
+        def check(_cancelled=None):
+            asked.append(threading.current_thread())
+            answer.wait(5)
+
+        self.dialog.done(0)
+        with mock.patch.object(claude_code, 'answers_now',
+                               return_value=False), \
+                mock.patch.object(providers, 'check_sign_ins', check):
+            self.dialog = self.make_dialog()
+            box = self.box('anthropic')
+            self.assertIn('Asking Claude Code', box.status_label.text())
+            self.assertFalse(box.web_button.isEnabled())
+            changed = []
+            self.dialog.settings_changed.connect(lambda: changed.append(1))
+        answer.set()
+        deadline = time.time() + 5
+        while not changed and time.time() < deadline:
+            app.processEvents()
+        self.assertEqual(1, len(asked))
+        self.assertIsNot(threading.main_thread(), asked[0])
+        self.assertTrue(changed)
+        self.assertNotIn('Asking', box.status_label.text())
+
     def test_it_is_off_until_turned_on(self):
         self.dialog.done(0)
         self.prefs.clear()
@@ -958,7 +1011,9 @@ class SettingsDialogTests(unittest.TestCase):
                 mock.patch.object(providers.Anthropic, 'finish_sign_in',
                                   return_value=record) as finish, \
                 mock.patch.object(claude_code, 'signed_in',
-                                  return_value=None):
+                                  return_value=None), \
+                mock.patch.object(claude_code, 'answers_now',
+                                  return_value=True):
             box.refresh()
             self.assertEqual('Sign in with Claude Code',
                              box.web_button.text())
@@ -973,7 +1028,9 @@ class SettingsDialogTests(unittest.TestCase):
         with mock.patch.object(claude_code, 'find_cli',
                                return_value='claude'), \
                 mock.patch.object(claude_code, 'signed_in',
-                                  return_value=record):
+                                  return_value=record), \
+                mock.patch.object(claude_code, 'answers_now',
+                                  return_value=True):
             box.refresh()
             self.assertEqual('Switch Account', box.web_button.text())
             self.assertTrue(box.sign_out_button.isEnabled())
@@ -985,7 +1042,9 @@ class SettingsDialogTests(unittest.TestCase):
         with mock.patch.object(claude_code, 'find_cli',
                                return_value='claude'), \
                 mock.patch.object(claude_code, 'signed_in',
-                                  return_value=record):
+                                  return_value=record), \
+                mock.patch.object(claude_code, 'answers_now',
+                                  return_value=True):
             self.dialog.show()
             app.processEvents()
         self.assertIn('me@example.com', box.status_label.text())

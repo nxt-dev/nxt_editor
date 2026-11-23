@@ -101,8 +101,10 @@ Requirements:
 - Qt through [Qt.py](https://github.com/mottosso/Qt.py) (below 3) on
   [PySide6](https://doc.qt.io/qtforpython-6/) (6.x, below 6.12). pip
   installs both.
-- Windows, macOS or Linux. nxt is pure Python: the same release runs on
-  every platform and in every host, with nothing compiled.
+- Windows, macOS or Linux. The same release runs on every platform and in
+  every host. It carries a faster comp engine, compiled in Rust for each
+  of them, and works the same without it, see
+  [The faster comp engine](docs/user_docs/docs/install.md#the-faster-comp-engine).
 
 We recommend a [virtual environment](https://docs.python.org/3/library/venv.html).
 
@@ -123,6 +125,10 @@ pip install "nxt-editor[completion]"
 The PyPI release can be behind this repository. For the newest code,
 install from git.
 
+`nxt --version` ends with `Comp native` when graphs are composited by the
+faster engine. `NXT_COMP_ENGINE=python` composites with the Python code
+instead.
+
 ### From git
 
 Install the core from the same branch first, so the editor gets the core it
@@ -132,6 +138,10 @@ was developed against:
 pip install git+https://github.com/nxt-dev/nxt.git@dev
 pip install git+https://github.com/nxt-dev/nxt_editor.git@dev
 ```
+
+With [Rust](https://rustup.rs) installed, the core install builds the
+faster comp engine for your machine. Without it, nxt runs on its Python
+code, slower on big graphs and otherwise the same.
 
 Use `@release` for the latest release, or a tag name for a specific one.
 

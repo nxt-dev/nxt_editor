@@ -22,6 +22,15 @@ from nxt_editor import LoggingSignaler, colors
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
 
+def _alive(qobject):
+    """Whether the Qt object behind a wrapper still exists."""
+    try:
+        qobject.objectName()
+    except RuntimeError:
+        return False
+    return True
+
+
 class VisualLogHandler(logging.Handler):
     def __init__(self, output_log):
         logging.Handler.__init__(self)
@@ -116,9 +125,22 @@ class VisualLogHandler(logging.Handler):
         self.signaller.signal.emit(record)
 
     def update(self, record):
-        text = self.format(record)
-        text += '\n'
-        self.target_output_log.write_rich_output(text, level=record.levelno)
+        # A failure here was handed to the editor's excepthook, which logs
+        # it, back to here, until the stack ran out and took the host down.
+        # It is reported the way logging reports a failed handler, outside
+        # the log, and a log whose window is gone stops being written to.
+        try:
+            # Printed output from before the record goes above it.
+            self.target_output_log.flush_output(until=record.created)
+            text = self.format(record)
+            text += '\n'
+            self.target_output_log.write_rich_output(text,
+                                                     level=record.levelno)
+        except Exception:
+            if not _alive(self.target_output_log):
+                logging.getLogger('nxt').removeHandler(self)
+                return
+            self.handleError(record)
 
 
 class WriteDuper(QtCore.QObject):
@@ -196,6 +218,11 @@ class OutputLog(DockWidgetBase):
     write_raw = QtCore.Signal(str, float)
     #: Lines each log keeps. Older ones are dropped from the top.
     MAX_LINES = 10000
+    #: How long printed output gathers before it is written to the logs, in
+    #: ms. A print is several writes, and each write laid the logs out
+    #: again, so a node that printed a line at a time ran hundreds of times
+    #: slower in the editor than on its own.
+    FLUSH_MS = 50
 
     def __init__(self, graph_model=None, parent=None):
         super(OutputLog, self).__init__('Output Log', graph_model=graph_model,
@@ -272,6 +299,12 @@ class OutputLog(DockWidgetBase):
         self.wrap_action.toggled.connect(self.set_wrap_lines)
         self.set_wrap_lines(self.wrap_action.isChecked(), save=False)
 
+        # Output waiting to be written, see write_raw_output.
+        self.pending_output = []
+        self.flush_timer = QtCore.QTimer(self)
+        self.flush_timer.setSingleShot(True)
+        self.flush_timer.setInterval(self.FLUSH_MS)
+        self.flush_timer.timeout.connect(self.flush_output)
         self.log_watcher = None
         self.wrapped_stdout = None
         self.wrapped_stderr = None
@@ -381,17 +414,71 @@ class OutputLog(DockWidgetBase):
         :param val: Text to add to textedit
         :type val: str
         """
-        self._write_raw_output(val)
+        # Gathered and written together, see flush_output.
+        self.pending_output.append((val, msg_time))
+        if not self.flush_timer.isActive():
+            self.flush_timer.start()
+
+    def flush_output(self, until=None):
+        """Write the output gathered by write_raw_output to the logs, all of
+        it at once.
+
+        :param until: only what was written up to this time, so that a log
+            record written next goes after it and before the rest
+        :type until: float
+        """
+        pending = self.pending_output
+        if not pending:
+            return
+        cut = len(pending)
+        if until is not None:
+            while cut and pending[cut - 1][1] > until:
+                cut -= 1
+        now, self.pending_output = pending[:cut], pending[cut:]
+        if not self.pending_output:
+            self.flush_timer.stop()
+        if not now:
+            return
+        self._write_raw_output(''.join(val for val, _ in now))
         if not self.stage_model:
             return
         curr_rt_layer = self.stage_model.current_rt_layer
-        if not (curr_rt_layer and
-                curr_rt_layer.cache_layer.was_during_node_exec(msg_time)):
+        if not curr_rt_layer:
             return
-        if self.log_filter_button.is_level_enabled(nxt_log.NODEOUT):
-            # Intentionally breaking html syntax here. Printing type(object)
-            # was being interpreted as html. <class 'type'>
-            self.write_rich_output(val.replace('<', '&lt;'))
+        if not self.log_filter_button.is_level_enabled(nxt_log.NODEOUT):
+            return
+        during = curr_rt_layer.cache_layer.was_during_node_exec
+        node_output = []
+        for val, msg_time in now:
+            if during(msg_time):
+                node_output.append(val)
+            elif node_output:
+                self._write_node_output(''.join(node_output))
+                node_output = []
+        if node_output:
+            self._write_node_output(''.join(node_output))
+
+    def set_stage_model(self, stage_model):
+        # Gathered output is told apart by the runs of the model it was
+        # gathered under.
+        self.flush_output()
+        super(OutputLog, self).set_stage_model(stage_model)
+
+    def set_stage_model_connections(self, model, connect):
+        self.model_signal_connections = [
+            (model.about_to_execute, self.on_about_to_execute),
+        ]
+        super(OutputLog, self).set_stage_model_connections(model, connect)
+
+    def on_about_to_execute(self, *_args):
+        # Output gathered from the last run is told apart by that run's
+        # node times, before a new run takes their place.
+        self.flush_output()
+
+    def _write_node_output(self, text):
+        # Intentionally breaking html syntax here. Printing type(object)
+        # was being interpreted as html. <class 'type'>
+        self.write_rich_output(text.replace('<', '&lt;'))
 
     def _write_raw_output(self, val):
         """Write text to the raw output textedit. Dose NOT write to the rich
@@ -489,6 +576,7 @@ class OutputLog(DockWidgetBase):
         super(OutputLog, self).showEvent(event)
 
     def closeEvent(self, event):
+        self.flush_output()
         if self.log_watcher:
             self.log_watcher.requestInterruption()
         self.detach_from_logging()

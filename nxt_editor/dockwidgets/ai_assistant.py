@@ -22,7 +22,7 @@ from nxt_editor import theme, user_dir
 from nxt_editor.ai import (chat_render, chats, claude_code, codex, context,
                            graph_actions, providers, tools)
 from nxt_editor.ai.memory import Memory
-from nxt_editor.ai.workers import ChatThread, TaskThread
+from nxt_editor.ai.workers import ChatThread, SignInCheck, TaskThread
 from nxt_editor.dockwidgets.dock_widget_base import DockWidgetBase
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
@@ -165,6 +165,8 @@ class AiAssistant(DockWidgetBase):
         layout.addLayout(top)
 
         self.account_label = QtWidgets.QLabel()
+        self.sign_in_check = SignInCheck(self)
+        self.sign_in_check.known.connect(self.on_sign_ins_known)
         self.account_label.setObjectName('aiMuted')
         self.account_label.setWordWrap(True)
         layout.addWidget(self.account_label)
@@ -354,7 +356,12 @@ class AiAssistant(DockWidgetBase):
                                       prefs=self.prefs)
 
     def refresh_providers(self):
-        """Show what is set up. Called again when the settings change."""
+        """Show what is set up. Called again when the settings change.
+        Claude Code and Codex are asked who is signed in off the UI thread
+        first, when what they said is not known."""
+        if not self.sign_in_check.start():
+            self.account_label.setText('Checking who is signed in...')
+            return
         current = (self.provider_combo.currentData() or
                    self.prefs.get(user_dir.USER_PREF.AI_PROVIDER))
         self.provider_combo.blockSignals(True)
@@ -384,6 +391,10 @@ class AiAssistant(DockWidgetBase):
                 '<a href="settings">Open the AI Assistant settings</a>.')
             self.setup_label.show()
         self.on_provider_changed()
+
+    def on_sign_ins_known(self):
+        if not self.busy:
+            self.refresh_providers()
 
     def on_provider_changed(self, *_args):
         provider = self.provider()

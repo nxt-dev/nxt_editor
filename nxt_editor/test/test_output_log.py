@@ -1,5 +1,6 @@
 """The Output Log following new text, and how it lays out long lines."""
 # Builtin
+import logging
 import os
 import sys
 import unittest
@@ -162,6 +163,110 @@ class TestLongLogs(OutputLogTestCase):
         tall = bar.maximum()
         self.resize_log(500)
         self.assertEqual(tall, bar.maximum())
+
+
+class TestPrintedOutput(OutputLogTestCase):
+    """Printed output is gathered and written to the logs together. Written
+    a piece at a time, a node that printed a line at a time ran hundreds of
+    times slower in the editor than on its own."""
+
+    def setUp(self):
+        self.log.flush_output()
+        super(TestPrintedOutput, self).setUp()
+
+    def lines(self):
+        return self.log.raw_output_textedit.toPlainText().splitlines()
+
+    def wait_for_flush(self):
+        timer = QtCore.QElapsedTimer()
+        timer.start()
+        while timer.elapsed() < self.log.FLUSH_MS * 4:
+            app.processEvents()
+
+    def test_output_is_written_together(self):
+        writes = []
+        write = self.log._write_raw_output
+        self.log._write_raw_output = lambda val: (writes.append(val),
+                                                  write(val))
+        try:
+            for i in range(500):
+                self.log.write_raw_output('line')
+                self.log.write_raw_output(' %d\n' % i)
+            self.wait_for_flush()
+        finally:
+            del self.log._write_raw_output
+        self.assertEqual(1, len(writes))
+        self.assertEqual(['line %d' % i for i in range(500)], self.lines())
+
+    def test_output_shows_without_a_log_record(self):
+        self.log.write_raw_output('on its own\n')
+        self.wait_for_flush()
+        self.assertEqual(['on its own'], self.lines())
+        self.assertEqual([], self.log.pending_output)
+
+    def test_a_log_record_comes_after_the_output_before_it(self):
+        self.log.write_raw_output('before\n', 1.0)
+        self.log.write_raw_output('after\n', 3.0)
+        self.log.flush_output(until=2.0)
+        self.assertEqual(['before'], self.lines())
+        self.assertEqual([('after\n', 3.0)], self.log.pending_output)
+        self.log.flush_output()
+        self.assertEqual(['before', 'after'], self.lines())
+
+
+class TestAFailedWrite(unittest.TestCase):
+    """A record the log fails to show is reported once, outside the log.
+
+    Reported by logging it, it came back to the log, failed again and so
+    on, until the stack ran out and took the host down with it.
+    """
+
+    class FailingLog(object):
+        def __init__(self, gone=False):
+            self.gone = gone
+            self.writes = 0
+
+        def objectName(self):
+            if self.gone:
+                raise RuntimeError('Internal C++ object already deleted.')
+            return 'log'
+
+        def flush_output(self, until=None):
+            pass
+
+        def write_rich_output(self, text, level=None):
+            self.writes += 1
+            raise RuntimeError('could not write')
+
+    def setUp(self):
+        from unittest import mock
+        from nxt_editor.dockwidgets.output_log import VisualLogHandler
+        self.nxt_logger = logging.getLogger('nxt')
+        self.handler_type = VisualLogHandler
+        patch = mock.patch.object(VisualLogHandler, 'handleError')
+        self.handle_error = patch.start()
+        self.addCleanup(patch.stop)
+
+    def attach(self, output_log):
+        handler = self.handler_type(output_log)
+        self.nxt_logger.addHandler(handler)
+        self.addCleanup(self.nxt_logger.removeHandler, handler)
+        return handler
+
+    def test_is_reported_once(self):
+        output_log = self.FailingLog()
+        handler = self.attach(output_log)
+        self.nxt_logger.error('shown')
+        self.assertEqual(1, output_log.writes)
+        self.assertEqual(1, self.handle_error.call_count)
+        self.assertIn(handler, self.nxt_logger.handlers)
+
+    def test_a_log_that_is_gone_is_let_go(self):
+        output_log = self.FailingLog(gone=True)
+        handler = self.attach(output_log)
+        self.nxt_logger.error('shown')
+        self.assertEqual(0, self.handle_error.call_count)
+        self.assertNotIn(handler, self.nxt_logger.handlers)
 
 
 if __name__ == '__main__':

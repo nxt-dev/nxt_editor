@@ -5,7 +5,9 @@ import traceback
 import math
 import socket
 import pickle
+import inspect
 import sys
+import time
 
 # External
 from Qt import QtWidgets
@@ -35,6 +37,17 @@ from nxt.remote import nxt_socket
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 LAYER_DATA_KEYS = ['position_data', 'enabled_data', 'execute_data' 'break_data']
+#: Set to 1 to composite the graph again for each run, as the editor once
+#: did, rather than run in a copy of the comp it shows.
+RECOMP_ENV_VAR = 'NXT_EXEC_RECOMP'
+#: How long after an edit leaves the comp stale it is built again, when
+#: that is quick enough not to be noticed, in ms and seconds.
+STALE_COMP_MS = 600
+QUICK_COMP_SECONDS = 0.25
+#: Set to 1 to check each run's copy against a fresh comp of the graph.
+#: Where they differ the run is in the fresh comp, and what differs is
+#: logged.
+CHECK_COMP_ENV_VAR = 'NXT_EXEC_CHECK_COMP'
 
 
 class EXEC_FRAMING:
@@ -156,6 +169,24 @@ class StageModel(QtCore.QObject):
         # the comp_layer property.
         self._comp_layer = None
         self._comp_generation = 0
+        # Whether the comp is the same as a fresh comp of the graph, see
+        # comp_is_exact.
+        self._comp_exact = False
+        self._comp_builds = 0
+        self._comp_patches = 0
+        self._drawn_layers = None
+        self._drawn_specs = None
+        # How long the last comp took, see refresh_stale_comp.
+        self._comp_seconds = None
+        # A fresh comp made for a run, to show once the run is done, see
+        # new_runtime_layer.
+        self._fresh_comp = None
+        self.stale_comp_timer = QtCore.QTimer(self)
+        self.stale_comp_timer.setSingleShot(True)
+        self.stale_comp_timer.setInterval(STALE_COMP_MS)
+        self.stale_comp_timer.timeout.connect(self.refresh_stale_comp)
+        self.nodes_changed.connect(self.mark_comp_patched)
+        self.attrs_changed.connect(self.mark_comp_patched)
         self._target_layer = stage.top_layer
         self._display_layer = stage.top_layer
         # selection
@@ -538,10 +569,159 @@ class StageModel(QtCore.QObject):
         an edit replaces it.
         """
         if self._comp_layer is None:
-            self._comp_layer = self.stage.build_stage(
-                from_idx=self._display_layer.layer_idx())
+            self._comp_layer = self.build_comp(
+                self._display_layer.layer_idx())
             self._comp_generation += 1
+            self.comp_built()
         return self._comp_layer
+
+    def build_comp(self, from_idx):
+        """A new comp of the layers from from_idx, timed."""
+        start = time.time()
+        comp = self.stage.build_stage(from_idx=from_idx)
+        self._comp_seconds = time.time() - start
+        return comp
+
+    @property
+    def comp_is_exact(self):
+        """Whether the comp is the same as a fresh comp of the graph.
+
+        It is right after it is built. Most edits change it in place, and
+        some of those leave a node that inherits from the edited one as it
+        was, so after one it is no longer counted on. A run copies the comp
+        only while it is exact, see new_runtime_layer.
+        """
+        return self._comp_exact
+
+    def comp_built(self):
+        """The comp was just built from the layers."""
+        self._comp_exact = True
+        self._comp_builds += 1
+        self._drawn_layers = self.layers_as_drawn()
+        self._drawn_specs = self.specs_as_drawn()
+
+    def specs_as_drawn(self):
+        """The values of every node of the layers, as the comp was built
+        from them. An edit can change a layer's node and build the comp
+        again, and the old comp and the new inherit from that same node, so
+        only this says it changed."""
+        specs = {}
+        comp = self._comp_layer
+        if comp is None:
+            return specs
+        for table in comp._sublayer_node_tables:
+            for _path, node in table:
+                specs[node] = {k: (list(v) if type(v) is list else v)
+                               for k, v in node.__dict__.items()}
+        return specs
+
+    def layers_as_drawn(self):
+        """What of the layers, beyond their nodes, every node is drawn
+        with: which there are, in order, and their colors, mute and solo.
+        """
+        layers = []
+        for layer in self.stage._sub_layers:
+            layers.append((layer.real_path, layer.get_alias(),
+                           layer.get_muted(), layer.get_soloed(),
+                           self.get_layer_color(layer)))
+        return tuple(layers)
+
+    def changed_since(self, old, old_layers, new, old_specs=None):
+        """The nodes to draw again for the comp new, built in place of old.
+
+        Drawing every node again, for a graph of thousands, took longer
+        than anything else in the edit. Few change in a new comp of the
+        same layers, so only those are drawn again: see
+        nxt_layer.changed_nodes. When the layers themselves changed, or
+        there is nothing to compare, every node is.
+
+        :return: dirty node paths, or () for every node
+        :rtype: list | tuple
+        """
+        changed_nodes = getattr(nxt_layer, 'changed_nodes', None)
+        if (old is None or changed_nodes is None or
+                old_layers != self.layers_as_drawn()):
+            return ()
+        try:
+            dirty = set(changed_nodes(old, new))
+        except Exception:
+            logger.debug('Drawing every node again', exc_info=True)
+            return ()
+        edited = set()
+        for spec, values in (old_specs or {}).items():
+            if values != dict(spec.__dict__):
+                edited.add(spec)
+        if edited:
+            for path, node in new._nodes_path_as_key.items():
+                if not edited.isdisjoint(node.__mro__):
+                    dirty.add(path)
+        for name in ('positions', 'collapse'):
+            before = getattr(old, name, {}) or {}
+            after = getattr(new, name, {}) or {}
+            for path in set(before) | set(after):
+                if before.get(path) != after.get(path):
+                    dirty.add(path)
+        # Nothing to draw again, but something to say: the world is never
+        # drawn.
+        return list(dirty) or [nxt_path.WORLD]
+
+    def mark_comp_patched(self, *_args):
+        """The comp was changed in place, see comp_is_exact."""
+        self._comp_exact = False
+        self._comp_patches += 1
+        if (self._comp_seconds is not None and
+                self._comp_seconds < QUICK_COMP_SECONDS):
+            self.stale_comp_timer.start()
+
+    def refresh_stale_comp(self):
+        """Build the comp again, when an edit changed it in place and that
+        is quick: what the graph shows is then what the layers say, a node
+        inheriting from the edited one too, and the next run can copy it.
+        A graph that takes longer is built again by its next run, see
+        new_runtime_layer."""
+        if self._comp_exact or self._comp_layer is None or self.executing:
+            return
+        self.update_comp_layer(rebuild=True)
+
+    def comp_of_every_layer(self):
+        """The comp, to give to a stage call that would otherwise build one
+        of every layer, when it is that and exact: see
+        Stage.parent_nodes.
+
+        :return: keyword arguments for the call
+        :rtype: dict
+        """
+        comp = self._comp_layer
+        if (comp is None or not self._comp_exact or comp.layer_idx() != 0 or
+                not _takes_comp(self.stage.parent_nodes)):
+            return {}
+        return {'comp_layer': comp}
+
+    def comp_stamp(self):
+        """Says which comp the graph has: it is different after any
+        change."""
+        return (self._comp_builds, self._comp_patches)
+
+    def show_fresh_comp(self):
+        """Show the fresh comp the last run was copied from, as the comp
+        shown changed in place before it was made. Not if the graph has
+        changed since."""
+        fresh = self._fresh_comp
+        self._fresh_comp = None
+        if fresh is None or self.executing:
+            return
+        comp, stamp = fresh
+        if stamp != self.comp_stamp() or self._comp_exact:
+            return
+        self.processing.emit(True)
+        old = self._comp_layer
+        self._comp_layer = comp
+        dirty = self.changed_since(old, self._drawn_layers, comp,
+                                   self._drawn_specs)
+        self._comp_generation += 1
+        self.comp_layer_changed.emit(dirty)
+        self.comp_built()
+        self.processing.emit(False)
 
     @property
     def comp_is_built(self):
@@ -569,6 +749,7 @@ class StageModel(QtCore.QObject):
         comp_layer = self.stage.build_stage(from_idx=idx)
         self._display_layer = layer
         self.set_comp_layer(comp_layer, rebuild=False)
+        self.comp_built()
         self.disp_layer_changed.emit(self.get_layer_path(layer))
         self.processing.emit(False)
 
@@ -576,8 +757,14 @@ class StageModel(QtCore.QObject):
         self.processing.emit(True)
         if rebuild:
             idx = layer.layer_idx()
-            comp_layer = self.stage.build_stage(from_idx=idx)
+            old = self._comp_layer
+            old_layers = self._drawn_layers
+            old_specs = self._drawn_specs
+            comp_layer = self.build_comp(idx)
             self._comp_layer = comp_layer
+            if not dirty:
+                dirty = self.changed_since(old, old_layers, comp_layer,
+                                           old_specs)
         else:
             self._comp_layer = layer
         safe_selection = []
@@ -587,6 +774,10 @@ class StageModel(QtCore.QObject):
         self.selection = safe_selection
         self._comp_generation += 1
         self.comp_layer_changed.emit(dirty)
+        if rebuild:
+            self.comp_built()
+        else:
+            self.mark_comp_patched()
         self.processing.emit(False)
 
     def update_comp_layer(self, rebuild=False, dirty=()):
@@ -1606,6 +1797,7 @@ class StageModel(QtCore.QObject):
             layer_path = layer.real_path
         else:
             layer_path = LAYERS.TARGET
+            layer = self.target_layer
         safe_node_paths = []
         for node_path in node_paths:
             node = layer.lookup(node_path)
@@ -3994,10 +4186,55 @@ class StageModel(QtCore.QObject):
                                                 button_text=button_text,
                                                 icon=icon)
         if confirm:
-            temp_comp = self.stage.build_stage(self.comp_layer.layer_idx())
-            rt_layer = self.stage.setup_runtime_layer(temp_comp)
+            rt_layer = self.new_runtime_layer()
             self.current_rt_layer = rt_layer
         return rt_layer
+
+    def new_runtime_layer(self):
+        """A runtime layer to run in, made from a copy of the comp the
+        editor shows while that is exact, or else from a fresh comp.
+
+        Compositing the graph for each run cost as long as opening it,
+        before the first node started. A copy is much quicker, and is the
+        graph as it is now while the comp is exact, see comp_is_exact. A
+        run sets values on the nodes it runs in, so it has a copy of its
+        own. See RECOMP_ENV_VAR and CHECK_COMP_ENV_VAR.
+
+        :raises GraphError: when the world node fails
+        :rtype: CompLayer
+        """
+        comp = self.comp_layer
+        if (os.environ.get(RECOMP_ENV_VAR) == '1' or
+                not hasattr(comp, 'copy')):
+            build = self.stage.build_stage(comp.layer_idx())
+        elif not self.comp_is_exact:
+            # The comp shown changed in place. A fresh one is made, the
+            # run has a copy, and it is shown once the run is done.
+            self.stale_comp_timer.stop()
+            fresh = self.build_comp(comp.layer_idx())
+            self._fresh_comp = (fresh, self.comp_stamp())
+            build = fresh.copy()
+        else:
+            build = comp.copy()
+            if os.environ.get(CHECK_COMP_ENV_VAR) == '1':
+                build = self.checked_copy(build)
+        return self.stage.setup_runtime_layer(build)
+
+    def checked_copy(self, copied):
+        """The copy, or a fresh comp where it differs from one.
+
+        :param copied: a copy of the comp the editor shows
+        :rtype: CompLayer
+        """
+        fresh = self.stage.build_stage(copied.layer_idx())
+        found = nxt_layer.comp_differences(copied, fresh)
+        if not found:
+            logger.info('The graph shown is the same as a fresh comp of it.')
+            return copied
+        logger.warning('The graph shown differs from a fresh comp of it, '
+                       'so this run is in a fresh comp. Where they differ:\n'
+                       '{}'.format('\n'.join(found)))
+        return fresh
 
     def validate_socket_connection(self):
         """Attempts a round trip, if the client gets its message and returns
@@ -4322,9 +4559,8 @@ class StageModel(QtCore.QObject):
         elif rt_layer:
             self.current_rt_layer = rt_layer
         else:
-            rt_build = self.stage.build_stage(self.comp_layer.layer_idx())
             try:
-                self.current_rt_layer = self.stage.setup_runtime_layer(rt_build)
+                self.current_rt_layer = self.new_runtime_layer()
             except GraphError as err:
                 logger.error("World node failed, cannot execute.\n" + str(err),
                              links=[nxt_path.WORLD])
@@ -4528,6 +4764,8 @@ class StageModel(QtCore.QObject):
         self._set_build_paused(False)
         self._set_executing(False)
         self.data_state_changed.emit(True)
+        if self._fresh_comp is not None:
+            QtCore.QTimer.singleShot(0, self.show_fresh_comp)
         if self._use_cmd_port:
             self.get_remote_cache()
             self.suspend_remote_visual_refreshes(False)
@@ -4598,6 +4836,15 @@ class StageModel(QtCore.QObject):
     @staticmethod
     def process_events():
         QtCore.QCoreApplication.processEvents()
+
+
+def _takes_comp(call):
+    """Whether a stage call takes a comp_layer, which an older nxt core
+    may not."""
+    try:
+        return 'comp_layer' in inspect.signature(call).parameters
+    except (TypeError, ValueError):
+        return False
 
 
 class NxtUndoStack(QtWidgets.QUndoStack):

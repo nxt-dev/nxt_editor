@@ -1020,6 +1020,23 @@ def get_providers(store=None, prefs=None):
     return [cls(store=store, prefs=prefs) for cls in PROVIDERS]
 
 
+#: The apps that sign in for a provider, which have to be run to say who.
+APPS = (claude_code, codex)
+
+
+def sign_ins_known():
+    """True when every provider's status() answers at once, without
+    running an app to ask who is signed in."""
+    return all(app.answers_now() for app in APPS)
+
+
+def check_sign_ins(_cancelled=None):
+    """Ask each app who is signed in, so status() answers at once after.
+    It runs the apps, so it is slow: see workers.SignInCheck."""
+    for app in APPS:
+        app.status()
+
+
 def get_provider(provider_id, store=None, prefs=None):
     for cls in PROVIDERS:
         if cls.id == provider_id:

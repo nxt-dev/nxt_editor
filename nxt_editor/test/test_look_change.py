@@ -152,6 +152,26 @@ class Reopen(LookChange):
         self.assertEqual([same_path(self.graph)],
                          [same_path(path) for path in new.open_paths()])
 
+    def test_reopening_closes_preferences_with_the_old_editor(self):
+        # In a host the old editor's window is kept, and Preferences with
+        # it, so it has to be closed.
+        dialog = self.win.open_preferences()
+        self.assertTrue(dialog.isVisible())
+        self.prefs[PREF.LOOK] = theme.LOOK_CLASSIC
+        with mock.patch.object(QtWidgets.QMessageBox, 'exec_'), \
+                mock.patch.object(QtWidgets.QMessageBox, 'clickedButton',
+                                  lambda box: box.defaultButton()):
+            new = dialog.offer_reopen()
+        self.windows.append(new)
+        self.assertFalse(dialog.isVisible())
+
+    def test_preferences_that_will_not_close_keep_the_editor(self):
+        dialog = self.win.open_preferences()
+        with mock.patch.object(type(dialog), 'reject', lambda d: None):
+            self.assertFalse(self.win.close())
+        self.assertTrue(dialog.isVisible())
+        dialog.hide()
+
     def test_later_leaves_the_editor_open(self):
         dialog = self.win.open_preferences()
         with mock.patch.object(QtWidgets.QMessageBox, 'exec_'),                 mock.patch.object(MainWindow, 'reopen') as reopen:
