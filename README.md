@@ -1,10 +1,9 @@
 <div align="center">
 
-[![Unittests](https://github.com/squarebit-studios/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/unittests.yml?query=branch%3Adev)
-[![Rez Release](https://github.com/squarebit-studios/nxt_editor/actions/workflows/rez_release.yml/badge.svg?branch=release)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/rez_release.yml)
-[![Host packages](https://github.com/squarebit-studios/nxt_editor/actions/workflows/maya_module_release.yml/badge.svg)](https://github.com/squarebit-studios/nxt_editor/actions/workflows/maya_module_release.yml)
+[![Release](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml/badge.svg?branch=release)](https://github.com/nxt-dev/nxt_editor/actions/workflows/release.yml)
+[![Unittests](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml/badge.svg?branch=dev)](https://github.com/nxt-dev/nxt_editor/actions/workflows/unittests.yml?query=branch%3Adev)
 
-[![Version](https://img.shields.io/badge/version-4.13.0-green?logo=rocket&logoColor=green)](https://github.com/squarebit-studios/nxt_editor/releases/latest)
+[![Version](https://img.shields.io/badge/version-4.13.0-green?logo=rocket&logoColor=green)](https://github.com/nxt-dev/nxt_editor/releases/latest)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)&nbsp;&nbsp;
 ![Linux](https://img.shields.io/badge/Linux-FCC624?style=flat&logo=linux&logoColor=black)
 ![macOS](https://img.shields.io/badge/macOS-000000?style=flat&logo=apple&logoColor=white)
@@ -211,7 +210,6 @@ including in `--background` sessions.
 | `docs/user_docs/` | The user docs, built with MkDocs and published at [nxt-dev.github.io](https://nxt-dev.github.io/). |
 | `examples/` | Example graphs that walk through the main concepts. |
 | `build/` | nxt graphs and scripts that build the release packages and the host zips. |
-| `package.py`, `rez_build.py` | The rez package. `setup.py` is the pip package. |
 
 ## Contributing
 

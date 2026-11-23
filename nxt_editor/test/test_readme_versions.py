@@ -23,7 +23,6 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
 SETUP_PY = os.path.join(REPO_ROOT, 'setup.py')
 README = os.path.join(REPO_ROOT, 'README.md')
-PACKAGE_PY = os.path.join(REPO_ROOT, 'package.py')
 VERSION_JSON = os.path.join(REPO_ROOT, 'nxt_editor', 'version.json')
 WORKFLOWS = os.path.join(REPO_ROOT, '.github', 'workflows')
 
@@ -34,9 +33,6 @@ REQUIRES_RE = re.compile(r"python_requires\s*=\s*['\"]"
 README_RE = re.compile(r"^- Python \[(\d+)\.(\d+)\][^\n]*?to \[(\d+)\.(\d+)\]",
                        re.MULTILINE)
 
-
-# "python-3.11+<3.14" in package.py requires
-PACKAGE_RE = re.compile(r"['\"]python-(\d+)\.(\d+)\+<(\d+)\.(\d+)['\"]")
 VERSION_BADGE_RE = re.compile(r"img\.shields\.io/badge/version-([\d.]+)-")
 PYTHON_BADGE_RE = re.compile(r"img\.shields\.io/badge/python-(\d+)\.(\d+)-")
 WORKFLOW_BADGE_RE = re.compile(r"/actions/workflows/([\w.-]+)/badge\.svg")
@@ -86,18 +82,6 @@ class ReadmeMatchesSetup(unittest.TestCase):
             fmt % declared_high, fmt % documented_high,
             'README ceiling disagrees with setup.py python_requires')
 
-
-    def test_setup_agrees_with_the_rez_package(self):
-        # The rez package is what this fork ships, so it is the one that
-        # is right; setup.py had kept claiming versions it never tested.
-        if not os.path.isfile(PACKAGE_PY):
-            self.skipTest('no package.py')
-        match = PACKAGE_RE.search(read(PACKAGE_PY))
-        self.assertIsNotNone(match, 'could not read the python requirement')
-        low = (int(match.group(1)), int(match.group(2)))
-        high = (int(match.group(3)), int(match.group(4)) - 1)
-        self.assertEqual((low, high), self.declared_range(),
-                         'setup.py python_requires disagrees with package.py')
 
     def test_python_badges_cover_the_range(self):
         low, high = self.declared_range()

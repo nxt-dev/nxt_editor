@@ -1,9 +1,5 @@
 name: Unittests
 
-# The nxt-dev copy of squarebit-studios' dev: the suite on hosted
-# runners. The squarebit job and its release workflows use private
-# shared workflows and studio runners, which can't run here.
-
 on:
   workflow_dispatch:
   pull_request:
@@ -12,8 +8,6 @@ on:
     branches-ignore: [ release ]
 
 jobs:
-  # The same suite on hosted runners, for the copies of this repo outside
-  # squarebit-studios (nxt-dev), which can't reach the studio runners.
   test-public:
     strategy:
       matrix:
