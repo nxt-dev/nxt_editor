@@ -99,6 +99,26 @@ python -c "import nxt, nxt_editor; print(nxt.__file__, nxt_editor.__file__)"
 nxt --version
 ```
 
+### The faster comp engine
+
+nxt composites graphs with a compiled module written in Rust. Releases
+carry it, but a checkout of nxt doesn't, so until you build it the editor
+runs on nxt's Python code: everything works, with the same results, only
+slower on big graphs. `nxt --version` ends with `Comp native` once it is
+built, or `Comp python` and the reason.
+
+To build it, install [Rust](https://rustup.rs) and your OS's C build tools
+(the Microsoft C++ build tools on Windows, `xcode-select --install` on
+macOS), then from the `nxt` checkout run:
+
+```
+python native/build.py
+```
+
+Run it again after pulling changes to `nxt/native`. The
+[nxt contributing guide](https://github.com/nxt-dev/nxt/blob/dev/CONTRIBUTING.md#the-faster-comp-engine-in-a-checkout)
+has the steps for each OS, and how to change the module.
+
 ## Running the editor from source
 
 ```

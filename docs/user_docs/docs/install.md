@@ -70,7 +70,9 @@ It is on by default, and there is nothing to install or set:
 - An install from GitHub builds it for your machine during the install
   when [Rust](https://rustup.rs) is installed. Without Rust the install
   still works, and nxt runs on its Python code. In a checkout of nxt,
-  build it with `python native/build.py`.
+  build it with `python native/build.py`; the
+  [nxt contributing guide](https://github.com/nxt-dev/nxt/blob/dev/CONTRIBUTING.md#the-faster-comp-engine-in-a-checkout)
+  has the steps for each OS.
 
 To see which engine you have, run `nxt --version`. It ends with
 `Comp native` when the faster engine is in use, or `Comp python` and the
