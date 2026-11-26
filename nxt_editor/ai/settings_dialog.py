@@ -198,13 +198,11 @@ class SectionHeader(QtWidgets.QAbstractButton):
         # Default
         if self.is_default:
             text = 'Default'
-            pill = QtCore.QRectF(x, mid - 9,
-                                 metrics.horizontalAdvance(text) + 12, 18)
-            painter.setPen(QtCore.Qt.NoPen)
-            painter.setBrush(theme.color(theme.ACCENT_DIM))
-            painter.drawRoundedRect(pill, 9, 9)
-            painter.setPen(theme.color(theme.TEXT))
-            painter.drawText(pill, QtCore.Qt.AlignCenter, text)
+            pill = QtCore.QRectF(x, mid - theme.TAG_HEIGHT / 2.0,
+                                 theme.tag_width(text, small),
+                                 theme.TAG_HEIGHT)
+            theme.paint_tag(painter, pill, text, small,
+                            radius=theme.TAG_HEIGHT / 2.0)
             x = pill.right() + 10
         # How it is set up
         room = self.width() - 12 - x

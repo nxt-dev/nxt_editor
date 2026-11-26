@@ -353,8 +353,8 @@ class PagesAndHotkeys(Editing):
         with mock.patch.object(hotkey_settings, 'ask_to_take',
                                return_value=False) as ask:
             self.assertFalse(entry.set(taken))
-        ask.assert_called_once_with(None, taken, entry.action,
-                                    [new_graph.action])
+        ask.assert_called_once_with(None, taken, entry,
+                                    [new_graph])
         self.assertEqual(before, entry.shortcut())
         self.assertEqual(taken, new_graph.shortcut())
 
@@ -392,7 +392,7 @@ class PagesAndHotkeys(Editing):
         field = hotkeys.recorder
         self.assertFalse(field.isReadOnly())
         self.assertEqual(['Ctrl', 'Shift', 'Alt', 'Meta'],
-                         [name for name, _m, _r in field.chip_rects()])
+                         [name for name, _m, _r in field.tag_rects()])
         # Held modifiers light up, and nothing is typed into the box.
         # Qt 6 reports a modifier key with what is held after it, so
         # there the press is sent from nothing held and the release from

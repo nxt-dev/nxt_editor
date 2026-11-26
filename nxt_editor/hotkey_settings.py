@@ -19,14 +19,27 @@ from Qt import QtCore, QtGui, QtWidgets
 # Internal
 import nxt_editor
 from nxt_editor import theme
+from nxt_editor.dialogs import NxtConfirmDialog
 from nxt_editor.preference_editor import HOTKEYS, SettingRow
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
-HOW_TO = ('Click a hotkey and press a key, holding Ctrl, Shift, Alt or '
-          'Meta with it if you like. Global hotkeys work anywhere in the '
-          'window, so no other hotkey can be the same as one.')
 FORMAT = QtGui.QKeySequence.PortableText
+
+#: The modifiers, in the order a hotkey names them.
+MODIFIERS = ((QtCore.Qt.ControlModifier, 'Ctrl'),
+             (QtCore.Qt.ShiftModifier, 'Shift'),
+             (QtCore.Qt.AltModifier, 'Alt'),
+             (QtCore.Qt.MetaModifier, 'Meta'))
+MODIFIER_KEYS = (QtCore.Qt.Key_Control, QtCore.Qt.Key_Shift,
+                 QtCore.Qt.Key_Alt, QtCore.Qt.Key_Meta,
+                 QtCore.Qt.Key_AltGr)
+_NAMES = [name for _modifier, name in MODIFIERS]
+
+HOW_TO = ('Click a hotkey and press a key, holding {} or {} with it if you '
+          'like. Global hotkeys work anywhere in the window, so no other '
+          'hotkey can be the same as one.').format(', '.join(_NAMES[:-1]),
+                                                   _NAMES[-1])
 
 
 def as_text(shortcut):
@@ -44,18 +57,8 @@ def is_global(action):
     return action.shortcutContext() == QtCore.Qt.WindowShortcut
 
 
-#: The modifiers, in the order a hotkey names them.
-MODIFIERS = ((QtCore.Qt.ControlModifier, 'Ctrl'),
-             (QtCore.Qt.ShiftModifier, 'Shift'),
-             (QtCore.Qt.AltModifier, 'Alt'),
-             (QtCore.Qt.MetaModifier, 'Meta'))
-MODIFIER_KEYS = (QtCore.Qt.Key_Control, QtCore.Qt.Key_Shift,
-                 QtCore.Qt.Key_Alt, QtCore.Qt.Key_Meta,
-                 QtCore.Qt.Key_AltGr)
-
-
-def held(modifiers):
-    """The names of the modifiers held, Ctrl first."""
+def modifier_names(modifiers):
+    """The names of the modifiers in modifiers, Ctrl first."""
     return [name for modifier, name in MODIFIERS if modifiers & modifier]
 
 
@@ -64,16 +67,18 @@ def sequence_text(key, modifiers):
     together from names: adding modifier flags to a key's number crashes
     some PySide6 versions."""
     key_name = QtGui.QKeySequence(int(key)).toString(FORMAT)
-    return '+'.join(held(modifiers) + [key_name])
+    return '+'.join(modifier_names(modifiers) + [key_name])
 
 
 class ShortcutField(QtWidgets.QLineEdit):
     """A hotkey's box. Clicked, it shows a text cursor and the modifiers
-    that can be held, lighting each one while it is held, and records the
-    next key pressed with them; Escape leaves it as it was."""
+    that can be held as tags, lighting each one while it is held, and
+    records the next key pressed with them; Escape leaves it as it was."""
     recorded = QtCore.Signal(str)
-    CHIP_GAP = 3
-    CHIP_PAD = 4
+    #: Tighter than other tags, so four fit beside the text in the box.
+    TAG_PAD = 4
+    TAG_GAP = 3
+    MARGIN = 6
 
     def __init__(self, shortcut, parent=None):
         super(ShortcutField, self).__init__(shortcut, parent)
@@ -86,7 +91,7 @@ class ShortcutField(QtWidgets.QLineEdit):
         self.setPlaceholderText('None')
         self.setToolTip('Click, then press a key, holding any modifiers '
                         'you want with it.')
-        self.chip_font = theme.font(theme.SMALL_PX)
+        self.tag_font = theme.font(theme.SMALL_PX)
         self.shown = shortcut
         self.recording = False
         self.held = QtCore.Qt.NoModifier
@@ -95,30 +100,29 @@ class ShortcutField(QtWidgets.QLineEdit):
         self.shown = as_text(sequence)
         self.setText(self.shown)
 
-    def chip_rects(self):
-        """Where each modifier is drawn while recording.
+    def tag_rects(self):
+        """Where each modifier's tag is drawn while recording, at the
+        right of the box.
 
         :return: [(name, modifier, QRectF)], in the order a hotkey names
-            them, at the right of the box
+            them
         """
-        metrics = QtGui.QFontMetrics(self.chip_font)
-        height = metrics.height() + 4
-        top = (self.height() - height) / 2.0
-        right = self.width() - 6
+        top = (self.height() - theme.TAG_HEIGHT) / 2.0
+        right = self.width() - self.MARGIN
         rects = []
         for modifier, name in reversed(MODIFIERS):
-            width = metrics.horizontalAdvance(name) + self.CHIP_PAD * 2
-            rects.append((name, modifier,
-                          QtCore.QRectF(right - width, top, width, height)))
-            right -= width + self.CHIP_GAP
-        return list(reversed(rects))
+            width = theme.tag_width(name, self.tag_font, self.TAG_PAD)
+            rects.append((name, modifier, QtCore.QRectF(
+                right - width, top, width, theme.TAG_HEIGHT)))
+            right -= width + self.TAG_GAP
+        return rects[::-1]
 
     def set_recording(self, recording):
         self.recording = recording
         self.held = QtCore.Qt.NoModifier
         if recording:
-            # The text stops short of the modifiers.
-            left = self.chip_rects()[0][2].left()
+            # The text stops short of the tags.
+            left = self.tag_rects()[0][2].left()
             self.setTextMargins(0, 0, int(self.width() - left), 0)
             self.setPlaceholderText('Press a key')
         else:
@@ -145,20 +149,9 @@ class ShortcutField(QtWidgets.QLineEdit):
         if not self.recording:
             return
         painter = QtGui.QPainter(self)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-        painter.setFont(self.chip_font)
-        for name, modifier, rect in self.chip_rects():
-            if self.held & modifier:
-                painter.setPen(QtCore.Qt.NoPen)
-                painter.setBrush(theme.color(theme.ACCENT_STRONG))
-                text = theme.TEXT
-            else:
-                painter.setPen(QtGui.QPen(theme.color(theme.BORDER), 1))
-                painter.setBrush(QtCore.Qt.NoBrush)
-                text = theme.TEXT_FAINT
-            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3)
-            painter.setPen(theme.color(text))
-            painter.drawText(rect, QtCore.Qt.AlignCenter, name)
+        for name, modifier, rect in self.tag_rects():
+            theme.paint_tag(painter, rect, name, self.tag_font,
+                            lit=bool(self.held & modifier))
         painter.end()
 
     def inputMethodEvent(self, event):
@@ -229,22 +222,33 @@ class HotkeyEntry(object):
                          'global' if self.is_global else '')).lower()
         return all(word in text for word in words)
 
-    def set(self, text, parent=None):
-        """Give the action this hotkey and save it. When other actions'
-        hotkeys are in the way, the user is asked first, and taking it
-        leaves those actions with no hotkey.
+    def works_with(self, other):
+        """Whether this hotkey and other's could both work at once: either
+        is global, or they work in the same part of the editor."""
+        return (self.is_global or other.is_global or
+                bool(widgets_of(self.action) & widgets_of(other.action)))
 
+    def set(self, text, parent=None):
+        """Give the action this hotkey and save it. When other hotkeys are
+        in the way, the user is asked first, and taking it leaves them
+        with none.
+
+        :param parent: the window to ask over
         :return: whether it was set
         """
-        clashes = self.hotkeys.clashes(self.action, text)
+        clashes = self.hotkeys.clashes(self, text)
         if clashes:
-            if not ask_to_take(parent, text, self.action, clashes):
+            if not ask_to_take(parent, text, self, clashes):
                 return False
             for other in clashes:
-                other.setShortcut(QtGui.QKeySequence(), user_override=True)
-        # An empty sequence is no hotkey, saved as none.
-        self.action.setShortcut(QtGui.QKeySequence(text), user_override=True)
+                other.save('')
+        self.save(text)
         return True
+
+    def save(self, text):
+        """Give the action this hotkey, as it is, and save it to the user's
+        hotkeys. An empty one is no hotkey, saved as none."""
+        self.action.setShortcut(QtGui.QKeySequence(text), user_override=True)
 
     def clear(self, parent=None):
         return self.set('', parent)
@@ -263,28 +267,19 @@ class Hotkeys(object):
                         for group, rows in self.groups.items()
                         for row in rows]
 
-    def actions(self):
-        for entry in self.entries:
-            yield entry.action
+    def clashes(self, entry, text):
+        """The hotkeys in the way of giving entry text: the same keys, on
+        an action that works where entry's does. Actions in different
+        parts of the editor can share one, as each works only where its
+        part has focus.
 
-    def clashes(self, action, text):
-        """The actions whose hotkey is in the way of giving action text.
-        A global hotkey clashes with any other, and two actions in the
-        same part of the editor can not share one. Actions in different
-        parts can: each works only where its part has focus.
-
-        :rtype: list[QtWidgets.QAction]
+        :rtype: list[HotkeyEntry]
         """
         if not text:
             return []
-        found = []
-        for other in self.actions():
-            if other is action or as_text(other.shortcut()) != text:
-                continue
-            if (is_global(other) or is_global(action) or
-                    widgets_of(other) & widgets_of(action)):
-                found.append(other)
-        return found
+        return [other for other in self.entries
+                if other is not entry and other.shortcut() == text and
+                entry.works_with(other)]
 
 
 def widgets_of(action):
@@ -298,25 +293,19 @@ def widgets_of(action):
             not isinstance(obj, QtWidgets.QMenu)}
 
 
-def ask_to_take(parent, text, action, others):
-    """Ask whether action should take the hotkey text from the others
-    that have it.
+def ask_to_take(parent, text, entry, others):
+    """Ask whether entry should take the hotkey text from the others that
+    have it.
 
     :return: whether to take it
     """
-    names = ', '.join(other.text() for other in others)
-    box = QtWidgets.QMessageBox(parent)
-    box.setIcon(QtWidgets.QMessageBox.Warning)
-    box.setWindowTitle('Hotkey Taken')
-    box.setText('{} is already the hotkey for {}.'.format(text, names))
-    box.setInformativeText(
-        'Use it for {} instead? {} will be left with no hotkey.'.format(
-            action.text(), names))
-    take = box.addButton('Use It', QtWidgets.QMessageBox.AcceptRole)
-    cancel = box.addButton(QtWidgets.QMessageBox.Cancel)
-    box.setDefaultButton(cancel)
-    box.exec_()
-    return box.clickedButton() is take
+    names = ', '.join(other.title for other in others)
+    return NxtConfirmDialog.show_message(
+        text='{} is already the hotkey for {}.'.format(text, names),
+        info='Use it for {} instead? {} will be left with no '
+             'hotkey.'.format(entry.title, names),
+        button_text={NxtConfirmDialog.Ok: 'Use It'},
+        icon=QtWidgets.QMessageBox.Icon.Warning, parent=parent)
 
 
 ENTRY_ROLE = QtCore.Qt.UserRole + 1
@@ -551,15 +540,10 @@ class HotkeyDelegate(QtWidgets.QStyledItemDelegate):
         name_width = self.draw_text(painter, entry.title, name_rect,
                                     self.name_font, theme.TEXT, words)
         if entry.is_global:
-            metrics = QtGui.QFontMetrics(self.small_font)
-            pill = QtCore.QRectF(left + name_width + 8, rect.top() + 8,
-                                 metrics.horizontalAdvance('Global') + 12, 18)
-            painter.setPen(QtCore.Qt.NoPen)
-            painter.setBrush(theme.color(theme.ACCENT_DIM))
-            painter.drawRoundedRect(pill, 4, 4)
-            painter.setFont(self.small_font)
-            painter.setPen(theme.color(theme.TEXT))
-            painter.drawText(pill, QtCore.Qt.AlignCenter, 'Global')
+            tag = QtCore.QRectF(left + name_width + 8, rect.top() + 8,
+                                theme.tag_width('Global', self.small_font),
+                                theme.TAG_HEIGHT)
+            theme.paint_tag(painter, tag, 'Global', self.small_font)
         about_rect = QtCore.QRect(left, rect.top() + 28, text_width, 16)
         self.draw_text(painter, entry.about, about_rect, self.small_font,
                        theme.TEXT_DIM, words)

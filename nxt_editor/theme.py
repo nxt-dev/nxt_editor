@@ -311,6 +311,40 @@ def paint_stripes(painter, rect, base):
     painter.restore()
 
 
+# A tag: a word in a small rounded box beside a name, such as Global or
+# Default. Lit, it is filled; unlit, only outlined, for one that could be
+# but is not, such as a modifier key not held.
+TAG_PAD = 6
+TAG_HEIGHT = 18
+TAG_RADIUS = 4
+
+
+def tag_width(text, font, pad=TAG_PAD):
+    return QtGui.QFontMetrics(font).horizontalAdvance(text) + pad * 2
+
+
+def paint_tag(painter, rect, text, font, lit=True, radius=TAG_RADIUS):
+    """A tag, with text centered in rect.
+
+    :param rect: QRectF, as wide as tag_width gives
+    """
+    rect = QtCore.QRectF(rect)
+    painter.save()
+    painter.setRenderHint(QtGui.QPainter.Antialiasing)
+    if lit:
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color(ACCENT_DIM))
+    else:
+        painter.setPen(QtGui.QPen(color(BORDER_STRONG), 1))
+        painter.setBrush(QtCore.Qt.NoBrush)
+        rect = rect.adjusted(0.5, 0.5, -0.5, -0.5)
+    painter.drawRoundedRect(rect, radius, radius)
+    painter.setFont(font)
+    painter.setPen(color(TEXT if lit else TEXT_FAINT))
+    painter.drawText(rect, QtCore.Qt.AlignCenter, text)
+    painter.restore()
+
+
 def mix(a, b, amount):
     """a, moved towards b by amount (0 to 1).
 
