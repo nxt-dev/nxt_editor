@@ -6,7 +6,9 @@ box and pressing the keys, and is saved straight away to the user's
 hotkeys file, as other preferences are.
 
 A global action works anywhere in the window, so its shortcut can not be
-one any other action uses, and no other action can take a global one.
+one any other action uses, and actions in the same part of the editor
+can not share one either. Picking a hotkey another action has asks
+first, and taking it leaves that action with no hotkey.
 """
 # Builtin
 import logging
@@ -21,9 +23,9 @@ from nxt_editor.preference_editor import HOTKEYS, SettingRow
 
 logger = logging.getLogger(nxt_editor.LOGGER_NAME)
 
-HOW_TO = ('Click a hotkey and press the keys you want, then stop typing. '
-          'Global hotkeys work anywhere in the window, so no other hotkey '
-          'can be the same as one.')
+HOW_TO = ('Click a hotkey and press a key, holding Ctrl, Shift, Alt or '
+          'Meta with it if you like. Global hotkeys work anywhere in the '
+          'window, so no other hotkey can be the same as one.')
 FORMAT = QtGui.QKeySequence.PortableText
 
 
@@ -65,42 +67,103 @@ def sequence_text(key, modifiers):
     return '+'.join(held(modifiers) + [key_name])
 
 
-def modifiers_text(modifiers):
-    """The modifiers held so far, as Ctrl+Shift+, while waiting for the
-    key that goes with them."""
-    names = held(modifiers)
-    return '+'.join(names) + ('+' if names else '')
-
-
 class ShortcutField(QtWidgets.QLineEdit):
-    """A hotkey's box. Clicked, it records the next key pressed with the
-    modifiers held; Escape leaves it as it was."""
+    """A hotkey's box. Clicked, it shows a text cursor and the modifiers
+    that can be held, lighting each one while it is held, and records the
+    next key pressed with them; Escape leaves it as it was."""
     recorded = QtCore.Signal(str)
+    CHIP_GAP = 3
+    CHIP_PAD = 4
 
     def __init__(self, shortcut, parent=None):
         super(ShortcutField, self).__init__(shortcut, parent)
-        self.setReadOnly(True)
+        # Not read only, so the text cursor shows. Every key is taken in
+        # keyPressEvent, and nothing can be pasted or dropped in.
         self.setFocusPolicy(QtCore.Qt.ClickFocus)
+        self.setContextMenuPolicy(QtCore.Qt.NoContextMenu)
+        self.setAcceptDrops(False)
+        self.setAttribute(QtCore.Qt.WA_InputMethodEnabled, False)
         self.setPlaceholderText('None')
-        self.setToolTip('Click, then press the keys for this hotkey.')
+        self.setToolTip('Click, then press a key, holding any modifiers '
+                        'you want with it.')
+        self.chip_font = theme.font(theme.SMALL_PX)
         self.shown = shortcut
         self.recording = False
+        self.held = QtCore.Qt.NoModifier
 
     def setKeySequence(self, sequence):
         self.shown = as_text(sequence)
         self.setText(self.shown)
 
+    def chip_rects(self):
+        """Where each modifier is drawn while recording.
+
+        :return: [(name, modifier, QRectF)], in the order a hotkey names
+            them, at the right of the box
+        """
+        metrics = QtGui.QFontMetrics(self.chip_font)
+        height = metrics.height() + 4
+        top = (self.height() - height) / 2.0
+        right = self.width() - 6
+        rects = []
+        for modifier, name in reversed(MODIFIERS):
+            width = metrics.horizontalAdvance(name) + self.CHIP_PAD * 2
+            rects.append((name, modifier,
+                          QtCore.QRectF(right - width, top, width, height)))
+            right -= width + self.CHIP_GAP
+        return list(reversed(rects))
+
+    def set_recording(self, recording):
+        self.recording = recording
+        self.held = QtCore.Qt.NoModifier
+        if recording:
+            # The text stops short of the modifiers.
+            left = self.chip_rects()[0][2].left()
+            self.setTextMargins(0, 0, int(self.width() - left), 0)
+            self.setPlaceholderText('Press a key')
+        else:
+            self.setTextMargins(0, 0, 0, 0)
+            self.setPlaceholderText('None')
+        self.update()
+
+    def set_held(self, modifiers):
+        self.held = modifiers
+        self.update()
+
     def focusInEvent(self, event):
         super(ShortcutField, self).focusInEvent(event)
-        self.recording = True
         self.setText('')
-        self.setPlaceholderText('Press keys...')
+        self.set_recording(True)
 
     def focusOutEvent(self, event):
         super(ShortcutField, self).focusOutEvent(event)
-        self.recording = False
-        self.setPlaceholderText('None')
+        self.set_recording(False)
         self.setText(self.shown)
+
+    def paintEvent(self, event):
+        super(ShortcutField, self).paintEvent(event)
+        if not self.recording:
+            return
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing)
+        painter.setFont(self.chip_font)
+        for name, modifier, rect in self.chip_rects():
+            if self.held & modifier:
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.setBrush(theme.color(theme.ACCENT_STRONG))
+                text = theme.TEXT
+            else:
+                painter.setPen(QtGui.QPen(theme.color(theme.BORDER), 1))
+                painter.setBrush(QtCore.Qt.NoBrush)
+                text = theme.TEXT_FAINT
+            painter.drawRoundedRect(rect.adjusted(0.5, 0.5, -0.5, -0.5), 3, 3)
+            painter.setPen(theme.color(text))
+            painter.drawText(rect, QtCore.Qt.AlignCenter, name)
+        painter.end()
+
+    def inputMethodEvent(self, event):
+        # Nothing is typed into the box, from any keyboard.
+        event.accept()
 
     def event(self, event):
         # Keys pressed here are a hotkey being recorded, not one to use.
@@ -113,7 +176,7 @@ class ShortcutField(QtWidgets.QLineEdit):
 
     def keyPressEvent(self, event):
         # Every key is the field's while it records, none for the list
-        # under it to act on.
+        # under it to act on, and none typed into the box.
         event.accept()
         if not self.recording or event.isAutoRepeat():
             return
@@ -122,10 +185,10 @@ class ShortcutField(QtWidgets.QLineEdit):
             self.clearFocus()
             return
         if key in MODIFIER_KEYS or key == QtCore.Qt.Key_unknown:
-            self.setText(modifiers_text(event.modifiers()))
+            self.set_held(event.modifiers())
             return
         text = sequence_text(key, event.modifiers())
-        self.recording = False
+        self.set_recording(False)
         self.setText(text)
         # Told once Qt is done with this key: what it sets off hides the
         # field, and the hotkey being changed is one Qt is matching keys to.
@@ -134,7 +197,7 @@ class ShortcutField(QtWidgets.QLineEdit):
     def keyReleaseEvent(self, event):
         event.accept()
         if self.recording and event.key() in MODIFIER_KEYS:
-            self.setText(modifiers_text(event.modifiers()))
+            self.set_held(event.modifiers())
 
 
 class HotkeyEntry(object):
@@ -167,21 +230,18 @@ class HotkeyEntry(object):
         return all(word in text for word in words)
 
     def set(self, text, parent=None):
-        """Give the action this hotkey, if no other action's hotkey is in
-        the way, and save it.
+        """Give the action this hotkey and save it. When other actions'
+        hotkeys are in the way, the user is asked first, and taking it
+        leaves those actions with no hotkey.
 
         :return: whether it was set
         """
-        clash = self.hotkeys.clash(self.action, text)
-        if clash is not None:
-            QtWidgets.QMessageBox.warning(
-                parent, 'Hotkeys',
-                '{} is the hotkey for {}{}.'.format(
-                    text, clash.text(),
-                    ', which is global' if is_global(clash) else '') +
-                ('\n\nA global hotkey can not be the same as any other.'
-                 if is_global(clash) or self.is_global else ''))
-            return False
+        clashes = self.hotkeys.clashes(self.action, text)
+        if clashes:
+            if not ask_to_take(parent, text, self.action, clashes):
+                return False
+            for other in clashes:
+                other.setShortcut(QtGui.QKeySequence(), user_override=True)
         # An empty sequence is no hotkey, saved as none.
         self.action.setShortcut(QtGui.QKeySequence(text), user_override=True)
         return True
@@ -207,21 +267,56 @@ class Hotkeys(object):
         for entry in self.entries:
             yield entry.action
 
-    def clash(self, action, text):
-        """The action whose hotkey is in the way of giving action text, or
-        None. Only global hotkeys clash: one action's hotkey works where
-        that part of the editor has focus, so two parts can share one.
+    def clashes(self, action, text):
+        """The actions whose hotkey is in the way of giving action text.
+        A global hotkey clashes with any other, and two actions in the
+        same part of the editor can not share one. Actions in different
+        parts can: each works only where its part has focus.
 
-        :rtype: QtWidgets.QAction | None
+        :rtype: list[QtWidgets.QAction]
         """
         if not text:
-            return None
+            return []
+        found = []
         for other in self.actions():
             if other is action or as_text(other.shortcut()) != text:
                 continue
-            if is_global(other) or is_global(action):
-                return other
-        return None
+            if (is_global(other) or is_global(action) or
+                    widgets_of(other) & widgets_of(action)):
+                found.append(other)
+        return found
+
+
+def widgets_of(action):
+    """The parts of the editor an action's hotkey works in. Menus only
+    show it, so they are left out."""
+    if hasattr(action, 'associatedObjects'):
+        objects = action.associatedObjects()
+    else:
+        objects = action.associatedWidgets()
+    return {obj for obj in objects if isinstance(obj, QtWidgets.QWidget) and
+            not isinstance(obj, QtWidgets.QMenu)}
+
+
+def ask_to_take(parent, text, action, others):
+    """Ask whether action should take the hotkey text from the others
+    that have it.
+
+    :return: whether to take it
+    """
+    names = ', '.join(other.text() for other in others)
+    box = QtWidgets.QMessageBox(parent)
+    box.setIcon(QtWidgets.QMessageBox.Warning)
+    box.setWindowTitle('Hotkey Taken')
+    box.setText('{} is already the hotkey for {}.'.format(text, names))
+    box.setInformativeText(
+        'Use it for {} instead? {} will be left with no hotkey.'.format(
+            action.text(), names))
+    take = box.addButton('Use It', QtWidgets.QMessageBox.AcceptRole)
+    cancel = box.addButton(QtWidgets.QMessageBox.Cancel)
+    box.setDefaultButton(cancel)
+    box.exec_()
+    return box.clickedButton() is take
 
 
 ENTRY_ROLE = QtCore.Qt.UserRole + 1
@@ -372,8 +467,9 @@ class HotkeyList(QtWidgets.QListView):
         cursor = QtCore.Qt.ArrowCursor
         if entry is not None:
             box, clear, reset = self.part_rects(self.visualRect(index))
-            if (box.contains(event.pos()) or
-                    (clear.contains(event.pos()) and entry.shortcut()) or
+            if box.contains(event.pos()):
+                cursor = QtCore.Qt.IBeamCursor
+            elif ((clear.contains(event.pos()) and entry.shortcut()) or
                     (reset.contains(event.pos()) and not entry.is_default())):
                 cursor = QtCore.Qt.PointingHandCursor
         self.viewport().setCursor(cursor)

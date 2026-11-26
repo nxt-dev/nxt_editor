@@ -12,11 +12,12 @@ import unittest
 from unittest import mock
 
 # External
-from Qt import QtCore, QtWidgets
+from Qt import QtCore, QtGui, QtWidgets
 from Qt.QtTest import QTest
 
 # Internal
-from nxt_editor import preference_editor, stage_model, user_dir
+from nxt_editor import (hotkey_settings, preference_editor, stage_model,
+                        user_dir)
 from nxt_editor.preference_editor import (PREFERENCES, PreferenceEditor,
                                           find_action)
 
@@ -343,15 +344,72 @@ class PagesAndHotkeys(Editing):
         entry.clear()
         self.assertEqual('', entry.action.shortcut().toString())
         entry.reset()
-    def test_a_global_hotkey_can_not_be_taken(self):
+    def test_a_hotkey_in_use_is_kept_when_cancelled(self):
         new_graph = self.hotkey('New Graph')
         self.assertTrue(new_graph.is_global)
+        taken = new_graph.shortcut()
         entry = self.hotkey('Frame Selection')
         before = entry.shortcut()
-        with mock.patch.object(QtWidgets.QMessageBox, 'warning') as warn:
-            self.assertFalse(entry.set(new_graph.shortcut()))
-        warn.assert_called_once()
+        with mock.patch.object(hotkey_settings, 'ask_to_take',
+                               return_value=False) as ask:
+            self.assertFalse(entry.set(taken))
+        ask.assert_called_once_with(None, taken, entry.action,
+                                    [new_graph.action])
         self.assertEqual(before, entry.shortcut())
+        self.assertEqual(taken, new_graph.shortcut())
+
+    def test_taking_a_hotkey_leaves_the_other_with_none(self):
+        new_graph = self.hotkey('New Graph')
+        taken = new_graph.shortcut()
+        entry = self.hotkey('Frame Selection')
+        self.addCleanup(new_graph.reset)
+        self.addCleanup(entry.reset)
+        with mock.patch.object(hotkey_settings, 'ask_to_take',
+                               return_value=True):
+            self.assertTrue(entry.set(taken))
+        self.assertEqual(taken, entry.shortcut())
+        self.assertEqual('', new_graph.shortcut())
+        self.assertIsNone(user_dir.hotkeys['New Graph'])
+
+    def test_the_box_shows_a_cursor_and_the_modifiers(self):
+        hotkeys = self.dialog.hotkey_list
+        self.dialog.select_section('Hotkeys')
+        self.dialog.show()
+        self.addCleanup(self.dialog.hide)
+        app.processEvents()
+        index = hotkeys.index_of(self.hotkey('Frame Selection'))
+        box, _clear, _reset = hotkeys.part_rects(hotkeys.visualRect(index))
+        point = QtCore.QPointF(box.center())
+        move = QtGui.QMouseEvent(QtCore.QEvent.MouseMove, point,
+                                 hotkeys.viewport().mapToGlobal(point),
+                                 QtCore.Qt.NoButton, QtCore.Qt.NoButton,
+                                 QtCore.Qt.NoModifier)
+        app.sendEvent(hotkeys.viewport(), move)
+        self.assertEqual(QtCore.Qt.IBeamCursor,
+                         hotkeys.viewport().cursor().shape())
+        QTest.mouseClick(hotkeys.viewport(), QtCore.Qt.LeftButton,
+                         pos=box.center())
+        field = hotkeys.recorder
+        self.assertFalse(field.isReadOnly())
+        self.assertEqual(['Ctrl', 'Shift', 'Alt', 'Meta'],
+                         [name for name, _m, _r in field.chip_rects()])
+        # Held modifiers light up, and nothing is typed into the box.
+        # Qt 6 reports a modifier key with what is held after it, so
+        # there the press is sent from nothing held and the release from
+        # Shift. Qt 5 takes them as a keyboard sends them.
+        qt5 = QtCore.qVersion().startswith('5')
+        shift, nothing = QtCore.Qt.ShiftModifier, QtCore.Qt.NoModifier
+        app.sendEvent(field, QtGui.QKeyEvent(
+            QtCore.QEvent.KeyPress, QtCore.Qt.Key_Shift,
+            shift if qt5 else nothing))
+        self.assertEqual(QtCore.Qt.ShiftModifier, field.held)
+        self.assertEqual('', field.text())
+        app.sendEvent(field, QtGui.QKeyEvent(
+            QtCore.QEvent.KeyRelease, QtCore.Qt.Key_Shift,
+            nothing if qt5 else shift))
+        self.assertEqual(QtCore.Qt.NoModifier, field.held)
+        QTest.keyClick(field, QtCore.Qt.Key_Escape)
+        app.processEvents()
     def test_search_finds_hotkeys_by_their_keys(self):
         self.dialog.apply_filter('ctrl+n')
         shown = [entry.title for entry in
