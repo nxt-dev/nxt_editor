@@ -55,6 +55,8 @@ Each item links to the part of the docs that explains it in full.
 - The editor's title shows the name of the Maya scene or `.blend` file its
   host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
   of the same host can be told apart in the taskbar.
+- **Execute Graph**'s play button is green all the time, as Stop is red.
+  It was grey until the mouse was over it.
 
 **Faster**
 - **Big graphs show in seconds.** A graph of 5,000 nodes took about a
