@@ -177,6 +177,22 @@ class ExecuteIcons(unittest.TestCase):
                                  QtGui.QIcon.Active).toImage()
             self.assertNotEqual(normal, active)
 
+    def test_execute_graph_is_green_and_brighter_under_the_mouse(self):
+        from nxt_editor import exec_icons
+        icon = exec_icons.execute_graph()
+        self.assertFalse(icon.isNull())
+        size = QtCore.QSize(17, 16)
+        colors = {}
+        for mode in (QtGui.QIcon.Normal, QtGui.QIcon.Active):
+            image = icon.pixmap(size, mode).toImage()
+            # Inside the triangle, whatever the screen's pixel ratio.
+            colors[mode] = image.pixelColor(image.width() // 4,
+                                            image.height() // 2)
+        self.assertEqual(colors[QtGui.QIcon.Normal].name(),
+                         exec_icons.PLAY_GREEN)
+        self.assertEqual(colors[QtGui.QIcon.Active].name(),
+                         exec_icons.PLAY_GREEN_HOVER)
+
 
 class RenameBox(unittest.TestCase):
 

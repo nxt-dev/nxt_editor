@@ -4,6 +4,7 @@ import contextlib
 import logging
 import re
 from code import InteractiveConsole
+from functools import partial
 import sys
 import os
 import time
@@ -688,14 +689,19 @@ class LogFilterButton(QtWidgets.QPushButton):
 
     def __init__(self, *args, **kwargs):
         super(LogFilterButton, self).__init__('Filter Log', *args, **kwargs)
-        self.menu = QtWidgets.QMenu()
+        self.menu = QtWidgets.QMenu(self)
         self.lvl_actions = {}
+        # The levels as plain values: the logger asks this filter after
+        # the window, and the actions with it, are gone.
+        self.lvl_enabled = {}
         for lvl in self.VISUAL_LOG_LEVELS:
             lvl_name = logging.getLevelName(lvl)
             new_action = self.menu.addAction(lvl_name)
             new_action.setCheckable(True)
             new_action.setChecked(True)
             self.lvl_actions[lvl] = new_action
+            self.lvl_enabled[lvl] = True
+            new_action.toggled.connect(partial(self.set_level_enabled, lvl))
         self.all_action = self.menu.addAction('All')
         self.all_action.setCheckable(True)
         self.all_action.setChecked(True)
@@ -709,12 +715,12 @@ class LogFilterButton(QtWidgets.QPushButton):
         """
         return self.is_level_enabled(record.levelno)
 
+    def set_level_enabled(self, lvl, enabled):
+        self.lvl_enabled[lvl] = enabled
+
     def is_level_enabled(self, lvl):
-        action = self.lvl_actions.get(lvl, None)
-        if not action:
-            # If we don't know we don't care.
-            return True
-        return action.isChecked()
+        # If we don't know we don't care.
+        return self.lvl_enabled.get(lvl, True)
 
     def load_filters_from_pref(self):
         pref_filters = user_dir.user_prefs.get(self.PREF_KEY)

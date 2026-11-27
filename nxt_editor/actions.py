@@ -2036,12 +2036,7 @@ class ExecuteActions(NxtActionContainer):
         self.execute_graph_action = NxtAction(text='Execute Graph',
                                               parent=self)
         self.execute_graph_action.setAutoRepeat(False)
-        exec_icon = QtGui.QIcon()
-        exec_pixmap_off = QtGui.QPixmap(':icons/icons/play.png')
-        exec_pixmap_hov = QtGui.QPixmap(':icons/icons/play_hover.png')
-        exec_icon.addPixmap(exec_pixmap_hov, QtGui.QIcon.Active, QtGui.QIcon.Off)
-        exec_icon.addPixmap(exec_pixmap_off, QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        self.execute_graph_action.setIcon(exec_icon)
+        self.execute_graph_action.setIcon(exec_icons.execute_graph())
 
         def exec_stage():
             if not self.main_window.model:

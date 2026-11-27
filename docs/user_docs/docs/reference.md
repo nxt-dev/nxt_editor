@@ -119,7 +119,7 @@ view, so a teammate sees the same file in their own view.
 
 ### Running nodes
 
-Besides **Execute Graph** (the play button) and stop, the toolbar has a
+Besides **Execute Graph** (the green play button) and stop, the toolbar has a
 button for each way of running part of the graph. Hover a button to see
 what it runs.
 

@@ -3,7 +3,10 @@
 Each is the play triangle of Execute Graph, with what it runs beside it:
 one node for the selected nodes, a parent and its children for a
 hierarchy, and a node with an arrow down for running on from it. Grey, with
-the triangle going green under the mouse, as Execute Graph's does.
+the triangle going green under the mouse.
+
+Execute Graph's own play is green all the time, in the tone of Stop's
+red, and brighter under the mouse as Stop is.
 
 Ignore Breakpoints' button is drawn here too, a hollow breakpoint with a
 line through it.
@@ -13,6 +16,9 @@ from Qt import QtCore, QtGui
 
 GREY = '#a09e9e'
 GREEN = '#49cc54'
+# Stop's reds, #c62222 and #ea3434 under the mouse, turned to green.
+PLAY_GREEN = '#22c730'
+PLAY_GREEN_HOVER = '#34eb43'
 NODE = '#c8c6c6'
 # The breakpoint buttons' red, and the blue they go under the mouse.
 BREAK_RED = '#ec1c24'
@@ -80,6 +86,30 @@ def _icon(draw):
     icon = QtGui.QIcon()
     icon.addPixmap(_pixmap(draw, GREY), QtGui.QIcon.Normal, QtGui.QIcon.Off)
     icon.addPixmap(_pixmap(draw, GREEN), QtGui.QIcon.Active, QtGui.QIcon.Off)
+    return icon
+
+
+def _tinted(path, color):
+    """The image at path, filled with color where it is drawn."""
+    pixmap = QtGui.QPixmap(path)
+    painter = QtGui.QPainter(pixmap)
+    painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceIn)
+    painter.fillRect(pixmap.rect(), QtGui.QColor(color))
+    painter.end()
+    return pixmap
+
+
+def execute_graph():
+    """Play, green as Stop is red.
+
+    :rtype: QtGui.QIcon
+    """
+    play = ':icons/icons/play.png'
+    icon = QtGui.QIcon()
+    icon.addPixmap(_tinted(play, PLAY_GREEN_HOVER), QtGui.QIcon.Active,
+                   QtGui.QIcon.Off)
+    icon.addPixmap(_tinted(play, PLAY_GREEN), QtGui.QIcon.Normal,
+                   QtGui.QIcon.Off)
     return icon
 
 

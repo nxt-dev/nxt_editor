@@ -55,6 +55,8 @@ Each item links to the part of the docs that explains it in full.
 - The editor's title shows the name of the Maya scene or `.blend` file its
   host has open, `nxt maya [rig_v012.ma]`, so the editors of two sessions
   of the same host can be told apart in the taskbar.
+- **Execute Graph**'s play button is green all the time, as Stop is red.
+  It was grey until the mouse was over it.
 
 **Faster**
 - **Big graphs show in seconds.** A graph of 5,000 nodes took about a
@@ -90,6 +92,9 @@ Each item links to the part of the docs that explains it in full.
   small in the upper left corner.
 - Right clicking a toolbar names each toolbar in its menu: Node Authoring,
   Execute, Display and Grid Snap. They were four checked rows with no text.
+- **Open Recent**, **Reference Builtin Graph** and the output log's
+  **Filter Log** menu look like the editor's other menus inside a host.
+  They were drawn as the host's own menus.
 
 ## nxt_editor 4.13.0
 
