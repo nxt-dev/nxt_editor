@@ -6,12 +6,13 @@ were drawn as the host's menus, beside a File menu drawn as the editor's.
 Every menu in the menu bar belongs to the editor's window.
 """
 # Builtin
+import logging
 import sys
 import unittest
 from unittest import mock
 
 # External
-from Qt import QtWidgets
+from Qt import QtCompat, QtWidgets
 
 # Internal
 from nxt_editor import stage_model
@@ -55,7 +56,16 @@ class SubmenuStyle(unittest.TestCase):
         button = self.win.findChild(LogFilterButton)
         self.assertIsNotNone(button)
         self.assertIsNotNone(button.menu.parentWidget())
-        self.assertIn(button.menu, button.findChildren(QtWidgets.QMenu))
+
+    def test_the_log_filter_answers_after_its_button_is_gone(self):
+        """The logger keeps the button as a filter after the window is
+        closed, and the menu's actions now go with the button."""
+        button = LogFilterButton()
+        button.lvl_actions[logging.DEBUG].setChecked(False)
+        button.lvl_actions[logging.INFO].setChecked(True)
+        QtCompat.delete(button)
+        self.assertFalse(button.is_level_enabled(logging.DEBUG))
+        self.assertTrue(button.is_level_enabled(logging.INFO))
 
 
 if __name__ == '__main__':
