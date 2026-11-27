@@ -688,7 +688,7 @@ class LogFilterButton(QtWidgets.QPushButton):
 
     def __init__(self, *args, **kwargs):
         super(LogFilterButton, self).__init__('Filter Log', *args, **kwargs)
-        self.menu = QtWidgets.QMenu()
+        self.menu = QtWidgets.QMenu(self)
         self.lvl_actions = {}
         for lvl in self.VISUAL_LOG_LEVELS:
             lvl_name = logging.getLevelName(lvl)

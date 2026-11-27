@@ -1892,7 +1892,7 @@ class MenuBar(QtWidgets.QMenuBar):
 
         # Recent files
         self.load_recent_menu = RecentFilesMenu(
-            action_target=self.main_window.load_file
+            action_target=self.main_window.load_file, parent=self.file_menu
         )
         self.file_menu.addMenu(self.load_recent_menu)
         self.file_menu.addAction(self.layer_actions.save_layer_action)
@@ -1911,7 +1911,8 @@ class MenuBar(QtWidgets.QMenuBar):
         self.file_menu.addAction(self.layer_actions.ref_layer_above_action)
         self.file_menu.addAction(self.layer_actions.ref_layer_below_action)
         self.file_menu.addSeparator()
-        self.builtins_menu = QtWidgets.QMenu("Reference Builtin Graph")
+        self.builtins_menu = QtWidgets.QMenu("Reference Builtin Graph",
+                                             self.file_menu)
         self.builtins_menu.aboutToShow.connect(
             partial(
                 populate_builtins_menu,
@@ -2695,8 +2696,10 @@ class OpenFilesTabWidget(QtWidgets.QTabWidget):
 
 
 class RecentFilesMenu(QtWidgets.QMenu):
-    def __init__(self, action_target=None):
-        super(RecentFilesMenu, self).__init__("Open Recent")
+    def __init__(self, action_target=None, parent=None):
+        # A menu with no parent is not styled by the editor's style
+        # sheet, and in a host looks like the host's menus instead.
+        super(RecentFilesMenu, self).__init__("Open Recent", parent)
         self.aboutToShow.connect(self.refresh_list)
         self.action_target = action_target
         self.triggered.connect(self.recent_selected)

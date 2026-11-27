@@ -90,6 +90,9 @@ Each item links to the part of the docs that explains it in full.
   small in the upper left corner.
 - Right clicking a toolbar names each toolbar in its menu: Node Authoring,
   Execute, Display and Grid Snap. They were four checked rows with no text.
+- **Open Recent**, **Reference Builtin Graph** and the output log's
+  **Filter Log** menu look like the editor's other menus inside a host.
+  They were drawn as the host's own menus.
 
 ## nxt_editor 4.13.0
 
